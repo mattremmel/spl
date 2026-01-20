@@ -1957,9 +1957,1207 @@ mod tests {
         );
     }
 
-    // Note: Tests for `arr[2:]` and `arr[1:3]` removed because the parser has a bug
-    // where slice syntax only works when it starts with `:` (e.g., `arr[:]`, `arr[:5]`).
-    // See beads issue for tracking this parser limitation.
+    #[test]
+    fn slice_from_end() {
+        check_expr(
+            "arr[2:]",
+            &expect![[r#"
+                SliceExpr@0..7
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "arr"
+                  L_BRACKET@3..4 "["
+                  LiteralExpr@4..5
+                    INT_LITERAL@4..5 "2"
+                  COLON@5..6 ":"
+                  R_BRACKET@6..7 "]"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn slice_bounded() {
+        check_expr(
+            "arr[1:3]",
+            &expect![[r#"
+                SliceExpr@0..8
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "arr"
+                  L_BRACKET@3..4 "["
+                  LiteralExpr@4..5
+                    INT_LITERAL@4..5 "1"
+                  COLON@5..6 ":"
+                  LiteralExpr@6..7
+                    INT_LITERAL@6..7 "3"
+                  R_BRACKET@7..8 "]"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn slice_with_exprs() {
+        check_expr(
+            "arr[i:j]",
+            &expect![[r#"
+                SliceExpr@0..8
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "arr"
+                  L_BRACKET@3..4 "["
+                  PathExpr@4..5
+                    Path@4..5
+                      PathSegment@4..5
+                        NameRef@4..5
+                          IDENT@4..5 "i"
+                  COLON@5..6 ":"
+                  PathExpr@6..7
+                    Path@6..7
+                      PathSegment@6..7
+                        NameRef@6..7
+                          IDENT@6..7 "j"
+                  R_BRACKET@7..8 "]"
+            "#]],
+        );
+    }
+
+    // === Phase 1: Precedence/Associativity Tests ===
+
+    #[test]
+    fn precedence_full_chain() {
+        // Tests: a || b && c == d < e + f * g
+        // Parses as: a || (b && (c == (d < (e + (f * g)))))
+        check_expr(
+            "a || b && c == d < e + f * g",
+            &expect![[r#"
+                BinExpr@0..28
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  WHITESPACE@1..2 " "
+                  OR_OR@2..4 "||"
+                  BinExpr@4..28
+                    PathExpr@4..6
+                      Path@4..6
+                        PathSegment@4..6
+                          NameRef@4..6
+                            WHITESPACE@4..5 " "
+                            IDENT@5..6 "b"
+                    WHITESPACE@6..7 " "
+                    AND_AND@7..9 "&&"
+                    BinExpr@9..28
+                      PathExpr@9..11
+                        Path@9..11
+                          PathSegment@9..11
+                            NameRef@9..11
+                              WHITESPACE@9..10 " "
+                              IDENT@10..11 "c"
+                      WHITESPACE@11..12 " "
+                      EQ_EQ@12..14 "=="
+                      BinExpr@14..28
+                        PathExpr@14..16
+                          Path@14..16
+                            PathSegment@14..16
+                              NameRef@14..16
+                                WHITESPACE@14..15 " "
+                                IDENT@15..16 "d"
+                        WHITESPACE@16..17 " "
+                        LT@17..18 "<"
+                        BinExpr@18..28
+                          PathExpr@18..20
+                            Path@18..20
+                              PathSegment@18..20
+                                NameRef@18..20
+                                  WHITESPACE@18..19 " "
+                                  IDENT@19..20 "e"
+                          WHITESPACE@20..21 " "
+                          PLUS@21..22 "+"
+                          BinExpr@22..28
+                            PathExpr@22..24
+                              Path@22..24
+                                PathSegment@22..24
+                                  NameRef@22..24
+                                    WHITESPACE@22..23 " "
+                                    IDENT@23..24 "f"
+                            WHITESPACE@24..25 " "
+                            STAR@25..26 "*"
+                            PathExpr@26..28
+                              Path@26..28
+                                PathSegment@26..28
+                                  NameRef@26..28
+                                    WHITESPACE@26..27 " "
+                                    IDENT@27..28 "g"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn precedence_cast_vs_arithmetic() {
+        check_expr(
+            "a as i32 + b",
+            &expect![[r#"
+                BinExpr@0..12
+                  CastExpr@0..8
+                    PathExpr@0..1
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "a"
+                    WHITESPACE@1..2 " "
+                    AS_KW@2..4 "as"
+                    PathType@4..8
+                      Path@4..8
+                        PathSegment@4..8
+                          NameRef@4..8
+                            WHITESPACE@4..5 " "
+                            IDENT@5..8 "i32"
+                  WHITESPACE@8..9 " "
+                  PLUS@9..10 "+"
+                  PathExpr@10..12
+                    Path@10..12
+                      PathSegment@10..12
+                        NameRef@10..12
+                          WHITESPACE@10..11 " "
+                          IDENT@11..12 "b"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn precedence_unary_vs_binary() {
+        check_expr(
+            "-a + b",
+            &expect![[r#"
+                BinExpr@0..6
+                  PrefixExpr@0..2
+                    MINUS@0..1 "-"
+                    PathExpr@1..2
+                      Path@1..2
+                        PathSegment@1..2
+                          NameRef@1..2
+                            IDENT@1..2 "a"
+                  WHITESPACE@2..3 " "
+                  PLUS@3..4 "+"
+                  PathExpr@4..6
+                    Path@4..6
+                      PathSegment@4..6
+                        NameRef@4..6
+                          WHITESPACE@4..5 " "
+                          IDENT@5..6 "b"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn associativity_assignment_chain() {
+        check_expr(
+            "a = b = c = 1",
+            &expect![[r#"
+                BinExpr@0..13
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  WHITESPACE@1..2 " "
+                  EQ@2..3 "="
+                  BinExpr@3..13
+                    PathExpr@3..5
+                      Path@3..5
+                        PathSegment@3..5
+                          NameRef@3..5
+                            WHITESPACE@3..4 " "
+                            IDENT@4..5 "b"
+                    WHITESPACE@5..6 " "
+                    EQ@6..7 "="
+                    BinExpr@7..13
+                      PathExpr@7..9
+                        Path@7..9
+                          PathSegment@7..9
+                            NameRef@7..9
+                              WHITESPACE@7..8 " "
+                              IDENT@8..9 "c"
+                      WHITESPACE@9..10 " "
+                      EQ@10..11 "="
+                      LiteralExpr@11..13
+                        WHITESPACE@11..12 " "
+                        INT_LITERAL@12..13 "1"
+            "#]],
+        );
+    }
+
+    // === Phase 2: Literal Edge Cases ===
+
+    #[test]
+    fn literal_int_zero() {
+        check_expr(
+            "0",
+            &expect![[r#"
+                LiteralExpr@0..1
+                  INT_LITERAL@0..1 "0"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_int_large() {
+        check_expr(
+            "999999999999",
+            &expect![[r#"
+                LiteralExpr@0..12
+                  INT_LITERAL@0..12 "999999999999"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_int_underscores() {
+        check_expr(
+            "1_000_000",
+            &expect![[r#"
+                LiteralExpr@0..9
+                  INT_LITERAL@0..9 "1_000_000"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_int_hex() {
+        check_expr(
+            "0xFF",
+            &expect![[r#"
+                LiteralExpr@0..4
+                  INT_LITERAL@0..4 "0xFF"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_int_binary() {
+        check_expr(
+            "0b1010",
+            &expect![[r#"
+                LiteralExpr@0..6
+                  INT_LITERAL@0..6 "0b1010"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_int_octal() {
+        check_expr(
+            "0o755",
+            &expect![[r#"
+                LiteralExpr@0..5
+                  INT_LITERAL@0..5 "0o755"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_float_zero() {
+        check_expr(
+            "0.0",
+            &expect![[r#"
+                LiteralExpr@0..3
+                  FLOAT_LITERAL@0..3 "0.0"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_float_exponent() {
+        check_expr(
+            "1e10",
+            &expect![[r#"
+                LiteralExpr@0..4
+                  FLOAT_LITERAL@0..4 "1e10"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_float_exponent_positive() {
+        check_expr(
+            "1e+10",
+            &expect![[r#"
+                LiteralExpr@0..5
+                  FLOAT_LITERAL@0..5 "1e+10"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_float_exponent_negative() {
+        check_expr(
+            "2e-3",
+            &expect![[r#"
+                LiteralExpr@0..4
+                  FLOAT_LITERAL@0..4 "2e-3"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_float_full() {
+        check_expr(
+            "2.5e-3",
+            &expect![[r#"
+                LiteralExpr@0..6
+                  FLOAT_LITERAL@0..6 "2.5e-3"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_string_empty() {
+        check_expr(
+            r#""""#,
+            &expect![[r#"
+                LiteralExpr@0..2
+                  STRING_LITERAL@0..2 "\"\""
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_string_escapes() {
+        check_expr(
+            r#""\n\t\r\\\"\'""#,
+            &expect![[r#"
+                LiteralExpr@0..14
+                  STRING_LITERAL@0..14 "\"\\n\\t\\r\\\\\\\"\\'\""
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_char_newline() {
+        check_expr(
+            r"'\n'",
+            &expect![[r#"
+                LiteralExpr@0..4
+                  CHAR_LITERAL@0..4 "'\\n'"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_char_tab() {
+        check_expr(
+            r"'\t'",
+            &expect![[r#"
+                LiteralExpr@0..4
+                  CHAR_LITERAL@0..4 "'\\t'"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_char_null() {
+        check_expr(
+            r"'\0'",
+            &expect![[r#"
+                LiteralExpr@0..4
+                  CHAR_LITERAL@0..4 "'\\0'"
+            "#]],
+        );
+    }
+
+    // === Phase 3: Expression Edge Cases ===
+
+    #[test]
+    fn mul_div_chain() {
+        check_expr(
+            "a * b / c % d",
+            &expect![[r#"
+                BinExpr@0..13
+                  BinExpr@0..9
+                    BinExpr@0..5
+                      PathExpr@0..1
+                        Path@0..1
+                          PathSegment@0..1
+                            NameRef@0..1
+                              IDENT@0..1 "a"
+                      WHITESPACE@1..2 " "
+                      STAR@2..3 "*"
+                      PathExpr@3..5
+                        Path@3..5
+                          PathSegment@3..5
+                            NameRef@3..5
+                              WHITESPACE@3..4 " "
+                              IDENT@4..5 "b"
+                    WHITESPACE@5..6 " "
+                    SLASH@6..7 "/"
+                    PathExpr@7..9
+                      Path@7..9
+                        PathSegment@7..9
+                          NameRef@7..9
+                            WHITESPACE@7..8 " "
+                            IDENT@8..9 "c"
+                  WHITESPACE@9..10 " "
+                  PERCENT@10..11 "%"
+                  PathExpr@11..13
+                    Path@11..13
+                      PathSegment@11..13
+                        NameRef@11..13
+                          WHITESPACE@11..12 " "
+                          IDENT@12..13 "d"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn add_sub_chain() {
+        check_expr(
+            "a + b - c",
+            &expect![[r#"
+                BinExpr@0..9
+                  BinExpr@0..5
+                    PathExpr@0..1
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "a"
+                    WHITESPACE@1..2 " "
+                    PLUS@2..3 "+"
+                    PathExpr@3..5
+                      Path@3..5
+                        PathSegment@3..5
+                          NameRef@3..5
+                            WHITESPACE@3..4 " "
+                            IDENT@4..5 "b"
+                  WHITESPACE@5..6 " "
+                  MINUS@6..7 "-"
+                  PathExpr@7..9
+                    Path@7..9
+                      PathSegment@7..9
+                        NameRef@7..9
+                          WHITESPACE@7..8 " "
+                          IDENT@8..9 "c"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn logical_and_chain() {
+        check_expr(
+            "a && b && c && d",
+            &expect![[r#"
+                BinExpr@0..16
+                  BinExpr@0..11
+                    BinExpr@0..6
+                      PathExpr@0..1
+                        Path@0..1
+                          PathSegment@0..1
+                            NameRef@0..1
+                              IDENT@0..1 "a"
+                      WHITESPACE@1..2 " "
+                      AND_AND@2..4 "&&"
+                      PathExpr@4..6
+                        Path@4..6
+                          PathSegment@4..6
+                            NameRef@4..6
+                              WHITESPACE@4..5 " "
+                              IDENT@5..6 "b"
+                    WHITESPACE@6..7 " "
+                    AND_AND@7..9 "&&"
+                    PathExpr@9..11
+                      Path@9..11
+                        PathSegment@9..11
+                          NameRef@9..11
+                            WHITESPACE@9..10 " "
+                            IDENT@10..11 "c"
+                  WHITESPACE@11..12 " "
+                  AND_AND@12..14 "&&"
+                  PathExpr@14..16
+                    Path@14..16
+                      PathSegment@14..16
+                        NameRef@14..16
+                          WHITESPACE@14..15 " "
+                          IDENT@15..16 "d"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn prefix_on_paren() {
+        check_expr(
+            "-(a + b)",
+            &expect![[r#"
+                PrefixExpr@0..8
+                  MINUS@0..1 "-"
+                  ParenExpr@1..8
+                    L_PAREN@1..2 "("
+                    BinExpr@2..7
+                      PathExpr@2..3
+                        Path@2..3
+                          PathSegment@2..3
+                            NameRef@2..3
+                              IDENT@2..3 "a"
+                      WHITESPACE@3..4 " "
+                      PLUS@4..5 "+"
+                      PathExpr@5..7
+                        Path@5..7
+                          PathSegment@5..7
+                            NameRef@5..7
+                              WHITESPACE@5..6 " "
+                              IDENT@6..7 "b"
+                    R_PAREN@7..8 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn ref_paren() {
+        check_expr(
+            "&(a + b)",
+            &expect![[r#"
+                RefExpr@0..8
+                  AMP@0..1 "&"
+                  ParenExpr@1..8
+                    L_PAREN@1..2 "("
+                    BinExpr@2..7
+                      PathExpr@2..3
+                        Path@2..3
+                          PathSegment@2..3
+                            NameRef@2..3
+                              IDENT@2..3 "a"
+                      WHITESPACE@3..4 " "
+                      PLUS@4..5 "+"
+                      PathExpr@5..7
+                        Path@5..7
+                          PathSegment@5..7
+                            NameRef@5..7
+                              WHITESPACE@5..6 " "
+                              IDENT@6..7 "b"
+                    R_PAREN@7..8 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn prefix_on_call() {
+        check_expr(
+            "-foo()",
+            &expect![[r#"
+                PrefixExpr@0..6
+                  MINUS@0..1 "-"
+                  CallExpr@1..6
+                    PathExpr@1..4
+                      Path@1..4
+                        PathSegment@1..4
+                          NameRef@1..4
+                            IDENT@1..4 "foo"
+                    ArgList@4..6
+                      L_PAREN@4..5 "("
+                      R_PAREN@5..6 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn ref_field() {
+        check_expr(
+            "&obj.field",
+            &expect![[r#"
+                RefExpr@0..10
+                  AMP@0..1 "&"
+                  FieldExpr@1..10
+                    PathExpr@1..4
+                      Path@1..4
+                        PathSegment@1..4
+                          NameRef@1..4
+                            IDENT@1..4 "obj"
+                    DOT@4..5 "."
+                    IDENT@5..10 "field"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn call_trailing_comma() {
+        check_expr(
+            "foo(a, b,)",
+            &expect![[r#"
+                CallExpr@0..10
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "foo"
+                  ArgList@3..10
+                    L_PAREN@3..4 "("
+                    PathExpr@4..5
+                      Path@4..5
+                        PathSegment@4..5
+                          NameRef@4..5
+                            IDENT@4..5 "a"
+                    COMMA@5..6 ","
+                    PathExpr@6..8
+                      Path@6..8
+                        PathSegment@6..8
+                          NameRef@6..8
+                            WHITESPACE@6..7 " "
+                            IDENT@7..8 "b"
+                    COMMA@8..9 ","
+                    R_PAREN@9..10 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn call_nested() {
+        check_expr(
+            "foo(bar(baz()))",
+            &expect![[r#"
+                CallExpr@0..15
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "foo"
+                  ArgList@3..15
+                    L_PAREN@3..4 "("
+                    CallExpr@4..14
+                      PathExpr@4..7
+                        Path@4..7
+                          PathSegment@4..7
+                            NameRef@4..7
+                              IDENT@4..7 "bar"
+                      ArgList@7..14
+                        L_PAREN@7..8 "("
+                        CallExpr@8..13
+                          PathExpr@8..11
+                            Path@8..11
+                              PathSegment@8..11
+                                NameRef@8..11
+                                  IDENT@8..11 "baz"
+                          ArgList@11..13
+                            L_PAREN@11..12 "("
+                            R_PAREN@12..13 ")"
+                        R_PAREN@13..14 ")"
+                    R_PAREN@14..15 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn call_on_paren_expr() {
+        check_expr(
+            "(get_fn())(arg)",
+            &expect![[r#"
+                CallExpr@0..15
+                  ParenExpr@0..10
+                    L_PAREN@0..1 "("
+                    CallExpr@1..9
+                      PathExpr@1..7
+                        Path@1..7
+                          PathSegment@1..7
+                            NameRef@1..7
+                              IDENT@1..7 "get_fn"
+                      ArgList@7..9
+                        L_PAREN@7..8 "("
+                        R_PAREN@8..9 ")"
+                    R_PAREN@9..10 ")"
+                  ArgList@10..15
+                    L_PAREN@10..11 "("
+                    PathExpr@11..14
+                      Path@11..14
+                        PathSegment@11..14
+                          NameRef@11..14
+                            IDENT@11..14 "arg"
+                    R_PAREN@14..15 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn field_chain() {
+        check_expr(
+            "obj.a.b.c",
+            &expect![[r#"
+                FieldExpr@0..9
+                  FieldExpr@0..7
+                    FieldExpr@0..5
+                      PathExpr@0..3
+                        Path@0..3
+                          PathSegment@0..3
+                            NameRef@0..3
+                              IDENT@0..3 "obj"
+                      DOT@3..4 "."
+                      IDENT@4..5 "a"
+                    DOT@5..6 "."
+                    IDENT@6..7 "b"
+                  DOT@7..8 "."
+                  IDENT@8..9 "c"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn field_on_call() {
+        check_expr(
+            "get_obj().field",
+            &expect![[r#"
+                FieldExpr@0..15
+                  CallExpr@0..9
+                    PathExpr@0..7
+                      Path@0..7
+                        PathSegment@0..7
+                          NameRef@0..7
+                            IDENT@0..7 "get_obj"
+                    ArgList@7..9
+                      L_PAREN@7..8 "("
+                      R_PAREN@8..9 ")"
+                  DOT@9..10 "."
+                  IDENT@10..15 "field"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn index_with_expr() {
+        check_expr(
+            "arr[i + 1]",
+            &expect![[r#"
+                IndexExpr@0..10
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "arr"
+                  L_BRACKET@3..4 "["
+                  BinExpr@4..9
+                    PathExpr@4..5
+                      Path@4..5
+                        PathSegment@4..5
+                          NameRef@4..5
+                            IDENT@4..5 "i"
+                    WHITESPACE@5..6 " "
+                    PLUS@6..7 "+"
+                    LiteralExpr@7..9
+                      WHITESPACE@7..8 " "
+                      INT_LITERAL@8..9 "1"
+                  R_BRACKET@9..10 "]"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn index_chained() {
+        check_expr(
+            "arr[0][1]",
+            &expect![[r#"
+                IndexExpr@0..9
+                  IndexExpr@0..6
+                    PathExpr@0..3
+                      Path@0..3
+                        PathSegment@0..3
+                          NameRef@0..3
+                            IDENT@0..3 "arr"
+                    L_BRACKET@3..4 "["
+                    LiteralExpr@4..5
+                      INT_LITERAL@4..5 "0"
+                    R_BRACKET@5..6 "]"
+                  L_BRACKET@6..7 "["
+                  LiteralExpr@7..8
+                    INT_LITERAL@7..8 "1"
+                  R_BRACKET@8..9 "]"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn index_on_field() {
+        check_expr(
+            "obj.arr[0]",
+            &expect![[r#"
+                IndexExpr@0..10
+                  FieldExpr@0..7
+                    PathExpr@0..3
+                      Path@0..3
+                        PathSegment@0..3
+                          NameRef@0..3
+                            IDENT@0..3 "obj"
+                    DOT@3..4 "."
+                    IDENT@4..7 "arr"
+                  L_BRACKET@7..8 "["
+                  LiteralExpr@8..9
+                    INT_LITERAL@8..9 "0"
+                  R_BRACKET@9..10 "]"
+            "#]],
+        );
+    }
+
+    // === Control Flow Edge Cases ===
+
+    #[test]
+    fn if_complex_condition() {
+        check_expr(
+            "if a > 0 && b < 10 { x }",
+            &expect![[r#"
+                IfExpr@0..24
+                  IF_KW@0..2 "if"
+                  BinExpr@2..18
+                    BinExpr@2..8
+                      PathExpr@2..4
+                        Path@2..4
+                          PathSegment@2..4
+                            NameRef@2..4
+                              WHITESPACE@2..3 " "
+                              IDENT@3..4 "a"
+                      WHITESPACE@4..5 " "
+                      GT@5..6 ">"
+                      LiteralExpr@6..8
+                        WHITESPACE@6..7 " "
+                        INT_LITERAL@7..8 "0"
+                    WHITESPACE@8..9 " "
+                    AND_AND@9..11 "&&"
+                    BinExpr@11..18
+                      PathExpr@11..13
+                        Path@11..13
+                          PathSegment@11..13
+                            NameRef@11..13
+                              WHITESPACE@11..12 " "
+                              IDENT@12..13 "b"
+                      WHITESPACE@13..14 " "
+                      LT@14..15 "<"
+                      LiteralExpr@15..18
+                        WHITESPACE@15..16 " "
+                        INT_LITERAL@16..18 "10"
+                  Block@18..24
+                    WHITESPACE@18..19 " "
+                    L_BRACE@19..20 "{"
+                    PathExpr@20..22
+                      Path@20..22
+                        PathSegment@20..22
+                          NameRef@20..22
+                            WHITESPACE@20..21 " "
+                            IDENT@21..22 "x"
+                    WHITESPACE@22..23 " "
+                    R_BRACE@23..24 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn if_nested() {
+        check_expr(
+            "if a { if b { x } }",
+            &expect![[r#"
+                IfExpr@0..19
+                  IF_KW@0..2 "if"
+                  PathExpr@2..4
+                    Path@2..4
+                      PathSegment@2..4
+                        NameRef@2..4
+                          WHITESPACE@2..3 " "
+                          IDENT@3..4 "a"
+                  Block@4..19
+                    WHITESPACE@4..5 " "
+                    L_BRACE@5..6 "{"
+                    IfExpr@6..17
+                      WHITESPACE@6..7 " "
+                      IF_KW@7..9 "if"
+                      PathExpr@9..11
+                        Path@9..11
+                          PathSegment@9..11
+                            NameRef@9..11
+                              WHITESPACE@9..10 " "
+                              IDENT@10..11 "b"
+                      Block@11..17
+                        WHITESPACE@11..12 " "
+                        L_BRACE@12..13 "{"
+                        PathExpr@13..15
+                          Path@13..15
+                            PathSegment@13..15
+                              NameRef@13..15
+                                WHITESPACE@13..14 " "
+                                IDENT@14..15 "x"
+                        WHITESPACE@15..16 " "
+                        R_BRACE@16..17 "}"
+                    WHITESPACE@17..18 " "
+                    R_BRACE@18..19 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn loop_with_break_value() {
+        check_expr(
+            "loop { break 42 }",
+            &expect![[r#"
+                LoopExpr@0..17
+                  LOOP_KW@0..4 "loop"
+                  Block@4..17
+                    WHITESPACE@4..5 " "
+                    L_BRACE@5..6 "{"
+                    BreakExpr@6..15
+                      WHITESPACE@6..7 " "
+                      BREAK_KW@7..12 "break"
+                      LiteralExpr@12..15
+                        WHITESPACE@12..13 " "
+                        INT_LITERAL@13..15 "42"
+                    WHITESPACE@15..16 " "
+                    R_BRACE@16..17 "}"
+            "#]],
+        );
+    }
+
+    // === Collections Edge Cases ===
+
+    #[test]
+    fn array_trailing_comma() {
+        check_expr(
+            "[1, 2, 3,]",
+            &expect![[r#"
+                ArrayExpr@0..10
+                  L_BRACKET@0..1 "["
+                  LiteralExpr@1..2
+                    INT_LITERAL@1..2 "1"
+                  COMMA@2..3 ","
+                  LiteralExpr@3..5
+                    WHITESPACE@3..4 " "
+                    INT_LITERAL@4..5 "2"
+                  COMMA@5..6 ","
+                  LiteralExpr@6..8
+                    WHITESPACE@6..7 " "
+                    INT_LITERAL@7..8 "3"
+                  COMMA@8..9 ","
+                  R_BRACKET@9..10 "]"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn array_nested() {
+        check_expr(
+            "[[1, 2], [3, 4]]",
+            &expect![[r#"
+                ArrayExpr@0..16
+                  L_BRACKET@0..1 "["
+                  ArrayExpr@1..7
+                    L_BRACKET@1..2 "["
+                    LiteralExpr@2..3
+                      INT_LITERAL@2..3 "1"
+                    COMMA@3..4 ","
+                    LiteralExpr@4..6
+                      WHITESPACE@4..5 " "
+                      INT_LITERAL@5..6 "2"
+                    R_BRACKET@6..7 "]"
+                  COMMA@7..8 ","
+                  ArrayExpr@8..15
+                    WHITESPACE@8..9 " "
+                    L_BRACKET@9..10 "["
+                    LiteralExpr@10..11
+                      INT_LITERAL@10..11 "3"
+                    COMMA@11..12 ","
+                    LiteralExpr@12..14
+                      WHITESPACE@12..13 " "
+                      INT_LITERAL@13..14 "4"
+                    R_BRACKET@14..15 "]"
+                  R_BRACKET@15..16 "]"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn tuple_trailing_comma() {
+        check_expr(
+            "(1, 2, 3,)",
+            &expect![[r#"
+                TupleExpr@0..10
+                  L_PAREN@0..1 "("
+                  LiteralExpr@1..2
+                    INT_LITERAL@1..2 "1"
+                  COMMA@2..3 ","
+                  LiteralExpr@3..5
+                    WHITESPACE@3..4 " "
+                    INT_LITERAL@4..5 "2"
+                  COMMA@5..6 ","
+                  LiteralExpr@6..8
+                    WHITESPACE@6..7 " "
+                    INT_LITERAL@7..8 "3"
+                  COMMA@8..9 ","
+                  R_PAREN@9..10 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn tuple_nested() {
+        check_expr(
+            "((1, 2), (3, 4))",
+            &expect![[r#"
+                TupleExpr@0..16
+                  L_PAREN@0..1 "("
+                  TupleExpr@1..7
+                    L_PAREN@1..2 "("
+                    LiteralExpr@2..3
+                      INT_LITERAL@2..3 "1"
+                    COMMA@3..4 ","
+                    LiteralExpr@4..6
+                      WHITESPACE@4..5 " "
+                      INT_LITERAL@5..6 "2"
+                    R_PAREN@6..7 ")"
+                  COMMA@7..8 ","
+                  TupleExpr@8..15
+                    WHITESPACE@8..9 " "
+                    L_PAREN@9..10 "("
+                    LiteralExpr@10..11
+                      INT_LITERAL@10..11 "3"
+                    COMMA@11..12 ","
+                    LiteralExpr@12..14
+                      WHITESPACE@12..13 " "
+                      INT_LITERAL@13..14 "4"
+                    R_PAREN@14..15 ")"
+                  R_PAREN@15..16 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_trailing_comma() {
+        check_expr(
+            "Point { x: 1, y: 2, }",
+            &expect![[r#"
+                StructExpr@0..21
+                  Path@0..5
+                    PathSegment@0..5
+                      NameRef@0..5
+                        IDENT@0..5 "Point"
+                  WHITESPACE@5..6 " "
+                  L_BRACE@6..7 "{"
+                  StructExprField@7..12
+                    WHITESPACE@7..8 " "
+                    IDENT@8..9 "x"
+                    COLON@9..10 ":"
+                    LiteralExpr@10..12
+                      WHITESPACE@10..11 " "
+                      INT_LITERAL@11..12 "1"
+                  COMMA@12..13 ","
+                  StructExprField@13..18
+                    WHITESPACE@13..14 " "
+                    IDENT@14..15 "y"
+                    COLON@15..16 ":"
+                    LiteralExpr@16..18
+                      WHITESPACE@16..17 " "
+                      INT_LITERAL@17..18 "2"
+                  COMMA@18..19 ","
+                  WHITESPACE@19..20 " "
+                  R_BRACE@20..21 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_mixed_shorthand() {
+        check_expr(
+            "Point { x, y: other_y }",
+            &expect![[r#"
+                StructExpr@0..23
+                  Path@0..5
+                    PathSegment@0..5
+                      NameRef@0..5
+                        IDENT@0..5 "Point"
+                  WHITESPACE@5..6 " "
+                  L_BRACE@6..7 "{"
+                  StructExprField@7..9
+                    WHITESPACE@7..8 " "
+                    IDENT@8..9 "x"
+                  COMMA@9..10 ","
+                  StructExprField@10..21
+                    WHITESPACE@10..11 " "
+                    IDENT@11..12 "y"
+                    COLON@12..13 ":"
+                    PathExpr@13..21
+                      Path@13..21
+                        PathSegment@13..21
+                          NameRef@13..21
+                            WHITESPACE@13..14 " "
+                            IDENT@14..21 "other_y"
+                  WHITESPACE@21..22 " "
+                  R_BRACE@22..23 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_nested() {
+        check_expr(
+            "Outer { inner: Inner { x: 1 } }",
+            &expect![[r#"
+                StructExpr@0..31
+                  Path@0..5
+                    PathSegment@0..5
+                      NameRef@0..5
+                        IDENT@0..5 "Outer"
+                  WHITESPACE@5..6 " "
+                  L_BRACE@6..7 "{"
+                  StructExprField@7..29
+                    WHITESPACE@7..8 " "
+                    IDENT@8..13 "inner"
+                    COLON@13..14 ":"
+                    StructExpr@14..29
+                      Path@14..20
+                        PathSegment@14..20
+                          NameRef@14..20
+                            WHITESPACE@14..15 " "
+                            IDENT@15..20 "Inner"
+                      WHITESPACE@20..21 " "
+                      L_BRACE@21..22 "{"
+                      StructExprField@22..27
+                        WHITESPACE@22..23 " "
+                        IDENT@23..24 "x"
+                        COLON@24..25 ":"
+                        LiteralExpr@25..27
+                          WHITESPACE@25..26 " "
+                          INT_LITERAL@26..27 "1"
+                      WHITESPACE@27..28 " "
+                      R_BRACE@28..29 "}"
+                  WHITESPACE@29..30 " "
+                  R_BRACE@30..31 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_with_path() {
+        check_expr(
+            "module::Point { x: 1 }",
+            &expect![[r#"
+                StructExpr@0..22
+                  Path@0..13
+                    PathSegment@0..6
+                      NameRef@0..6
+                        IDENT@0..6 "module"
+                    COLON_COLON@6..8 "::"
+                    PathSegment@8..13
+                      NameRef@8..13
+                        IDENT@8..13 "Point"
+                  WHITESPACE@13..14 " "
+                  L_BRACE@14..15 "{"
+                  StructExprField@15..20
+                    WHITESPACE@15..16 " "
+                    IDENT@16..17 "x"
+                    COLON@17..18 ":"
+                    LiteralExpr@18..20
+                      WHITESPACE@18..19 " "
+                      INT_LITERAL@19..20 "1"
+                  WHITESPACE@20..21 " "
+                  R_BRACE@21..22 "}"
+            "#]],
+        );
+    }
 
     // Phase 5: Complex Cases & Edge Cases
 

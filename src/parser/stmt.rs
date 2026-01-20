@@ -943,4 +943,396 @@ mod tests {
             "#]],
         );
     }
+
+    // === Phase 5: Type Annotation Edge Cases ===
+
+    #[test]
+    fn ref_to_slice_type() {
+        check_expr(
+            "{ let x: &[i32]; }",
+            &expect![[r#"
+                BlockExpr@0..18
+                  Block@0..18
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..16
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      RefType@8..15
+                        WHITESPACE@8..9 " "
+                        AMP@9..10 "&"
+                        SliceType@10..15
+                          L_BRACKET@10..11 "["
+                          PathType@11..14
+                            Path@11..14
+                              PathSegment@11..14
+                                NameRef@11..14
+                                  IDENT@11..14 "i32"
+                          R_BRACKET@14..15 "]"
+                      SEMI@15..16 ";"
+                    WHITESPACE@16..17 " "
+                    R_BRACE@17..18 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn ref_to_array_type() {
+        check_expr(
+            "{ let x: &[i32; 5]; }",
+            &expect![[r#"
+                BlockExpr@0..21
+                  Block@0..21
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..19
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      RefType@8..18
+                        WHITESPACE@8..9 " "
+                        AMP@9..10 "&"
+                        ArrayType@10..18
+                          L_BRACKET@10..11 "["
+                          PathType@11..14
+                            Path@11..14
+                              PathSegment@11..14
+                                NameRef@11..14
+                                  IDENT@11..14 "i32"
+                          SEMI@14..15 ";"
+                          LiteralExpr@15..17
+                            WHITESPACE@15..16 " "
+                            INT_LITERAL@16..17 "5"
+                          R_BRACKET@17..18 "]"
+                      SEMI@18..19 ";"
+                    WHITESPACE@19..20 " "
+                    R_BRACE@20..21 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn array_nested_type() {
+        check_expr(
+            "{ let x: [[i32; 2]; 3]; }",
+            &expect![[r#"
+                BlockExpr@0..25
+                  Block@0..25
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..23
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      ArrayType@8..22
+                        WHITESPACE@8..9 " "
+                        L_BRACKET@9..10 "["
+                        ArrayType@10..18
+                          L_BRACKET@10..11 "["
+                          PathType@11..14
+                            Path@11..14
+                              PathSegment@11..14
+                                NameRef@11..14
+                                  IDENT@11..14 "i32"
+                          SEMI@14..15 ";"
+                          LiteralExpr@15..17
+                            WHITESPACE@15..16 " "
+                            INT_LITERAL@16..17 "2"
+                          R_BRACKET@17..18 "]"
+                        SEMI@18..19 ";"
+                        LiteralExpr@19..21
+                          WHITESPACE@19..20 " "
+                          INT_LITERAL@20..21 "3"
+                        R_BRACKET@21..22 "]"
+                      SEMI@22..23 ";"
+                    WHITESPACE@23..24 " "
+                    R_BRACE@24..25 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn slice_of_tuples_type() {
+        check_expr(
+            "{ let x: [(i32, i32)]; }",
+            &expect![[r#"
+                BlockExpr@0..24
+                  Block@0..24
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..22
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      SliceType@8..21
+                        WHITESPACE@8..9 " "
+                        L_BRACKET@9..10 "["
+                        TupleType@10..20
+                          L_PAREN@10..11 "("
+                          PathType@11..14
+                            Path@11..14
+                              PathSegment@11..14
+                                NameRef@11..14
+                                  IDENT@11..14 "i32"
+                          COMMA@14..15 ","
+                          PathType@15..19
+                            Path@15..19
+                              PathSegment@15..19
+                                NameRef@15..19
+                                  WHITESPACE@15..16 " "
+                                  IDENT@16..19 "i32"
+                          R_PAREN@19..20 ")"
+                        R_BRACKET@20..21 "]"
+                      SEMI@21..22 ";"
+                    WHITESPACE@22..23 " "
+                    R_BRACE@23..24 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn tuple_empty_type() {
+        check_expr(
+            "{ let x: (); }",
+            &expect![[r#"
+                BlockExpr@0..14
+                  Block@0..14
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..12
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      TupleType@8..11
+                        WHITESPACE@8..9 " "
+                        L_PAREN@9..10 "("
+                        R_PAREN@10..11 ")"
+                      SEMI@11..12 ";"
+                    WHITESPACE@12..13 " "
+                    R_BRACE@13..14 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn tuple_nested_type() {
+        check_expr(
+            "{ let x: ((i32, i32), (bool, bool)); }",
+            &expect![[r#"
+                BlockExpr@0..38
+                  Block@0..38
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..36
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      TupleType@8..35
+                        WHITESPACE@8..9 " "
+                        L_PAREN@9..10 "("
+                        TupleType@10..20
+                          L_PAREN@10..11 "("
+                          PathType@11..14
+                            Path@11..14
+                              PathSegment@11..14
+                                NameRef@11..14
+                                  IDENT@11..14 "i32"
+                          COMMA@14..15 ","
+                          PathType@15..19
+                            Path@15..19
+                              PathSegment@15..19
+                                NameRef@15..19
+                                  WHITESPACE@15..16 " "
+                                  IDENT@16..19 "i32"
+                          R_PAREN@19..20 ")"
+                        COMMA@20..21 ","
+                        TupleType@21..34
+                          WHITESPACE@21..22 " "
+                          L_PAREN@22..23 "("
+                          PathType@23..27
+                            Path@23..27
+                              PathSegment@23..27
+                                NameRef@23..27
+                                  IDENT@23..27 "bool"
+                          COMMA@27..28 ","
+                          PathType@28..33
+                            Path@28..33
+                              PathSegment@28..33
+                                NameRef@28..33
+                                  WHITESPACE@28..29 " "
+                                  IDENT@29..33 "bool"
+                          R_PAREN@33..34 ")"
+                        R_PAREN@34..35 ")"
+                      SEMI@35..36 ";"
+                    WHITESPACE@36..37 " "
+                    R_BRACE@37..38 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn fn_returning_fn_type() {
+        check_expr(
+            "{ let x: fn() -> fn() -> i32; }",
+            &expect![[r#"
+                BlockExpr@0..31
+                  Block@0..31
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..29
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      FnPtrType@8..28
+                        WHITESPACE@8..9 " "
+                        FN_KW@9..11 "fn"
+                        L_PAREN@11..12 "("
+                        R_PAREN@12..13 ")"
+                        WHITESPACE@13..14 " "
+                        ARROW@14..16 "->"
+                        FnPtrType@16..28
+                          WHITESPACE@16..17 " "
+                          FN_KW@17..19 "fn"
+                          L_PAREN@19..20 "("
+                          R_PAREN@20..21 ")"
+                          WHITESPACE@21..22 " "
+                          ARROW@22..24 "->"
+                          PathType@24..28
+                            Path@24..28
+                              PathSegment@24..28
+                                NameRef@24..28
+                                  WHITESPACE@24..25 " "
+                                  IDENT@25..28 "i32"
+                      SEMI@28..29 ";"
+                    WHITESPACE@29..30 " "
+                    R_BRACE@30..31 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn fn_taking_fn_type() {
+        check_expr(
+            "{ let x: fn(fn(i32) -> bool) -> i32; }",
+            &expect![[r#"
+                BlockExpr@0..38
+                  Block@0..38
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..36
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      FnPtrType@8..35
+                        WHITESPACE@8..9 " "
+                        FN_KW@9..11 "fn"
+                        L_PAREN@11..12 "("
+                        FnPtrType@12..27
+                          FN_KW@12..14 "fn"
+                          L_PAREN@14..15 "("
+                          PathType@15..18
+                            Path@15..18
+                              PathSegment@15..18
+                                NameRef@15..18
+                                  IDENT@15..18 "i32"
+                          R_PAREN@18..19 ")"
+                          WHITESPACE@19..20 " "
+                          ARROW@20..22 "->"
+                          PathType@22..27
+                            Path@22..27
+                              PathSegment@22..27
+                                NameRef@22..27
+                                  WHITESPACE@22..23 " "
+                                  IDENT@23..27 "bool"
+                        R_PAREN@27..28 ")"
+                        WHITESPACE@28..29 " "
+                        ARROW@29..31 "->"
+                        PathType@31..35
+                          Path@31..35
+                            PathSegment@31..35
+                              NameRef@31..35
+                                WHITESPACE@31..32 " "
+                                IDENT@32..35 "i32"
+                      SEMI@35..36 ";"
+                    WHITESPACE@36..37 " "
+                    R_BRACE@37..38 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn deeply_nested_generics_type() {
+        check_expr(
+            "{ let x: Result<Option<Vec<T>>, Error>; }",
+            &expect![[r#"
+                BlockExpr@0..41
+                  Block@0..41
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..39
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      PathType@8..38
+                        Path@8..38
+                          PathSegment@8..38
+                            NameRef@8..15
+                              WHITESPACE@8..9 " "
+                              IDENT@9..15 "Result"
+                            GenericArgs@15..38
+                              LT@15..16 "<"
+                              PathType@16..30
+                                Path@16..30
+                                  PathSegment@16..30
+                                    NameRef@16..22
+                                      IDENT@16..22 "Option"
+                                    GenericArgs@22..30
+                                      LT@22..23 "<"
+                                      PathType@23..29
+                                        Path@23..29
+                                          PathSegment@23..29
+                                            NameRef@23..26
+                                              IDENT@23..26 "Vec"
+                                            GenericArgs@26..29
+                                              LT@26..27 "<"
+                                              PathType@27..28
+                                                Path@27..28
+                                                  PathSegment@27..28
+                                                    NameRef@27..28
+                                                      IDENT@27..28 "T"
+                                              GT@28..29 ">"
+                                      GT@29..30 ">"
+                              COMMA@30..31 ","
+                              PathType@31..37
+                                Path@31..37
+                                  PathSegment@31..37
+                                    NameRef@31..37
+                                      WHITESPACE@31..32 " "
+                                      IDENT@32..37 "Error"
+                              GT@37..38 ">"
+                      SEMI@38..39 ";"
+                    WHITESPACE@39..40 " "
+                    R_BRACE@40..41 "}"
+            "#]],
+        );
+    }
 }

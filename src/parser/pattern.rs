@@ -1074,4 +1074,395 @@ mod tests {
             "#]],
         );
     }
+
+    // === Phase 4: Pattern Edge Cases ===
+
+    #[test]
+    fn tuple_pattern_nested() {
+        check_expr(
+            "{ let ((a, b), (c, d)) = x; }",
+            &expect![[r#"
+                BlockExpr@0..29
+                  Block@0..29
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..27
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      TuplePat@5..22
+                        WHITESPACE@5..6 " "
+                        L_PAREN@6..7 "("
+                        TuplePat@7..13
+                          L_PAREN@7..8 "("
+                          IdentPat@8..9
+                            IDENT@8..9 "a"
+                          COMMA@9..10 ","
+                          IdentPat@10..12
+                            WHITESPACE@10..11 " "
+                            IDENT@11..12 "b"
+                          R_PAREN@12..13 ")"
+                        COMMA@13..14 ","
+                        TuplePat@14..21
+                          WHITESPACE@14..15 " "
+                          L_PAREN@15..16 "("
+                          IdentPat@16..17
+                            IDENT@16..17 "c"
+                          COMMA@17..18 ","
+                          IdentPat@18..20
+                            WHITESPACE@18..19 " "
+                            IDENT@19..20 "d"
+                          R_PAREN@20..21 ")"
+                        R_PAREN@21..22 ")"
+                      WHITESPACE@22..23 " "
+                      EQ@23..24 "="
+                      PathExpr@24..26
+                        Path@24..26
+                          PathSegment@24..26
+                            NameRef@24..26
+                              WHITESPACE@24..25 " "
+                              IDENT@25..26 "x"
+                      SEMI@26..27 ";"
+                    WHITESPACE@27..28 " "
+                    R_BRACE@28..29 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn tuple_pattern_with_wildcard() {
+        check_expr(
+            "{ let (a, _, c) = x; }",
+            &expect![[r#"
+                BlockExpr@0..22
+                  Block@0..22
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..20
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      TuplePat@5..15
+                        WHITESPACE@5..6 " "
+                        L_PAREN@6..7 "("
+                        IdentPat@7..8
+                          IDENT@7..8 "a"
+                        COMMA@8..9 ","
+                        WildcardPat@9..11
+                          WHITESPACE@9..10 " "
+                          IDENT@10..11 "_"
+                        COMMA@11..12 ","
+                        IdentPat@12..14
+                          WHITESPACE@12..13 " "
+                          IDENT@13..14 "c"
+                        R_PAREN@14..15 ")"
+                      WHITESPACE@15..16 " "
+                      EQ@16..17 "="
+                      PathExpr@17..19
+                        Path@17..19
+                          PathSegment@17..19
+                            NameRef@17..19
+                              WHITESPACE@17..18 " "
+                              IDENT@18..19 "x"
+                      SEMI@19..20 ";"
+                    WHITESPACE@20..21 " "
+                    R_BRACE@21..22 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn slice_pattern_empty() {
+        check_expr(
+            "{ let [] = x; }",
+            &expect![[r#"
+                BlockExpr@0..15
+                  Block@0..15
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..13
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      SlicePat@5..8
+                        WHITESPACE@5..6 " "
+                        L_BRACKET@6..7 "["
+                        R_BRACKET@7..8 "]"
+                      WHITESPACE@8..9 " "
+                      EQ@9..10 "="
+                      PathExpr@10..12
+                        Path@10..12
+                          PathSegment@10..12
+                            NameRef@10..12
+                              WHITESPACE@10..11 " "
+                              IDENT@11..12 "x"
+                      SEMI@12..13 ";"
+                    WHITESPACE@13..14 " "
+                    R_BRACE@14..15 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn slice_pattern_single() {
+        check_expr(
+            "{ let [a] = x; }",
+            &expect![[r#"
+                BlockExpr@0..16
+                  Block@0..16
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..14
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      SlicePat@5..9
+                        WHITESPACE@5..6 " "
+                        L_BRACKET@6..7 "["
+                        IdentPat@7..8
+                          IDENT@7..8 "a"
+                        R_BRACKET@8..9 "]"
+                      WHITESPACE@9..10 " "
+                      EQ@10..11 "="
+                      PathExpr@11..13
+                        Path@11..13
+                          PathSegment@11..13
+                            NameRef@11..13
+                              WHITESPACE@11..12 " "
+                              IDENT@12..13 "x"
+                      SEMI@13..14 ";"
+                    WHITESPACE@14..15 " "
+                    R_BRACE@15..16 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn slice_pattern_rest_at_start() {
+        check_expr(
+            "{ let [.., last] = x; }",
+            &expect![[r#"
+                BlockExpr@0..23
+                  Block@0..23
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..21
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      SlicePat@5..16
+                        WHITESPACE@5..6 " "
+                        L_BRACKET@6..7 "["
+                        RestPat@7..9
+                          DOT_DOT@7..9 ".."
+                        COMMA@9..10 ","
+                        IdentPat@10..15
+                          WHITESPACE@10..11 " "
+                          IDENT@11..15 "last"
+                        R_BRACKET@15..16 "]"
+                      WHITESPACE@16..17 " "
+                      EQ@17..18 "="
+                      PathExpr@18..20
+                        Path@18..20
+                          PathSegment@18..20
+                            NameRef@18..20
+                              WHITESPACE@18..19 " "
+                              IDENT@19..20 "x"
+                      SEMI@20..21 ";"
+                    WHITESPACE@21..22 " "
+                    R_BRACE@22..23 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn slice_pattern_rest_at_end() {
+        check_expr(
+            "{ let [first, ..] = x; }",
+            &expect![[r#"
+                BlockExpr@0..24
+                  Block@0..24
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..22
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      SlicePat@5..17
+                        WHITESPACE@5..6 " "
+                        L_BRACKET@6..7 "["
+                        IdentPat@7..12
+                          IDENT@7..12 "first"
+                        COMMA@12..13 ","
+                        RestPat@13..16
+                          WHITESPACE@13..14 " "
+                          DOT_DOT@14..16 ".."
+                        R_BRACKET@16..17 "]"
+                      WHITESPACE@17..18 " "
+                      EQ@18..19 "="
+                      PathExpr@19..21
+                        Path@19..21
+                          PathSegment@19..21
+                            NameRef@19..21
+                              WHITESPACE@19..20 " "
+                              IDENT@20..21 "x"
+                      SEMI@21..22 ";"
+                    WHITESPACE@22..23 " "
+                    R_BRACE@23..24 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_pattern_all_rest() {
+        check_expr(
+            "{ let Point { .. } = p; }",
+            &expect![[r#"
+                BlockExpr@0..25
+                  Block@0..25
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..23
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      StructPat@5..18
+                        WHITESPACE@5..6 " "
+                        IDENT@6..11 "Point"
+                        WHITESPACE@11..12 " "
+                        L_BRACE@12..13 "{"
+                        RestPat@13..16
+                          WHITESPACE@13..14 " "
+                          DOT_DOT@14..16 ".."
+                        WHITESPACE@16..17 " "
+                        R_BRACE@17..18 "}"
+                      WHITESPACE@18..19 " "
+                      EQ@19..20 "="
+                      PathExpr@20..22
+                        Path@20..22
+                          PathSegment@20..22
+                            NameRef@20..22
+                              WHITESPACE@20..21 " "
+                              IDENT@21..22 "p"
+                      SEMI@22..23 ";"
+                    WHITESPACE@23..24 " "
+                    R_BRACE@24..25 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_pattern_deeply_nested() {
+        check_expr(
+            "{ let A { b: B { c: C { x } } } = a; }",
+            &expect![[r#"
+                BlockExpr@0..38
+                  Block@0..38
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..36
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      StructPat@5..31
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "A"
+                        WHITESPACE@7..8 " "
+                        L_BRACE@8..9 "{"
+                        StructPatField@9..29
+                          WHITESPACE@9..10 " "
+                          IDENT@10..11 "b"
+                          COLON@11..12 ":"
+                          StructPat@12..29
+                            WHITESPACE@12..13 " "
+                            IDENT@13..14 "B"
+                            WHITESPACE@14..15 " "
+                            L_BRACE@15..16 "{"
+                            StructPatField@16..27
+                              WHITESPACE@16..17 " "
+                              IDENT@17..18 "c"
+                              COLON@18..19 ":"
+                              StructPat@19..27
+                                WHITESPACE@19..20 " "
+                                IDENT@20..21 "C"
+                                WHITESPACE@21..22 " "
+                                L_BRACE@22..23 "{"
+                                StructPatField@23..25
+                                  WHITESPACE@23..24 " "
+                                  IDENT@24..25 "x"
+                                WHITESPACE@25..26 " "
+                                R_BRACE@26..27 "}"
+                            WHITESPACE@27..28 " "
+                            R_BRACE@28..29 "}"
+                        WHITESPACE@29..30 " "
+                        R_BRACE@30..31 "}"
+                      WHITESPACE@31..32 " "
+                      EQ@32..33 "="
+                      PathExpr@33..35
+                        Path@33..35
+                          PathSegment@33..35
+                            NameRef@33..35
+                              WHITESPACE@33..34 " "
+                              IDENT@34..35 "a"
+                      SEMI@35..36 ";"
+                    WHITESPACE@36..37 " "
+                    R_BRACE@37..38 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn tuple_pattern_with_ref() {
+        check_expr(
+            "{ let (&a, &mut b) = x; }",
+            &expect![[r#"
+                BlockExpr@0..25
+                  Block@0..25
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..23
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      TuplePat@5..18
+                        WHITESPACE@5..6 " "
+                        L_PAREN@6..7 "("
+                        RefPat@7..9
+                          AMP@7..8 "&"
+                          IdentPat@8..9
+                            IDENT@8..9 "a"
+                        COMMA@9..10 ","
+                        RefPat@10..17
+                          WHITESPACE@10..11 " "
+                          AMP@11..12 "&"
+                          MUT_KW@12..15 "mut"
+                          IdentPat@15..17
+                            WHITESPACE@15..16 " "
+                            IDENT@16..17 "b"
+                        R_PAREN@17..18 ")"
+                      WHITESPACE@18..19 " "
+                      EQ@19..20 "="
+                      PathExpr@20..22
+                        Path@20..22
+                          PathSegment@20..22
+                            NameRef@20..22
+                              WHITESPACE@20..21 " "
+                              IDENT@21..22 "x"
+                      SEMI@22..23 ";"
+                    WHITESPACE@23..24 " "
+                    R_BRACE@24..25 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn literal_pattern_false() {
+        check_expr(
+            "{ let false = x; }",
+            &expect![[r#"
+                BlockExpr@0..18
+                  Block@0..18
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..16
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      LiteralPat@5..11
+                        WHITESPACE@5..6 " "
+                        FALSE_KW@6..11 "false"
+                      WHITESPACE@11..12 " "
+                      EQ@12..13 "="
+                      PathExpr@13..15
+                        Path@13..15
+                          PathSegment@13..15
+                            NameRef@13..15
+                              WHITESPACE@13..14 " "
+                              IDENT@14..15 "x"
+                      SEMI@15..16 ";"
+                    WHITESPACE@16..17 " "
+                    R_BRACE@17..18 "}"
+            "#]],
+        );
+    }
 }

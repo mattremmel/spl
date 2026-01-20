@@ -1376,4 +1376,525 @@ mod tests {
             "#]],
         );
     }
+
+    // === Phase 6: Item Edge Cases ===
+
+    #[test]
+    fn fn_many_generics() {
+        check_item(
+            "fn foo<T, U, V>(a: T, b: U) -> V {}",
+            &expect![[r#"
+                FunctionDef@0..35
+                  FN_KW@0..2 "fn"
+                  Name@2..6
+                    WHITESPACE@2..3 " "
+                    IDENT@3..6 "foo"
+                  GenericParams@6..15
+                    LT@6..7 "<"
+                    GenericParam@7..8
+                      Name@7..8
+                        IDENT@7..8 "T"
+                    COMMA@8..9 ","
+                    GenericParam@9..11
+                      Name@9..11
+                        WHITESPACE@9..10 " "
+                        IDENT@10..11 "U"
+                    COMMA@11..12 ","
+                    GenericParam@12..14
+                      Name@12..14
+                        WHITESPACE@12..13 " "
+                        IDENT@13..14 "V"
+                    GT@14..15 ">"
+                  ParamList@15..27
+                    L_PAREN@15..16 "("
+                    Param@16..20
+                      Name@16..17
+                        IDENT@16..17 "a"
+                      COLON@17..18 ":"
+                      PathType@18..20
+                        Path@18..20
+                          PathSegment@18..20
+                            NameRef@18..20
+                              WHITESPACE@18..19 " "
+                              IDENT@19..20 "T"
+                    COMMA@20..21 ","
+                    Param@21..26
+                      Name@21..23
+                        WHITESPACE@21..22 " "
+                        IDENT@22..23 "b"
+                      COLON@23..24 ":"
+                      PathType@24..26
+                        Path@24..26
+                          PathSegment@24..26
+                            NameRef@24..26
+                              WHITESPACE@24..25 " "
+                              IDENT@25..26 "U"
+                    R_PAREN@26..27 ")"
+                  WHITESPACE@27..28 " "
+                  ARROW@28..30 "->"
+                  PathType@30..32
+                    Path@30..32
+                      PathSegment@30..32
+                        NameRef@30..32
+                          WHITESPACE@30..31 " "
+                          IDENT@31..32 "V"
+                  Block@32..35
+                    WHITESPACE@32..33 " "
+                    L_BRACE@33..34 "{"
+                    R_BRACE@34..35 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn fn_taking_fn_arg() {
+        check_item(
+            "fn apply(f: fn(i32) -> i32, x: i32) -> i32 {}",
+            &expect![[r#"
+                FunctionDef@0..45
+                  FN_KW@0..2 "fn"
+                  Name@2..8
+                    WHITESPACE@2..3 " "
+                    IDENT@3..8 "apply"
+                  ParamList@8..35
+                    L_PAREN@8..9 "("
+                    Param@9..26
+                      Name@9..10
+                        IDENT@9..10 "f"
+                      COLON@10..11 ":"
+                      FnPtrType@11..26
+                        WHITESPACE@11..12 " "
+                        FN_KW@12..14 "fn"
+                        L_PAREN@14..15 "("
+                        PathType@15..18
+                          Path@15..18
+                            PathSegment@15..18
+                              NameRef@15..18
+                                IDENT@15..18 "i32"
+                        R_PAREN@18..19 ")"
+                        WHITESPACE@19..20 " "
+                        ARROW@20..22 "->"
+                        PathType@22..26
+                          Path@22..26
+                            PathSegment@22..26
+                              NameRef@22..26
+                                WHITESPACE@22..23 " "
+                                IDENT@23..26 "i32"
+                    COMMA@26..27 ","
+                    Param@27..34
+                      Name@27..29
+                        WHITESPACE@27..28 " "
+                        IDENT@28..29 "x"
+                      COLON@29..30 ":"
+                      PathType@30..34
+                        Path@30..34
+                          PathSegment@30..34
+                            NameRef@30..34
+                              WHITESPACE@30..31 " "
+                              IDENT@31..34 "i32"
+                    R_PAREN@34..35 ")"
+                  WHITESPACE@35..36 " "
+                  ARROW@36..38 "->"
+                  PathType@38..42
+                    Path@38..42
+                      PathSegment@38..42
+                        NameRef@38..42
+                          WHITESPACE@38..39 " "
+                          IDENT@39..42 "i32"
+                  Block@42..45
+                    WHITESPACE@42..43 " "
+                    L_BRACE@43..44 "{"
+                    R_BRACE@44..45 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_many_fields() {
+        check_item(
+            "struct S { a: A, b: B, c: C, d: D }",
+            &expect![[r#"
+                StructDef@0..35
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..8
+                    WHITESPACE@6..7 " "
+                    IDENT@7..8 "S"
+                  FieldList@8..35
+                    WHITESPACE@8..9 " "
+                    L_BRACE@9..10 "{"
+                    FieldDef@10..15
+                      Name@10..12
+                        WHITESPACE@10..11 " "
+                        IDENT@11..12 "a"
+                      COLON@12..13 ":"
+                      PathType@13..15
+                        Path@13..15
+                          PathSegment@13..15
+                            NameRef@13..15
+                              WHITESPACE@13..14 " "
+                              IDENT@14..15 "A"
+                    COMMA@15..16 ","
+                    FieldDef@16..21
+                      Name@16..18
+                        WHITESPACE@16..17 " "
+                        IDENT@17..18 "b"
+                      COLON@18..19 ":"
+                      PathType@19..21
+                        Path@19..21
+                          PathSegment@19..21
+                            NameRef@19..21
+                              WHITESPACE@19..20 " "
+                              IDENT@20..21 "B"
+                    COMMA@21..22 ","
+                    FieldDef@22..27
+                      Name@22..24
+                        WHITESPACE@22..23 " "
+                        IDENT@23..24 "c"
+                      COLON@24..25 ":"
+                      PathType@25..27
+                        Path@25..27
+                          PathSegment@25..27
+                            NameRef@25..27
+                              WHITESPACE@25..26 " "
+                              IDENT@26..27 "C"
+                    COMMA@27..28 ","
+                    FieldDef@28..33
+                      Name@28..30
+                        WHITESPACE@28..29 " "
+                        IDENT@29..30 "d"
+                      COLON@30..31 ":"
+                      PathType@31..33
+                        Path@31..33
+                          PathSegment@31..33
+                            NameRef@31..33
+                              WHITESPACE@31..32 " "
+                              IDENT@32..33 "D"
+                    WHITESPACE@33..34 " "
+                    R_BRACE@34..35 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_mixed_visibility() {
+        check_item(
+            "struct S { pub a: i32, pub(crate) b: i32, c: i32 }",
+            &expect![[r#"
+                StructDef@0..50
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..8
+                    WHITESPACE@6..7 " "
+                    IDENT@7..8 "S"
+                  FieldList@8..50
+                    WHITESPACE@8..9 " "
+                    L_BRACE@9..10 "{"
+                    FieldDef@10..21
+                      Visibility@10..14
+                        WHITESPACE@10..11 " "
+                        PUB_KW@11..14 "pub"
+                      Name@14..16
+                        WHITESPACE@14..15 " "
+                        IDENT@15..16 "a"
+                      COLON@16..17 ":"
+                      PathType@17..21
+                        Path@17..21
+                          PathSegment@17..21
+                            NameRef@17..21
+                              WHITESPACE@17..18 " "
+                              IDENT@18..21 "i32"
+                    COMMA@21..22 ","
+                    FieldDef@22..40
+                      Visibility@22..33
+                        WHITESPACE@22..23 " "
+                        PUB_KW@23..26 "pub"
+                        L_PAREN@26..27 "("
+                        CRATE_KW@27..32 "crate"
+                        R_PAREN@32..33 ")"
+                      Name@33..35
+                        WHITESPACE@33..34 " "
+                        IDENT@34..35 "b"
+                      COLON@35..36 ":"
+                      PathType@36..40
+                        Path@36..40
+                          PathSegment@36..40
+                            NameRef@36..40
+                              WHITESPACE@36..37 " "
+                              IDENT@37..40 "i32"
+                    COMMA@40..41 ","
+                    FieldDef@41..48
+                      Name@41..43
+                        WHITESPACE@41..42 " "
+                        IDENT@42..43 "c"
+                      COLON@43..44 ":"
+                      PathType@44..48
+                        Path@44..48
+                          PathSegment@44..48
+                            NameRef@44..48
+                              WHITESPACE@44..45 " "
+                              IDENT@45..48 "i32"
+                    WHITESPACE@48..49 " "
+                    R_BRACE@49..50 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn type_alias_tuple() {
+        check_item(
+            "type Pair = (i32, i32);",
+            &expect![[r#"
+                TypeAlias@0..23
+                  TYPE_KW@0..4 "type"
+                  Name@4..9
+                    WHITESPACE@4..5 " "
+                    IDENT@5..9 "Pair"
+                  WHITESPACE@9..10 " "
+                  EQ@10..11 "="
+                  TupleType@11..22
+                    WHITESPACE@11..12 " "
+                    L_PAREN@12..13 "("
+                    PathType@13..16
+                      Path@13..16
+                        PathSegment@13..16
+                          NameRef@13..16
+                            IDENT@13..16 "i32"
+                    COMMA@16..17 ","
+                    PathType@17..21
+                      Path@17..21
+                        PathSegment@17..21
+                          NameRef@17..21
+                            WHITESPACE@17..18 " "
+                            IDENT@18..21 "i32"
+                    R_PAREN@21..22 ")"
+                  SEMI@22..23 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn type_alias_array() {
+        check_item(
+            "type Buffer = [u8; 1024];",
+            &expect![[r#"
+                TypeAlias@0..25
+                  TYPE_KW@0..4 "type"
+                  Name@4..11
+                    WHITESPACE@4..5 " "
+                    IDENT@5..11 "Buffer"
+                  WHITESPACE@11..12 " "
+                  EQ@12..13 "="
+                  ArrayType@13..24
+                    WHITESPACE@13..14 " "
+                    L_BRACKET@14..15 "["
+                    PathType@15..17
+                      Path@15..17
+                        PathSegment@15..17
+                          NameRef@15..17
+                            IDENT@15..17 "u8"
+                    SEMI@17..18 ";"
+                    LiteralExpr@18..23
+                      WHITESPACE@18..19 " "
+                      INT_LITERAL@19..23 "1024"
+                    R_BRACKET@23..24 "]"
+                  SEMI@24..25 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn impl_multiple_methods() {
+        check_item(
+            "impl Foo { fn a() {} fn b() {} fn c() {} }",
+            &expect![[r#"
+                ImplBlock@0..42
+                  IMPL_KW@0..4 "impl"
+                  PathType@4..8
+                    Path@4..8
+                      PathSegment@4..8
+                        NameRef@4..8
+                          WHITESPACE@4..5 " "
+                          IDENT@5..8 "Foo"
+                  WHITESPACE@8..9 " "
+                  L_BRACE@9..10 "{"
+                  FunctionDef@10..20
+                    WHITESPACE@10..11 " "
+                    FN_KW@11..13 "fn"
+                    Name@13..15
+                      WHITESPACE@13..14 " "
+                      IDENT@14..15 "a"
+                    ParamList@15..17
+                      L_PAREN@15..16 "("
+                      R_PAREN@16..17 ")"
+                    Block@17..20
+                      WHITESPACE@17..18 " "
+                      L_BRACE@18..19 "{"
+                      R_BRACE@19..20 "}"
+                  FunctionDef@20..30
+                    WHITESPACE@20..21 " "
+                    FN_KW@21..23 "fn"
+                    Name@23..25
+                      WHITESPACE@23..24 " "
+                      IDENT@24..25 "b"
+                    ParamList@25..27
+                      L_PAREN@25..26 "("
+                      R_PAREN@26..27 ")"
+                    Block@27..30
+                      WHITESPACE@27..28 " "
+                      L_BRACE@28..29 "{"
+                      R_BRACE@29..30 "}"
+                  FunctionDef@30..40
+                    WHITESPACE@30..31 " "
+                    FN_KW@31..33 "fn"
+                    Name@33..35
+                      WHITESPACE@33..34 " "
+                      IDENT@34..35 "c"
+                    ParamList@35..37
+                      L_PAREN@35..36 "("
+                      R_PAREN@36..37 ")"
+                    Block@37..40
+                      WHITESPACE@37..38 " "
+                      L_BRACE@38..39 "{"
+                      R_BRACE@39..40 "}"
+                  WHITESPACE@40..41 " "
+                  R_BRACE@41..42 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn impl_mixed_visibility() {
+        check_item(
+            "impl Foo { pub fn public() {} fn private() {} }",
+            &expect![[r#"
+                ImplBlock@0..47
+                  IMPL_KW@0..4 "impl"
+                  PathType@4..8
+                    Path@4..8
+                      PathSegment@4..8
+                        NameRef@4..8
+                          WHITESPACE@4..5 " "
+                          IDENT@5..8 "Foo"
+                  WHITESPACE@8..9 " "
+                  L_BRACE@9..10 "{"
+                  FunctionDef@10..29
+                    Visibility@10..14
+                      WHITESPACE@10..11 " "
+                      PUB_KW@11..14 "pub"
+                    WHITESPACE@14..15 " "
+                    FN_KW@15..17 "fn"
+                    Name@17..24
+                      WHITESPACE@17..18 " "
+                      IDENT@18..24 "public"
+                    ParamList@24..26
+                      L_PAREN@24..25 "("
+                      R_PAREN@25..26 ")"
+                    Block@26..29
+                      WHITESPACE@26..27 " "
+                      L_BRACE@27..28 "{"
+                      R_BRACE@28..29 "}"
+                  FunctionDef@29..45
+                    WHITESPACE@29..30 " "
+                    FN_KW@30..32 "fn"
+                    Name@32..40
+                      WHITESPACE@32..33 " "
+                      IDENT@33..40 "private"
+                    ParamList@40..42
+                      L_PAREN@40..41 "("
+                      R_PAREN@41..42 ")"
+                    Block@42..45
+                      WHITESPACE@42..43 " "
+                      L_BRACE@43..44 "{"
+                      R_BRACE@44..45 "}"
+                  WHITESPACE@45..46 " "
+                  R_BRACE@46..47 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_trailing_comma() {
+        check_item(
+            "struct S { a: i32, b: i32, }",
+            &expect![[r#"
+                StructDef@0..28
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..8
+                    WHITESPACE@6..7 " "
+                    IDENT@7..8 "S"
+                  FieldList@8..28
+                    WHITESPACE@8..9 " "
+                    L_BRACE@9..10 "{"
+                    FieldDef@10..17
+                      Name@10..12
+                        WHITESPACE@10..11 " "
+                        IDENT@11..12 "a"
+                      COLON@12..13 ":"
+                      PathType@13..17
+                        Path@13..17
+                          PathSegment@13..17
+                            NameRef@13..17
+                              WHITESPACE@13..14 " "
+                              IDENT@14..17 "i32"
+                    COMMA@17..18 ","
+                    FieldDef@18..25
+                      Name@18..20
+                        WHITESPACE@18..19 " "
+                        IDENT@19..20 "b"
+                      COLON@20..21 ":"
+                      PathType@21..25
+                        Path@21..25
+                          PathSegment@21..25
+                            NameRef@21..25
+                              WHITESPACE@21..22 " "
+                              IDENT@22..25 "i32"
+                    COMMA@25..26 ","
+                    WHITESPACE@26..27 " "
+                    R_BRACE@27..28 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn fn_trailing_comma_params() {
+        check_item(
+            "fn foo(a: i32, b: i32,) {}",
+            &expect![[r#"
+                FunctionDef@0..26
+                  FN_KW@0..2 "fn"
+                  Name@2..6
+                    WHITESPACE@2..3 " "
+                    IDENT@3..6 "foo"
+                  ParamList@6..23
+                    L_PAREN@6..7 "("
+                    Param@7..13
+                      Name@7..8
+                        IDENT@7..8 "a"
+                      COLON@8..9 ":"
+                      PathType@9..13
+                        Path@9..13
+                          PathSegment@9..13
+                            NameRef@9..13
+                              WHITESPACE@9..10 " "
+                              IDENT@10..13 "i32"
+                    COMMA@13..14 ","
+                    Param@14..21
+                      Name@14..16
+                        WHITESPACE@14..15 " "
+                        IDENT@15..16 "b"
+                      COLON@16..17 ":"
+                      PathType@17..21
+                        Path@17..21
+                          PathSegment@17..21
+                            NameRef@17..21
+                              WHITESPACE@17..18 " "
+                              IDENT@18..21 "i32"
+                    COMMA@21..22 ","
+                    R_PAREN@22..23 ")"
+                  Block@23..26
+                    WHITESPACE@23..24 " "
+                    L_BRACE@24..25 "{"
+                    R_BRACE@25..26 "}"
+            "#]],
+        );
+    }
 }
