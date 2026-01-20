@@ -89,6 +89,7 @@ impl<'src> Parser<'src> {
     }
 
     /// Parse an expression (entry point for PARSE-2).
+    #[allow(dead_code)]
     pub fn parse_expr(&mut self) -> Result<(), ParseError> {
         expr::expr(self)?;
         Ok(())
@@ -99,6 +100,18 @@ impl<'src> Parser<'src> {
     pub fn parse_function(&mut self) -> Result<(), ParseError> {
         item::function_def(self)?;
         Ok(())
+    }
+
+    /// Parse a top-level item (function, struct, type alias, impl).
+    #[allow(dead_code)]
+    pub fn parse_item(&mut self) -> Result<(), ParseError> {
+        item::item(self)?;
+        Ok(())
+    }
+
+    /// Parse a source file (sequence of items).
+    pub fn parse_source_file(&mut self) -> CompletedMarker {
+        item::source_file(self)
     }
 
     /// Finish parsing and produce the syntax tree.
@@ -136,6 +149,11 @@ impl<'src> Parser<'src> {
     #[allow(dead_code)]
     fn peek_at(&mut self, n: usize, kind: SyntaxKind) -> bool {
         self.source.peek(n) == Some(kind)
+    }
+
+    /// Get the nth lookahead token kind (0 = current).
+    fn peek(&mut self, n: usize) -> Option<SyntaxKind> {
+        self.source.peek(n)
     }
 
     /// Consume the current token if it matches.
@@ -253,15 +271,7 @@ impl CompletedMarker {
 /// Parse source code and return the syntax tree.
 pub fn parse(source: &str) -> Parse {
     let mut parser = Parser::new(source);
-
-    // For now, parse a single expression (PARSE-2 scope)
-    // Later phases will add statement/item parsing
-    let m = parser.start();
-    if parser.current().is_some() {
-        let _ = parser.parse_expr();
-    }
-    m.complete(&mut parser, SyntaxKind::SourceFile);
-
+    parser.parse_source_file();
     parser.finish()
 }
 
@@ -290,8 +300,14 @@ pub(crate) mod tests {
     /// Test helper that parses an item and compares the tree.
     pub fn check_item(input: &str, expected_tree: &Expect) {
         let mut parser = Parser::new(input);
-        let _ = parser.parse_function();
+        let _ = parser.parse_item();
         let parse = parser.finish();
+        expected_tree.assert_eq(&parse.debug_tree());
+    }
+
+    /// Test helper that parses a source file and compares the tree.
+    pub fn check_source_file(input: &str, expected_tree: &Expect) {
+        let parse = super::parse(input);
         expected_tree.assert_eq(&parse.debug_tree());
     }
 }

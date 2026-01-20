@@ -139,6 +139,152 @@ fn generic_param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::P
     Ok(m.complete(p, SyntaxKind::GenericParam))
 }
 
+/// Parse a struct definition: `[pub] struct Name[<generics>] { fields }`
+pub(crate) fn struct_def(
+    p: &mut Parser<'_>,
+) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    // Optional visibility
+    p.eat(SyntaxKind::PUB_KW);
+
+    // struct keyword
+    p.expect(SyntaxKind::STRUCT_KW)?;
+
+    // Struct name
+    name(p)?;
+
+    // Optional generic parameters
+    if p.at(SyntaxKind::LT) {
+        generic_params(p)?;
+    }
+
+    // Field list
+    field_list(p)?;
+
+    Ok(m.complete(p, SyntaxKind::StructDef))
+}
+
+/// Parse a field list: `{ [pub] name: Type, ... }`
+fn field_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    p.expect(SyntaxKind::L_BRACE)?;
+
+    while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
+        field_def(p)?;
+        // Allow trailing comma
+        if !p.eat(SyntaxKind::COMMA) && !p.at(SyntaxKind::R_BRACE) {
+            return Err(p.error_at_current("expected ',' or '}'".to_string()));
+        }
+    }
+
+    p.expect(SyntaxKind::R_BRACE)?;
+    Ok(m.complete(p, SyntaxKind::FieldList))
+}
+
+/// Parse a field definition: `[pub] name: Type`
+fn field_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    // Optional visibility
+    p.eat(SyntaxKind::PUB_KW);
+
+    // Field name
+    name(p)?;
+
+    // Type annotation
+    p.expect(SyntaxKind::COLON)?;
+    stmt::type_annotation(p)?;
+
+    Ok(m.complete(p, SyntaxKind::FieldDef))
+}
+
+/// Parse a type alias: `[pub] type Name = Type;`
+pub(crate) fn type_alias(
+    p: &mut Parser<'_>,
+) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    // Optional visibility
+    p.eat(SyntaxKind::PUB_KW);
+
+    // type keyword
+    p.expect(SyntaxKind::TYPE_KW)?;
+
+    // Alias name
+    name(p)?;
+
+    // = Type
+    p.expect(SyntaxKind::EQ)?;
+    stmt::type_annotation(p)?;
+
+    // Semicolon
+    p.expect(SyntaxKind::SEMI)?;
+
+    Ok(m.complete(p, SyntaxKind::TypeAlias))
+}
+
+/// Parse an impl block: `impl [<generics>] Type { items }`
+pub(crate) fn impl_block(
+    p: &mut Parser<'_>,
+) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    // impl keyword
+    p.expect(SyntaxKind::IMPL_KW)?;
+
+    // Optional generic parameters
+    if p.at(SyntaxKind::LT) {
+        generic_params(p)?;
+    }
+
+    // Self type
+    stmt::type_annotation(p)?;
+
+    // Items block
+    p.expect(SyntaxKind::L_BRACE)?;
+
+    while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
+        item(p)?;
+    }
+
+    p.expect(SyntaxKind::R_BRACE)?;
+
+    Ok(m.complete(p, SyntaxKind::ImplBlock))
+}
+
+/// Parse a top-level item (function, struct, type alias, or impl block).
+pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    // Check for visibility modifier first
+    let has_pub = p.at(SyntaxKind::PUB_KW);
+    let lookahead = if has_pub { 1 } else { 0 };
+
+    match p.peek(lookahead) {
+        Some(SyntaxKind::FN_KW) => function_def(p),
+        Some(SyntaxKind::STRUCT_KW) => struct_def(p),
+        Some(SyntaxKind::TYPE_KW) => type_alias(p),
+        Some(SyntaxKind::IMPL_KW) if !has_pub => impl_block(p),
+        _ => {
+            let err = p.error_at_current("expected item (fn, struct, type, or impl)".to_string());
+            Err(err)
+        }
+    }
+}
+
+/// Parse a source file (sequence of items).
+pub(crate) fn source_file(p: &mut Parser<'_>) -> CompletedMarker {
+    let m = p.start();
+
+    while p.current().is_some() {
+        if item(p).is_err() {
+            // Skip problematic token on error
+            p.bump();
+        }
+    }
+
+    m.complete(p, SyntaxKind::SourceFile)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::parser::tests::check_item;
@@ -475,6 +621,418 @@ mod tests {
                     WHITESPACE@16..17 " "
                     L_BRACE@17..18 "{"
                     R_BRACE@18..19 "}"
+            "#]],
+        );
+    }
+
+    // === Struct tests ===
+
+    #[test]
+    fn struct_empty() {
+        check_item(
+            "struct Point {}",
+            &expect![[r#"
+                StructDef@0..15
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..12
+                    WHITESPACE@6..7 " "
+                    IDENT@7..12 "Point"
+                  FieldList@12..15
+                    WHITESPACE@12..13 " "
+                    L_BRACE@13..14 "{"
+                    R_BRACE@14..15 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_with_fields() {
+        check_item(
+            "struct Point { x: i32, y: i32 }",
+            &expect![[r#"
+                StructDef@0..31
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..12
+                    WHITESPACE@6..7 " "
+                    IDENT@7..12 "Point"
+                  FieldList@12..31
+                    WHITESPACE@12..13 " "
+                    L_BRACE@13..14 "{"
+                    FieldDef@14..21
+                      Name@14..16
+                        WHITESPACE@14..15 " "
+                        IDENT@15..16 "x"
+                      COLON@16..17 ":"
+                      PathType@17..21
+                        WHITESPACE@17..18 " "
+                        IDENT@18..21 "i32"
+                    COMMA@21..22 ","
+                    FieldDef@22..29
+                      Name@22..24
+                        WHITESPACE@22..23 " "
+                        IDENT@23..24 "y"
+                      COLON@24..25 ":"
+                      PathType@25..29
+                        WHITESPACE@25..26 " "
+                        IDENT@26..29 "i32"
+                    WHITESPACE@29..30 " "
+                    R_BRACE@30..31 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_pub() {
+        check_item(
+            "pub struct Foo {}",
+            &expect![[r#"
+                StructDef@0..17
+                  PUB_KW@0..3 "pub"
+                  WHITESPACE@3..4 " "
+                  STRUCT_KW@4..10 "struct"
+                  Name@10..14
+                    WHITESPACE@10..11 " "
+                    IDENT@11..14 "Foo"
+                  FieldList@14..17
+                    WHITESPACE@14..15 " "
+                    L_BRACE@15..16 "{"
+                    R_BRACE@16..17 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_with_pub_field() {
+        check_item(
+            "struct Foo { pub x: i32 }",
+            &expect![[r#"
+                StructDef@0..25
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..10
+                    WHITESPACE@6..7 " "
+                    IDENT@7..10 "Foo"
+                  FieldList@10..25
+                    WHITESPACE@10..11 " "
+                    L_BRACE@11..12 "{"
+                    FieldDef@12..23
+                      WHITESPACE@12..13 " "
+                      PUB_KW@13..16 "pub"
+                      Name@16..18
+                        WHITESPACE@16..17 " "
+                        IDENT@17..18 "x"
+                      COLON@18..19 ":"
+                      PathType@19..23
+                        WHITESPACE@19..20 " "
+                        IDENT@20..23 "i32"
+                    WHITESPACE@23..24 " "
+                    R_BRACE@24..25 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_with_generics() {
+        check_item(
+            "struct Pair<T, U> { first: T, second: U }",
+            &expect![[r#"
+                StructDef@0..41
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..11
+                    WHITESPACE@6..7 " "
+                    IDENT@7..11 "Pair"
+                  GenericParams@11..17
+                    LT@11..12 "<"
+                    GenericParam@12..13
+                      Name@12..13
+                        IDENT@12..13 "T"
+                    COMMA@13..14 ","
+                    GenericParam@14..16
+                      Name@14..16
+                        WHITESPACE@14..15 " "
+                        IDENT@15..16 "U"
+                    GT@16..17 ">"
+                  FieldList@17..41
+                    WHITESPACE@17..18 " "
+                    L_BRACE@18..19 "{"
+                    FieldDef@19..28
+                      Name@19..25
+                        WHITESPACE@19..20 " "
+                        IDENT@20..25 "first"
+                      COLON@25..26 ":"
+                      PathType@26..28
+                        WHITESPACE@26..27 " "
+                        IDENT@27..28 "T"
+                    COMMA@28..29 ","
+                    FieldDef@29..39
+                      Name@29..36
+                        WHITESPACE@29..30 " "
+                        IDENT@30..36 "second"
+                      COLON@36..37 ":"
+                      PathType@37..39
+                        WHITESPACE@37..38 " "
+                        IDENT@38..39 "U"
+                    WHITESPACE@39..40 " "
+                    R_BRACE@40..41 "}"
+            "#]],
+        );
+    }
+
+    // === Type alias tests ===
+
+    #[test]
+    fn type_alias_simple() {
+        check_item(
+            "type Int = i32;",
+            &expect![[r#"
+                TypeAlias@0..15
+                  TYPE_KW@0..4 "type"
+                  Name@4..8
+                    WHITESPACE@4..5 " "
+                    IDENT@5..8 "Int"
+                  WHITESPACE@8..9 " "
+                  EQ@9..10 "="
+                  PathType@10..14
+                    WHITESPACE@10..11 " "
+                    IDENT@11..14 "i32"
+                  SEMI@14..15 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn type_alias_pub() {
+        check_item(
+            "pub type Callback = fn(i32) -> bool;",
+            &expect![[r#"
+                TypeAlias@0..36
+                  PUB_KW@0..3 "pub"
+                  WHITESPACE@3..4 " "
+                  TYPE_KW@4..8 "type"
+                  Name@8..17
+                    WHITESPACE@8..9 " "
+                    IDENT@9..17 "Callback"
+                  WHITESPACE@17..18 " "
+                  EQ@18..19 "="
+                  FnPtrType@19..35
+                    WHITESPACE@19..20 " "
+                    FN_KW@20..22 "fn"
+                    L_PAREN@22..23 "("
+                    PathType@23..26
+                      IDENT@23..26 "i32"
+                    R_PAREN@26..27 ")"
+                    WHITESPACE@27..28 " "
+                    ARROW@28..30 "->"
+                    PathType@30..35
+                      WHITESPACE@30..31 " "
+                      IDENT@31..35 "bool"
+                  SEMI@35..36 ";"
+            "#]],
+        );
+    }
+
+    // === Impl block tests ===
+
+    #[test]
+    fn impl_empty() {
+        check_item(
+            "impl Point {}",
+            &expect![[r#"
+                ImplBlock@0..13
+                  IMPL_KW@0..4 "impl"
+                  PathType@4..10
+                    WHITESPACE@4..5 " "
+                    IDENT@5..10 "Point"
+                  WHITESPACE@10..11 " "
+                  L_BRACE@11..12 "{"
+                  R_BRACE@12..13 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn impl_with_method() {
+        check_item(
+            "impl Point { fn new() -> Point {} }",
+            &expect![[r#"
+                ImplBlock@0..35
+                  IMPL_KW@0..4 "impl"
+                  PathType@4..10
+                    WHITESPACE@4..5 " "
+                    IDENT@5..10 "Point"
+                  WHITESPACE@10..11 " "
+                  L_BRACE@11..12 "{"
+                  FunctionDef@12..33
+                    WHITESPACE@12..13 " "
+                    FN_KW@13..15 "fn"
+                    Name@15..19
+                      WHITESPACE@15..16 " "
+                      IDENT@16..19 "new"
+                    ParamList@19..21
+                      L_PAREN@19..20 "("
+                      R_PAREN@20..21 ")"
+                    WHITESPACE@21..22 " "
+                    ARROW@22..24 "->"
+                    PathType@24..30
+                      WHITESPACE@24..25 " "
+                      IDENT@25..30 "Point"
+                    Block@30..33
+                      WHITESPACE@30..31 " "
+                      L_BRACE@31..32 "{"
+                      R_BRACE@32..33 "}"
+                  WHITESPACE@33..34 " "
+                  R_BRACE@34..35 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn impl_with_generics() {
+        check_item(
+            "impl<T> Vec<T> {}",
+            &expect![[r#"
+                ImplBlock@0..17
+                  IMPL_KW@0..4 "impl"
+                  GenericParams@4..7
+                    LT@4..5 "<"
+                    GenericParam@5..6
+                      Name@5..6
+                        IDENT@5..6 "T"
+                    GT@6..7 ">"
+                  PathType@7..14
+                    WHITESPACE@7..8 " "
+                    IDENT@8..11 "Vec"
+                    GenericArgs@11..14
+                      LT@11..12 "<"
+                      PathType@12..13
+                        IDENT@12..13 "T"
+                      GT@13..14 ">"
+                  WHITESPACE@14..15 " "
+                  L_BRACE@15..16 "{"
+                  R_BRACE@16..17 "}"
+            "#]],
+        );
+    }
+
+    // === Source file tests ===
+
+    #[test]
+    fn source_file_empty() {
+        use crate::parser::tests::check_source_file;
+        check_source_file(
+            "",
+            &expect![[r#"
+                SourceFile@0..0
+            "#]],
+        );
+    }
+
+    #[test]
+    fn source_file_single_function() {
+        use crate::parser::tests::check_source_file;
+        check_source_file(
+            "fn main() {}",
+            &expect![[r#"
+                SourceFile@0..12
+                  FunctionDef@0..12
+                    FN_KW@0..2 "fn"
+                    Name@2..7
+                      WHITESPACE@2..3 " "
+                      IDENT@3..7 "main"
+                    ParamList@7..9
+                      L_PAREN@7..8 "("
+                      R_PAREN@8..9 ")"
+                    Block@9..12
+                      WHITESPACE@9..10 " "
+                      L_BRACE@10..11 "{"
+                      R_BRACE@11..12 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn source_file_multiple_items() {
+        use crate::parser::tests::check_source_file;
+        check_source_file(
+            "struct Point { x: i32 }\nfn main() {}",
+            &expect![[r#"
+                SourceFile@0..36
+                  StructDef@0..23
+                    STRUCT_KW@0..6 "struct"
+                    Name@6..12
+                      WHITESPACE@6..7 " "
+                      IDENT@7..12 "Point"
+                    FieldList@12..23
+                      WHITESPACE@12..13 " "
+                      L_BRACE@13..14 "{"
+                      FieldDef@14..21
+                        Name@14..16
+                          WHITESPACE@14..15 " "
+                          IDENT@15..16 "x"
+                        COLON@16..17 ":"
+                        PathType@17..21
+                          WHITESPACE@17..18 " "
+                          IDENT@18..21 "i32"
+                      WHITESPACE@21..22 " "
+                      R_BRACE@22..23 "}"
+                  FunctionDef@23..36
+                    WHITESPACE@23..24 "\n"
+                    FN_KW@24..26 "fn"
+                    Name@26..31
+                      WHITESPACE@26..27 " "
+                      IDENT@27..31 "main"
+                    ParamList@31..33
+                      L_PAREN@31..32 "("
+                      R_PAREN@32..33 ")"
+                    Block@33..36
+                      WHITESPACE@33..34 " "
+                      L_BRACE@34..35 "{"
+                      R_BRACE@35..36 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn source_file_with_impl() {
+        use crate::parser::tests::check_source_file;
+        check_source_file(
+            "struct Foo {}\nimpl Foo { fn bar(&self) {} }",
+            &expect![[r#"
+                SourceFile@0..43
+                  StructDef@0..13
+                    STRUCT_KW@0..6 "struct"
+                    Name@6..10
+                      WHITESPACE@6..7 " "
+                      IDENT@7..10 "Foo"
+                    FieldList@10..13
+                      WHITESPACE@10..11 " "
+                      L_BRACE@11..12 "{"
+                      R_BRACE@12..13 "}"
+                  ImplBlock@13..43
+                    WHITESPACE@13..14 "\n"
+                    IMPL_KW@14..18 "impl"
+                    PathType@18..22
+                      WHITESPACE@18..19 " "
+                      IDENT@19..22 "Foo"
+                    WHITESPACE@22..23 " "
+                    L_BRACE@23..24 "{"
+                    FunctionDef@24..41
+                      WHITESPACE@24..25 " "
+                      FN_KW@25..27 "fn"
+                      Name@27..31
+                        WHITESPACE@27..28 " "
+                        IDENT@28..31 "bar"
+                      ParamList@31..38
+                        L_PAREN@31..32 "("
+                        SelfParam@32..37
+                          AMP@32..33 "&"
+                          SELF_VALUE_KW@33..37 "self"
+                        R_PAREN@37..38 ")"
+                      Block@38..41
+                        WHITESPACE@38..39 " "
+                        L_BRACE@39..40 "{"
+                        R_BRACE@40..41 "}"
+                    WHITESPACE@41..42 " "
+                    R_BRACE@42..43 "}"
             "#]],
         );
     }
