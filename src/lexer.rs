@@ -1971,7 +1971,12 @@ fn main() {
         // Empty char in a let statement should lex successfully
         let result = lex_all("let x = '';");
         assert!(result.is_ok());
-        assert!(result.tokens.iter().any(|t| t.token == Token::Char && t.text == "''"));
+        assert!(
+            result
+                .tokens
+                .iter()
+                .any(|t| t.token == Token::Char && t.text == "''")
+        );
     }
 
     #[test]
