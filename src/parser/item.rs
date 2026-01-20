@@ -57,6 +57,15 @@ fn name(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError
     Ok(m.complete(p, SyntaxKind::Name))
 }
 
+/// Recovery set for parameter list (param start or list end).
+const PARAM_RECOVERY_SET: &[SyntaxKind] = &[
+    SyntaxKind::IDENT,
+    SyntaxKind::SELF_VALUE_KW,
+    SyntaxKind::AMP,
+    SyntaxKind::COMMA,
+    SyntaxKind::R_PAREN,
+];
+
 /// Parse a parameter list: `(self_param?, params...)`
 fn param_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
@@ -64,17 +73,23 @@ fn param_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Pars
 
     // Check for self parameter first
     if is_self_param_start(p) {
-        self_param(p)?;
-        if !p.at(SyntaxKind::R_PAREN) {
-            p.expect(SyntaxKind::COMMA)?;
+        if let Err(err) = self_param(p) {
+            p.recover_with_error(err, PARAM_RECOVERY_SET);
+        }
+        if !p.at(SyntaxKind::R_PAREN) && !p.eat(SyntaxKind::COMMA) {
+            let err = p.error_at_current("expected ',' after self parameter".to_string());
+            p.error(err);
         }
     }
 
     // Regular parameters
     while !p.at(SyntaxKind::R_PAREN) && p.current().is_some() {
-        param(p)?;
-        if !p.at(SyntaxKind::R_PAREN) {
-            p.expect(SyntaxKind::COMMA)?;
+        if let Err(err) = param(p) {
+            p.recover_with_error(err, PARAM_RECOVERY_SET);
+        }
+        if !p.at(SyntaxKind::R_PAREN) && !p.eat(SyntaxKind::COMMA) {
+            let err = p.error_at_current("expected ',' after parameter".to_string());
+            p.error(err);
         }
     }
 
@@ -165,16 +180,28 @@ pub(crate) fn struct_def(
     Ok(m.complete(p, SyntaxKind::StructDef))
 }
 
+/// Recovery set for field list (field start or list end).
+const FIELD_RECOVERY_SET: &[SyntaxKind] = &[
+    SyntaxKind::IDENT,
+    SyntaxKind::PUB_KW,
+    SyntaxKind::COMMA,
+    SyntaxKind::R_BRACE,
+];
+
 /// Parse a field list: `{ [pub] name: Type, ... }`
 fn field_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
     p.expect(SyntaxKind::L_BRACE)?;
 
     while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
-        field_def(p)?;
+        if let Err(err) = field_def(p) {
+            // Recover to next field or end of list
+            p.recover_with_error(err, FIELD_RECOVERY_SET);
+        }
         // Allow trailing comma
         if !p.eat(SyntaxKind::COMMA) && !p.at(SyntaxKind::R_BRACE) {
-            return Err(p.error_at_current("expected ',' or '}'".to_string()));
+            let err = p.error_at_current("expected ',' or '}'".to_string());
+            p.error(err);
         }
     }
 
@@ -224,6 +251,13 @@ pub(crate) fn type_alias(
     Ok(m.complete(p, SyntaxKind::TypeAlias))
 }
 
+/// Recovery set for impl block contents (functions only).
+const IMPL_ITEM_RECOVERY_SET: &[SyntaxKind] = &[
+    SyntaxKind::FN_KW,
+    SyntaxKind::PUB_KW,
+    SyntaxKind::R_BRACE,
+];
+
 /// Parse an impl block: `impl [<generics>] Type { items }`
 pub(crate) fn impl_block(
     p: &mut Parser<'_>,
@@ -245,7 +279,10 @@ pub(crate) fn impl_block(
     p.expect(SyntaxKind::L_BRACE)?;
 
     while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
-        item(p)?;
+        if let Err(err) = item(p) {
+            // Recover to next item in impl block
+            p.recover_with_error(err, IMPL_ITEM_RECOVERY_SET);
+        }
     }
 
     p.expect(SyntaxKind::R_BRACE)?;
@@ -276,9 +313,9 @@ pub(crate) fn source_file(p: &mut Parser<'_>) -> CompletedMarker {
     let m = p.start();
 
     while p.current().is_some() {
-        if item(p).is_err() {
-            // Skip problematic token on error
-            p.bump();
+        if let Err(err) = item(p) {
+            // Recover to next item boundary, wrapping error in ERROR node
+            p.recover_to_item(err);
         }
     }
 

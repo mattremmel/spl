@@ -17,6 +17,43 @@ use source::Source;
 
 pub use event::ParseError;
 
+// === Recovery Sets ===
+// These define synchronization points where the parser can resume after errors.
+
+/// Tokens that can start a new top-level item.
+const ITEM_RECOVERY_SET: &[SyntaxKind] = &[
+    SyntaxKind::FN_KW,
+    SyntaxKind::STRUCT_KW,
+    SyntaxKind::TYPE_KW,
+    SyntaxKind::IMPL_KW,
+    SyntaxKind::PUB_KW,
+];
+
+/// Tokens that can start a new statement or end a block.
+const STMT_RECOVERY_SET: &[SyntaxKind] = &[
+    SyntaxKind::LET_KW,
+    SyntaxKind::IF_KW,
+    SyntaxKind::WHILE_KW,
+    SyntaxKind::FOR_KW,
+    SyntaxKind::LOOP_KW,
+    SyntaxKind::RETURN_KW,
+    SyntaxKind::BREAK_KW,
+    SyntaxKind::CONTINUE_KW,
+    SyntaxKind::L_BRACE,
+    SyntaxKind::R_BRACE,
+    SyntaxKind::SEMI,
+];
+
+/// Tokens that typically end expressions.
+#[allow(dead_code)]
+const EXPR_RECOVERY_SET: &[SyntaxKind] = &[
+    SyntaxKind::SEMI,
+    SyntaxKind::R_PAREN,
+    SyntaxKind::R_BRACKET,
+    SyntaxKind::R_BRACE,
+    SyntaxKind::COMMA,
+];
+
 /// Result of parsing, containing the syntax tree and any errors.
 #[derive(Debug)]
 pub struct Parse {
@@ -196,6 +233,43 @@ impl<'src> Parser<'src> {
     fn error(&mut self, error: ParseError) {
         self.events.push(Event::Error(error));
     }
+
+    // === Error Recovery ===
+
+    /// Check if we're at a token in the recovery set.
+    fn at_set(&mut self, set: &[SyntaxKind]) -> bool {
+        self.current().is_some_and(|k| set.contains(&k))
+    }
+
+    /// Emit an error and skip tokens until we reach a recovery point.
+    /// Returns the marker for the error node wrapping the skipped tokens.
+    fn recover_with_error(
+        &mut self,
+        error: ParseError,
+        recovery_set: &[SyntaxKind],
+    ) -> CompletedMarker {
+        let m = self.start();
+        self.error(error);
+
+        // Skip tokens until we hit a recovery point or EOF
+        while !self.at_set(recovery_set) && self.current().is_some() {
+            self.bump();
+        }
+
+        m.complete(self, SyntaxKind::ERROR)
+    }
+
+    /// Try to recover to the nearest item boundary.
+    /// Skips tokens and wraps them in an ERROR node.
+    fn recover_to_item(&mut self, error: ParseError) -> CompletedMarker {
+        self.recover_with_error(error, ITEM_RECOVERY_SET)
+    }
+
+    /// Try to recover to the nearest statement boundary.
+    /// Skips tokens and wraps them in an ERROR node.
+    fn recover_to_stmt(&mut self, error: ParseError) -> CompletedMarker {
+        self.recover_with_error(error, STMT_RECOVERY_SET)
+    }
 }
 
 /// Marks the start of a syntax node.
@@ -278,7 +352,7 @@ pub fn parse(source: &str) -> Parse {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use expect_test::Expect;
+    use expect_test::{expect, Expect};
 
     /// Test helper that parses an expression and compares the tree.
     pub fn check_expr(input: &str, expected_tree: &Expect) {
@@ -289,6 +363,7 @@ pub(crate) mod tests {
     }
 
     /// Test helper that parses and checks for no errors.
+    #[allow(dead_code)]
     pub fn check_expr_ok(input: &str) {
         let mut parser = Parser::new(input);
         let result = parser.parse_expr();
@@ -309,5 +384,109 @@ pub(crate) mod tests {
     pub fn check_source_file(input: &str, expected_tree: &Expect) {
         let parse = super::parse(input);
         expected_tree.assert_eq(&parse.debug_tree());
+    }
+
+    // === Error Recovery Tests ===
+
+    #[test]
+    fn recovery_unknown_token_between_items() {
+        // Unknown token between valid items should be wrapped in ERROR
+        let parse = parse("fn foo() {} @ fn bar() {}");
+        assert!(!parse.ok());
+        assert_eq!(parse.errors().len(), 1);
+        // Both functions should still be parsed
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    #[test]
+    fn recovery_invalid_item_start() {
+        // Invalid token at start should be skipped, valid items parsed
+        let parse = parse("!!! fn foo() {}");
+        assert!(!parse.ok());
+        // The function should still be parsed
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    #[test]
+    fn recovery_multiple_valid_items_with_garbage() {
+        // Multiple valid items with garbage between them
+        let parse = parse("struct A {} %%% fn foo() {} ??? struct B {}");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        // All three items should be parsed
+        assert!(tree.contains("StructDef"));
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    #[test]
+    fn recovery_preserves_syntax_tree_structure() {
+        // Error recovery should produce a well-formed tree
+        // Note: whitespace before recovery point attaches to next item
+        check_source_file(
+            "fn a() {} @@@ fn b() {}",
+            &expect![[r#"
+                SourceFile@0..23
+                  FunctionDef@0..9
+                    FN_KW@0..2 "fn"
+                    Name@2..4
+                      WHITESPACE@2..3 " "
+                      IDENT@3..4 "a"
+                    ParamList@4..6
+                      L_PAREN@4..5 "("
+                      R_PAREN@5..6 ")"
+                    Block@6..9
+                      WHITESPACE@6..7 " "
+                      L_BRACE@7..8 "{"
+                      R_BRACE@8..9 "}"
+                  ERROR@9..13
+                    WHITESPACE@9..10 " "
+                    ERROR@10..11 "@"
+                    ERROR@11..12 "@"
+                    ERROR@12..13 "@"
+                  FunctionDef@13..23
+                    WHITESPACE@13..14 " "
+                    FN_KW@14..16 "fn"
+                    Name@16..18
+                      WHITESPACE@16..17 " "
+                      IDENT@17..18 "b"
+                    ParamList@18..20
+                      L_PAREN@18..19 "("
+                      R_PAREN@19..20 ")"
+                    Block@20..23
+                      WHITESPACE@20..21 " "
+                      L_BRACE@21..22 "{"
+                      R_BRACE@22..23 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn recovery_in_impl_block() {
+        // Error in impl block should recover to next method
+        let parse = parse("impl Foo { !! fn bar() {} }");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("ImplBlock"));
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    #[test]
+    fn recovery_reports_all_errors() {
+        // Multiple errors should all be reported
+        let parse = parse("@@ fn a() {} ## fn b() {}");
+        assert!(!parse.ok());
+        // Should have at least 2 errors (one for each garbage section)
+        assert!(parse.errors().len() >= 2);
+    }
+
+    #[test]
+    fn recovery_empty_with_garbage() {
+        // Only garbage should result in error nodes
+        let parse = parse("!@#");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("ERROR"));
     }
 }

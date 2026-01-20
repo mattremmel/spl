@@ -173,35 +173,44 @@ pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser
         // Try to parse a statement
         match p.current() {
             Some(SyntaxKind::LET_KW) => {
-                let_stmt(p)?;
+                if let Err(err) = let_stmt(p) {
+                    // Recover to next statement or block end
+                    p.recover_to_stmt(err);
+                }
             }
             Some(_) => {
                 // Try to parse an expression
                 let expr_m = p.start();
-                let expr_result = expr::expr(p)?;
-
-                if expr_result.is_none() {
-                    // Couldn't parse an expression - error recovery
-                    expr_m.abandon(p);
-                    // Skip the problematic token
-                    if p.current().is_some() && !p.at(SyntaxKind::R_BRACE) {
-                        p.bump();
+                match expr::expr(p) {
+                    Ok(Some(_)) => {
+                        // Successfully parsed an expression
+                        if p.eat(SyntaxKind::SEMI) {
+                            // Expression statement
+                            expr_m.complete(p, SyntaxKind::ExprStmt);
+                        } else if p.at(SyntaxKind::R_BRACE) {
+                            // Tail expression (no semicolon, at end of block)
+                            expr_m.abandon(p);
+                        } else {
+                            // Missing semicolon - emit error but continue
+                            let err =
+                                p.error_at_current("expected ';' after expression".to_string());
+                            p.error(err);
+                            expr_m.abandon(p);
+                        }
                     }
-                    continue;
-                }
-
-                // Check for semicolon
-                if p.eat(SyntaxKind::SEMI) {
-                    // Expression statement
-                    expr_m.complete(p, SyntaxKind::ExprStmt);
-                } else if p.at(SyntaxKind::R_BRACE) {
-                    // Tail expression (no semicolon, at end of block)
-                    // Don't wrap in ExprStmt - the expression is directly a child of Block
-                    expr_m.abandon(p);
-                } else {
-                    // Missing semicolon - this is an error
-                    // For now, abandon and let the outer loop continue
-                    expr_m.abandon(p);
+                    Ok(None) => {
+                        // Couldn't parse an expression - skip token
+                        expr_m.abandon(p);
+                        if p.current().is_some() && !p.at(SyntaxKind::R_BRACE) {
+                            let err = p.error_at_current("expected expression".to_string());
+                            p.recover_to_stmt(err);
+                        }
+                    }
+                    Err(err) => {
+                        // Expression parsing failed - recover
+                        expr_m.abandon(p);
+                        p.recover_to_stmt(err);
+                    }
                 }
             }
             None => break,
