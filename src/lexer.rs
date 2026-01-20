@@ -13,10 +13,20 @@ use std::fmt;
 
 /// All token types in the SPL language.
 #[derive(Logos, Debug, Clone, PartialEq)]
-#[logos(skip r"[ \t\n\r]+")]
-#[logos(skip r"//[^\n]*")]
-#[logos(skip r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/")]
 pub enum Token {
+    // === Trivia (whitespace and comments) ===
+    /// Whitespace (spaces, tabs, newlines)
+    #[regex(r"[ \t\n\r]+")]
+    Whitespace,
+
+    /// Line comment (// ...)
+    #[regex(r"//[^\n]*")]
+    LineComment,
+
+    /// Block comment (/* ... */)
+    #[regex(r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/")]
+    BlockComment,
+
     // === Keywords ===
     #[token("let")]
     Let,
@@ -511,13 +521,26 @@ mod tests {
         Lexer::new(source).map(|st| (st.token, st.text)).collect()
     }
 
+    /// Helper to lex and filter out trivia (whitespace and comments)
+    fn lex_no_trivia(source: &str) -> Vec<(Token, &str)> {
+        Lexer::new(source)
+            .filter(|st| !matches!(st.token, Token::Whitespace | Token::LineComment | Token::BlockComment))
+            .map(|st| (st.token, st.text))
+            .collect()
+    }
+
     /// Helper to lex with full span information
     fn lex_spanned(source: &str) -> Vec<SpannedToken<'_>> {
         Lexer::new(source).collect()
     }
 
-    /// Helper to check that source lexes to expected tokens
+    /// Helper to check that source lexes to expected tokens (ignoring trivia)
     fn check(source: &str, expected: &[(Token, &str)]) {
+        assert_eq!(lex_no_trivia(source), expected);
+    }
+
+    /// Helper to check all tokens including trivia
+    fn check_with_trivia(source: &str, expected: &[(Token, &str)]) {
         assert_eq!(lex(source), expected);
     }
 
@@ -1606,30 +1629,39 @@ mod tests {
 
     #[test]
     fn span_multiple_tokens() {
+        // Now includes whitespace tokens
         let tokens = lex_spanned("let x = 42;");
-        assert_eq!(tokens.len(), 5);
+        assert_eq!(tokens.len(), 8); // let, ws, x, ws, =, ws, 42, ;
         assert_eq!(tokens[0].span, 0..3); // "let"
-        assert_eq!(tokens[1].span, 4..5); // "x"
-        assert_eq!(tokens[2].span, 6..7); // "="
-        assert_eq!(tokens[3].span, 8..10); // "42"
-        assert_eq!(tokens[4].span, 10..11); // ";"
+        assert_eq!(tokens[0].token, Token::Let);
+        assert_eq!(tokens[1].span, 3..4); // " "
+        assert_eq!(tokens[1].token, Token::Whitespace);
+        assert_eq!(tokens[2].span, 4..5); // "x"
+        assert_eq!(tokens[2].token, Token::Ident);
+        assert_eq!(tokens[7].span, 10..11); // ";"
     }
 
     #[test]
     fn span_with_comments() {
+        // Now comment is included as a token
         let tokens = lex_spanned("/* comment */let");
-        assert_eq!(tokens.len(), 1);
-        assert_eq!(tokens[0].token, Token::Let);
-        assert_eq!(tokens[0].span, 13..16); // After the comment
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0].token, Token::BlockComment);
+        assert_eq!(tokens[0].span, 0..13);
+        assert_eq!(tokens[1].token, Token::Let);
+        assert_eq!(tokens[1].span, 13..16);
     }
 
     #[test]
     fn span_multiline() {
+        // Now includes whitespace token
         let source = "let\n  x";
         let tokens = lex_spanned(source);
-        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens.len(), 3); // let, whitespace, x
         assert_eq!(tokens[0].span, 0..3); // "let"
-        assert_eq!(tokens[1].span, 6..7); // "x" (after newline and spaces)
+        assert_eq!(tokens[1].span, 3..6); // "\n  "
+        assert_eq!(tokens[1].token, Token::Whitespace);
+        assert_eq!(tokens[2].span, 6..7); // "x"
     }
 
     // ============================================================
@@ -1984,7 +2016,8 @@ fn main() {
         let result = lex_all("let x = 42;");
         assert!(result.is_ok());
         assert!(result.errors.is_empty());
-        assert_eq!(result.tokens.len(), 5);
+        // Now includes whitespace tokens: let, ws, x, ws, =, ws, 42, ;
+        assert_eq!(result.tokens.len(), 8);
     }
 
     #[test]
@@ -1993,11 +2026,11 @@ fn main() {
         let result = lex_all("let @ x = 42;");
         assert!(result.has_errors());
 
-        // Count valid tokens (excluding Error)
+        // Count valid non-trivia tokens (excluding Error and trivia)
         let valid_count = result
             .tokens
             .iter()
-            .filter(|t| t.token != Token::Error)
+            .filter(|t| !matches!(t.token, Token::Error | Token::Whitespace | Token::LineComment | Token::BlockComment))
             .count();
         assert_eq!(valid_count, 5); // let, x, =, 42, ;
     }
@@ -2049,20 +2082,21 @@ fn main() {
     fn recovery_unicode_invalid_char() {
         let result = lex_all("let \u{1F600} x"); // emoji
         assert!(result.has_errors());
-        // Should still parse let and x
+        // Should still parse let and x (filtering out trivia and errors)
         let tokens: Vec<_> = result
             .tokens
             .iter()
-            .filter(|t| t.token != Token::Error)
+            .filter(|t| !matches!(t.token, Token::Error | Token::Whitespace | Token::LineComment | Token::BlockComment))
             .collect();
         assert_eq!(tokens.len(), 2);
     }
 
     #[test]
     fn recovery_preserves_token_order() {
+        // Now includes whitespace tokens
         let result = lex_all("a @ b # c");
         let tokens: Vec<_> = result.tokens.iter().map(|t| t.text).collect();
-        assert_eq!(tokens, vec!["a", "@", "b", "#", "c"]);
+        assert_eq!(tokens, vec!["a", " ", "@", " ", "b", " ", "#", " ", "c"]);
     }
 
     #[test]

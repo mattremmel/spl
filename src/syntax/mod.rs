@@ -174,6 +174,11 @@ impl SyntaxKind {
 impl From<Token> for SyntaxKind {
     fn from(token: Token) -> Self {
         match token {
+            // Trivia
+            Token::Whitespace => Self::WHITESPACE,
+            Token::LineComment => Self::COMMENT,
+            Token::BlockComment => Self::COMMENT,
+            // Keywords
             Token::Let => Self::LET_KW,
             Token::Mut => Self::MUT_KW,
             Token::Fn => Self::FN_KW,
