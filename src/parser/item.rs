@@ -155,9 +155,7 @@ fn generic_param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::P
 }
 
 /// Parse a struct definition: `[pub] struct Name[<generics>] { fields }`
-pub(crate) fn struct_def(
-    p: &mut Parser<'_>,
-) -> Result<CompletedMarker, crate::parser::ParseError> {
+pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
 
     // Optional visibility
@@ -227,9 +225,7 @@ fn field_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
 }
 
 /// Parse a type alias: `[pub] type Name = Type;`
-pub(crate) fn type_alias(
-    p: &mut Parser<'_>,
-) -> Result<CompletedMarker, crate::parser::ParseError> {
+pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
 
     // Optional visibility
@@ -252,16 +248,11 @@ pub(crate) fn type_alias(
 }
 
 /// Recovery set for impl block contents (functions only).
-const IMPL_ITEM_RECOVERY_SET: &[SyntaxKind] = &[
-    SyntaxKind::FN_KW,
-    SyntaxKind::PUB_KW,
-    SyntaxKind::R_BRACE,
-];
+const IMPL_ITEM_RECOVERY_SET: &[SyntaxKind] =
+    &[SyntaxKind::FN_KW, SyntaxKind::PUB_KW, SyntaxKind::R_BRACE];
 
 /// Parse an impl block: `impl [<generics>] Type { items }`
-pub(crate) fn impl_block(
-    p: &mut Parser<'_>,
-) -> Result<CompletedMarker, crate::parser::ParseError> {
+pub(crate) fn impl_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
 
     // impl keyword

@@ -10,7 +10,6 @@ ast_node!(SliceType);
 ast_node!(TupleType);
 ast_node!(FnPtrType);
 ast_node!(PathType);
-ast_node!(TypePath);
 
 /// Type enum - all type syntax variants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -113,12 +112,6 @@ impl FnPtrType {
 }
 
 impl PathType {
-    pub fn path(&self) -> Option<Path> {
-        child(&self.0)
-    }
-}
-
-impl TypePath {
     pub fn path(&self) -> Option<Path> {
         child(&self.0)
     }

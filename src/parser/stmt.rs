@@ -6,6 +6,7 @@ use crate::parser::{CompletedMarker, Parser};
 use crate::syntax::SyntaxKind;
 
 use super::expr;
+use super::pattern;
 
 /// Parse a let statement: `let [mut] pattern [: type] [= expr];`
 fn let_stmt(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
@@ -15,8 +16,8 @@ fn let_stmt(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseE
     // Optional mut
     p.eat(SyntaxKind::MUT_KW);
 
-    // Pattern (simplified: just identifier for now)
-    pattern(p)?;
+    // Pattern
+    pattern::pattern(p)?;
 
     // Optional type annotation
     if p.eat(SyntaxKind::COLON) {
@@ -30,23 +31,6 @@ fn let_stmt(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseE
 
     p.expect(SyntaxKind::SEMI)?;
     Ok(m.complete(p, SyntaxKind::LetStmt))
-}
-
-/// Parse a pattern (simplified: just identifier or wildcard for now).
-fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
-    let m = p.start();
-
-    match p.current() {
-        Some(SyntaxKind::IDENT) => {
-            p.bump();
-            Ok(m.complete(p, SyntaxKind::IdentPat))
-        }
-        _ => {
-            let err = p.error_at_current("expected pattern".to_string());
-            m.abandon(p);
-            Err(err)
-        }
-    }
 }
 
 /// Parse a type annotation.

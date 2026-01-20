@@ -138,24 +138,13 @@ impl Diagnostic {
     }
 
     /// Build an ariadne Report from this diagnostic.
-    fn to_report<'a>(
-        &self,
-        file_name: &'a str,
-        config: Config,
-    ) -> Report<'a, (&'a str, Span)> {
+    fn to_report<'a>(&self, file_name: &'a str, config: Config) -> Report<'a, (&'a str, Span)> {
         // Find the primary span for the report header
-        let primary_span = self
-            .labels
-            .first()
-            .map(|l| l.span.clone())
-            .unwrap_or(0..0);
+        let primary_span = self.labels.first().map(|l| l.span.clone()).unwrap_or(0..0);
 
-        let mut builder = Report::build(
-            self.severity.to_report_kind(),
-            (file_name, primary_span),
-        )
-        .with_config(config)
-        .with_message(&self.message);
+        let mut builder = Report::build(self.severity.to_report_kind(), (file_name, primary_span))
+            .with_config(config)
+            .with_message(&self.message);
 
         // Add labels
         for label in &self.labels {
@@ -288,7 +277,7 @@ pub fn render_diagnostic_plain(source: &str, diagnostic: &Diagnostic) -> String 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use expect_test::{expect, Expect};
+    use expect_test::{Expect, expect};
 
     /// Helper to render a diagnostic and compare against expected output.
     fn check(source: &str, diagnostic: &Diagnostic, expected: &Expect) {
@@ -456,8 +445,7 @@ mod tests {
     fn render_multiline_source() {
         let source = "fn main() {\n    let x = ;\n}";
         // ';' is at position 24 (after "fn main() {\n    let x = ")
-        let diag =
-            Diagnostic::error("expected expression").with_label(24..25, "unexpected ';'");
+        let diag = Diagnostic::error("expected expression").with_label(24..25, "unexpected ';'");
 
         check(
             source,
@@ -501,8 +489,8 @@ mod tests {
     #[test]
     fn render_wide_underline() {
         let source = "let very_long_identifier = something_else;";
-        let diag = Diagnostic::error("unknown identifier")
-            .with_label(27..41, "not found in this scope");
+        let diag =
+            Diagnostic::error("unknown identifier").with_label(27..41, "not found in this scope");
 
         check(
             source,

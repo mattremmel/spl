@@ -5,6 +5,7 @@
 mod event;
 mod expr;
 mod item;
+mod pattern;
 mod sink;
 mod source;
 mod stmt;
@@ -174,6 +175,11 @@ impl<'src> Parser<'src> {
     /// Check if current token matches the expected kind.
     fn at(&mut self, kind: SyntaxKind) -> bool {
         self.current() == Some(kind)
+    }
+
+    /// Get the current token's text.
+    fn current_text(&mut self) -> Option<&str> {
+        self.source.current_text()
     }
 
     /// Check if current token matches any of the expected kinds.
@@ -352,7 +358,7 @@ pub fn parse(source: &str) -> Parse {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use expect_test::{expect, Expect};
+    use expect_test::{Expect, expect};
 
     /// Test helper that parses an expression and compares the tree.
     pub fn check_expr(input: &str, expected_tree: &Expect) {

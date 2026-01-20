@@ -91,7 +91,6 @@ pub enum SyntaxKind {
     StructDef,
     ImplBlock,
     TypeAlias,
-    Visibility,
     ParamList,
     Param,
     SelfParam,
@@ -141,7 +140,6 @@ pub enum SyntaxKind {
     TupleType,
     FnPtrType,
     PathType,
-    TypePath,
 
     // Patterns
     IdentPat,
@@ -157,9 +155,16 @@ pub enum SyntaxKind {
 
     // Names & Paths
     Name,
+    // Reserved for future structured path AST:
+    // - NameRef: identifier reference within a path segment
+    // - Path: full path (e.g., std::vec::Vec)
+    // - PathSegment: single segment of a path
+    // Currently paths are parsed as flat token sequences in PathExpr/PathType.
     NameRef,
     Path,
     PathSegment,
+    // Reserved for future visibility node (currently `pub` is parsed as inline token)
+    Visibility,
 
     #[doc(hidden)]
     __LAST,

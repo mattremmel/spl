@@ -59,6 +59,11 @@ impl<'src> Source<'src> {
         self.current_token().map(|t| t.span.clone()).unwrap_or(0..0)
     }
 
+    /// Get the current token's text.
+    pub fn current_text(&self) -> Option<&'src str> {
+        self.current_token().map(|t| t.text)
+    }
+
     /// Bump the current token.
     pub fn bump(&mut self) -> Option<&Token<'src>> {
         // Skip trivia first
