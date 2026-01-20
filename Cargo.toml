@@ -5,8 +5,10 @@ edition = "2024"
 
 [dependencies]
 ariadne = "0.5"
+lasso = "0.7"
 logos = "0.15"
 rowan = "0.15"
+rustc-hash = "2.1"
 
 [dev-dependencies]
 pretty_assertions = "1.4"
