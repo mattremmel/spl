@@ -24,7 +24,7 @@ Trailing commas are allowed in all comma-separated lists (Rust-style).
 ```ebnf
 Program = { Item } ;
 
-Item = [ "pub" ] ( FunctionDef | StructDef | ImplBlock | TypeAlias ) ;
+Item = [ "pub" ] ( FunctionDef | StructDef | ImplBlock | TypeAlias | UseDecl | ModDecl ) ;
 ```
 
 ### Function Definitions
@@ -68,6 +68,52 @@ ImplItem = [ "pub" ] FunctionDef ;
 ```ebnf
 TypeAlias = "type" IDENTIFIER [ GenericParams ] "=" Type ";" ;
 ```
+
+### Use Declarations
+
+Import items or modules into scope. See `module-system.md` for full details.
+
+```ebnf
+UseDecl = "use" UsePath ";" ;
+
+UsePath = PathPrefix [ "::" UseTree ] ;
+
+PathPrefix = [ "crate" | "super" | "self" ] "::" IDENTIFIER { "::" IDENTIFIER }
+           | IDENTIFIER { "::" IDENTIFIER } ;
+
+UseTree = "*"                                    (* glob import *)
+        | "{" UseTreeList "}"                    (* grouped import *)
+        | IDENTIFIER [ "as" IDENTIFIER ] ;       (* item or rename *)
+
+UseTreeList = UseTree { "," UseTree } [ "," ] ;
+```
+
+**Examples:**
+
+| Syntax | Description |
+|--------|-------------|
+| `use std::vec::Vec;` | Import single item |
+| `use std::io;` | Import module |
+| `use std::collections::HashMap as Map;` | Import with rename |
+| `use std::collections::{HashMap, HashSet};` | Grouped import |
+| `use std::prelude::*;` | Glob import |
+| `use crate::utils::helper;` | Crate-relative import |
+| `use super::common;` | Parent module import |
+
+### Module Declarations
+
+Declare submodules. Only valid in `_module.spl` files.
+
+```ebnf
+ModDecl = "mod" IDENTIFIER ";" ;
+```
+
+**Examples:**
+
+| Syntax | Description |
+|--------|-------------|
+| `mod network;` | Private submodule |
+| `pub mod api;` | Public submodule |
 
 ---
 
@@ -569,6 +615,7 @@ impl<T> Point<T> {
 | Category    | Key Productions                                                 |
 |-------------|-----------------------------------------------------------------|
 | Program     | `Program`, `Item`, `FunctionDef`, `StructDef`                   |
+| Modules     | `UseDecl`, `UsePath`, `UseTree`, `ModDecl`                      |
 | Types       | `Type`, `ReferenceType`, `ArrayType`, `FnPointerType`, `Self`   |
 | Statements  | `Block`, `Statement`, `LetStatement`                            |
 | Expressions | `Expression`, `PrimaryExpr`, `IfExpr`, `LoopExpr`               |
