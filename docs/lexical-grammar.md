@@ -33,6 +33,7 @@ SPL reserves 21 keywords that cannot be used as identifiers:
 | `true`     | Boolean literal true                 |
 | `false`    | Boolean literal false                |
 | `pub`      | Public visibility modifier           |
+| `self`     | Self value in methods                |
 | `Self`     | Self type in impl blocks             |
 
 ---
