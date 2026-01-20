@@ -5,22 +5,26 @@
 pub mod resolver;
 pub mod scope;
 pub mod symbol;
+pub mod types;
 
 pub use resolver::{ResolveResult, Resolver, resolve};
 pub use scope::{Scope, ScopeId, ScopeKind};
 pub use symbol::{DefId, Symbol, SymbolKind, Visibility};
+pub use types::{Mutability, PrimitiveKind, Type, TypeId, TypeInterner, TypeVar};
 
 use crate::lexer::Span;
 use lasso::{Rodeo, Spur};
 
 /// The central context for semantic analysis.
 ///
-/// Owns the string interner, symbol table, and scope hierarchy.
+/// Owns the string interner, symbol table, scope hierarchy, and type interner.
 pub struct SemanticContext {
     interner: Rodeo,
     symbols: Vec<Symbol>,
     scopes: Vec<Scope>,
     current_scope: ScopeId,
+    /// Type interner for semantic types.
+    pub types: TypeInterner,
 }
 
 impl Default for SemanticContext {
@@ -41,6 +45,7 @@ impl SemanticContext {
             symbols: Vec::new(),
             scopes,
             current_scope: ScopeId(0),
+            types: TypeInterner::new(),
         }
     }
 
