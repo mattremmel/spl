@@ -1,8 +1,15 @@
 //! SPL Lexer - Tokenizes SPL source code
 //!
 //! Uses the `logos` crate for efficient lexical analysis.
+//!
+//! # Error Recovery
+//!
+//! The lexer implements error recovery by continuing to produce tokens after
+//! encountering invalid input. Errors are collected separately and can be
+//! retrieved along with the token stream using [`lex_all`].
 
 use logos::Logos;
+use std::fmt;
 
 /// All token types in the SPL language.
 #[derive(Logos, Debug, Clone, PartialEq)]
@@ -152,7 +159,7 @@ pub enum Token {
     #[regex(r#""([^"\\]|\\.)*""#)]
     String,
 
-    #[regex(r"'([^'\\]|\\.)'")]
+    #[regex(r"'([^'\\]|\\.)?'")]
     Char,
 
     // === Identifier ===
@@ -166,6 +173,72 @@ pub enum Token {
 
 /// A span representing the byte range of a token in the source code.
 pub type Span = std::ops::Range<usize>;
+
+/// Kinds of lexer errors.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LexErrorKind {
+    /// An unrecognized character was encountered.
+    InvalidCharacter(char),
+    /// A string literal was not terminated before end of input.
+    UnterminatedString,
+    /// A character literal was not terminated before end of input.
+    UnterminatedChar,
+    /// A block comment was not terminated before end of input.
+    UnterminatedBlockComment,
+    /// An empty character literal `''` was encountered.
+    EmptyCharLiteral,
+    /// A character literal contains multiple characters (not an escape).
+    MultiCharacterLiteral,
+    /// An invalid escape sequence was encountered.
+    InvalidEscape(char),
+    /// Generic error for unrecognized input.
+    Unknown,
+}
+
+impl fmt::Display for LexErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LexErrorKind::InvalidCharacter(c) => {
+                write!(f, "invalid character '{}'", c.escape_default())
+            }
+            LexErrorKind::UnterminatedString => write!(f, "unterminated string literal"),
+            LexErrorKind::UnterminatedChar => write!(f, "unterminated character literal"),
+            LexErrorKind::UnterminatedBlockComment => write!(f, "unterminated block comment"),
+            LexErrorKind::EmptyCharLiteral => write!(f, "empty character literal"),
+            LexErrorKind::MultiCharacterLiteral => {
+                write!(f, "character literal contains multiple characters")
+            }
+            LexErrorKind::InvalidEscape(c) => {
+                write!(f, "invalid escape sequence '\\{}'", c.escape_default())
+            }
+            LexErrorKind::Unknown => write!(f, "unrecognized input"),
+        }
+    }
+}
+
+/// A lexer error with location information.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LexError {
+    /// The kind of error.
+    pub kind: LexErrorKind,
+    /// The byte range in the source where the error occurred.
+    pub span: Span,
+}
+
+impl LexError {
+    /// Create a new lexer error.
+    pub fn new(kind: LexErrorKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+}
+
+impl fmt::Display for LexError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} at {}..{}", self.kind, self.span.start, self.span.end)
+    }
+}
+
+impl std::error::Error for LexError {}
 
 /// A token with its source text and position information.
 #[derive(Debug, Clone, PartialEq)]
@@ -212,6 +285,222 @@ impl<'a> Iterator for Lexer<'a> {
     }
 }
 
+/// Result of lexing source code, containing both tokens and any errors encountered.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LexResult<'a> {
+    /// All tokens produced, including error tokens for invalid input.
+    pub tokens: Vec<SpannedToken<'a>>,
+    /// Errors encountered during lexing, with detailed information.
+    pub errors: Vec<LexError>,
+}
+
+impl<'a> LexResult<'a> {
+    /// Returns true if lexing completed without errors.
+    pub fn is_ok(&self) -> bool {
+        self.errors.is_empty()
+    }
+
+    /// Returns true if there were any lexing errors.
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+}
+
+/// Lex source code and collect all tokens and errors.
+///
+/// This function lexes the entire input, continuing after errors to report
+/// as many problems as possible. Error tokens are included in the token stream
+/// and detailed error information is collected separately.
+///
+/// # Example
+///
+/// ```
+/// use spl::lexer::{lex_all, Token, LexErrorKind};
+///
+/// let result = lex_all("let x = @;");
+/// assert!(result.has_errors());
+/// assert_eq!(result.errors[0].kind, LexErrorKind::InvalidCharacter('@'));
+///
+/// // Valid tokens are still produced
+/// assert!(result.tokens.iter().any(|t| t.token == Token::Let));
+/// ```
+pub fn lex_all(source: &str) -> LexResult<'_> {
+    let mut tokens = Vec::new();
+    let mut errors = Vec::new();
+
+    for spanned in Lexer::new(source) {
+        if spanned.token == Token::Error {
+            let error = classify_error(source, &spanned);
+            errors.push(error);
+        }
+        tokens.push(spanned);
+    }
+
+    // Check for unterminated constructs at end of input
+    if let Some(error) = check_unterminated(source) {
+        errors.push(error);
+    }
+
+    LexResult { tokens, errors }
+}
+
+/// Classify an error token into a specific error kind.
+fn classify_error(source: &str, token: &SpannedToken<'_>) -> LexError {
+    let text = token.text;
+    let span = token.span.clone();
+
+    // Single character errors
+    if let Some(c) = text.chars().next() {
+        // Check for unterminated string starting with "
+        if c == '"' {
+            return LexError::new(LexErrorKind::UnterminatedString, span);
+        }
+        // Check for unterminated char starting with '
+        if c == '\'' {
+            if text == "''" {
+                return LexError::new(LexErrorKind::EmptyCharLiteral, span);
+            }
+            return LexError::new(LexErrorKind::UnterminatedChar, span);
+        }
+        // Check for unterminated block comment
+        if text.starts_with("/*") {
+            return LexError::new(LexErrorKind::UnterminatedBlockComment, span);
+        }
+        // Single invalid character
+        if text.len() == c.len_utf8() {
+            return LexError::new(LexErrorKind::InvalidCharacter(c), span);
+        }
+    }
+
+    // Check for invalid escape sequences in strings/chars
+    if text.contains('\\') {
+        // Try to find the invalid escape
+        let bytes = text.as_bytes();
+        for (i, &b) in bytes.iter().enumerate() {
+            if b == b'\\' && i + 1 < bytes.len() {
+                let next = bytes[i + 1] as char;
+                if !matches!(next, 'n' | 'r' | 't' | '\\' | '\'' | '"' | '0') {
+                    return LexError::new(LexErrorKind::InvalidEscape(next), span);
+                }
+            }
+        }
+    }
+
+    // Check the source around the error for context
+    let start = span.start;
+    if start < source.len() {
+        let remaining = &source[start..];
+        // Check if we're at the start of an unterminated string
+        if remaining.starts_with('"') && !remaining[1..].contains('"') {
+            return LexError::new(LexErrorKind::UnterminatedString, span);
+        }
+        // Check if we're at the start of an unterminated char
+        if remaining.starts_with('\'') {
+            return LexError::new(LexErrorKind::UnterminatedChar, span);
+        }
+    }
+
+    LexError::new(LexErrorKind::Unknown, span)
+}
+
+/// Check for unterminated constructs at end of input.
+fn check_unterminated(source: &str) -> Option<LexError> {
+    let mut in_string = false;
+    let mut in_char = false;
+    let mut in_block_comment = false;
+    let mut string_start = 0;
+    let mut char_start = 0;
+    let mut comment_start = 0;
+    let mut escape_next = false;
+
+    let bytes = source.as_bytes();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        let b = bytes[i];
+
+        if escape_next {
+            escape_next = false;
+            i += 1;
+            continue;
+        }
+
+        if in_string {
+            if b == b'\\' {
+                escape_next = true;
+            } else if b == b'"' {
+                in_string = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        if in_char {
+            if b == b'\\' {
+                escape_next = true;
+            } else if b == b'\'' {
+                in_char = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        if in_block_comment {
+            if b == b'*' && i + 1 < bytes.len() && bytes[i + 1] == b'/' {
+                in_block_comment = false;
+                i += 2;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+
+        // Check for start of constructs
+        if b == b'"' {
+            in_string = true;
+            string_start = i;
+        } else if b == b'\'' {
+            in_char = true;
+            char_start = i;
+        } else if b == b'/' && i + 1 < bytes.len() {
+            if bytes[i + 1] == b'*' {
+                in_block_comment = true;
+                comment_start = i;
+                i += 2;
+                continue;
+            } else if bytes[i + 1] == b'/' {
+                // Line comment - skip to end of line
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    // Check for unterminated constructs
+    if in_string {
+        return Some(LexError::new(
+            LexErrorKind::UnterminatedString,
+            string_start..source.len(),
+        ));
+    }
+    if in_char {
+        return Some(LexError::new(
+            LexErrorKind::UnterminatedChar,
+            char_start..source.len(),
+        ));
+    }
+    if in_block_comment {
+        return Some(LexError::new(
+            LexErrorKind::UnterminatedBlockComment,
+            comment_start..source.len(),
+        ));
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,9 +508,7 @@ mod tests {
 
     /// Helper to lex a string and collect all tokens (without spans for simpler assertions)
     fn lex(source: &str) -> Vec<(Token, &str)> {
-        Lexer::new(source)
-            .map(|st| (st.token, st.text))
-            .collect()
+        Lexer::new(source).map(|st| (st.token, st.text)).collect()
     }
 
     /// Helper to lex with full span information
@@ -1392,7 +1679,10 @@ mod tests {
 
     #[test]
     fn edge_string_with_all_escapes() {
-        check_single(r#""line\nreturn\rtab\tbackslash\\quote\"null\0""#, Token::String);
+        check_single(
+            r#""line\nreturn\rtab\tbackslash\\quote\"null\0""#,
+            Token::String,
+        );
     }
 
     #[test]
@@ -1454,10 +1744,7 @@ mod tests {
 
     #[test]
     fn edge_amp_vs_andand() {
-        check(
-            "&&&",
-            &[(Token::AndAnd, "&&"), (Token::Amp, "&")],
-        );
+        check("&&&", &[(Token::AndAnd, "&&"), (Token::Amp, "&")]);
     }
 
     #[test]
@@ -1608,5 +1895,182 @@ fn main() {
         assert!(token_types.contains(&Token::Le));
         assert!(token_types.contains(&Token::AndAnd));
         assert!(token_types.contains(&Token::Gt));
+    }
+
+    // ============================================================
+    // Error Recovery Tests (lex_all)
+    // ============================================================
+
+    #[test]
+    fn recovery_invalid_character() {
+        let result = lex_all("let @ x");
+        assert!(result.has_errors());
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].kind, LexErrorKind::InvalidCharacter('@'));
+
+        // Valid tokens are still produced
+        let tokens: Vec<_> = result.tokens.iter().map(|t| &t.token).collect();
+        assert!(tokens.contains(&&Token::Let));
+        assert!(tokens.contains(&&Token::Ident));
+    }
+
+    #[test]
+    fn recovery_multiple_invalid_characters() {
+        let result = lex_all("@ # ~");
+        assert_eq!(result.errors.len(), 3);
+        assert_eq!(result.errors[0].kind, LexErrorKind::InvalidCharacter('@'));
+        assert_eq!(result.errors[1].kind, LexErrorKind::InvalidCharacter('#'));
+        assert_eq!(result.errors[2].kind, LexErrorKind::InvalidCharacter('~'));
+    }
+
+    #[test]
+    fn recovery_unterminated_string() {
+        let result = lex_all(r#"let x = "hello"#);
+        assert!(result.has_errors());
+        // Should detect unterminated string
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| matches!(e.kind, LexErrorKind::UnterminatedString))
+        );
+    }
+
+    #[test]
+    fn recovery_unterminated_char() {
+        let result = lex_all("let x = 'a");
+        assert!(result.has_errors());
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| matches!(e.kind, LexErrorKind::UnterminatedChar))
+        );
+    }
+
+    #[test]
+    fn recovery_unterminated_block_comment() {
+        let result = lex_all("let x = /* comment");
+        assert!(result.has_errors());
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| matches!(e.kind, LexErrorKind::UnterminatedBlockComment))
+        );
+    }
+
+    #[test]
+    fn char_empty_literal() {
+        // Empty char '' is now a valid token - parser will handle the semantic error
+        check_single("''", Token::Char);
+    }
+
+    #[test]
+    fn char_empty_in_context() {
+        // Empty char in a let statement should lex successfully
+        let result = lex_all("let x = '';");
+        assert!(result.is_ok());
+        assert!(result.tokens.iter().any(|t| t.token == Token::Char && t.text == "''"));
+    }
+
+    #[test]
+    fn recovery_valid_code_no_errors() {
+        let result = lex_all("let x = 42;");
+        assert!(result.is_ok());
+        assert!(result.errors.is_empty());
+        assert_eq!(result.tokens.len(), 5);
+    }
+
+    #[test]
+    fn recovery_continues_after_error() {
+        // Ensure lexer continues producing tokens after an error
+        let result = lex_all("let @ x = 42;");
+        assert!(result.has_errors());
+
+        // Count valid tokens (excluding Error)
+        let valid_count = result
+            .tokens
+            .iter()
+            .filter(|t| t.token != Token::Error)
+            .count();
+        assert_eq!(valid_count, 5); // let, x, =, 42, ;
+    }
+
+    #[test]
+    fn recovery_error_spans_are_correct() {
+        let result = lex_all("ab@cd");
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].span, 2..3);
+    }
+
+    #[test]
+    fn recovery_lex_result_methods() {
+        let ok_result = lex_all("let x = 1;");
+        assert!(ok_result.is_ok());
+        assert!(!ok_result.has_errors());
+
+        let err_result = lex_all("let @ = 1;");
+        assert!(!err_result.is_ok());
+        assert!(err_result.has_errors());
+    }
+
+    #[test]
+    fn recovery_error_display() {
+        let error = LexError::new(LexErrorKind::InvalidCharacter('@'), 5..6);
+        let msg = format!("{}", error);
+        assert!(msg.contains("invalid character"));
+        assert!(msg.contains("@"));
+        assert!(msg.contains("5..6"));
+    }
+
+    #[test]
+    fn recovery_error_kind_display() {
+        assert_eq!(
+            format!("{}", LexErrorKind::UnterminatedString),
+            "unterminated string literal"
+        );
+        assert_eq!(
+            format!("{}", LexErrorKind::UnterminatedChar),
+            "unterminated character literal"
+        );
+        assert_eq!(
+            format!("{}", LexErrorKind::InvalidCharacter('@')),
+            "invalid character '@'"
+        );
+    }
+
+    #[test]
+    fn recovery_unicode_invalid_char() {
+        let result = lex_all("let \u{1F600} x"); // emoji
+        assert!(result.has_errors());
+        // Should still parse let and x
+        let tokens: Vec<_> = result
+            .tokens
+            .iter()
+            .filter(|t| t.token != Token::Error)
+            .collect();
+        assert_eq!(tokens.len(), 2);
+    }
+
+    #[test]
+    fn recovery_preserves_token_order() {
+        let result = lex_all("a @ b # c");
+        let tokens: Vec<_> = result.tokens.iter().map(|t| t.text).collect();
+        assert_eq!(tokens, vec!["a", "@", "b", "#", "c"]);
+    }
+
+    #[test]
+    fn recovery_string_with_escaped_quote() {
+        // This is valid - should have no errors
+        let result = lex_all(r#""hello\"world""#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn recovery_char_with_escaped_quote() {
+        // This is valid - should have no errors
+        let result = lex_all(r"'\''");
+        assert!(result.is_ok());
     }
 }
