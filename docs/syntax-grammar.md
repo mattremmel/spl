@@ -77,6 +77,7 @@ TypeAlias = "type" IDENTIFIER [ GenericParams ] "=" Type ";" ;
 Type = ReferenceType
      | ArrayType
      | TupleType
+     | FnPointerType
      | PathType ;
 
 ReferenceType = "&" [ "mut" ] Type ;
@@ -85,7 +86,12 @@ ArrayType = "[" Type [ ";" Expression ] "]" ;
 
 TupleType = "(" [ Type { "," Type } [ "," ] ] ")" ;
 
-PathType = TypePath [ GenericArgs ] ;
+FnPointerType = "fn" "(" [ TypeList ] ")" [ "->" Type ] ;
+
+TypeList = Type { "," Type } [ "," ] ;
+
+PathType = TypePath [ GenericArgs ]
+         | "Self" ;
 
 TypePath = IDENTIFIER { "::" IDENTIFIER } ;
 
@@ -94,17 +100,21 @@ GenericArgs = "<" Type { "," Type } [ "," ] ">" ;
 
 ### Type Examples
 
-| Syntax           | Description                        |
-|------------------|------------------------------------|
-| `i32`            | Simple type                        |
-| `Point<T>`       | Generic type                       |
-| `std::vec::Vec`  | Qualified path type                |
-| `&T`             | Immutable reference                |
-| `&mut T`         | Mutable reference                  |
-| `[T]`            | Slice type                         |
-| `[T; 10]`        | Fixed-size array                   |
-| `(T, U)`         | Tuple type                         |
-| `()`             | Unit type                          |
+| Syntax              | Description                        |
+|---------------------|------------------------------------|
+| `i32`               | Simple type                        |
+| `Point<T>`          | Generic type                       |
+| `std::vec::Vec`     | Qualified path type                |
+| `Self`              | Self type (in impl blocks)         |
+| `&T`                | Immutable reference                |
+| `&mut T`            | Mutable reference                  |
+| `[T]`               | Slice type                         |
+| `[T; 10]`           | Fixed-size array                   |
+| `(T, U)`            | Tuple type                         |
+| `()`                | Unit type                          |
+| `fn(i32) -> bool`   | Function pointer                   |
+| `fn(T, U) -> V`     | Generic function pointer           |
+| `fn()`              | Function pointer returning unit    |
 
 ---
 
@@ -144,7 +154,7 @@ Expressions are defined using layered production rules that encode operator prec
 | 8          | `*` `/` `%`                  | Left          | MultiplicativeExpr |
 | 9          | `as`                         | Left          | CastExpr           |
 | 10         | `!` `-` `&` (unary)          | Right         | UnaryExpr          |
-| 11 (highest)| `.` `::` `()` `[]`          | Left          | PostfixExpr        |
+| 11 (highest)| `.` `::` `()` `[]` `[:]`    | Left          | PostfixExpr        |
 
 ### Expression Grammar
 
@@ -181,7 +191,10 @@ PostfixOp = "." IDENTIFIER
           | "::" IDENTIFIER
           | "::" IDENTIFIER "(" [ ArgList ] ")"
           | "(" [ ArgList ] ")"
-          | "[" Expression "]" ;
+          | "[" Expression "]"
+          | "[" SliceExpr "]" ;
+
+SliceExpr = [ Expression ] ":" [ Expression | "$" ] ;
 ```
 
 ### Primary Expressions
@@ -213,7 +226,10 @@ TupleExpr = "(" [ Expression "," [ Expression { "," Expression } ] [ "," ] ] ")"
 ArrayExpr = "[" [ Expression { "," Expression } [ "," ] ] "]"
           | "[" Expression ";" Expression "]" ;
 
-StructExpr = TypePath [ GenericArgs ] "{" [ StructFieldList ] "}" ;
+StructExpr = StructExprPath "{" [ StructFieldList ] "}" ;
+
+StructExprPath = TypePath [ GenericArgs ]
+               | "Self" ;
 
 StructFieldList = StructField { "," StructField } [ "," ] ;
 
@@ -256,7 +272,9 @@ Patterns are used in `let` bindings, `for` loops, and (potentially) match arms.
 Pattern = IdentifierPattern
         | WildcardPattern
         | LiteralPattern
+        | RangePattern
         | TuplePattern
+        | SlicePattern
         | StructPattern
         | ReferencePattern ;
 
@@ -264,9 +282,22 @@ IdentifierPattern = [ "mut" ] IDENTIFIER ;
 
 WildcardPattern = "_" ;
 
-LiteralPattern = INTEGER | FLOAT | STRING | CHAR | "true" | "false" ;
+LiteralPattern = [ "-" ] INTEGER
+               | [ "-" ] FLOAT
+               | STRING
+               | CHAR
+               | "true"
+               | "false" ;
+
+RangePattern = LiteralPattern ".." LiteralPattern ;
 
 TuplePattern = "(" [ Pattern { "," Pattern } [ "," ] ] ")" ;
+
+SlicePattern = "[" [ SlicePatternElement { "," SlicePatternElement } [ "," ] ] "]" ;
+
+SlicePatternElement = RestPattern | Pattern ;
+
+RestPattern = ".." [ IDENTIFIER ] ;
 
 StructPattern = TypePath "{" [ StructPatternFields ] "}" ;
 
@@ -277,6 +308,8 @@ StructPatternField = IDENTIFIER [ ":" Pattern ] ;
 ReferencePattern = "&" [ "mut" ] Pattern ;
 ```
 
+**Note:** At most one `RestPattern` (`..` or `..name`) is allowed per slice pattern. This is enforced semantically, not syntactically.
+
 ### Pattern Examples
 
 | Syntax                | Description                          |
@@ -285,7 +318,15 @@ ReferencePattern = "&" [ "mut" ] Pattern ;
 | `mut x`               | Mutable binding                      |
 | `_`                   | Wildcard (ignore value)              |
 | `42`                  | Match literal integer                |
+| `-1`                  | Match negative literal               |
+| `0..10`               | Match range (inclusive start, exclusive end) |
+| `'a'..'z'`            | Match character range                |
 | `(a, b)`              | Destructure tuple                    |
+| `[a, b, c]`           | Destructure fixed-size array/slice   |
+| `[first, ..]`         | Match first, ignore rest             |
+| `[first, ..rest]`     | Match first, bind rest to `rest`     |
+| `[.., last]`          | Match last element                   |
+| `[first, ..middle, last]` | Match first, last, bind middle   |
 | `Point { x, y }`      | Destructure struct (shorthand)       |
 | `Point { x: a, y: b }`| Destructure with rename              |
 | `Point { x, .. }`     | Partial struct destructure           |
@@ -328,7 +369,7 @@ From lowest to highest precedence:
 | 8    | Multiplicative | `*` `/` `%`                    | Left  | `a * b / c`           |
 | 9    | Cast           | `as`                           | Left  | `x as i32 as f64`     |
 | 10   | Unary          | `!` `-` `&` `&mut`             | Right | `!&mut x`             |
-| 11   | Postfix        | `.` `::` `()` `[]`             | Left  | `a.b().c[0]`          |
+| 11   | Postfix        | `.` `::` `()` `[]` `[:]`       | Left  | `a.b().c[0]`          |
 
 ---
 
@@ -396,6 +437,24 @@ let y = 2;
 Point { x, y }           // Equivalent to Point { x: x, y: y }
 Point { x, y: y + 1 }    // Mixed shorthand and explicit
 ```
+
+### 6. Index vs Slice
+
+A bracketed expression could be an index or a slice.
+
+**Rule:** If `:` appears at the top level inside brackets, it is a slice expression. Otherwise, it is an index expression.
+
+```spl
+arr[0]           // Index: element at position 0
+arr[i + 1]       // Index: element at computed position
+arr[1:3]         // Slice: elements 1, 2
+arr[:3]          // Slice: elements 0, 1, 2
+arr[1:]          // Slice: from index 1 to end
+arr[1:$]         // Slice: from index 1 to end (explicit $)
+arr[:]           // Slice: full copy
+```
+
+The `$` symbol represents the end of the array and is only valid in slice expressions.
 
 ---
 
@@ -467,9 +526,39 @@ fn main() {
     let indexed = [1, 2, 3][0];          // Array indexing
     let range = 0..100;                  // Range
 
+    // Slicing
+    let arr = [1, 2, 3, 4, 5];
+    let slice1 = arr[1:3];               // [2, 3]
+    let slice2 = arr[:3];                // [1, 2, 3]
+    let slice3 = arr[2:];                // [3, 4, 5]
+    let slice4 = arr[2:$];               // [3, 4, 5] (explicit end)
+    let copy = arr[:];                   // full copy
+
     // Patterns
     let (a, b) = (1, 2);                 // Tuple destructuring
     let Point { x, y } = target;         // Struct destructuring
+    let [first, ..rest] = [1, 2, 3, 4];  // Slice pattern with rest
+    let [head, .., tail] = [1, 2, 3];    // First and last
+}
+
+// Function pointer types
+type Predicate = fn(i32) -> bool;
+type BinaryOp = fn(i32, i32) -> i32;
+type Action = fn();
+
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+    f(x)
+}
+
+// Self type in impl blocks
+impl<T> Point<T> {
+    fn origin() -> Self {
+        Self { x: 0, y: 0 }
+    }
+
+    fn clone(&self) -> Self {
+        Self { x: self.x, y: self.y }
+    }
 }
 ```
 
@@ -477,11 +566,11 @@ fn main() {
 
 ## Grammar Summary
 
-| Category    | Key Productions                                          |
-|-------------|----------------------------------------------------------|
-| Program     | `Program`, `Item`, `FunctionDef`, `StructDef`            |
-| Types       | `Type`, `ReferenceType`, `ArrayType`, `PathType`         |
-| Statements  | `Block`, `Statement`, `LetStatement`                     |
-| Expressions | `Expression`, `PrimaryExpr`, `IfExpr`, `LoopExpr`        |
-| Patterns    | `Pattern`, `IdentifierPattern`, `StructPattern`          |
-| Literals    | `INTEGER`, `FLOAT`, `STRING`, `CHAR`, `true`, `false`    |
+| Category    | Key Productions                                                 |
+|-------------|-----------------------------------------------------------------|
+| Program     | `Program`, `Item`, `FunctionDef`, `StructDef`                   |
+| Types       | `Type`, `ReferenceType`, `ArrayType`, `FnPointerType`, `Self`   |
+| Statements  | `Block`, `Statement`, `LetStatement`                            |
+| Expressions | `Expression`, `PrimaryExpr`, `IfExpr`, `LoopExpr`               |
+| Patterns    | `Pattern`, `RangePattern`, `SlicePattern`, `StructPattern`      |
+| Literals    | `INTEGER`, `FLOAT`, `STRING`, `CHAR`, `true`, `false`           |

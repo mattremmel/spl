@@ -10,7 +10,7 @@ The lexer transforms source text into a stream of tokens. Whitespace and comment
 
 ## Keywords
 
-SPL reserves 19 keywords that cannot be used as identifiers:
+SPL reserves 21 keywords that cannot be used as identifiers:
 
 | Keyword    | Description                          |
 |------------|--------------------------------------|
@@ -29,9 +29,11 @@ SPL reserves 19 keywords that cannot be used as identifiers:
 | `break`    | Exit loop                            |
 | `continue` | Skip to next iteration               |
 | `return`   | Return from function                 |
+| `as`       | Type cast operator                   |
 | `true`     | Boolean literal true                 |
 | `false`    | Boolean literal false                |
 | `pub`      | Public visibility modifier           |
+| `Self`     | Self type in impl blocks             |
 
 ---
 
@@ -86,6 +88,7 @@ SPL reserves 19 keywords that cannot be used as identifiers:
 | `::`     | Path separator           |
 | `&`      | Reference                |
 | `..`     | Range                    |
+| `$`      | End of array (in slices) |
 
 ### Operator Precedence (highest to lowest)
 
