@@ -46,6 +46,51 @@ fn expr_bp(
     Ok(Some(lhs))
 }
 
+/// Parse an expression, but don't allow struct expressions.
+/// Used in control flow contexts where `identifier {` should be parsed as
+/// identifier followed by block, not as a struct expression.
+pub(crate) fn expr_no_struct(
+    p: &mut Parser<'_>,
+) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+    expr_no_struct_bp(p, 0)
+}
+
+/// Parse an expression with minimum binding power, disallowing struct expressions.
+fn expr_no_struct_bp(
+    p: &mut Parser<'_>,
+    min_bp: u8,
+) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+    let mut lhs = match lhs_no_struct(p)? {
+        Some(lhs) => lhs,
+        None => return Ok(None),
+    };
+
+    while let Some(op) = p.current() {
+        // Check for postfix operators first (highest precedence)
+        if let Some((l_bp, ())) = postfix_bp(op) {
+            if l_bp < min_bp {
+                break;
+            }
+            lhs = postfix_expr(p, lhs, op)?;
+            continue;
+        }
+
+        // Check for infix operators
+        if let Some((l_bp, r_bp)) = infix_bp(op) {
+            if l_bp < min_bp {
+                break;
+            }
+            lhs = infix_expr(p, lhs, r_bp)?;
+            continue;
+        }
+
+        // Not an operator we recognize, stop
+        break;
+    }
+
+    Ok(Some(lhs))
+}
+
 /// Parse the left-hand side of an expression (prefix or primary).
 fn lhs(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let current = match p.current() {
@@ -60,6 +105,22 @@ fn lhs(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser::Par
 
     // Otherwise, parse a primary expression
     primary_expr(p)
+}
+
+/// Parse the left-hand side of an expression, disallowing struct expressions.
+fn lhs_no_struct(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+    let current = match p.current() {
+        Some(kind) => kind,
+        None => return Ok(None),
+    };
+
+    // Check for prefix operators
+    if let Some(((), r_bp)) = prefix_bp(current) {
+        return prefix_expr_no_struct(p, r_bp);
+    }
+
+    // Otherwise, parse a primary expression (no struct)
+    primary_expr_no_struct(p)
 }
 
 /// Parse a prefix expression.
@@ -81,6 +142,34 @@ fn prefix_expr(
     // Regular prefix operator
     p.bump();
     let _ = expr_bp(p, r_bp)?;
+
+    let kind = match op {
+        SyntaxKind::BANG | SyntaxKind::MINUS => SyntaxKind::PrefixExpr,
+        _ => unreachable!("unexpected prefix operator: {:?}", op),
+    };
+
+    Ok(Some(m.complete(p, kind)))
+}
+
+/// Parse a prefix expression, disallowing struct expressions.
+fn prefix_expr_no_struct(
+    p: &mut Parser<'_>,
+    r_bp: u8,
+) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+    let m = p.start();
+    let op = p.current().unwrap();
+
+    // Handle &mut specially
+    if op == SyntaxKind::AMP {
+        p.bump(); // &
+        p.eat(SyntaxKind::MUT_KW); // optional mut
+        let _ = expr_no_struct_bp(p, r_bp)?;
+        return Ok(Some(m.complete(p, SyntaxKind::RefExpr)));
+    }
+
+    // Regular prefix operator
+    p.bump();
+    let _ = expr_no_struct_bp(p, r_bp)?;
 
     let kind = match op {
         SyntaxKind::BANG | SyntaxKind::MINUS => SyntaxKind::PrefixExpr,
@@ -293,6 +382,51 @@ fn primary_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::pa
     }
 }
 
+/// Parse a primary expression, disallowing struct expressions.
+fn primary_expr_no_struct(
+    p: &mut Parser<'_>,
+) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+    let current = match p.current() {
+        Some(kind) => kind,
+        None => return Ok(None),
+    };
+
+    match current {
+        // Literals
+        SyntaxKind::INT_LITERAL
+        | SyntaxKind::FLOAT_LITERAL
+        | SyntaxKind::STRING_LITERAL
+        | SyntaxKind::CHAR_LITERAL
+        | SyntaxKind::TRUE_KW
+        | SyntaxKind::FALSE_KW => literal_expr(p),
+
+        // Identifier / path - use path_expr_only instead of path_or_struct_expr
+        SyntaxKind::IDENT | SyntaxKind::SELF_VALUE_KW | SyntaxKind::SELF_TYPE_KW => {
+            path_expr_only(p)
+        }
+
+        // Grouped or tuple expression
+        SyntaxKind::L_PAREN => paren_or_tuple_expr(p),
+
+        // Array expression
+        SyntaxKind::L_BRACKET => array_expr(p),
+
+        // Block expression
+        SyntaxKind::L_BRACE => block_expr(p),
+
+        // Control flow
+        SyntaxKind::IF_KW => if_expr(p),
+        SyntaxKind::WHILE_KW => while_expr(p),
+        SyntaxKind::FOR_KW => for_expr(p),
+        SyntaxKind::LOOP_KW => loop_expr(p),
+        SyntaxKind::BREAK_KW => break_expr(p),
+        SyntaxKind::CONTINUE_KW => continue_expr(p),
+        SyntaxKind::RETURN_KW => return_expr(p),
+
+        _ => Ok(None),
+    }
+}
+
 /// Parse a literal expression.
 fn literal_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
@@ -326,6 +460,28 @@ fn path_or_struct_expr(
         return struct_expr_rest(p, m);
     }
 
+    Ok(Some(m.complete(p, SyntaxKind::PathExpr)))
+}
+
+/// Parse a path expression only (no struct expression).
+/// Used in control flow contexts where `identifier {` should be parsed as
+/// identifier followed by block, not as a struct expression.
+fn path_expr_only(
+    p: &mut Parser<'_>,
+) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+    let m = p.start();
+    p.bump(); // identifier or self
+
+    // Continue path with ::
+    while p.at(SyntaxKind::COLON_COLON) {
+        p.bump();
+        if !p.at(SyntaxKind::IDENT) {
+            return Err(p.error_at_current("expected identifier after '::'".to_string()));
+        }
+        p.bump();
+    }
+
+    // NO struct check - just return PathExpr
     Ok(Some(m.complete(p, SyntaxKind::PathExpr)))
 }
 
@@ -466,7 +622,7 @@ fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseErro
 fn if_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
     p.expect(SyntaxKind::IF_KW)?;
-    let _ = expr(p)?;
+    let _ = expr_no_struct(p)?;
     block(p)?;
 
     if p.eat(SyntaxKind::ELSE_KW) {
@@ -486,7 +642,7 @@ fn if_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser:
 fn while_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
     p.expect(SyntaxKind::WHILE_KW)?;
-    let _ = expr(p)?;
+    let _ = expr_no_struct(p)?;
     block(p)?;
     Ok(Some(m.complete(p, SyntaxKind::WhileExpr)))
 }
@@ -505,7 +661,7 @@ fn for_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser
     pat_m.complete(p, SyntaxKind::IdentPat);
 
     p.expect(SyntaxKind::IN_KW)?;
-    let _ = expr(p)?;
+    let _ = expr_no_struct(p)?;
     block(p)?;
     Ok(Some(m.complete(p, SyntaxKind::ForExpr)))
 }
@@ -1028,22 +1184,21 @@ mod tests {
 
     #[test]
     fn if_expr_simple() {
-        // Using boolean literal to avoid struct expression ambiguity with `ident {`
         check_expr(
-            "if true { 1 }",
+            "if x { 1 }",
             &expect![[r#"
-                IfExpr@0..13
+                IfExpr@0..10
                   IF_KW@0..2 "if"
-                  LiteralExpr@2..7
+                  PathExpr@2..4
                     WHITESPACE@2..3 " "
-                    TRUE_KW@3..7 "true"
-                  Block@7..13
-                    WHITESPACE@7..8 " "
-                    L_BRACE@8..9 "{"
-                    WHITESPACE@9..10 " "
-                    INT_LITERAL@10..11 "1"
-                    WHITESPACE@11..12 " "
-                    R_BRACE@12..13 "}"
+                    IDENT@3..4 "x"
+                  Block@4..10
+                    WHITESPACE@4..5 " "
+                    L_BRACE@5..6 "{"
+                    WHITESPACE@6..7 " "
+                    INT_LITERAL@7..8 "1"
+                    WHITESPACE@8..9 " "
+                    R_BRACE@9..10 "}"
             "#]],
         );
     }
@@ -1126,13 +1281,13 @@ mod tests {
     #[test]
     fn while_expr_simple() {
         check_expr(
-            "while true { 1 }",
+            "while cond { 1 }",
             &expect![[r#"
                 WhileExpr@0..16
                   WHILE_KW@0..5 "while"
-                  LiteralExpr@5..10
+                  PathExpr@5..10
                     WHITESPACE@5..6 " "
-                    TRUE_KW@6..10 "true"
+                    IDENT@6..10 "cond"
                   Block@10..16
                     WHITESPACE@10..11 " "
                     L_BRACE@11..12 "{"
@@ -1146,31 +1301,26 @@ mod tests {
 
     #[test]
     fn for_expr_simple() {
-        // Note: Using parentheses around `items` because the parser treats
-        // `identifier {` as struct expression syntax (known limitation)
         check_expr(
-            "for i in (items) { x }",
+            "for i in items { x }",
             &expect![[r#"
-                ForExpr@0..22
+                ForExpr@0..20
                   FOR_KW@0..3 "for"
                   IdentPat@3..5
                     WHITESPACE@3..4 " "
                     IDENT@4..5 "i"
                   WHITESPACE@5..6 " "
                   IN_KW@6..8 "in"
-                  ParenExpr@8..16
+                  PathExpr@8..14
                     WHITESPACE@8..9 " "
-                    L_PAREN@9..10 "("
-                    PathExpr@10..15
-                      IDENT@10..15 "items"
-                    R_PAREN@15..16 ")"
-                  Block@16..22
+                    IDENT@9..14 "items"
+                  Block@14..20
+                    WHITESPACE@14..15 " "
+                    L_BRACE@15..16 "{"
                     WHITESPACE@16..17 " "
-                    L_BRACE@17..18 "{"
+                    IDENT@17..18 "x"
                     WHITESPACE@18..19 " "
-                    IDENT@19..20 "x"
-                    WHITESPACE@20..21 " "
-                    R_BRACE@21..22 "}"
+                    R_BRACE@19..20 "}"
             "#]],
         );
     }
