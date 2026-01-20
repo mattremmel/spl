@@ -296,4 +296,269 @@ mod tests {
         // but regular lookup should find it
         assert!(ctx.lookup(name).is_some());
     }
+
+    #[test]
+    fn test_symbol_span_stored_correctly() {
+        let mut ctx = SemanticContext::new();
+        let name = ctx.intern("my_var");
+
+        let def_id = ctx
+            .define(name, SymbolKind::Local, Visibility::Private, 42..50)
+            .unwrap();
+
+        let symbol = ctx.get_symbol(def_id);
+        assert_eq!(symbol.span, 42..50);
+    }
+
+    #[test]
+    fn test_symbol_scope_id_matches_definition_scope() {
+        let mut ctx = SemanticContext::new();
+        let root_scope = ctx.current_scope_id();
+
+        let name1 = ctx.intern("root_sym");
+        let def1 = ctx
+            .define(name1, SymbolKind::Function, Visibility::Public, 0..8)
+            .unwrap();
+
+        let block_scope = ctx.enter_scope(ScopeKind::Block);
+        let name2 = ctx.intern("block_sym");
+        let def2 = ctx
+            .define(name2, SymbolKind::Local, Visibility::Private, 10..19)
+            .unwrap();
+
+        assert_eq!(ctx.get_symbol(def1).scope_id, root_scope);
+        assert_eq!(ctx.get_symbol(def2).scope_id, block_scope);
+    }
+
+    #[test]
+    fn test_visibility_default_is_private() {
+        assert_eq!(Visibility::default(), Visibility::Private);
+    }
+
+    #[test]
+    fn test_all_visibility_variants_stored() {
+        let mut ctx = SemanticContext::new();
+
+        let visibilities = [
+            Visibility::Private,
+            Visibility::Public,
+            Visibility::Crate,
+            Visibility::Super,
+            Visibility::PubSelf,
+        ];
+
+        for (i, vis) in visibilities.iter().enumerate() {
+            let name = ctx.intern(&format!("sym_{i}"));
+            let def_id = ctx
+                .define(name, SymbolKind::Function, *vis, 0..1)
+                .unwrap();
+            assert_eq!(ctx.get_symbol(def_id).visibility, *vis);
+        }
+    }
+
+    #[test]
+    fn test_all_symbol_kinds() {
+        let mut ctx = SemanticContext::new();
+
+        let kinds = [
+            SymbolKind::Function,
+            SymbolKind::Struct,
+            SymbolKind::TypeAlias,
+            SymbolKind::Local,
+            SymbolKind::Parameter,
+            SymbolKind::Field,
+            SymbolKind::TypeParam,
+            SymbolKind::SelfParam,
+        ];
+
+        for (i, kind) in kinds.iter().enumerate() {
+            let name = ctx.intern(&format!("sym_{i}"));
+            let def_id = ctx
+                .define(name, *kind, Visibility::Private, 0..1)
+                .unwrap();
+            assert_eq!(ctx.get_symbol(def_id).kind, *kind);
+        }
+    }
+
+    #[test]
+    fn test_all_scope_kinds() {
+        let mut ctx = SemanticContext::new();
+
+        // Root is Module
+        assert_eq!(ctx.get_scope(ctx.current_scope_id()).kind, ScopeKind::Module);
+
+        let function_scope = ctx.enter_scope(ScopeKind::Function);
+        assert_eq!(ctx.get_scope(function_scope).kind, ScopeKind::Function);
+
+        let block_scope = ctx.enter_scope(ScopeKind::Block);
+        assert_eq!(ctx.get_scope(block_scope).kind, ScopeKind::Block);
+
+        ctx.exit_scope();
+        ctx.exit_scope();
+
+        let impl_scope = ctx.enter_scope(ScopeKind::Impl);
+        assert_eq!(ctx.get_scope(impl_scope).kind, ScopeKind::Impl);
+
+        ctx.exit_scope();
+
+        let for_scope = ctx.enter_scope(ScopeKind::ForLoop);
+        assert_eq!(ctx.get_scope(for_scope).kind, ScopeKind::ForLoop);
+    }
+
+    #[test]
+    fn test_get_scope_returns_correct_scope() {
+        let mut ctx = SemanticContext::new();
+        let root = ctx.current_scope_id();
+
+        let scope1 = ctx.enter_scope(ScopeKind::Function);
+        let scope2 = ctx.enter_scope(ScopeKind::Block);
+
+        // Can retrieve any scope by ID
+        assert_eq!(ctx.get_scope(root).kind, ScopeKind::Module);
+        assert_eq!(ctx.get_scope(scope1).kind, ScopeKind::Function);
+        assert_eq!(ctx.get_scope(scope2).kind, ScopeKind::Block);
+
+        // Parent chain is correct
+        assert_eq!(ctx.get_scope(root).parent, None);
+        assert_eq!(ctx.get_scope(scope1).parent, Some(root));
+        assert_eq!(ctx.get_scope(scope2).parent, Some(scope1));
+    }
+
+    #[test]
+    fn test_multiple_symbols_in_same_scope() {
+        let mut ctx = SemanticContext::new();
+
+        let a = ctx.intern("a");
+        let b = ctx.intern("b");
+        let c = ctx.intern("c");
+
+        let def_a = ctx
+            .define(a, SymbolKind::Local, Visibility::Private, 0..1)
+            .unwrap();
+        let def_b = ctx
+            .define(b, SymbolKind::Local, Visibility::Private, 2..3)
+            .unwrap();
+        let def_c = ctx
+            .define(c, SymbolKind::Local, Visibility::Private, 4..5)
+            .unwrap();
+
+        assert_eq!(ctx.lookup(a), Some(def_a));
+        assert_eq!(ctx.lookup(b), Some(def_b));
+        assert_eq!(ctx.lookup(c), Some(def_c));
+    }
+
+    #[test]
+    fn test_def_ids_are_unique_and_sequential() {
+        let mut ctx = SemanticContext::new();
+
+        let name1 = ctx.intern("first");
+        let name2 = ctx.intern("second");
+        let name3 = ctx.intern("third");
+
+        let def1 = ctx
+            .define(name1, SymbolKind::Local, Visibility::Private, 0..5)
+            .unwrap();
+        let def2 = ctx
+            .define(name2, SymbolKind::Local, Visibility::Private, 6..12)
+            .unwrap();
+        let def3 = ctx
+            .define(name3, SymbolKind::Local, Visibility::Private, 13..18)
+            .unwrap();
+
+        assert_eq!(def1.0, 0);
+        assert_eq!(def2.0, 1);
+        assert_eq!(def3.0, 2);
+    }
+
+    #[test]
+    fn test_sibling_scopes_do_not_share_symbols() {
+        let mut ctx = SemanticContext::new();
+        let name = ctx.intern("x");
+
+        // Enter first sibling scope and define x
+        ctx.enter_scope(ScopeKind::Block);
+        ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1)
+            .unwrap();
+        ctx.exit_scope();
+
+        // Enter second sibling scope - x should not be visible
+        ctx.enter_scope(ScopeKind::Block);
+        assert_eq!(ctx.lookup(name), None);
+
+        // Can define x again in this sibling
+        let def2 = ctx
+            .define(name, SymbolKind::Local, Visibility::Private, 10..11)
+            .unwrap();
+        assert_eq!(ctx.lookup(name), Some(def2));
+    }
+
+    #[test]
+    fn test_empty_string_interning() {
+        let mut ctx = SemanticContext::new();
+        let spur1 = ctx.intern("");
+        let spur2 = ctx.intern("");
+
+        assert_eq!(spur1, spur2);
+        assert_eq!(ctx.resolve(spur1), "");
+    }
+
+    #[test]
+    fn test_unicode_string_interning() {
+        let mut ctx = SemanticContext::new();
+        let spur = ctx.intern("héllo_wörld_日本語");
+
+        assert_eq!(ctx.resolve(spur), "héllo_wörld_日本語");
+    }
+
+    #[test]
+    fn test_deeply_nested_scopes() {
+        let mut ctx = SemanticContext::new();
+        let name = ctx.intern("deep");
+
+        let outer_def = ctx
+            .define(name, SymbolKind::Local, Visibility::Private, 0..4)
+            .unwrap();
+
+        // Nest 10 levels deep
+        for _ in 0..10 {
+            ctx.enter_scope(ScopeKind::Block);
+        }
+
+        // Should still find the symbol from root
+        assert_eq!(ctx.lookup(name), Some(outer_def));
+
+        // Exit all scopes
+        for _ in 0..10 {
+            ctx.exit_scope();
+        }
+
+        assert_eq!(ctx.lookup(name), Some(outer_def));
+    }
+
+    #[test]
+    fn test_default_impl_for_semantic_context() {
+        let ctx = SemanticContext::default();
+        assert_eq!(ctx.current_scope_id(), ScopeId(0));
+        assert_eq!(ctx.get_scope(ScopeId(0)).kind, ScopeKind::Module);
+    }
+
+    #[test]
+    fn test_duplicate_does_not_create_symbol() {
+        let mut ctx = SemanticContext::new();
+        let name = ctx.intern("x");
+
+        let first_def = ctx
+            .define(name, SymbolKind::Local, Visibility::Private, 0..1)
+            .unwrap();
+
+        // Try to define again - should fail
+        let result = ctx.define(name, SymbolKind::Function, Visibility::Public, 10..11);
+        assert!(result.is_err());
+
+        // The symbol should still have the original properties
+        let symbol = ctx.get_symbol(first_def);
+        assert_eq!(symbol.kind, SymbolKind::Local);
+        assert_eq!(symbol.visibility, Visibility::Private);
+        assert_eq!(symbol.span, 0..1);
+    }
 }
