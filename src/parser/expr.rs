@@ -603,17 +603,27 @@ fn for_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser
     let m = p.start();
     p.expect(SyntaxKind::FOR_KW)?;
 
-    // Pattern (simplified: just identifier for now)
-    if !p.at(SyntaxKind::IDENT) {
-        return Err(p.error_at_current("expected pattern in for loop".to_string()));
+    // Pattern (supports full pattern syntax including tuples)
+    if let Err(err) = super::pattern::pattern(p) {
+        m.abandon(p);
+        return Err(err);
     }
-    let pat_m = p.start();
-    p.bump();
-    pat_m.complete(p, SyntaxKind::IdentPat);
 
-    p.expect(SyntaxKind::IN_KW)?;
-    let _ = expr_no_struct(p)?;
-    block(p)?;
+    if let Err(err) = p.expect(SyntaxKind::IN_KW) {
+        m.abandon(p);
+        return Err(err);
+    }
+
+    if let Err(err) = expr_no_struct(p) {
+        m.abandon(p);
+        return Err(err);
+    }
+
+    if let Err(err) = block(p) {
+        m.abandon(p);
+        return Err(err);
+    }
+
     Ok(Some(m.complete(p, SyntaxKind::ForExpr)))
 }
 

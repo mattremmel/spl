@@ -571,7 +571,7 @@ pub(crate) mod tests {
 
     #[test]
     fn comment_inline() {
-        let parse = parse("fn foo/* comment */() {}");
+        let parse = parse("fn /* comment */ foo() {}");
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
         let tree = parse.debug_tree();
         assert!(tree.contains("FunctionDef"));
@@ -579,11 +579,18 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn comment_line_before() {
-        let parse = parse("// comment\nfn foo() {}");
+    fn comment_line() {
+        let parse = parse("// line comment\nfn foo() {}");
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
         let tree = parse.debug_tree();
         assert!(tree.contains("FunctionDef"));
+        assert!(tree.contains("COMMENT"));
+    }
+
+    #[test]
+    fn comment_multiline() {
+        let parse = parse("fn foo() { let x = /* multi\nline */ 1; }");
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
@@ -603,6 +610,20 @@ pub(crate) mod tests {
         assert!(parse.ok());
         let tree = parse.debug_tree();
         assert!(tree.contains("SourceFile@0..0"));
+    }
+
+    #[test]
+    fn whitespace_only() {
+        let parse = parse("   \n\t  ");
+        assert!(parse.ok());
+    }
+
+    #[test]
+    fn comment_only() {
+        let parse = parse("// just a comment");
+        assert!(parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("COMMENT"));
     }
 
     #[test]
@@ -648,8 +669,22 @@ pub(crate) mod tests {
     // === Phase 11: Integration Tests ===
 
     #[test]
-    fn struct_with_impl() {
-        let parse = parse("struct Point { x: i32, y: i32 } impl Point { fn new() -> Point { Point { x: 0, y: 0 } } }");
+    fn full_point_struct() {
+        let parse = parse(r#"
+            struct Point { x: i32, y: i32 }
+
+            impl Point {
+                fn new(x: i32, y: i32) -> Point {
+                    Point { x, y }
+                }
+
+                fn distance(&self, other: &Point) -> f64 {
+                    let dx = self.x - other.x;
+                    let dy = self.y - other.y;
+                    0.0
+                }
+            }
+        "#);
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
         let tree = parse.debug_tree();
         assert!(tree.contains("StructDef"));
@@ -657,61 +692,147 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn generic_struct() {
-        let parse = parse("struct Node<T> { value: T, next: Option<T> }");
+    fn generic_container() {
+        let parse = parse(r#"
+            struct Node<T> {
+                value: T,
+                next: Option<Box<Node<T>>>
+            }
+        "#);
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
-    fn for_loop_in_function() {
-        let parse = parse("fn foo() { for item in items { bar(item); } }");
+    fn control_flow_in_method() {
+        let parse = parse(r#"
+            fn process(items: Vec<i32>) -> i32 {
+                let mut sum = 0;
+                for item in items {
+                    if item > 0 {
+                        sum = sum + item;
+                    } else {
+                        continue;
+                    }
+                }
+                sum
+            }
+        "#);
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
-    fn if_else_chain() {
-        let parse = parse("fn foo(x: i32) -> i32 { if x < 0 { -1 } else if x == 0 { 0 } else { 1 } }");
+    fn pattern_in_for() {
+        let parse = parse(r#"
+            fn foo() {
+                for (a, b) in pairs {
+                    bar(a, b);
+                }
+            }
+        "#);
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
-    fn nested_struct_expr() {
-        let parse = parse("fn foo() { bar(Point { x: 1 }); }");
+    fn nested_struct_in_call() {
+        let parse = parse(r#"
+            fn foo() {
+                bar(Point { x: Inner { y: 1 } });
+            }
+        "#);
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
-    fn nested_generic_type() {
-        let parse = parse("fn foo() { let x: Vec<Option<i32>>; }");
+    fn complex_generic_type() {
+        let parse = parse(r#"
+            fn foo() {
+                let x: Vec<HashMap<String, Option<(i32, bool)>>>;
+            }
+        "#);
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
-    fn multiple_items() {
-        let parse = parse("struct Foo {} struct Bar {} impl Foo { fn a() {} } impl Bar { fn b() {} }");
+    fn multiple_impl_blocks() {
+        let parse = parse(r#"
+            struct Foo {}
+            struct Bar {}
+
+            impl Foo {
+                fn a() {}
+            }
+
+            impl Bar {
+                fn b() {}
+            }
+
+            impl Foo {
+                fn c() {}
+            }
+        "#);
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
         let tree = parse.debug_tree();
+        // Should have 2 StructDef and 3 ImplBlock
         assert_eq!(tree.matches("StructDef").count(), 2);
-        assert_eq!(tree.matches("ImplBlock").count(), 2);
+        assert_eq!(tree.matches("ImplBlock").count(), 3);
     }
 
     #[test]
-    fn visibility_on_struct() {
-        let parse = parse("pub struct Foo { pub a: i32, pub(crate) b: i32, c: i32 }");
+    fn visibility_combinations() {
+        let parse = parse(r#"
+            pub struct Foo {
+                pub a: i32,
+                pub(crate) b: i32,
+                pub(super) c: i32,
+                d: i32
+            }
+
+            impl Foo {
+                pub fn public() {}
+                pub(crate) fn internal() {}
+                fn private() {}
+            }
+        "#);
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
-    fn type_aliases() {
-        let parse = parse("type Int = i32; type Pair = (i32, i32); type Callback = fn(i32) -> i32;");
+    fn type_alias_variety() {
+        let parse = parse(r#"
+            type Int = i32;
+            type Pair = (i32, i32);
+            type Buffer = [u8; 256];
+            type Callback = fn(i32) -> i32;
+            type Nested = Option<Vec<String>>;
+        "#);
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
         let tree = parse.debug_tree();
-        assert_eq!(tree.matches("TypeAlias").count(), 3);
+        assert_eq!(tree.matches("TypeAlias").count(), 5);
     }
 
     #[test]
-    fn method_chain() {
-        let parse = parse("fn foo() { obj.a().b().c; }");
+    fn method_call_chain() {
+        let parse = parse(r#"
+            fn foo() {
+                obj.method1().method2().method3().field.method4();
+            }
+        "#);
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+    }
+
+    #[test]
+    fn match_like_if_chain() {
+        let parse = parse(r#"
+            fn classify(x: i32) -> i32 {
+                if x < 0 {
+                    -1
+                } else if x == 0 {
+                    0
+                } else {
+                    1
+                }
+            }
+        "#);
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 }

@@ -32,6 +32,13 @@ impl<'src> Sink<'src> {
         // First pass: find which events are forward-linked parents
         let forward_linked: Vec<bool> = self.compute_forward_linked();
 
+        // Find the last Finish event index - this is the root node's finish.
+        // We need to eat trailing trivia before finishing the root.
+        let last_finish_idx = self
+            .events
+            .iter()
+            .rposition(|e| matches!(e, Event::Finish));
+
         // Second pass: process events
         // We need `i` for both indexing forward_linked and for event replacement
         #[allow(clippy::needless_range_loop)]
@@ -59,6 +66,11 @@ impl<'src> Sink<'src> {
                     }
                 }
                 Event::Finish => {
+                    // Before finishing the root node (last Finish), eat any remaining trivia
+                    // so it's included inside the root
+                    if Some(i) == last_finish_idx {
+                        self.eat_trivia();
+                    }
                     self.builder.finish_node();
                 }
                 Event::Token { n_raw_tokens, .. } => {
@@ -71,9 +83,6 @@ impl<'src> Sink<'src> {
                 Event::Placeholder => {}
             }
         }
-
-        // Eat any remaining trivia
-        self.eat_trivia();
 
         Parse {
             green_node: self.builder.finish(),

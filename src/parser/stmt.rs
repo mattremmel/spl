@@ -8,6 +8,37 @@ use crate::syntax::SyntaxKind;
 use super::expr;
 use super::pattern;
 
+/// Check if the current token can start an expression.
+/// Used to distinguish between missing semicolons and block-ending expressions.
+fn can_start_expr(p: &mut Parser<'_>) -> bool {
+    matches!(
+        p.current(),
+        Some(
+            SyntaxKind::IDENT
+                | SyntaxKind::INT_LITERAL
+                | SyntaxKind::FLOAT_LITERAL
+                | SyntaxKind::STRING_LITERAL
+                | SyntaxKind::CHAR_LITERAL
+                | SyntaxKind::TRUE_KW
+                | SyntaxKind::FALSE_KW
+                | SyntaxKind::IF_KW
+                | SyntaxKind::WHILE_KW
+                | SyntaxKind::FOR_KW
+                | SyntaxKind::LOOP_KW
+                | SyntaxKind::RETURN_KW
+                | SyntaxKind::BREAK_KW
+                | SyntaxKind::CONTINUE_KW
+                | SyntaxKind::L_PAREN
+                | SyntaxKind::L_BRACKET
+                | SyntaxKind::L_BRACE
+                | SyntaxKind::AMP
+                | SyntaxKind::STAR
+                | SyntaxKind::MINUS
+                | SyntaxKind::BANG
+        )
+    )
+}
+
 /// Parse a let statement: `let [mut] pattern [: type] [= expr];`
 fn let_stmt(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
@@ -154,10 +185,15 @@ pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser
                     Ok(Some(_)) => {
                         // Successfully parsed an expression
                         if p.eat(SyntaxKind::SEMI) {
-                            // Expression statement
+                            // Expression statement with semicolon
                             expr_m.complete(p, SyntaxKind::ExprStmt);
                         } else if p.at(SyntaxKind::R_BRACE) {
                             // Tail expression (no semicolon, at end of block)
+                            expr_m.abandon(p);
+                        } else if can_start_expr(p) {
+                            // No semicolon but another expression follows
+                            // This is valid for block-ending expressions (if, while, for, loop, block)
+                            // which don't require semicolons when used as statements
                             expr_m.abandon(p);
                         } else {
                             // Missing semicolon - emit error but continue
