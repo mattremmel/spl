@@ -556,7 +556,11 @@ pub(crate) mod tests {
         assert!(!errors.is_empty());
         // Error should be at position 12 (the @)
         let range = &errors[0].range;
-        assert!(range.start >= 11 && range.start <= 13, "range.start = {}", range.start);
+        assert!(
+            range.start >= 11 && range.start <= 13,
+            "range.start = {}",
+            range.start
+        );
     }
 
     // === Phase 9: Whitespace and Comment Handling Tests ===
@@ -641,7 +645,7 @@ pub(crate) mod tests {
     #[test]
     fn many_parameters() {
         let parse = parse(
-            "fn foo(a: i32, b: i32, c: i32, d: i32, e: i32, f: i32, g: i32, h: i32, i: i32, j: i32) {}"
+            "fn foo(a: i32, b: i32, c: i32, d: i32, e: i32, f: i32, g: i32, h: i32, i: i32, j: i32) {}",
         );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
@@ -649,7 +653,7 @@ pub(crate) mod tests {
     #[test]
     fn many_struct_fields() {
         let parse = parse(
-            "struct S { a: i32, b: i32, c: i32, d: i32, e: i32, f: i32, g: i32, h: i32, i: i32, j: i32 }"
+            "struct S { a: i32, b: i32, c: i32, d: i32, e: i32, f: i32, g: i32, h: i32, i: i32, j: i32 }",
         );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
@@ -670,7 +674,8 @@ pub(crate) mod tests {
 
     #[test]
     fn full_point_struct() {
-        let parse = parse(r#"
+        let parse = parse(
+            r#"
             struct Point { x: i32, y: i32 }
 
             impl Point {
@@ -684,7 +689,8 @@ pub(crate) mod tests {
                     0.0
                 }
             }
-        "#);
+        "#,
+        );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
         let tree = parse.debug_tree();
         assert!(tree.contains("StructDef"));
@@ -693,18 +699,21 @@ pub(crate) mod tests {
 
     #[test]
     fn generic_container() {
-        let parse = parse(r#"
+        let parse = parse(
+            r#"
             struct Node<T> {
                 value: T,
                 next: Option<Box<Node<T>>>
             }
-        "#);
+        "#,
+        );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
     fn control_flow_in_method() {
-        let parse = parse(r#"
+        let parse = parse(
+            r#"
             fn process(items: Vec<i32>) -> i32 {
                 let mut sum = 0;
                 for item in items {
@@ -716,45 +725,53 @@ pub(crate) mod tests {
                 }
                 sum
             }
-        "#);
+        "#,
+        );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
     fn pattern_in_for() {
-        let parse = parse(r#"
+        let parse = parse(
+            r#"
             fn foo() {
                 for (a, b) in pairs {
                     bar(a, b);
                 }
             }
-        "#);
+        "#,
+        );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
     fn nested_struct_in_call() {
-        let parse = parse(r#"
+        let parse = parse(
+            r#"
             fn foo() {
                 bar(Point { x: Inner { y: 1 } });
             }
-        "#);
+        "#,
+        );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
     fn complex_generic_type() {
-        let parse = parse(r#"
+        let parse = parse(
+            r#"
             fn foo() {
                 let x: Vec<HashMap<String, Option<(i32, bool)>>>;
             }
-        "#);
+        "#,
+        );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
     fn multiple_impl_blocks() {
-        let parse = parse(r#"
+        let parse = parse(
+            r#"
             struct Foo {}
             struct Bar {}
 
@@ -769,7 +786,8 @@ pub(crate) mod tests {
             impl Foo {
                 fn c() {}
             }
-        "#);
+        "#,
+        );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
         let tree = parse.debug_tree();
         // Should have 2 StructDef and 3 ImplBlock
@@ -779,7 +797,8 @@ pub(crate) mod tests {
 
     #[test]
     fn visibility_combinations() {
-        let parse = parse(r#"
+        let parse = parse(
+            r#"
             pub struct Foo {
                 pub a: i32,
                 pub(crate) b: i32,
@@ -792,19 +811,22 @@ pub(crate) mod tests {
                 pub(crate) fn internal() {}
                 fn private() {}
             }
-        "#);
+        "#,
+        );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
     fn type_alias_variety() {
-        let parse = parse(r#"
+        let parse = parse(
+            r#"
             type Int = i32;
             type Pair = (i32, i32);
             type Buffer = [u8; 256];
             type Callback = fn(i32) -> i32;
             type Nested = Option<Vec<String>>;
-        "#);
+        "#,
+        );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
         let tree = parse.debug_tree();
         assert_eq!(tree.matches("TypeAlias").count(), 5);
@@ -812,17 +834,20 @@ pub(crate) mod tests {
 
     #[test]
     fn method_call_chain() {
-        let parse = parse(r#"
+        let parse = parse(
+            r#"
             fn foo() {
                 obj.method1().method2().method3().field.method4();
             }
-        "#);
+        "#,
+        );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
     #[test]
     fn match_like_if_chain() {
-        let parse = parse(r#"
+        let parse = parse(
+            r#"
             fn classify(x: i32) -> i32 {
                 if x < 0 {
                     -1
@@ -832,7 +857,8 @@ pub(crate) mod tests {
                     1
                 }
             }
-        "#);
+        "#,
+        );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 }

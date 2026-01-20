@@ -34,10 +34,7 @@ impl<'src> Sink<'src> {
 
         // Find the last Finish event index - this is the root node's finish.
         // We need to eat trailing trivia before finishing the root.
-        let last_finish_idx = self
-            .events
-            .iter()
-            .rposition(|e| matches!(e, Event::Finish));
+        let last_finish_idx = self.events.iter().rposition(|e| matches!(e, Event::Finish));
 
         // Second pass: process events
         // We need `i` for both indexing forward_linked and for event replacement

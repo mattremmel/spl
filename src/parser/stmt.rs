@@ -145,7 +145,9 @@ pub(crate) fn type_annotation(
 }
 
 /// Parse generic arguments: `<T, U, ...>`
-pub(crate) fn generic_args(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+pub(crate) fn generic_args(
+    p: &mut Parser<'_>,
+) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
     p.expect(SyntaxKind::LT)?;
 

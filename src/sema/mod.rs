@@ -2,9 +2,11 @@
 //!
 //! This module provides the symbol table infrastructure for name resolution and type checking.
 
+pub mod resolver;
 pub mod scope;
 pub mod symbol;
 
+pub use resolver::{ResolveResult, Resolver, resolve};
 pub use scope::{Scope, ScopeId, ScopeKind};
 pub use symbol::{DefId, Symbol, SymbolKind, Visibility};
 
@@ -71,9 +73,7 @@ impl SemanticContext {
     /// Panics if called when already at the root scope.
     pub fn exit_scope(&mut self) {
         let current = &self.scopes[self.current_scope.0 as usize];
-        self.current_scope = current
-            .parent
-            .expect("cannot exit root scope");
+        self.current_scope = current.parent.expect("cannot exit root scope");
     }
 
     /// Get the current scope ID.
@@ -349,9 +349,7 @@ mod tests {
 
         for (i, vis) in visibilities.iter().enumerate() {
             let name = ctx.intern(&format!("sym_{i}"));
-            let def_id = ctx
-                .define(name, SymbolKind::Function, *vis, 0..1)
-                .unwrap();
+            let def_id = ctx.define(name, SymbolKind::Function, *vis, 0..1).unwrap();
             assert_eq!(ctx.get_symbol(def_id).visibility, *vis);
         }
     }
@@ -373,9 +371,7 @@ mod tests {
 
         for (i, kind) in kinds.iter().enumerate() {
             let name = ctx.intern(&format!("sym_{i}"));
-            let def_id = ctx
-                .define(name, *kind, Visibility::Private, 0..1)
-                .unwrap();
+            let def_id = ctx.define(name, *kind, Visibility::Private, 0..1).unwrap();
             assert_eq!(ctx.get_symbol(def_id).kind, *kind);
         }
     }
@@ -385,7 +381,10 @@ mod tests {
         let mut ctx = SemanticContext::new();
 
         // Root is Module
-        assert_eq!(ctx.get_scope(ctx.current_scope_id()).kind, ScopeKind::Module);
+        assert_eq!(
+            ctx.get_scope(ctx.current_scope_id()).kind,
+            ScopeKind::Module
+        );
 
         let function_scope = ctx.enter_scope(ScopeKind::Function);
         assert_eq!(ctx.get_scope(function_scope).kind, ScopeKind::Function);

@@ -217,13 +217,13 @@ impl GenericArgs {
 
 impl Name {
     pub fn ident_token(&self) -> Option<SyntaxToken> {
-        self.0.first_token()
+        token(&self.0, SyntaxKind::IDENT)
     }
 }
 
 impl NameRef {
     pub fn ident_token(&self) -> Option<SyntaxToken> {
-        self.0.first_token()
+        token(&self.0, SyntaxKind::IDENT)
     }
 }
 
