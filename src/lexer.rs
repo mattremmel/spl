@@ -524,7 +524,12 @@ mod tests {
     /// Helper to lex and filter out trivia (whitespace and comments)
     fn lex_no_trivia(source: &str) -> Vec<(Token, &str)> {
         Lexer::new(source)
-            .filter(|st| !matches!(st.token, Token::Whitespace | Token::LineComment | Token::BlockComment))
+            .filter(|st| {
+                !matches!(
+                    st.token,
+                    Token::Whitespace | Token::LineComment | Token::BlockComment
+                )
+            })
             .map(|st| (st.token, st.text))
             .collect()
     }
@@ -2030,7 +2035,12 @@ fn main() {
         let valid_count = result
             .tokens
             .iter()
-            .filter(|t| !matches!(t.token, Token::Error | Token::Whitespace | Token::LineComment | Token::BlockComment))
+            .filter(|t| {
+                !matches!(
+                    t.token,
+                    Token::Error | Token::Whitespace | Token::LineComment | Token::BlockComment
+                )
+            })
             .count();
         assert_eq!(valid_count, 5); // let, x, =, 42, ;
     }
@@ -2086,7 +2096,12 @@ fn main() {
         let tokens: Vec<_> = result
             .tokens
             .iter()
-            .filter(|t| !matches!(t.token, Token::Error | Token::Whitespace | Token::LineComment | Token::BlockComment))
+            .filter(|t| {
+                !matches!(
+                    t.token,
+                    Token::Error | Token::Whitespace | Token::LineComment | Token::BlockComment
+                )
+            })
             .collect();
         assert_eq!(tokens.len(), 2);
     }

@@ -50,7 +50,9 @@ fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseEr
 }
 
 /// Parse a type annotation (simplified: path types for now).
-fn type_annotation(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+pub(crate) fn type_annotation(
+    p: &mut Parser<'_>,
+) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
 
     // Reference type: &T or &mut T

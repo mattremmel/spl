@@ -4,6 +4,7 @@
 
 mod event;
 mod expr;
+mod item;
 mod sink;
 mod source;
 mod stmt;
@@ -93,6 +94,13 @@ impl<'src> Parser<'src> {
         Ok(())
     }
 
+    /// Parse a function definition (entry point for PARSE-5).
+    #[allow(dead_code)]
+    pub fn parse_function(&mut self) -> Result<(), ParseError> {
+        item::function_def(self)?;
+        Ok(())
+    }
+
     /// Finish parsing and produce the syntax tree.
     pub fn finish(self) -> Parse {
         let sink = Sink::new(self.source.into_tokens(), self.events);
@@ -124,6 +132,12 @@ impl<'src> Parser<'src> {
         self.current().is_some_and(|k| kinds.contains(&k))
     }
 
+    /// Check if the nth lookahead token (0 = current) matches the expected kind.
+    #[allow(dead_code)]
+    fn peek_at(&mut self, n: usize, kind: SyntaxKind) -> bool {
+        self.source.peek(n) == Some(kind)
+    }
+
     /// Consume the current token if it matches.
     fn eat(&mut self, kind: SyntaxKind) -> bool {
         if self.at(kind) {
@@ -137,8 +151,10 @@ impl<'src> Parser<'src> {
     /// Consume the current token unconditionally.
     fn bump(&mut self) {
         let token = self.source.bump().expect("bump called with no token");
-        self.events
-            .push(Event::Token { kind: token.kind(), n_raw_tokens: 1 });
+        self.events.push(Event::Token {
+            kind: token.kind(),
+            n_raw_tokens: 1,
+        });
     }
 
     /// Expect a specific token, emitting an error if not found.
@@ -269,5 +285,13 @@ pub(crate) mod tests {
         let parse = parser.finish();
         assert!(result.is_ok(), "Parse error: {:?}", result);
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+    }
+
+    /// Test helper that parses an item and compares the tree.
+    pub fn check_item(input: &str, expected_tree: &Expect) {
+        let mut parser = Parser::new(input);
+        let _ = parser.parse_function();
+        let parse = parser.finish();
+        expected_tree.assert_eq(&parse.debug_tree());
     }
 }

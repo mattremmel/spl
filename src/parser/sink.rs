@@ -1,8 +1,8 @@
 //! Converts parse events into a rowan GreenNode tree.
 
+use crate::parser::Parse;
 use crate::parser::event::{Event, ParseError};
 use crate::parser::source::Token;
-use crate::parser::Parse;
 use crate::syntax::Lang;
 use rowan::{GreenNodeBuilder, Language};
 
@@ -112,7 +112,12 @@ impl<'src> Sink<'src> {
     }
 
     /// Collect the chain of parent kinds starting from a forward-linked node.
-    fn collect_parent_chain(&self, start: usize, first_offset: usize, first_kind: crate::syntax::SyntaxKind) -> Vec<crate::syntax::SyntaxKind> {
+    fn collect_parent_chain(
+        &self,
+        start: usize,
+        first_offset: usize,
+        first_kind: crate::syntax::SyntaxKind,
+    ) -> Vec<crate::syntax::SyntaxKind> {
         let mut kinds = vec![first_kind];
         let mut current = start + first_offset;
 

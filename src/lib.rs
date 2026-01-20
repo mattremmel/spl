@@ -5,5 +5,5 @@ pub mod parser;
 pub mod syntax;
 
 pub use lexer::{Lexer, Span, SpannedToken, Token};
-pub use parser::{parse, Parse, ParseError};
+pub use parser::{Parse, ParseError, parse};
 pub use syntax::{Lang, SyntaxKind, SyntaxNode, SyntaxToken};

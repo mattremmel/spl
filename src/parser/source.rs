@@ -56,9 +56,7 @@ impl<'src> Source<'src> {
 
     /// Get the current token's text range.
     pub fn current_range(&self) -> Range<usize> {
-        self.current_token()
-            .map(|t| t.span.clone())
-            .unwrap_or(0..0)
+        self.current_token().map(|t| t.span.clone()).unwrap_or(0..0)
     }
 
     /// Bump the current token.
