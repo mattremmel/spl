@@ -1897,4 +1897,28 @@ mod tests {
             "#]],
         );
     }
+
+    #[test]
+    fn source_file_trailing_whitespace() {
+        use crate::parser::tests::check_source_file;
+        check_source_file(
+            "fn main() {}  \n",
+            &expect![[r#"
+                SourceFile@0..15
+                  FunctionDef@0..12
+                    FN_KW@0..2 "fn"
+                    Name@2..7
+                      WHITESPACE@2..3 " "
+                      IDENT@3..7 "main"
+                    ParamList@7..9
+                      L_PAREN@7..8 "("
+                      R_PAREN@8..9 ")"
+                    Block@9..12
+                      WHITESPACE@9..10 " "
+                      L_BRACE@10..11 "{"
+                      R_BRACE@11..12 "}"
+                  WHITESPACE@12..15 "  \n"
+            "#]],
+        );
+    }
 }
