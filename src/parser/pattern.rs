@@ -91,11 +91,8 @@ fn ident_or_struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError
 fn path_or_struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
 
-    // Consume the path: ident (:: ident)*
-    p.bump(); // first identifier
-    while p.eat(SyntaxKind::COLON_COLON) {
-        p.expect(SyntaxKind::IDENT)?;
-    }
+    // Use structured path parsing (no generics in patterns)
+    crate::parser::path::path_no_generics(p)?;
 
     // Check if followed by {
     if p.at(SyntaxKind::L_BRACE) {
@@ -244,8 +241,11 @@ mod tests {
                       WHITESPACE@7..8 " "
                       EQ@8..9 "="
                       PathExpr@9..11
-                        WHITESPACE@9..10 " "
-                        IDENT@10..11 "x"
+                        Path@9..11
+                          PathSegment@9..11
+                            NameRef@9..11
+                              WHITESPACE@9..10 " "
+                              IDENT@10..11 "x"
                       SEMI@11..12 ";"
                     WHITESPACE@12..13 " "
                     R_BRACE@13..14 "}"
@@ -296,8 +296,11 @@ mod tests {
                       WHITESPACE@7..8 " "
                       EQ@8..9 "="
                       PathExpr@9..11
-                        WHITESPACE@9..10 " "
-                        IDENT@10..11 "x"
+                        Path@9..11
+                          PathSegment@9..11
+                            NameRef@9..11
+                              WHITESPACE@9..10 " "
+                              IDENT@10..11 "x"
                       SEMI@11..12 ";"
                     WHITESPACE@12..13 " "
                     R_BRACE@13..14 "}"
@@ -322,8 +325,11 @@ mod tests {
                       WHITESPACE@13..14 " "
                       EQ@14..15 "="
                       PathExpr@15..17
-                        WHITESPACE@15..16 " "
-                        IDENT@16..17 "x"
+                        Path@15..17
+                          PathSegment@15..17
+                            NameRef@15..17
+                              WHITESPACE@15..16 " "
+                              IDENT@16..17 "x"
                       SEMI@17..18 ";"
                     WHITESPACE@18..19 " "
                     R_BRACE@19..20 "}"
@@ -348,8 +354,11 @@ mod tests {
                       WHITESPACE@10..11 " "
                       EQ@11..12 "="
                       PathExpr@12..14
-                        WHITESPACE@12..13 " "
-                        IDENT@13..14 "x"
+                        Path@12..14
+                          PathSegment@12..14
+                            NameRef@12..14
+                              WHITESPACE@12..13 " "
+                              IDENT@13..14 "x"
                       SEMI@14..15 ";"
                     WHITESPACE@15..16 " "
                     R_BRACE@16..17 "}"
@@ -374,8 +383,11 @@ mod tests {
                       WHITESPACE@9..10 " "
                       EQ@10..11 "="
                       PathExpr@11..13
-                        WHITESPACE@11..12 " "
-                        IDENT@12..13 "x"
+                        Path@11..13
+                          PathSegment@11..13
+                            NameRef@11..13
+                              WHITESPACE@11..12 " "
+                              IDENT@12..13 "x"
                       SEMI@13..14 ";"
                     WHITESPACE@14..15 " "
                     R_BRACE@15..16 "}"
@@ -400,8 +412,11 @@ mod tests {
                       WHITESPACE@8..9 " "
                       EQ@9..10 "="
                       PathExpr@10..12
-                        WHITESPACE@10..11 " "
-                        IDENT@11..12 "x"
+                        Path@10..12
+                          PathSegment@10..12
+                            NameRef@10..12
+                              WHITESPACE@10..11 " "
+                              IDENT@11..12 "x"
                       SEMI@12..13 ";"
                     WHITESPACE@13..14 " "
                     R_BRACE@14..15 "}"
@@ -428,8 +443,11 @@ mod tests {
                       WHITESPACE@8..9 " "
                       EQ@9..10 "="
                       PathExpr@10..12
-                        WHITESPACE@10..11 " "
-                        IDENT@11..12 "r"
+                        Path@10..12
+                          PathSegment@10..12
+                            NameRef@10..12
+                              WHITESPACE@10..11 " "
+                              IDENT@11..12 "r"
                       SEMI@12..13 ";"
                     WHITESPACE@13..14 " "
                     R_BRACE@14..15 "}"
@@ -458,8 +476,11 @@ mod tests {
                       WHITESPACE@12..13 " "
                       EQ@13..14 "="
                       PathExpr@14..16
-                        WHITESPACE@14..15 " "
-                        IDENT@15..16 "r"
+                        Path@14..16
+                          PathSegment@14..16
+                            NameRef@14..16
+                              WHITESPACE@14..15 " "
+                              IDENT@15..16 "r"
                       SEMI@16..17 ";"
                     WHITESPACE@17..18 " "
                     R_BRACE@18..19 "}"
@@ -490,8 +511,11 @@ mod tests {
                       WHITESPACE@10..11 " "
                       EQ@11..12 "="
                       PathExpr@12..14
-                        WHITESPACE@12..13 " "
-                        IDENT@13..14 "r"
+                        Path@12..14
+                          PathSegment@12..14
+                            NameRef@12..14
+                              WHITESPACE@12..13 " "
+                              IDENT@13..14 "r"
                       SEMI@14..15 ";"
                     WHITESPACE@15..16 " "
                     R_BRACE@16..17 "}"
@@ -518,8 +542,11 @@ mod tests {
                       WHITESPACE@8..9 " "
                       EQ@9..10 "="
                       PathExpr@10..12
-                        WHITESPACE@10..11 " "
-                        IDENT@11..12 "r"
+                        Path@10..12
+                          PathSegment@10..12
+                            NameRef@10..12
+                              WHITESPACE@10..11 " "
+                              IDENT@11..12 "r"
                       SEMI@12..13 ";"
                     WHITESPACE@13..14 " "
                     R_BRACE@14..15 "}"
@@ -551,8 +578,11 @@ mod tests {
                       WHITESPACE@12..13 " "
                       EQ@13..14 "="
                       PathExpr@14..16
-                        WHITESPACE@14..15 " "
-                        IDENT@15..16 "t"
+                        Path@14..16
+                          PathSegment@14..16
+                            NameRef@14..16
+                              WHITESPACE@14..15 " "
+                              IDENT@15..16 "t"
                       SEMI@16..17 ";"
                     WHITESPACE@17..18 " "
                     R_BRACE@18..19 "}"
@@ -581,8 +611,11 @@ mod tests {
                       WHITESPACE@10..11 " "
                       EQ@11..12 "="
                       PathExpr@12..14
-                        WHITESPACE@12..13 " "
-                        IDENT@13..14 "t"
+                        Path@12..14
+                          PathSegment@12..14
+                            NameRef@12..14
+                              WHITESPACE@12..13 " "
+                              IDENT@13..14 "t"
                       SEMI@14..15 ";"
                     WHITESPACE@15..16 " "
                     R_BRACE@16..17 "}"
@@ -608,8 +641,11 @@ mod tests {
                       WHITESPACE@8..9 " "
                       EQ@9..10 "="
                       PathExpr@10..12
-                        WHITESPACE@10..11 " "
-                        IDENT@11..12 "t"
+                        Path@10..12
+                          PathSegment@10..12
+                            NameRef@10..12
+                              WHITESPACE@10..11 " "
+                              IDENT@11..12 "t"
                       SEMI@12..13 ";"
                     WHITESPACE@13..14 " "
                     R_BRACE@14..15 "}"
@@ -645,8 +681,11 @@ mod tests {
                       WHITESPACE@15..16 " "
                       EQ@16..17 "="
                       PathExpr@17..21
-                        WHITESPACE@17..18 " "
-                        IDENT@18..21 "arr"
+                        Path@17..21
+                          PathSegment@17..21
+                            NameRef@17..21
+                              WHITESPACE@17..18 " "
+                              IDENT@18..21 "arr"
                       SEMI@21..22 ";"
                     WHITESPACE@22..23 " "
                     R_BRACE@23..24 "}"
@@ -682,8 +721,11 @@ mod tests {
                       WHITESPACE@23..24 " "
                       EQ@24..25 "="
                       PathExpr@25..29
-                        WHITESPACE@25..26 " "
-                        IDENT@26..29 "arr"
+                        Path@25..29
+                          PathSegment@25..29
+                            NameRef@25..29
+                              WHITESPACE@25..26 " "
+                              IDENT@26..29 "arr"
                       SEMI@29..30 ";"
                     WHITESPACE@30..31 " "
                     R_BRACE@31..32 "}"
@@ -710,8 +752,11 @@ mod tests {
                       WHITESPACE@10..11 " "
                       EQ@11..12 "="
                       PathExpr@12..14
-                        WHITESPACE@12..13 " "
-                        IDENT@13..14 "x"
+                        Path@12..14
+                          PathSegment@12..14
+                            NameRef@12..14
+                              WHITESPACE@12..13 " "
+                              IDENT@13..14 "x"
                       SEMI@14..15 ";"
                     WHITESPACE@15..16 " "
                     R_BRACE@16..17 "}"
@@ -737,8 +782,11 @@ mod tests {
                       WHITESPACE@9..10 " "
                       EQ@10..11 "="
                       PathExpr@11..13
-                        WHITESPACE@11..12 " "
-                        IDENT@12..13 "x"
+                        Path@11..13
+                          PathSegment@11..13
+                            NameRef@11..13
+                              WHITESPACE@11..12 " "
+                              IDENT@12..13 "x"
                       SEMI@13..14 ";"
                     WHITESPACE@14..15 " "
                     R_BRACE@15..16 "}"
@@ -765,8 +813,11 @@ mod tests {
                       WHITESPACE@14..15 " "
                       EQ@15..16 "="
                       PathExpr@16..18
-                        WHITESPACE@16..17 " "
-                        IDENT@17..18 "x"
+                        Path@16..18
+                          PathSegment@16..18
+                            NameRef@16..18
+                              WHITESPACE@16..17 " "
+                              IDENT@17..18 "x"
                       SEMI@18..19 ";"
                     WHITESPACE@19..20 " "
                     R_BRACE@20..21 "}"
@@ -802,8 +853,11 @@ mod tests {
                       WHITESPACE@20..21 " "
                       EQ@21..22 "="
                       PathExpr@22..24
-                        WHITESPACE@22..23 " "
-                        IDENT@23..24 "p"
+                        Path@22..24
+                          PathSegment@22..24
+                            NameRef@22..24
+                              WHITESPACE@22..23 " "
+                              IDENT@23..24 "p"
                       SEMI@24..25 ";"
                     WHITESPACE@25..26 " "
                     R_BRACE@26..27 "}"
@@ -847,8 +901,11 @@ mod tests {
                       WHITESPACE@26..27 " "
                       EQ@27..28 "="
                       PathExpr@28..30
-                        WHITESPACE@28..29 " "
-                        IDENT@29..30 "p"
+                        Path@28..30
+                          PathSegment@28..30
+                            NameRef@28..30
+                              WHITESPACE@28..29 " "
+                              IDENT@29..30 "p"
                       SEMI@30..31 ";"
                     WHITESPACE@31..32 " "
                     R_BRACE@32..33 "}"
@@ -884,8 +941,11 @@ mod tests {
                       WHITESPACE@21..22 " "
                       EQ@22..23 "="
                       PathExpr@23..25
-                        WHITESPACE@23..24 " "
-                        IDENT@24..25 "p"
+                        Path@23..25
+                          PathSegment@23..25
+                            NameRef@23..25
+                              WHITESPACE@23..24 " "
+                              IDENT@24..25 "p"
                       SEMI@25..26 ";"
                     WHITESPACE@26..27 " "
                     R_BRACE@27..28 "}"
@@ -905,10 +965,15 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       StructPat@5..25
-                        WHITESPACE@5..6 " "
-                        IDENT@6..12 "module"
-                        COLON_COLON@12..14 "::"
-                        IDENT@14..19 "Point"
+                        Path@5..19
+                          PathSegment@5..12
+                            NameRef@5..12
+                              WHITESPACE@5..6 " "
+                              IDENT@6..12 "module"
+                          COLON_COLON@12..14 "::"
+                          PathSegment@14..19
+                            NameRef@14..19
+                              IDENT@14..19 "Point"
                         WHITESPACE@19..20 " "
                         L_BRACE@20..21 "{"
                         StructPatField@21..23
@@ -919,8 +984,11 @@ mod tests {
                       WHITESPACE@25..26 " "
                       EQ@26..27 "="
                       PathExpr@27..29
-                        WHITESPACE@27..28 " "
-                        IDENT@28..29 "p"
+                        Path@27..29
+                          PathSegment@27..29
+                            NameRef@27..29
+                              WHITESPACE@27..28 " "
+                              IDENT@28..29 "p"
                       SEMI@29..30 ";"
                     WHITESPACE@30..31 " "
                     R_BRACE@31..32 "}"
@@ -948,8 +1016,11 @@ mod tests {
                       WHITESPACE@13..14 " "
                       EQ@14..15 "="
                       PathExpr@15..17
-                        WHITESPACE@15..16 " "
-                        IDENT@16..17 "u"
+                        Path@15..17
+                          PathSegment@15..17
+                            NameRef@15..17
+                              WHITESPACE@15..16 " "
+                              IDENT@16..17 "u"
                       SEMI@17..18 ";"
                     WHITESPACE@18..19 " "
                     R_BRACE@19..20 "}"
@@ -992,8 +1063,11 @@ mod tests {
                       WHITESPACE@34..35 " "
                       EQ@35..36 "="
                       PathExpr@36..38
-                        WHITESPACE@36..37 " "
-                        IDENT@37..38 "o"
+                        Path@36..38
+                          PathSegment@36..38
+                            NameRef@36..38
+                              WHITESPACE@36..37 " "
+                              IDENT@37..38 "o"
                       SEMI@38..39 ";"
                     WHITESPACE@39..40 " "
                     R_BRACE@40..41 "}"

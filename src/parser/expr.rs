@@ -430,19 +430,9 @@ fn path_or_struct_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
-    p.bump(); // identifier
 
-    // Continue path with ::
-    while p.at(SyntaxKind::COLON_COLON) {
-        p.bump();
-        if !p.at(SyntaxKind::IDENT) {
-            let err = p.error_at_current("expected identifier after '::'".to_string());
-            p.error(err.clone());
-            m.abandon(p);
-            return Err(err);
-        }
-        p.bump();
-    }
+    // Use structured path parsing (no generics in expression position)
+    super::path::path_no_generics(p)?;
 
     // Check for struct expression: Path { fields }
     if p.at(SyntaxKind::L_BRACE) {
@@ -461,16 +451,9 @@ fn path_expr_only(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
-    p.bump(); // identifier or self
 
-    // Continue path with ::
-    while p.at(SyntaxKind::COLON_COLON) {
-        p.bump();
-        if !p.at(SyntaxKind::IDENT) {
-            return Err(p.error_at_current("expected identifier after '::'".to_string()));
-        }
-        p.bump();
-    }
+    // Use structured path parsing (no generics in expression position)
+    super::path::path_no_generics(p)?;
 
     // NO struct check - just return PathExpr
     Ok(Some(m.complete(p, SyntaxKind::PathExpr)))
@@ -687,19 +670,14 @@ fn return_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::par
 fn type_expr(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
 
-    // Simplified: just parse an identifier path
+    // Simplified: just parse an identifier path (no generics for now)
     if !p.at(SyntaxKind::IDENT) {
+        m.abandon(p);
         return Err(p.error_at_current("expected type".to_string()));
     }
-    p.bump();
 
-    while p.at(SyntaxKind::COLON_COLON) {
-        p.bump();
-        if !p.at(SyntaxKind::IDENT) {
-            return Err(p.error_at_current("expected identifier after '::'".to_string()));
-        }
-        p.bump();
-    }
+    // Use structured path parsing (no generics for cast expressions)
+    super::path::path_no_generics(p)?;
 
     Ok(m.complete(p, SyntaxKind::PathType))
 }
@@ -903,7 +881,10 @@ mod tests {
                 RefExpr@0..2
                   AMP@0..1 "&"
                   PathExpr@1..2
-                    IDENT@1..2 "x"
+                    Path@1..2
+                      PathSegment@1..2
+                        NameRef@1..2
+                          IDENT@1..2 "x"
             "#]],
         );
     }
@@ -917,8 +898,11 @@ mod tests {
                   AMP@0..1 "&"
                   MUT_KW@1..4 "mut"
                   PathExpr@4..6
-                    WHITESPACE@4..5 " "
-                    IDENT@5..6 "x"
+                    Path@4..6
+                      PathSegment@4..6
+                        NameRef@4..6
+                          WHITESPACE@4..5 " "
+                          IDENT@5..6 "x"
             "#]],
         );
     }
@@ -988,7 +972,10 @@ mod tests {
             &expect![[r#"
                 CallExpr@0..9
                   PathExpr@0..3
-                    IDENT@0..3 "foo"
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "foo"
                   ArgList@3..9
                     L_PAREN@3..4 "("
                     LiteralExpr@4..5
@@ -1009,7 +996,10 @@ mod tests {
             &expect![[r#"
                 FieldExpr@0..7
                   PathExpr@0..5
-                    IDENT@0..5 "point"
+                    Path@0..5
+                      PathSegment@0..5
+                        NameRef@0..5
+                          IDENT@0..5 "point"
                   DOT@5..6 "."
                   IDENT@6..7 "x"
             "#]],
@@ -1023,7 +1013,10 @@ mod tests {
             &expect![[r#"
                 MethodCallExpr@0..16
                   PathExpr@0..5
-                    IDENT@0..5 "point"
+                    Path@0..5
+                      PathSegment@0..5
+                        NameRef@0..5
+                          IDENT@0..5 "point"
                   DOT@5..6 "."
                   IDENT@6..14 "distance"
                   ArgList@14..16
@@ -1040,7 +1033,10 @@ mod tests {
             &expect![[r#"
                 IndexExpr@0..6
                   PathExpr@0..3
-                    IDENT@0..3 "arr"
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "arr"
                   L_BRACKET@3..4 "["
                   LiteralExpr@4..5
                     INT_LITERAL@4..5 "0"
@@ -1055,11 +1051,18 @@ mod tests {
             "std::vec::Vec",
             &expect![[r#"
                 PathExpr@0..13
-                  IDENT@0..3 "std"
-                  COLON_COLON@3..5 "::"
-                  IDENT@5..8 "vec"
-                  COLON_COLON@8..10 "::"
-                  IDENT@10..13 "Vec"
+                  Path@0..13
+                    PathSegment@0..3
+                      NameRef@0..3
+                        IDENT@0..3 "std"
+                    COLON_COLON@3..5 "::"
+                    PathSegment@5..8
+                      NameRef@5..8
+                        IDENT@5..8 "vec"
+                    COLON_COLON@8..10 "::"
+                    PathSegment@10..13
+                      NameRef@10..13
+                        IDENT@10..13 "Vec"
             "#]],
         );
     }
@@ -1090,8 +1093,11 @@ mod tests {
                   WHITESPACE@2..3 " "
                   AS_KW@3..5 "as"
                   PathType@5..9
-                    WHITESPACE@5..6 " "
-                    IDENT@6..9 "f64"
+                    Path@5..9
+                      PathSegment@5..9
+                        NameRef@5..9
+                          WHITESPACE@5..6 " "
+                          IDENT@6..9 "f64"
             "#]],
         );
     }
@@ -1104,23 +1110,35 @@ mod tests {
                 BinExpr@0..14
                   BinExpr@0..5
                     PathExpr@0..1
-                      IDENT@0..1 "a"
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "a"
                     WHITESPACE@1..2 " "
                     LT@2..3 "<"
                     PathExpr@3..5
-                      WHITESPACE@3..4 " "
-                      IDENT@4..5 "b"
+                      Path@3..5
+                        PathSegment@3..5
+                          NameRef@3..5
+                            WHITESPACE@3..4 " "
+                            IDENT@4..5 "b"
                   WHITESPACE@5..6 " "
                   AND_AND@6..8 "&&"
                   BinExpr@8..14
                     PathExpr@8..10
-                      WHITESPACE@8..9 " "
-                      IDENT@9..10 "c"
+                      Path@8..10
+                        PathSegment@8..10
+                          NameRef@8..10
+                            WHITESPACE@8..9 " "
+                            IDENT@9..10 "c"
                     WHITESPACE@10..11 " "
                     GT@11..12 ">"
                     PathExpr@12..14
-                      WHITESPACE@12..13 " "
-                      IDENT@13..14 "d"
+                      Path@12..14
+                        PathSegment@12..14
+                          NameRef@12..14
+                            WHITESPACE@12..13 " "
+                            IDENT@13..14 "d"
             "#]],
         );
     }
@@ -1132,13 +1150,19 @@ mod tests {
             &expect![[r#"
                 BinExpr@0..9
                   PathExpr@0..1
-                    IDENT@0..1 "a"
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
                   WHITESPACE@1..2 " "
                   EQ@2..3 "="
                   BinExpr@3..9
                     PathExpr@3..5
-                      WHITESPACE@3..4 " "
-                      IDENT@4..5 "b"
+                      Path@3..5
+                        PathSegment@3..5
+                          NameRef@3..5
+                            WHITESPACE@3..4 " "
+                            IDENT@4..5 "b"
                     WHITESPACE@5..6 " "
                     EQ@6..7 "="
                     LiteralExpr@7..9
@@ -1158,8 +1182,11 @@ mod tests {
                 IfExpr@0..10
                   IF_KW@0..2 "if"
                   PathExpr@2..4
-                    WHITESPACE@2..3 " "
-                    IDENT@3..4 "x"
+                    Path@2..4
+                      PathSegment@2..4
+                        NameRef@2..4
+                          WHITESPACE@2..3 " "
+                          IDENT@3..4 "x"
                   Block@4..10
                     WHITESPACE@4..5 " "
                     L_BRACE@5..6 "{"
@@ -1260,8 +1287,11 @@ mod tests {
                 WhileExpr@0..16
                   WHILE_KW@0..5 "while"
                   PathExpr@5..10
-                    WHITESPACE@5..6 " "
-                    IDENT@6..10 "cond"
+                    Path@5..10
+                      PathSegment@5..10
+                        NameRef@5..10
+                          WHITESPACE@5..6 " "
+                          IDENT@6..10 "cond"
                   Block@10..16
                     WHITESPACE@10..11 " "
                     L_BRACE@11..12 "{"
@@ -1287,14 +1317,20 @@ mod tests {
                   WHITESPACE@5..6 " "
                   IN_KW@6..8 "in"
                   PathExpr@8..14
-                    WHITESPACE@8..9 " "
-                    IDENT@9..14 "items"
+                    Path@8..14
+                      PathSegment@8..14
+                        NameRef@8..14
+                          WHITESPACE@8..9 " "
+                          IDENT@9..14 "items"
                   Block@14..20
                     WHITESPACE@14..15 " "
                     L_BRACE@15..16 "{"
                     PathExpr@16..18
-                      WHITESPACE@16..17 " "
-                      IDENT@17..18 "x"
+                      Path@16..18
+                        PathSegment@16..18
+                          NameRef@16..18
+                            WHITESPACE@16..17 " "
+                            IDENT@17..18 "x"
                     WHITESPACE@18..19 " "
                     R_BRACE@19..20 "}"
             "#]],
@@ -1324,8 +1360,11 @@ mod tests {
                     WHITESPACE@14..15 " "
                     L_BRACE@15..16 "{"
                     PathExpr@16..18
-                      WHITESPACE@16..17 " "
-                      IDENT@17..18 "x"
+                      Path@16..18
+                        PathSegment@16..18
+                          NameRef@16..18
+                            WHITESPACE@16..17 " "
+                            IDENT@17..18 "x"
                     WHITESPACE@18..19 " "
                     R_BRACE@19..20 "}"
             "#]],
@@ -1343,8 +1382,11 @@ mod tests {
                     WHITESPACE@4..5 " "
                     L_BRACE@5..6 "{"
                     PathExpr@6..8
-                      WHITESPACE@6..7 " "
-                      IDENT@7..8 "x"
+                      Path@6..8
+                        PathSegment@6..8
+                          NameRef@6..8
+                            WHITESPACE@6..7 " "
+                            IDENT@7..8 "x"
                     WHITESPACE@8..9 " "
                     R_BRACE@9..10 "}"
             "#]],
@@ -1407,8 +1449,11 @@ mod tests {
                   RETURN_KW@0..6 "return"
                   BinExpr@6..12
                     PathExpr@6..8
-                      WHITESPACE@6..7 " "
-                      IDENT@7..8 "x"
+                      Path@6..8
+                        PathSegment@6..8
+                          NameRef@6..8
+                            WHITESPACE@6..7 " "
+                            IDENT@7..8 "x"
                     WHITESPACE@8..9 " "
                     PLUS@9..10 "+"
                     LiteralExpr@10..12
@@ -1460,12 +1505,18 @@ mod tests {
             &expect![[r#"
                 BinExpr@0..6
                   PathExpr@0..1
-                    IDENT@0..1 "a"
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
                   WHITESPACE@1..2 " "
                   OR_OR@2..4 "||"
                   PathExpr@4..6
-                    WHITESPACE@4..5 " "
-                    IDENT@5..6 "b"
+                    Path@4..6
+                      PathSegment@4..6
+                        NameRef@4..6
+                          WHITESPACE@4..5 " "
+                          IDENT@5..6 "b"
             "#]],
         );
     }
@@ -1477,12 +1528,18 @@ mod tests {
             &expect![[r#"
                 BinExpr@0..6
                   PathExpr@0..1
-                    IDENT@0..1 "a"
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
                   WHITESPACE@1..2 " "
                   NE@2..4 "!="
                   PathExpr@4..6
-                    WHITESPACE@4..5 " "
-                    IDENT@5..6 "b"
+                    Path@4..6
+                      PathSegment@4..6
+                        NameRef@4..6
+                          WHITESPACE@4..5 " "
+                          IDENT@5..6 "b"
             "#]],
         );
     }
@@ -1494,12 +1551,18 @@ mod tests {
             &expect![[r#"
                 BinExpr@0..6
                   PathExpr@0..1
-                    IDENT@0..1 "a"
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
                   WHITESPACE@1..2 " "
                   LE@2..4 "<="
                   PathExpr@4..6
-                    WHITESPACE@4..5 " "
-                    IDENT@5..6 "b"
+                    Path@4..6
+                      PathSegment@4..6
+                        NameRef@4..6
+                          WHITESPACE@4..5 " "
+                          IDENT@5..6 "b"
             "#]],
         );
     }
@@ -1511,12 +1574,18 @@ mod tests {
             &expect![[r#"
                 BinExpr@0..6
                   PathExpr@0..1
-                    IDENT@0..1 "a"
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
                   WHITESPACE@1..2 " "
                   GE@2..4 ">="
                   PathExpr@4..6
-                    WHITESPACE@4..5 " "
-                    IDENT@5..6 "b"
+                    Path@4..6
+                      PathSegment@4..6
+                        NameRef@4..6
+                          WHITESPACE@4..5 " "
+                          IDENT@5..6 "b"
             "#]],
         );
     }
@@ -1562,7 +1631,10 @@ mod tests {
             &expect![[r#"
                 BinExpr@0..6
                   PathExpr@0..1
-                    IDENT@0..1 "x"
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
                   WHITESPACE@1..2 " "
                   PLUS_EQ@2..4 "+="
                   LiteralExpr@4..6
@@ -1579,7 +1651,10 @@ mod tests {
             &expect![[r#"
                 BinExpr@0..6
                   PathExpr@0..1
-                    IDENT@0..1 "x"
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
                   WHITESPACE@1..2 " "
                   MINUS_EQ@2..4 "-="
                   LiteralExpr@4..6
@@ -1596,7 +1671,10 @@ mod tests {
             &expect![[r#"
                 BinExpr@0..6
                   PathExpr@0..1
-                    IDENT@0..1 "x"
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
                   WHITESPACE@1..2 " "
                   STAR_EQ@2..4 "*="
                   LiteralExpr@4..6
@@ -1613,7 +1691,10 @@ mod tests {
             &expect![[r#"
                 BinExpr@0..6
                   PathExpr@0..1
-                    IDENT@0..1 "x"
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
                   WHITESPACE@1..2 " "
                   SLASH_EQ@2..4 "/="
                   LiteralExpr@4..6
@@ -1630,7 +1711,10 @@ mod tests {
             &expect![[r#"
                 BinExpr@0..6
                   PathExpr@0..1
-                    IDENT@0..1 "x"
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
                   WHITESPACE@1..2 " "
                   PERCENT_EQ@2..4 "%="
                   LiteralExpr@4..6
@@ -1719,7 +1803,10 @@ mod tests {
             "Point { x: 1, y: 2 }",
             &expect![[r#"
                 StructExpr@0..20
-                  IDENT@0..5 "Point"
+                  Path@0..5
+                    PathSegment@0..5
+                      NameRef@0..5
+                        IDENT@0..5 "Point"
                   WHITESPACE@5..6 " "
                   L_BRACE@6..7 "{"
                   StructExprField@7..12
@@ -1749,7 +1836,10 @@ mod tests {
             "Point { x, y }",
             &expect![[r#"
                 StructExpr@0..14
-                  IDENT@0..5 "Point"
+                  Path@0..5
+                    PathSegment@0..5
+                      NameRef@0..5
+                        IDENT@0..5 "Point"
                   WHITESPACE@5..6 " "
                   L_BRACE@6..7 "{"
                   StructExprField@7..9
@@ -1802,7 +1892,10 @@ mod tests {
             "self",
             &expect![[r#"
                 PathExpr@0..4
-                  SELF_VALUE_KW@0..4 "self"
+                  Path@0..4
+                    PathSegment@0..4
+                      NameRef@0..4
+                        SELF_VALUE_KW@0..4 "self"
             "#]],
         );
     }
@@ -1814,7 +1907,10 @@ mod tests {
             &expect![[r#"
                 FieldExpr@0..6
                   PathExpr@0..4
-                    SELF_VALUE_KW@0..4 "self"
+                    Path@0..4
+                      PathSegment@0..4
+                        NameRef@0..4
+                          SELF_VALUE_KW@0..4 "self"
                   DOT@4..5 "."
                   IDENT@5..6 "x"
             "#]],
@@ -1830,7 +1926,10 @@ mod tests {
             &expect![[r#"
                 SliceExpr@0..6
                   PathExpr@0..3
-                    IDENT@0..3 "arr"
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "arr"
                   L_BRACKET@3..4 "["
                   COLON@4..5 ":"
                   R_BRACKET@5..6 "]"
@@ -1845,7 +1944,10 @@ mod tests {
             &expect![[r#"
                 SliceExpr@0..7
                   PathExpr@0..3
-                    IDENT@0..3 "arr"
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "arr"
                   L_BRACKET@3..4 "["
                   COLON@4..5 ":"
                   LiteralExpr@5..6
@@ -1870,7 +1972,10 @@ mod tests {
                   MethodCallExpr@0..11
                     MethodCallExpr@0..7
                       PathExpr@0..3
-                        IDENT@0..3 "obj"
+                        Path@0..3
+                          PathSegment@0..3
+                            NameRef@0..3
+                              IDENT@0..3 "obj"
                       DOT@3..4 "."
                       IDENT@4..5 "a"
                       ArgList@5..7
@@ -1898,7 +2003,10 @@ mod tests {
                 FieldExpr@0..12
                   IndexExpr@0..6
                     PathExpr@0..3
-                      IDENT@0..3 "arr"
+                      Path@0..3
+                        PathSegment@0..3
+                          NameRef@0..3
+                            IDENT@0..3 "arr"
                     L_BRACKET@3..4 "["
                     LiteralExpr@4..5
                       INT_LITERAL@4..5 "0"
@@ -1916,18 +2024,27 @@ mod tests {
             &expect![[r#"
                 BinExpr@0..11
                   PathExpr@0..1
-                    IDENT@0..1 "a"
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
                   WHITESPACE@1..2 " "
                   OR_OR@2..4 "||"
                   BinExpr@4..11
                     PathExpr@4..6
-                      WHITESPACE@4..5 " "
-                      IDENT@5..6 "b"
+                      Path@4..6
+                        PathSegment@4..6
+                          NameRef@4..6
+                            WHITESPACE@4..5 " "
+                            IDENT@5..6 "b"
                     WHITESPACE@6..7 " "
                     AND_AND@7..9 "&&"
                     PathExpr@9..11
-                      WHITESPACE@9..10 " "
-                      IDENT@10..11 "c"
+                      Path@9..11
+                        PathSegment@9..11
+                          NameRef@9..11
+                            WHITESPACE@9..10 " "
+                            IDENT@10..11 "c"
             "#]],
         );
     }
@@ -1940,23 +2057,35 @@ mod tests {
                 BinExpr@0..13
                   BinExpr@0..9
                     PathExpr@0..1
-                      IDENT@0..1 "a"
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "a"
                     WHITESPACE@1..2 " "
                     PLUS@2..3 "+"
                     BinExpr@3..9
                       PathExpr@3..5
-                        WHITESPACE@3..4 " "
-                        IDENT@4..5 "b"
+                        Path@3..5
+                          PathSegment@3..5
+                            NameRef@3..5
+                              WHITESPACE@3..4 " "
+                              IDENT@4..5 "b"
                       WHITESPACE@5..6 " "
                       STAR@6..7 "*"
                       PathExpr@7..9
-                        WHITESPACE@7..8 " "
-                        IDENT@8..9 "c"
+                        Path@7..9
+                          PathSegment@7..9
+                            NameRef@7..9
+                              WHITESPACE@7..8 " "
+                              IDENT@8..9 "c"
                   WHITESPACE@9..10 " "
                   LT@10..11 "<"
                   PathExpr@11..13
-                    WHITESPACE@11..12 " "
-                    IDENT@12..13 "d"
+                    Path@11..13
+                      PathSegment@11..13
+                        NameRef@11..13
+                          WHITESPACE@11..12 " "
+                          IDENT@12..13 "d"
             "#]],
         );
     }

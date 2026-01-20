@@ -5,6 +5,7 @@
 mod event;
 mod expr;
 mod item;
+mod path;
 mod pattern;
 mod sink;
 mod source;

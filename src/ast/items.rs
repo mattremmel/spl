@@ -19,6 +19,7 @@ ast_node!(FieldList);
 ast_node!(FieldDef);
 ast_node!(Name);
 ast_node!(NameRef);
+ast_node!(Visibility);
 
 // === Typed accessors ===
 
@@ -71,8 +72,8 @@ impl AstNode for Item {
 }
 
 impl FunctionDef {
-    pub fn visibility(&self) -> Option<SyntaxToken> {
-        token(&self.0, SyntaxKind::PUB_KW)
+    pub fn visibility(&self) -> Option<Visibility> {
+        child(&self.0)
     }
 
     pub fn fn_kw(&self) -> Option<SyntaxToken> {
@@ -101,8 +102,8 @@ impl FunctionDef {
 }
 
 impl StructDef {
-    pub fn visibility(&self) -> Option<SyntaxToken> {
-        token(&self.0, SyntaxKind::PUB_KW)
+    pub fn visibility(&self) -> Option<Visibility> {
+        child(&self.0)
     }
 
     pub fn name(&self) -> Option<Name> {
@@ -133,8 +134,8 @@ impl ImplBlock {
 }
 
 impl TypeAlias {
-    pub fn visibility(&self) -> Option<SyntaxToken> {
-        token(&self.0, SyntaxKind::PUB_KW)
+    pub fn visibility(&self) -> Option<Visibility> {
+        child(&self.0)
     }
 
     pub fn name(&self) -> Option<Name> {
@@ -153,8 +154,8 @@ impl FieldList {
 }
 
 impl FieldDef {
-    pub fn visibility(&self) -> Option<SyntaxToken> {
-        token(&self.0, SyntaxKind::PUB_KW)
+    pub fn visibility(&self) -> Option<Visibility> {
+        child(&self.0)
     }
 
     pub fn name(&self) -> Option<Name> {
@@ -223,5 +224,11 @@ impl Name {
 impl NameRef {
     pub fn ident_token(&self) -> Option<SyntaxToken> {
         self.0.first_token()
+    }
+}
+
+impl Visibility {
+    pub fn pub_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::PUB_KW)
     }
 }

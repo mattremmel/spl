@@ -11,6 +11,17 @@ use crate::syntax::SyntaxKind;
 use super::expr;
 use super::stmt;
 
+/// Parse optional visibility: `pub`
+fn opt_visibility(p: &mut Parser<'_>) -> Option<CompletedMarker> {
+    if p.at(SyntaxKind::PUB_KW) {
+        let m = p.start();
+        p.bump();
+        Some(m.complete(p, SyntaxKind::Visibility))
+    } else {
+        None
+    }
+}
+
 /// Parse a function definition: `[pub] fn name[<generics>](params) [-> Type] { body }`
 pub(crate) fn function_def(
     p: &mut Parser<'_>,
@@ -18,7 +29,7 @@ pub(crate) fn function_def(
     let m = p.start();
 
     // Optional visibility
-    p.eat(SyntaxKind::PUB_KW);
+    opt_visibility(p);
 
     // fn keyword
     p.expect(SyntaxKind::FN_KW)?;
@@ -159,7 +170,7 @@ pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
     let m = p.start();
 
     // Optional visibility
-    p.eat(SyntaxKind::PUB_KW);
+    opt_visibility(p);
 
     // struct keyword
     p.expect(SyntaxKind::STRUCT_KW)?;
@@ -212,7 +223,7 @@ fn field_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
     let m = p.start();
 
     // Optional visibility
-    p.eat(SyntaxKind::PUB_KW);
+    opt_visibility(p);
 
     // Field name
     name(p)?;
@@ -229,7 +240,7 @@ pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
     let m = p.start();
 
     // Optional visibility
-    p.eat(SyntaxKind::PUB_KW);
+    opt_visibility(p);
 
     // type keyword
     p.expect(SyntaxKind::TYPE_KW)?;
@@ -355,8 +366,11 @@ mod tests {
                   WHITESPACE@8..9 " "
                   ARROW@9..11 "->"
                   PathType@11..15
-                    WHITESPACE@11..12 " "
-                    IDENT@12..15 "i32"
+                    Path@11..15
+                      PathSegment@11..15
+                        NameRef@11..15
+                          WHITESPACE@11..12 " "
+                          IDENT@12..15 "i32"
                   Block@15..18
                     WHITESPACE@15..16 " "
                     L_BRACE@16..17 "{"
@@ -382,8 +396,11 @@ mod tests {
                         IDENT@7..8 "x"
                       COLON@8..9 ":"
                       PathType@9..13
-                        WHITESPACE@9..10 " "
-                        IDENT@10..13 "i32"
+                        Path@9..13
+                          PathSegment@9..13
+                            NameRef@9..13
+                              WHITESPACE@9..10 " "
+                              IDENT@10..13 "i32"
                     COMMA@13..14 ","
                     Param@14..21
                       Name@14..16
@@ -391,14 +408,20 @@ mod tests {
                         IDENT@15..16 "y"
                       COLON@16..17 ":"
                       PathType@17..21
-                        WHITESPACE@17..18 " "
-                        IDENT@18..21 "i32"
+                        Path@17..21
+                          PathSegment@17..21
+                            NameRef@17..21
+                              WHITESPACE@17..18 " "
+                              IDENT@18..21 "i32"
                     R_PAREN@21..22 ")"
                   WHITESPACE@22..23 " "
                   ARROW@23..25 "->"
                   PathType@25..29
-                    WHITESPACE@25..26 " "
-                    IDENT@26..29 "i32"
+                    Path@25..29
+                      PathSegment@25..29
+                        NameRef@25..29
+                          WHITESPACE@25..26 " "
+                          IDENT@26..29 "i32"
                   Block@29..32
                     WHITESPACE@29..30 " "
                     L_BRACE@30..31 "{"
@@ -423,8 +446,11 @@ mod tests {
                   WHITESPACE@11..12 " "
                   ARROW@12..14 "->"
                   PathType@14..18
-                    WHITESPACE@14..15 " "
-                    IDENT@15..18 "i32"
+                    Path@14..18
+                      PathSegment@14..18
+                        NameRef@14..18
+                          WHITESPACE@14..15 " "
+                          IDENT@15..18 "i32"
                   Block@18..25
                     WHITESPACE@18..19 " "
                     L_BRACE@19..20 "{"
@@ -443,7 +469,8 @@ mod tests {
             "pub fn foo() {}",
             &expect![[r#"
                 FunctionDef@0..15
-                  PUB_KW@0..3 "pub"
+                  Visibility@0..3
+                    PUB_KW@0..3 "pub"
                   WHITESPACE@3..4 " "
                   FN_KW@4..6 "fn"
                   Name@6..10
@@ -532,8 +559,11 @@ mod tests {
                         IDENT@17..18 "x"
                       COLON@18..19 ":"
                       PathType@19..23
-                        WHITESPACE@19..20 " "
-                        IDENT@20..23 "i32"
+                        Path@19..23
+                          PathSegment@19..23
+                            NameRef@19..23
+                              WHITESPACE@19..20 " "
+                              IDENT@20..23 "i32"
                     R_PAREN@23..24 ")"
                   Block@24..27
                     WHITESPACE@24..25 " "
@@ -566,14 +596,20 @@ mod tests {
                         IDENT@15..16 "x"
                       COLON@16..17 ":"
                       PathType@17..19
-                        WHITESPACE@17..18 " "
-                        IDENT@18..19 "T"
+                        Path@17..19
+                          PathSegment@17..19
+                            NameRef@17..19
+                              WHITESPACE@17..18 " "
+                              IDENT@18..19 "T"
                     R_PAREN@19..20 ")"
                   WHITESPACE@20..21 " "
                   ARROW@21..23 "->"
                   PathType@23..25
-                    WHITESPACE@23..24 " "
-                    IDENT@24..25 "T"
+                    Path@23..25
+                      PathSegment@23..25
+                        NameRef@23..25
+                          WHITESPACE@23..24 " "
+                          IDENT@24..25 "T"
                   Block@25..28
                     WHITESPACE@25..26 " "
                     L_BRACE@26..27 "{"
@@ -610,8 +646,11 @@ mod tests {
                         IDENT@14..15 "a"
                       COLON@15..16 ":"
                       PathType@16..18
-                        WHITESPACE@16..17 " "
-                        IDENT@17..18 "T"
+                        Path@16..18
+                          PathSegment@16..18
+                            NameRef@16..18
+                              WHITESPACE@16..17 " "
+                              IDENT@17..18 "T"
                     COMMA@18..19 ","
                     Param@19..24
                       Name@19..21
@@ -619,8 +658,11 @@ mod tests {
                         IDENT@20..21 "b"
                       COLON@21..22 ":"
                       PathType@22..24
-                        WHITESPACE@22..23 " "
-                        IDENT@23..24 "U"
+                        Path@22..24
+                          PathSegment@22..24
+                            NameRef@22..24
+                              WHITESPACE@22..23 " "
+                              IDENT@23..24 "U"
                     R_PAREN@24..25 ")"
                   Block@25..28
                     WHITESPACE@25..26 " "
@@ -692,8 +734,11 @@ mod tests {
                         IDENT@15..16 "x"
                       COLON@16..17 ":"
                       PathType@17..21
-                        WHITESPACE@17..18 " "
-                        IDENT@18..21 "i32"
+                        Path@17..21
+                          PathSegment@17..21
+                            NameRef@17..21
+                              WHITESPACE@17..18 " "
+                              IDENT@18..21 "i32"
                     COMMA@21..22 ","
                     FieldDef@22..29
                       Name@22..24
@@ -701,8 +746,11 @@ mod tests {
                         IDENT@23..24 "y"
                       COLON@24..25 ":"
                       PathType@25..29
-                        WHITESPACE@25..26 " "
-                        IDENT@26..29 "i32"
+                        Path@25..29
+                          PathSegment@25..29
+                            NameRef@25..29
+                              WHITESPACE@25..26 " "
+                              IDENT@26..29 "i32"
                     WHITESPACE@29..30 " "
                     R_BRACE@30..31 "}"
             "#]],
@@ -715,7 +763,8 @@ mod tests {
             "pub struct Foo {}",
             &expect![[r#"
                 StructDef@0..17
-                  PUB_KW@0..3 "pub"
+                  Visibility@0..3
+                    PUB_KW@0..3 "pub"
                   WHITESPACE@3..4 " "
                   STRUCT_KW@4..10 "struct"
                   Name@10..14
@@ -743,15 +792,19 @@ mod tests {
                     WHITESPACE@10..11 " "
                     L_BRACE@11..12 "{"
                     FieldDef@12..23
-                      WHITESPACE@12..13 " "
-                      PUB_KW@13..16 "pub"
+                      Visibility@12..16
+                        WHITESPACE@12..13 " "
+                        PUB_KW@13..16 "pub"
                       Name@16..18
                         WHITESPACE@16..17 " "
                         IDENT@17..18 "x"
                       COLON@18..19 ":"
                       PathType@19..23
-                        WHITESPACE@19..20 " "
-                        IDENT@20..23 "i32"
+                        Path@19..23
+                          PathSegment@19..23
+                            NameRef@19..23
+                              WHITESPACE@19..20 " "
+                              IDENT@20..23 "i32"
                     WHITESPACE@23..24 " "
                     R_BRACE@24..25 "}"
             "#]],
@@ -788,8 +841,11 @@ mod tests {
                         IDENT@20..25 "first"
                       COLON@25..26 ":"
                       PathType@26..28
-                        WHITESPACE@26..27 " "
-                        IDENT@27..28 "T"
+                        Path@26..28
+                          PathSegment@26..28
+                            NameRef@26..28
+                              WHITESPACE@26..27 " "
+                              IDENT@27..28 "T"
                     COMMA@28..29 ","
                     FieldDef@29..39
                       Name@29..36
@@ -797,8 +853,11 @@ mod tests {
                         IDENT@30..36 "second"
                       COLON@36..37 ":"
                       PathType@37..39
-                        WHITESPACE@37..38 " "
-                        IDENT@38..39 "U"
+                        Path@37..39
+                          PathSegment@37..39
+                            NameRef@37..39
+                              WHITESPACE@37..38 " "
+                              IDENT@38..39 "U"
                     WHITESPACE@39..40 " "
                     R_BRACE@40..41 "}"
             "#]],
@@ -820,8 +879,11 @@ mod tests {
                   WHITESPACE@8..9 " "
                   EQ@9..10 "="
                   PathType@10..14
-                    WHITESPACE@10..11 " "
-                    IDENT@11..14 "i32"
+                    Path@10..14
+                      PathSegment@10..14
+                        NameRef@10..14
+                          WHITESPACE@10..11 " "
+                          IDENT@11..14 "i32"
                   SEMI@14..15 ";"
             "#]],
         );
@@ -833,7 +895,8 @@ mod tests {
             "pub type Callback = fn(i32) -> bool;",
             &expect![[r#"
                 TypeAlias@0..36
-                  PUB_KW@0..3 "pub"
+                  Visibility@0..3
+                    PUB_KW@0..3 "pub"
                   WHITESPACE@3..4 " "
                   TYPE_KW@4..8 "type"
                   Name@8..17
@@ -846,13 +909,19 @@ mod tests {
                     FN_KW@20..22 "fn"
                     L_PAREN@22..23 "("
                     PathType@23..26
-                      IDENT@23..26 "i32"
+                      Path@23..26
+                        PathSegment@23..26
+                          NameRef@23..26
+                            IDENT@23..26 "i32"
                     R_PAREN@26..27 ")"
                     WHITESPACE@27..28 " "
                     ARROW@28..30 "->"
                     PathType@30..35
-                      WHITESPACE@30..31 " "
-                      IDENT@31..35 "bool"
+                      Path@30..35
+                        PathSegment@30..35
+                          NameRef@30..35
+                            WHITESPACE@30..31 " "
+                            IDENT@31..35 "bool"
                   SEMI@35..36 ";"
             "#]],
         );
@@ -868,8 +937,11 @@ mod tests {
                 ImplBlock@0..13
                   IMPL_KW@0..4 "impl"
                   PathType@4..10
-                    WHITESPACE@4..5 " "
-                    IDENT@5..10 "Point"
+                    Path@4..10
+                      PathSegment@4..10
+                        NameRef@4..10
+                          WHITESPACE@4..5 " "
+                          IDENT@5..10 "Point"
                   WHITESPACE@10..11 " "
                   L_BRACE@11..12 "{"
                   R_BRACE@12..13 "}"
@@ -885,8 +957,11 @@ mod tests {
                 ImplBlock@0..35
                   IMPL_KW@0..4 "impl"
                   PathType@4..10
-                    WHITESPACE@4..5 " "
-                    IDENT@5..10 "Point"
+                    Path@4..10
+                      PathSegment@4..10
+                        NameRef@4..10
+                          WHITESPACE@4..5 " "
+                          IDENT@5..10 "Point"
                   WHITESPACE@10..11 " "
                   L_BRACE@11..12 "{"
                   FunctionDef@12..33
@@ -901,8 +976,11 @@ mod tests {
                     WHITESPACE@21..22 " "
                     ARROW@22..24 "->"
                     PathType@24..30
-                      WHITESPACE@24..25 " "
-                      IDENT@25..30 "Point"
+                      Path@24..30
+                        PathSegment@24..30
+                          NameRef@24..30
+                            WHITESPACE@24..25 " "
+                            IDENT@25..30 "Point"
                     Block@30..33
                       WHITESPACE@30..31 " "
                       L_BRACE@31..32 "{"
@@ -927,13 +1005,19 @@ mod tests {
                         IDENT@5..6 "T"
                     GT@6..7 ">"
                   PathType@7..14
-                    WHITESPACE@7..8 " "
-                    IDENT@8..11 "Vec"
-                    GenericArgs@11..14
-                      LT@11..12 "<"
-                      PathType@12..13
-                        IDENT@12..13 "T"
-                      GT@13..14 ">"
+                    Path@7..14
+                      PathSegment@7..14
+                        NameRef@7..11
+                          WHITESPACE@7..8 " "
+                          IDENT@8..11 "Vec"
+                        GenericArgs@11..14
+                          LT@11..12 "<"
+                          PathType@12..13
+                            Path@12..13
+                              PathSegment@12..13
+                                NameRef@12..13
+                                  IDENT@12..13 "T"
+                          GT@13..14 ">"
                   WHITESPACE@14..15 " "
                   L_BRACE@15..16 "{"
                   R_BRACE@16..17 "}"
@@ -998,8 +1082,11 @@ mod tests {
                           IDENT@15..16 "x"
                         COLON@16..17 ":"
                         PathType@17..21
-                          WHITESPACE@17..18 " "
-                          IDENT@18..21 "i32"
+                          Path@17..21
+                            PathSegment@17..21
+                              NameRef@17..21
+                                WHITESPACE@17..18 " "
+                                IDENT@18..21 "i32"
                       WHITESPACE@21..22 " "
                       R_BRACE@22..23 "}"
                   FunctionDef@23..36
@@ -1039,8 +1126,11 @@ mod tests {
                     WHITESPACE@13..14 "\n"
                     IMPL_KW@14..18 "impl"
                     PathType@18..22
-                      WHITESPACE@18..19 " "
-                      IDENT@19..22 "Foo"
+                      Path@18..22
+                        PathSegment@18..22
+                          NameRef@18..22
+                            WHITESPACE@18..19 " "
+                            IDENT@19..22 "Foo"
                     WHITESPACE@22..23 " "
                     L_BRACE@23..24 "{"
                     FunctionDef@24..41
