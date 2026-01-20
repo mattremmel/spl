@@ -590,32 +590,9 @@ fn block_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::pars
     Ok(Some(m.complete(p, SyntaxKind::BlockExpr)))
 }
 
-/// Parse a block.
-fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
-    let m = p.start();
-    p.expect(SyntaxKind::L_BRACE)?;
-
-    // For PARSE-2, we just skip to the matching brace
-    // Full statement parsing is in PARSE-3
-    let mut depth = 1;
-    while depth > 0 && p.current().is_some() {
-        match p.current() {
-            Some(SyntaxKind::L_BRACE) => {
-                depth += 1;
-                p.bump();
-            }
-            Some(SyntaxKind::R_BRACE) => {
-                depth -= 1;
-                if depth > 0 {
-                    p.bump();
-                }
-            }
-            _ => p.bump(),
-        }
-    }
-
-    p.expect(SyntaxKind::R_BRACE)?;
-    Ok(m.complete(p, SyntaxKind::Block))
+/// Parse a block with statements.
+pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    super::stmt::block(p)
 }
 
 /// Parse an if expression.
@@ -1195,8 +1172,9 @@ mod tests {
                   Block@4..10
                     WHITESPACE@4..5 " "
                     L_BRACE@5..6 "{"
-                    WHITESPACE@6..7 " "
-                    INT_LITERAL@7..8 "1"
+                    LiteralExpr@6..8
+                      WHITESPACE@6..7 " "
+                      INT_LITERAL@7..8 "1"
                     WHITESPACE@8..9 " "
                     R_BRACE@9..10 "}"
             "#]],
@@ -1216,8 +1194,9 @@ mod tests {
                   Block@7..13
                     WHITESPACE@7..8 " "
                     L_BRACE@8..9 "{"
-                    WHITESPACE@9..10 " "
-                    INT_LITERAL@10..11 "1"
+                    LiteralExpr@9..11
+                      WHITESPACE@9..10 " "
+                      INT_LITERAL@10..11 "1"
                     WHITESPACE@11..12 " "
                     R_BRACE@12..13 "}"
                   WHITESPACE@13..14 " "
@@ -1225,8 +1204,9 @@ mod tests {
                   Block@18..24
                     WHITESPACE@18..19 " "
                     L_BRACE@19..20 "{"
-                    WHITESPACE@20..21 " "
-                    INT_LITERAL@21..22 "2"
+                    LiteralExpr@20..22
+                      WHITESPACE@20..21 " "
+                      INT_LITERAL@21..22 "2"
                     WHITESPACE@22..23 " "
                     R_BRACE@23..24 "}"
             "#]],
@@ -1246,8 +1226,9 @@ mod tests {
                   Block@7..13
                     WHITESPACE@7..8 " "
                     L_BRACE@8..9 "{"
-                    WHITESPACE@9..10 " "
-                    INT_LITERAL@10..11 "1"
+                    LiteralExpr@9..11
+                      WHITESPACE@9..10 " "
+                      INT_LITERAL@10..11 "1"
                     WHITESPACE@11..12 " "
                     R_BRACE@12..13 "}"
                   WHITESPACE@13..14 " "
@@ -1261,8 +1242,9 @@ mod tests {
                     Block@27..33
                       WHITESPACE@27..28 " "
                       L_BRACE@28..29 "{"
-                      WHITESPACE@29..30 " "
-                      INT_LITERAL@30..31 "2"
+                      LiteralExpr@29..31
+                        WHITESPACE@29..30 " "
+                        INT_LITERAL@30..31 "2"
                       WHITESPACE@31..32 " "
                       R_BRACE@32..33 "}"
                     WHITESPACE@33..34 " "
@@ -1270,8 +1252,9 @@ mod tests {
                     Block@38..44
                       WHITESPACE@38..39 " "
                       L_BRACE@39..40 "{"
-                      WHITESPACE@40..41 " "
-                      INT_LITERAL@41..42 "3"
+                      LiteralExpr@40..42
+                        WHITESPACE@40..41 " "
+                        INT_LITERAL@41..42 "3"
                       WHITESPACE@42..43 " "
                       R_BRACE@43..44 "}"
             "#]],
@@ -1291,8 +1274,9 @@ mod tests {
                   Block@10..16
                     WHITESPACE@10..11 " "
                     L_BRACE@11..12 "{"
-                    WHITESPACE@12..13 " "
-                    INT_LITERAL@13..14 "1"
+                    LiteralExpr@12..14
+                      WHITESPACE@12..13 " "
+                      INT_LITERAL@13..14 "1"
                     WHITESPACE@14..15 " "
                     R_BRACE@15..16 "}"
             "#]],
@@ -1317,8 +1301,9 @@ mod tests {
                   Block@14..20
                     WHITESPACE@14..15 " "
                     L_BRACE@15..16 "{"
-                    WHITESPACE@16..17 " "
-                    IDENT@17..18 "x"
+                    PathExpr@16..18
+                      WHITESPACE@16..17 " "
+                      IDENT@17..18 "x"
                     WHITESPACE@18..19 " "
                     R_BRACE@19..20 "}"
             "#]],
@@ -1347,8 +1332,9 @@ mod tests {
                   Block@14..20
                     WHITESPACE@14..15 " "
                     L_BRACE@15..16 "{"
-                    WHITESPACE@16..17 " "
-                    IDENT@17..18 "x"
+                    PathExpr@16..18
+                      WHITESPACE@16..17 " "
+                      IDENT@17..18 "x"
                     WHITESPACE@18..19 " "
                     R_BRACE@19..20 "}"
             "#]],
@@ -1365,8 +1351,9 @@ mod tests {
                   Block@4..10
                     WHITESPACE@4..5 " "
                     L_BRACE@5..6 "{"
-                    WHITESPACE@6..7 " "
-                    IDENT@7..8 "x"
+                    PathExpr@6..8
+                      WHITESPACE@6..7 " "
+                      IDENT@7..8 "x"
                     WHITESPACE@8..9 " "
                     R_BRACE@9..10 "}"
             "#]],
@@ -1809,8 +1796,9 @@ mod tests {
                 BlockExpr@0..6
                   Block@0..6
                     L_BRACE@0..1 "{"
-                    WHITESPACE@1..2 " "
-                    INT_LITERAL@2..4 "42"
+                    LiteralExpr@1..4
+                      WHITESPACE@1..2 " "
+                      INT_LITERAL@2..4 "42"
                     WHITESPACE@4..5 " "
                     R_BRACE@5..6 "}"
             "#]],

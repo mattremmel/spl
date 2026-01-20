@@ -6,6 +6,7 @@ mod event;
 mod expr;
 mod sink;
 mod source;
+mod stmt;
 
 use crate::lexer::{Lexer, SpannedToken};
 use crate::syntax::{SyntaxKind, SyntaxNode};
