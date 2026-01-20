@@ -49,7 +49,7 @@ fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseEr
     }
 }
 
-/// Parse a type annotation (simplified: path types for now).
+/// Parse a type annotation.
 pub(crate) fn type_annotation(
     p: &mut Parser<'_>,
 ) -> Result<CompletedMarker, crate::parser::ParseError> {
@@ -95,7 +95,28 @@ pub(crate) fn type_annotation(
         return Ok(m.complete(p, SyntaxKind::TupleType));
     }
 
-    // Path type: identifier or path::to::Type
+    // Function pointer type: fn(T1, T2) -> R
+    if p.at(SyntaxKind::FN_KW) {
+        p.bump();
+        p.expect(SyntaxKind::L_PAREN)?;
+        if !p.at(SyntaxKind::R_PAREN) {
+            type_annotation(p)?;
+            while p.eat(SyntaxKind::COMMA) {
+                if p.at(SyntaxKind::R_PAREN) {
+                    break;
+                }
+                type_annotation(p)?;
+            }
+        }
+        p.expect(SyntaxKind::R_PAREN)?;
+        // Optional return type
+        if p.eat(SyntaxKind::ARROW) {
+            type_annotation(p)?;
+        }
+        return Ok(m.complete(p, SyntaxKind::FnPtrType));
+    }
+
+    // Path type: identifier or path::to::Type<Args>
     if !p.at(SyntaxKind::IDENT) {
         let err = p.error_at_current("expected type".to_string());
         m.abandon(p);
@@ -103,15 +124,43 @@ pub(crate) fn type_annotation(
     }
     p.bump();
 
-    while p.at(SyntaxKind::COLON_COLON) {
-        p.bump();
-        if !p.at(SyntaxKind::IDENT) {
-            return Err(p.error_at_current("expected identifier after '::'".to_string()));
+    // Handle path segments (::Name) and generic args (<T>)
+    loop {
+        if p.at(SyntaxKind::COLON_COLON) {
+            p.bump();
+            if !p.at(SyntaxKind::IDENT) {
+                return Err(p.error_at_current("expected identifier after '::'".to_string()));
+            }
+            p.bump();
+        } else if p.at(SyntaxKind::LT) {
+            // Generic arguments: <T, U, ...>
+            generic_args(p)?;
+            break; // Generic args must come at the end
+        } else {
+            break;
         }
-        p.bump();
     }
 
     Ok(m.complete(p, SyntaxKind::PathType))
+}
+
+/// Parse generic arguments: `<T, U, ...>`
+fn generic_args(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    p.expect(SyntaxKind::LT)?;
+
+    if !p.at(SyntaxKind::GT) {
+        type_annotation(p)?;
+        while p.eat(SyntaxKind::COMMA) {
+            if p.at(SyntaxKind::GT) {
+                break;
+            }
+            type_annotation(p)?;
+        }
+    }
+
+    p.expect(SyntaxKind::GT)?;
+    Ok(m.complete(p, SyntaxKind::GenericArgs))
 }
 
 /// Parse a block with statements: `{ stmt* [expr] }`
@@ -554,6 +603,265 @@ mod tests {
                       SEMI@20..21 ";"
                     WHITESPACE@21..22 " "
                     R_BRACE@22..23 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn generic_type_single_arg() {
+        check_expr(
+            "{ let x: Vec<i32>; }",
+            &expect![[r#"
+                BlockExpr@0..20
+                  Block@0..20
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..18
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      PathType@8..17
+                        WHITESPACE@8..9 " "
+                        IDENT@9..12 "Vec"
+                        GenericArgs@12..17
+                          LT@12..13 "<"
+                          PathType@13..16
+                            IDENT@13..16 "i32"
+                          GT@16..17 ">"
+                      SEMI@17..18 ";"
+                    WHITESPACE@18..19 " "
+                    R_BRACE@19..20 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn generic_type_multiple_args() {
+        check_expr(
+            "{ let x: HashMap<String, i32>; }",
+            &expect![[r#"
+                BlockExpr@0..32
+                  Block@0..32
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..30
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      PathType@8..29
+                        WHITESPACE@8..9 " "
+                        IDENT@9..16 "HashMap"
+                        GenericArgs@16..29
+                          LT@16..17 "<"
+                          PathType@17..23
+                            IDENT@17..23 "String"
+                          COMMA@23..24 ","
+                          PathType@24..28
+                            WHITESPACE@24..25 " "
+                            IDENT@25..28 "i32"
+                          GT@28..29 ">"
+                      SEMI@29..30 ";"
+                    WHITESPACE@30..31 " "
+                    R_BRACE@31..32 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn generic_type_nested() {
+        check_expr(
+            "{ let x: Option<Vec<i32>>; }",
+            &expect![[r#"
+                BlockExpr@0..28
+                  Block@0..28
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..26
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      PathType@8..25
+                        WHITESPACE@8..9 " "
+                        IDENT@9..15 "Option"
+                        GenericArgs@15..25
+                          LT@15..16 "<"
+                          PathType@16..24
+                            IDENT@16..19 "Vec"
+                            GenericArgs@19..24
+                              LT@19..20 "<"
+                              PathType@20..23
+                                IDENT@20..23 "i32"
+                              GT@23..24 ">"
+                          GT@24..25 ">"
+                      SEMI@25..26 ";"
+                    WHITESPACE@26..27 " "
+                    R_BRACE@27..28 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn fn_ptr_type_no_args() {
+        check_expr(
+            "{ let x: fn(); }",
+            &expect![[r#"
+                BlockExpr@0..16
+                  Block@0..16
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..14
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      FnPtrType@8..13
+                        WHITESPACE@8..9 " "
+                        FN_KW@9..11 "fn"
+                        L_PAREN@11..12 "("
+                        R_PAREN@12..13 ")"
+                      SEMI@13..14 ";"
+                    WHITESPACE@14..15 " "
+                    R_BRACE@15..16 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn fn_ptr_type_with_args() {
+        check_expr(
+            "{ let x: fn(i32, bool); }",
+            &expect![[r#"
+                BlockExpr@0..25
+                  Block@0..25
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..23
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      FnPtrType@8..22
+                        WHITESPACE@8..9 " "
+                        FN_KW@9..11 "fn"
+                        L_PAREN@11..12 "("
+                        PathType@12..15
+                          IDENT@12..15 "i32"
+                        COMMA@15..16 ","
+                        PathType@16..21
+                          WHITESPACE@16..17 " "
+                          IDENT@17..21 "bool"
+                        R_PAREN@21..22 ")"
+                      SEMI@22..23 ";"
+                    WHITESPACE@23..24 " "
+                    R_BRACE@24..25 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn fn_ptr_type_with_return() {
+        check_expr(
+            "{ let x: fn(i32) -> bool; }",
+            &expect![[r#"
+                BlockExpr@0..27
+                  Block@0..27
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..25
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      FnPtrType@8..24
+                        WHITESPACE@8..9 " "
+                        FN_KW@9..11 "fn"
+                        L_PAREN@11..12 "("
+                        PathType@12..15
+                          IDENT@12..15 "i32"
+                        R_PAREN@15..16 ")"
+                        WHITESPACE@16..17 " "
+                        ARROW@17..19 "->"
+                        PathType@19..24
+                          WHITESPACE@19..20 " "
+                          IDENT@20..24 "bool"
+                      SEMI@24..25 ";"
+                    WHITESPACE@25..26 " "
+                    R_BRACE@26..27 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn path_type_with_generics() {
+        check_expr(
+            "{ let x: std::vec::Vec<T>; }",
+            &expect![[r#"
+                BlockExpr@0..28
+                  Block@0..28
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..26
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      PathType@8..25
+                        WHITESPACE@8..9 " "
+                        IDENT@9..12 "std"
+                        COLON_COLON@12..14 "::"
+                        IDENT@14..17 "vec"
+                        COLON_COLON@17..19 "::"
+                        IDENT@19..22 "Vec"
+                        GenericArgs@22..25
+                          LT@22..23 "<"
+                          PathType@23..24
+                            IDENT@23..24 "T"
+                          GT@24..25 ">"
+                      SEMI@25..26 ";"
+                    WHITESPACE@26..27 " "
+                    R_BRACE@27..28 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn ref_to_generic_type() {
+        check_expr(
+            "{ let x: &Vec<i32>; }",
+            &expect![[r#"
+                BlockExpr@0..21
+                  Block@0..21
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..19
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        WHITESPACE@5..6 " "
+                        IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      RefType@8..18
+                        WHITESPACE@8..9 " "
+                        AMP@9..10 "&"
+                        PathType@10..18
+                          IDENT@10..13 "Vec"
+                          GenericArgs@13..18
+                            LT@13..14 "<"
+                            PathType@14..17
+                              IDENT@14..17 "i32"
+                            GT@17..18 ">"
+                      SEMI@18..19 ";"
+                    WHITESPACE@19..20 " "
+                    R_BRACE@20..21 "}"
             "#]],
         );
     }
