@@ -548,11 +548,6 @@ mod tests {
         assert_eq!(lex_no_trivia(source), expected);
     }
 
-    /// Helper to check all tokens including trivia
-    fn check_with_trivia(source: &str, expected: &[(Token, &str)]) {
-        assert_eq!(lex(source), expected);
-    }
-
     /// Helper to check single token
     fn check_single(source: &str, expected_token: Token) {
         let tokens = lex(source);
