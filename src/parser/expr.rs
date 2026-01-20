@@ -258,39 +258,30 @@ fn index_or_slice_expr(
     let m = lhs.precede(p);
     p.expect(SyntaxKind::L_BRACKET)?;
 
-    // Check for slice syntax (has : at some point)
-    // For now, simple heuristic: if we see : before ], it's a slice
+    // Parse optional start expression (skip if immediately at colon)
     let is_slice = p.at(SyntaxKind::COLON);
+    if !is_slice {
+        let _ = expr(p)?;
+    }
 
-    if is_slice || peek_for_colon_in_brackets(p) {
-        // Slice: [start:end] or [:end] or [start:] or [:]
-        if !p.at(SyntaxKind::COLON) {
-            let _ = expr(p)?; // start
-        }
-        p.expect(SyntaxKind::COLON)?;
+    // Determine if slice (has colon) or index (no colon)
+    if is_slice || p.at(SyntaxKind::COLON) {
+        p.bump(); // consume :
+
+        // Parse optional end expression
         if !p.at(SyntaxKind::R_BRACKET) {
             if p.at(SyntaxKind::DOLLAR) {
-                p.bump(); // $
+                p.bump(); // $ (slice to end)
             } else {
-                let _ = expr(p)?; // end
+                let _ = expr(p)?;
             }
         }
         p.expect(SyntaxKind::R_BRACKET)?;
         Ok(m.complete(p, SyntaxKind::SliceExpr))
     } else {
-        // Index: [expr]
-        let _ = expr(p)?;
         p.expect(SyntaxKind::R_BRACKET)?;
         Ok(m.complete(p, SyntaxKind::IndexExpr))
     }
-}
-
-/// Peek ahead to see if there's a colon before the closing bracket.
-fn peek_for_colon_in_brackets(_p: &mut Parser<'_>) -> bool {
-    // This is a simplified check - in a real parser we'd need more context
-    // For now, we parse as index and would need backtracking for slice
-    // A better approach: parse expression, then check for colon
-    false
 }
 
 /// Parse field access or method call: expr.field or expr.method(args)
