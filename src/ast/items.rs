@@ -1,6 +1,6 @@
 //! Item AST nodes: functions, structs, impls, type aliases.
 
-use crate::ast::{Block, Type, ast_node, child, children, token};
+use crate::ast::{Block, Path, Type, ast_node, child, children, token};
 use crate::syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::ast::AstNode;
 
@@ -230,5 +230,26 @@ impl NameRef {
 impl Visibility {
     pub fn pub_kw(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::PUB_KW)
+    }
+
+    pub fn crate_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::CRATE_KW)
+    }
+
+    pub fn super_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::SUPER_KW)
+    }
+
+    pub fn self_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::SELF_VALUE_KW)
+    }
+
+    pub fn in_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::IN_KW)
+    }
+
+    /// Returns the path for `pub(in path)` visibility.
+    pub fn path(&self) -> Option<Path> {
+        child(&self.0)
     }
 }

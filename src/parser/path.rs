@@ -41,12 +41,14 @@ fn path_segment(p: &mut Parser<'_>, allow_generics: bool) -> Result<CompletedMar
     Ok(m.complete(p, SyntaxKind::PathSegment))
 }
 
-/// Parse a name reference (identifier, self, or Self).
+/// Parse a name reference (identifier, self, Self, crate, or super).
 fn name_ref(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     if p.at(SyntaxKind::IDENT)
         || p.at(SyntaxKind::SELF_VALUE_KW)
         || p.at(SyntaxKind::SELF_TYPE_KW)
+        || p.at(SyntaxKind::CRATE_KW)
+        || p.at(SyntaxKind::SUPER_KW)
     {
         p.bump();
         Ok(m.complete(p, SyntaxKind::NameRef))

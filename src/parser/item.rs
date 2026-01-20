@@ -11,15 +11,33 @@ use crate::syntax::SyntaxKind;
 use super::expr;
 use super::stmt;
 
-/// Parse optional visibility: `pub`
+/// Parse optional visibility: `pub`, `pub(crate)`, `pub(super)`, `pub(self)`, `pub(in path)`
 fn opt_visibility(p: &mut Parser<'_>) -> Option<CompletedMarker> {
-    if p.at(SyntaxKind::PUB_KW) {
-        let m = p.start();
-        p.bump();
-        Some(m.complete(p, SyntaxKind::Visibility))
-    } else {
-        None
+    if !p.at(SyntaxKind::PUB_KW) {
+        return None;
     }
+
+    let m = p.start();
+    p.bump(); // pub
+
+    if p.at(SyntaxKind::L_PAREN) {
+        p.bump(); // (
+
+        if p.at(SyntaxKind::CRATE_KW)
+            || p.at(SyntaxKind::SUPER_KW)
+            || p.at(SyntaxKind::SELF_VALUE_KW)
+        {
+            p.bump();
+        } else if p.at(SyntaxKind::IN_KW) {
+            p.bump(); // in
+            // Parse path, ignoring errors (continue to closing paren for recovery)
+            let _ = crate::parser::path::path_no_generics(p);
+        }
+
+        p.expect(SyntaxKind::R_PAREN).ok();
+    }
+
+    Some(m.complete(p, SyntaxKind::Visibility))
 }
 
 /// Parse a function definition: `[pub] fn name[<generics>](params) [-> Type] { body }`
@@ -292,11 +310,38 @@ pub(crate) fn impl_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
     Ok(m.complete(p, SyntaxKind::ImplBlock))
 }
 
+/// Calculate lookahead to skip past visibility modifier.
+/// Returns the offset after visibility where the item keyword should be.
+fn visibility_lookahead(p: &mut Parser<'_>) -> usize {
+    if !p.at(SyntaxKind::PUB_KW) {
+        return 0;
+    }
+    // Check for pub(...)
+    if p.peek_at(1, SyntaxKind::L_PAREN) {
+        // Find the matching R_PAREN
+        let mut depth = 1;
+        let mut offset = 2;
+        while depth > 0 {
+            match p.peek(offset) {
+                Some(SyntaxKind::L_PAREN) => depth += 1,
+                Some(SyntaxKind::R_PAREN) => depth -= 1,
+                None => break,
+                _ => {}
+            }
+            offset += 1;
+        }
+        offset
+    } else {
+        // Just "pub"
+        1
+    }
+}
+
 /// Parse a top-level item (function, struct, type alias, or impl block).
 pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
-    // Check for visibility modifier first
+    // Check for visibility modifier and calculate lookahead
     let has_pub = p.at(SyntaxKind::PUB_KW);
-    let lookahead = if has_pub { 1 } else { 0 };
+    let lookahead = visibility_lookahead(p);
 
     match p.peek(lookahead) {
         Some(SyntaxKind::FN_KW) => function_def(p),
@@ -483,6 +528,183 @@ mod tests {
                     WHITESPACE@12..13 " "
                     L_BRACE@13..14 "{"
                     R_BRACE@14..15 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn visibility_pub_crate() {
+        check_item(
+            "pub(crate) fn foo() {}",
+            &expect![[r#"
+                FunctionDef@0..22
+                  Visibility@0..10
+                    PUB_KW@0..3 "pub"
+                    L_PAREN@3..4 "("
+                    CRATE_KW@4..9 "crate"
+                    R_PAREN@9..10 ")"
+                  WHITESPACE@10..11 " "
+                  FN_KW@11..13 "fn"
+                  Name@13..17
+                    WHITESPACE@13..14 " "
+                    IDENT@14..17 "foo"
+                  ParamList@17..19
+                    L_PAREN@17..18 "("
+                    R_PAREN@18..19 ")"
+                  Block@19..22
+                    WHITESPACE@19..20 " "
+                    L_BRACE@20..21 "{"
+                    R_BRACE@21..22 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn visibility_pub_super() {
+        check_item(
+            "pub(super) fn foo() {}",
+            &expect![[r#"
+                FunctionDef@0..22
+                  Visibility@0..10
+                    PUB_KW@0..3 "pub"
+                    L_PAREN@3..4 "("
+                    SUPER_KW@4..9 "super"
+                    R_PAREN@9..10 ")"
+                  WHITESPACE@10..11 " "
+                  FN_KW@11..13 "fn"
+                  Name@13..17
+                    WHITESPACE@13..14 " "
+                    IDENT@14..17 "foo"
+                  ParamList@17..19
+                    L_PAREN@17..18 "("
+                    R_PAREN@18..19 ")"
+                  Block@19..22
+                    WHITESPACE@19..20 " "
+                    L_BRACE@20..21 "{"
+                    R_BRACE@21..22 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn visibility_pub_self() {
+        check_item(
+            "pub(self) fn foo() {}",
+            &expect![[r#"
+                FunctionDef@0..21
+                  Visibility@0..9
+                    PUB_KW@0..3 "pub"
+                    L_PAREN@3..4 "("
+                    SELF_VALUE_KW@4..8 "self"
+                    R_PAREN@8..9 ")"
+                  WHITESPACE@9..10 " "
+                  FN_KW@10..12 "fn"
+                  Name@12..16
+                    WHITESPACE@12..13 " "
+                    IDENT@13..16 "foo"
+                  ParamList@16..18
+                    L_PAREN@16..17 "("
+                    R_PAREN@17..18 ")"
+                  Block@18..21
+                    WHITESPACE@18..19 " "
+                    L_BRACE@19..20 "{"
+                    R_BRACE@20..21 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn visibility_pub_in_path() {
+        check_item(
+            "pub(in crate::foo) fn bar() {}",
+            &expect![[r#"
+                FunctionDef@0..30
+                  Visibility@0..18
+                    PUB_KW@0..3 "pub"
+                    L_PAREN@3..4 "("
+                    IN_KW@4..6 "in"
+                    Path@6..17
+                      PathSegment@6..12
+                        NameRef@6..12
+                          WHITESPACE@6..7 " "
+                          CRATE_KW@7..12 "crate"
+                      COLON_COLON@12..14 "::"
+                      PathSegment@14..17
+                        NameRef@14..17
+                          IDENT@14..17 "foo"
+                    R_PAREN@17..18 ")"
+                  WHITESPACE@18..19 " "
+                  FN_KW@19..21 "fn"
+                  Name@21..25
+                    WHITESPACE@21..22 " "
+                    IDENT@22..25 "bar"
+                  ParamList@25..27
+                    L_PAREN@25..26 "("
+                    R_PAREN@26..27 ")"
+                  Block@27..30
+                    WHITESPACE@27..28 " "
+                    L_BRACE@28..29 "{"
+                    R_BRACE@29..30 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_pub_crate() {
+        check_item(
+            "pub(crate) struct Foo {}",
+            &expect![[r#"
+                StructDef@0..24
+                  Visibility@0..10
+                    PUB_KW@0..3 "pub"
+                    L_PAREN@3..4 "("
+                    CRATE_KW@4..9 "crate"
+                    R_PAREN@9..10 ")"
+                  WHITESPACE@10..11 " "
+                  STRUCT_KW@11..17 "struct"
+                  Name@17..21
+                    WHITESPACE@17..18 " "
+                    IDENT@18..21 "Foo"
+                  FieldList@21..24
+                    WHITESPACE@21..22 " "
+                    L_BRACE@22..23 "{"
+                    R_BRACE@23..24 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn field_pub_crate() {
+        check_item(
+            "struct Foo { pub(crate) x: i32 }",
+            &expect![[r#"
+                StructDef@0..32
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..10
+                    WHITESPACE@6..7 " "
+                    IDENT@7..10 "Foo"
+                  FieldList@10..32
+                    WHITESPACE@10..11 " "
+                    L_BRACE@11..12 "{"
+                    FieldDef@12..30
+                      Visibility@12..23
+                        WHITESPACE@12..13 " "
+                        PUB_KW@13..16 "pub"
+                        L_PAREN@16..17 "("
+                        CRATE_KW@17..22 "crate"
+                        R_PAREN@22..23 ")"
+                      Name@23..25
+                        WHITESPACE@23..24 " "
+                        IDENT@24..25 "x"
+                      COLON@25..26 ":"
+                      PathType@26..30
+                        Path@26..30
+                          PathSegment@26..30
+                            NameRef@26..30
+                              WHITESPACE@26..27 " "
+                              IDENT@27..30 "i32"
+                    WHITESPACE@30..31 " "
+                    R_BRACE@31..32 "}"
             "#]],
         );
     }

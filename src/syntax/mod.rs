@@ -30,6 +30,8 @@ pub enum SyntaxKind {
     PUB_KW,
     SELF_TYPE_KW,
     SELF_VALUE_KW,
+    CRATE_KW,
+    SUPER_KW,
 
     // Operators
     PLUS,
@@ -199,6 +201,8 @@ impl From<Token> for SyntaxKind {
             Token::Pub => Self::PUB_KW,
             Token::SelfType => Self::SELF_TYPE_KW,
             Token::SelfValue => Self::SELF_VALUE_KW,
+            Token::Crate => Self::CRATE_KW,
+            Token::Super => Self::SUPER_KW,
             Token::Plus => Self::PLUS,
             Token::Minus => Self::MINUS,
             Token::Star => Self::STAR,

@@ -70,6 +70,10 @@ pub enum Token {
     SelfType,
     #[token("self")]
     SelfValue,
+    #[token("crate")]
+    Crate,
+    #[token("super")]
+    Super,
 
     // === Operators ===
     // Arithmetic
@@ -664,6 +668,16 @@ mod tests {
     #[test]
     fn keyword_self_value() {
         check_single("self", Token::SelfValue);
+    }
+
+    #[test]
+    fn keyword_crate() {
+        check_single("crate", Token::Crate);
+    }
+
+    #[test]
+    fn keyword_super() {
+        check_single("super", Token::Super);
     }
 
     // ============================================================
