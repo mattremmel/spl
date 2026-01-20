@@ -374,7 +374,12 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_let_stmt(&mut self, let_stmt: &LetStmt) {
-        // Resolve the initializer first (before defining the binding)
+        // Resolve struct type paths in pattern FIRST (source order)
+        if let Some(pat) = let_stmt.pat() {
+            self.resolve_pattern_types(&pat);
+        }
+
+        // Resolve the initializer
         if let Some(init) = let_stmt.initializer() {
             self.resolve_expr(&init);
         }
@@ -384,7 +389,7 @@ impl<'ctx> Resolver<'ctx> {
             self.resolve_type(&ty);
         }
 
-        // Define the pattern binding
+        // Define the pattern bindings
         if let Some(pat) = let_stmt.pat() {
             self.define_pattern(&pat);
         }
@@ -564,7 +569,12 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_for_expr(&mut self, for_expr: &crate::ast::ForExpr) {
-        // Resolve iterable first (before entering for scope)
+        // Resolve pattern struct types FIRST (source order, in outer scope)
+        if let Some(pat) = for_expr.pat() {
+            self.resolve_pattern_types(&pat);
+        }
+
+        // Resolve iterable (in outer scope)
         if let Some(iterable) = for_expr.iterable() {
             self.resolve_expr(&iterable);
         }
@@ -572,7 +582,7 @@ impl<'ctx> Resolver<'ctx> {
         // Enter for-loop scope
         self.ctx.enter_scope(ScopeKind::ForLoop);
 
-        // Define the loop variable
+        // Define the loop variable bindings
         if let Some(pat) = for_expr.pat() {
             self.define_pattern(&pat);
         }
@@ -609,6 +619,53 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     // ===== Pattern Resolution =====
+
+    /// Resolve type paths in patterns without defining bindings.
+    /// This ensures struct type errors are reported in source order.
+    fn resolve_pattern_types(&mut self, pat: &Pat) {
+        match pat {
+            Pat::Struct(struct_pat) => {
+                // Handle qualified paths like `module::Point { x }`
+                if let Some(path) = struct_pat.path() {
+                    self.resolve_path(&path);
+                } else if let Some(token) = struct_pat.ident_token() {
+                    // Handle simple struct patterns like `Point { x }`
+                    let name_text = token.text().to_string();
+                    let span = Self::text_range_to_span(token.text_range());
+                    let interned = self.ctx.intern(&name_text);
+                    match self.ctx.lookup(interned) {
+                        Some(def_id) => {
+                            self.resolutions.insert(span, def_id);
+                        }
+                        None => {
+                            self.error_undefined(&name_text, span);
+                        }
+                    }
+                }
+                for field in struct_pat.fields() {
+                    if let Some(nested) = field.pat() {
+                        self.resolve_pattern_types(&nested);
+                    }
+                }
+            }
+            Pat::Tuple(tuple_pat) => {
+                for inner in tuple_pat.patterns() {
+                    self.resolve_pattern_types(&inner);
+                }
+            }
+            Pat::Slice(slice_pat) => {
+                for inner in slice_pat.patterns() {
+                    self.resolve_pattern_types(&inner);
+                }
+            }
+            Pat::Ref(ref_pat) => {
+                if let Some(inner) = ref_pat.pat() {
+                    self.resolve_pattern_types(&inner);
+                }
+            }
+            Pat::Ident(_) | Pat::Wildcard(_) | Pat::Literal(_) | Pat::Rest(_) | Pat::Range(_) => {}
+        }
+    }
 
     fn define_pattern(&mut self, pat: &Pat) {
         match pat {
@@ -670,11 +727,7 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn define_struct_pattern(&mut self, struct_pat: &StructPat) {
-        // Resolve the struct type path
-        if let Some(path) = struct_pat.path() {
-            self.resolve_path(&path);
-        }
-
+        // Note: struct path already resolved in resolve_pattern_types
         // Define bindings in struct pattern fields
         for field in struct_pat.fields() {
             self.define_struct_pat_field(&field);
@@ -686,17 +739,15 @@ impl<'ctx> Resolver<'ctx> {
         // If not, the field name itself becomes a binding
         if let Some(pat) = field.pat() {
             self.define_pattern(&pat);
-        } else if let Some(name_ref) = field.name() {
+        } else if let Some(token) = field.ident_token() {
             // Shorthand syntax: `Point { x, y }` means `Point { x: x, y: y }`
-            // The name_ref becomes a local binding
-            if let Some(token) = Self::get_name_ref_token(&name_ref) {
-                let text = token.text().to_string();
-                let span = Self::text_range_to_span(token.text_range());
-                let interned = self.ctx.intern(&text);
-                let _ = self
-                    .ctx
-                    .define(interned, SymbolKind::Local, Visibility::Private, span);
-            }
+            // The field name token becomes a local binding
+            let text = token.text().to_string();
+            let span = Self::text_range_to_span(token.text_range());
+            let interned = self.ctx.intern(&text);
+            let _ = self
+                .ctx
+                .define(interned, SymbolKind::Local, Visibility::Private, span);
         }
     }
 
@@ -1232,18 +1283,15 @@ mod tests {
         check_ok("struct Point { x: i32, y: i32 } fn main() { let Point { x: a, y: b } = Point { x: 1, y: 2 }; a + b; }");
     }
 
-    // TODO: Enable after fixing resolver to handle struct pattern shorthand bindings
-    // The resolver's define_struct_pat_field needs to extract IDENT directly, not via NameRef
-    // #[test]
-    // fn resolve_struct_pattern_shorthand() {
-    //     check_ok("struct Point { x: i32, y: i32 } fn main() { let Point { x, y } = Point { x: 1, y: 2 }; x + y; }");
-    // }
+    #[test]
+    fn resolve_struct_pattern_shorthand() {
+        check_ok("struct Point { x: i32, y: i32 } fn main() { let Point { x, y } = Point { x: 1, y: 2 }; x + y; }");
+    }
 
-    // TODO: Enable after fixing resolver to report undefined struct in pattern before undefined RHS
-    // #[test]
-    // fn resolve_struct_pattern_undefined_struct() {
-    //     check_err("fn main() { let UndefinedStruct { x } = foo; }", &["cannot find `UndefinedStruct`"]);
-    // }
+    #[test]
+    fn resolve_struct_pattern_undefined_struct() {
+        check_err("fn main() { let UndefinedStruct { x } = foo; }", &["cannot find `UndefinedStruct`"]);
+    }
 
     #[test]
     fn resolve_ref_pattern() {
@@ -1255,12 +1303,10 @@ mod tests {
         check_ok("fn main() { let [a, b, c] = [1, 2, 3]; a + b + c; }");
     }
 
-    // TODO: Enable after adding iterator support or using defined iterable
-    // Currently fails because `iter` is not defined
-    // #[test]
-    // fn resolve_for_loop_tuple_pattern() {
-    //     check_ok("fn main() { for (i, v) in iter { i + v; } }");
-    // }
+    #[test]
+    fn resolve_for_loop_tuple_pattern() {
+        check_ok("fn main() { let arr = [(1, 2)]; for (i, v) in arr { i + v; } }");
+    }
 
     // ===== Error cases =====
 
