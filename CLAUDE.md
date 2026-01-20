@@ -10,7 +10,7 @@ SPL (Simple Programming Language) is a Rust compiler for a custom programming la
 
 ```bash
 cargo test                     # Run all tests
-cargo clippy -- -D warnings    # Lint (treat warnings as errors)
+cargo clippy --all-targets -- -D warnings  # Lint (treat warnings as errors)
 cargo +nightly fmt             # Format (requires nightly)
 ```
 
