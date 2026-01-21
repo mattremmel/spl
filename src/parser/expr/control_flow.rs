@@ -548,4 +548,266 @@ mod tests {
             "#]],
         );
     }
+
+    // === Control Flow Combination Tests ===
+
+    #[test]
+    fn nested_loops_mixed() {
+        // for inside while inside loop
+        check_expr(
+            "loop { while cond { for i in items { x } } }",
+            &expect![[r#"
+                LoopExpr@0..44
+                  LOOP_KW@0..4 "loop"
+                  Block@4..44
+                    WHITESPACE@4..5 " "
+                    L_BRACE@5..6 "{"
+                    WhileExpr@6..42
+                      WHITESPACE@6..7 " "
+                      WHILE_KW@7..12 "while"
+                      PathExpr@12..17
+                        Path@12..17
+                          PathSegment@12..17
+                            NameRef@12..17
+                              WHITESPACE@12..13 " "
+                              IDENT@13..17 "cond"
+                      Block@17..42
+                        WHITESPACE@17..18 " "
+                        L_BRACE@18..19 "{"
+                        ForExpr@19..40
+                          WHITESPACE@19..20 " "
+                          FOR_KW@20..23 "for"
+                          IdentPat@23..25
+                            Name@23..25
+                              WHITESPACE@23..24 " "
+                              IDENT@24..25 "i"
+                          WHITESPACE@25..26 " "
+                          IN_KW@26..28 "in"
+                          PathExpr@28..34
+                            Path@28..34
+                              PathSegment@28..34
+                                NameRef@28..34
+                                  WHITESPACE@28..29 " "
+                                  IDENT@29..34 "items"
+                          Block@34..40
+                            WHITESPACE@34..35 " "
+                            L_BRACE@35..36 "{"
+                            PathExpr@36..38
+                              Path@36..38
+                                PathSegment@36..38
+                                  NameRef@36..38
+                                    WHITESPACE@36..37 " "
+                                    IDENT@37..38 "x"
+                            WHITESPACE@38..39 " "
+                            R_BRACE@39..40 "}"
+                        WHITESPACE@40..41 " "
+                        R_BRACE@41..42 "}"
+                    WHITESPACE@42..43 " "
+                    R_BRACE@43..44 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn break_in_nested_context() {
+        // break in nested if inside loop
+        check_expr(
+            "loop { if cond { break 42 } }",
+            &expect![[r#"
+                LoopExpr@0..29
+                  LOOP_KW@0..4 "loop"
+                  Block@4..29
+                    WHITESPACE@4..5 " "
+                    L_BRACE@5..6 "{"
+                    IfExpr@6..27
+                      WHITESPACE@6..7 " "
+                      IF_KW@7..9 "if"
+                      PathExpr@9..14
+                        Path@9..14
+                          PathSegment@9..14
+                            NameRef@9..14
+                              WHITESPACE@9..10 " "
+                              IDENT@10..14 "cond"
+                      Block@14..27
+                        WHITESPACE@14..15 " "
+                        L_BRACE@15..16 "{"
+                        BreakExpr@16..25
+                          WHITESPACE@16..17 " "
+                          BREAK_KW@17..22 "break"
+                          LiteralExpr@22..25
+                            WHITESPACE@22..23 " "
+                            INT_LITERAL@23..25 "42"
+                        WHITESPACE@25..26 " "
+                        R_BRACE@26..27 "}"
+                    WHITESPACE@27..28 " "
+                    R_BRACE@28..29 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn continue_in_nested_context() {
+        // continue in nested if inside for loop
+        check_expr(
+            "for i in items { if skip { continue } }",
+            &expect![[r#"
+                ForExpr@0..39
+                  FOR_KW@0..3 "for"
+                  IdentPat@3..5
+                    Name@3..5
+                      WHITESPACE@3..4 " "
+                      IDENT@4..5 "i"
+                  WHITESPACE@5..6 " "
+                  IN_KW@6..8 "in"
+                  PathExpr@8..14
+                    Path@8..14
+                      PathSegment@8..14
+                        NameRef@8..14
+                          WHITESPACE@8..9 " "
+                          IDENT@9..14 "items"
+                  Block@14..39
+                    WHITESPACE@14..15 " "
+                    L_BRACE@15..16 "{"
+                    IfExpr@16..37
+                      WHITESPACE@16..17 " "
+                      IF_KW@17..19 "if"
+                      PathExpr@19..24
+                        Path@19..24
+                          PathSegment@19..24
+                            NameRef@19..24
+                              WHITESPACE@19..20 " "
+                              IDENT@20..24 "skip"
+                      Block@24..37
+                        WHITESPACE@24..25 " "
+                        L_BRACE@25..26 "{"
+                        ContinueExpr@26..35
+                          WHITESPACE@26..27 " "
+                          CONTINUE_KW@27..35 "continue"
+                        WHITESPACE@35..36 " "
+                        R_BRACE@36..37 "}"
+                    WHITESPACE@37..38 " "
+                    R_BRACE@38..39 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn if_in_loop_with_break_value() {
+        // if inside loop where branches have break values
+        check_expr(
+            "loop { if done { break result } else { continue } }",
+            &expect![[r#"
+                LoopExpr@0..51
+                  LOOP_KW@0..4 "loop"
+                  Block@4..51
+                    WHITESPACE@4..5 " "
+                    L_BRACE@5..6 "{"
+                    IfExpr@6..49
+                      WHITESPACE@6..7 " "
+                      IF_KW@7..9 "if"
+                      PathExpr@9..14
+                        Path@9..14
+                          PathSegment@9..14
+                            NameRef@9..14
+                              WHITESPACE@9..10 " "
+                              IDENT@10..14 "done"
+                      Block@14..31
+                        WHITESPACE@14..15 " "
+                        L_BRACE@15..16 "{"
+                        BreakExpr@16..29
+                          WHITESPACE@16..17 " "
+                          BREAK_KW@17..22 "break"
+                          PathExpr@22..29
+                            Path@22..29
+                              PathSegment@22..29
+                                NameRef@22..29
+                                  WHITESPACE@22..23 " "
+                                  IDENT@23..29 "result"
+                        WHITESPACE@29..30 " "
+                        R_BRACE@30..31 "}"
+                      WHITESPACE@31..32 " "
+                      ELSE_KW@32..36 "else"
+                      Block@36..49
+                        WHITESPACE@36..37 " "
+                        L_BRACE@37..38 "{"
+                        ContinueExpr@38..47
+                          WHITESPACE@38..39 " "
+                          CONTINUE_KW@39..47 "continue"
+                        WHITESPACE@47..48 " "
+                        R_BRACE@48..49 "}"
+                    WHITESPACE@49..50 " "
+                    R_BRACE@50..51 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn while_with_break() {
+        check_expr(
+            "while cond { if done { break } }",
+            &expect![[r#"
+                WhileExpr@0..32
+                  WHILE_KW@0..5 "while"
+                  PathExpr@5..10
+                    Path@5..10
+                      PathSegment@5..10
+                        NameRef@5..10
+                          WHITESPACE@5..6 " "
+                          IDENT@6..10 "cond"
+                  Block@10..32
+                    WHITESPACE@10..11 " "
+                    L_BRACE@11..12 "{"
+                    IfExpr@12..30
+                      WHITESPACE@12..13 " "
+                      IF_KW@13..15 "if"
+                      PathExpr@15..20
+                        Path@15..20
+                          PathSegment@15..20
+                            NameRef@15..20
+                              WHITESPACE@15..16 " "
+                              IDENT@16..20 "done"
+                      Block@20..30
+                        WHITESPACE@20..21 " "
+                        L_BRACE@21..22 "{"
+                        BreakExpr@22..28
+                          WHITESPACE@22..23 " "
+                          BREAK_KW@23..28 "break"
+                        WHITESPACE@28..29 " "
+                        R_BRACE@29..30 "}"
+                    WHITESPACE@30..31 " "
+                    R_BRACE@31..32 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn return_in_if() {
+        check_expr(
+            "if cond { return x }",
+            &expect![[r#"
+                IfExpr@0..20
+                  IF_KW@0..2 "if"
+                  PathExpr@2..7
+                    Path@2..7
+                      PathSegment@2..7
+                        NameRef@2..7
+                          WHITESPACE@2..3 " "
+                          IDENT@3..7 "cond"
+                  Block@7..20
+                    WHITESPACE@7..8 " "
+                    L_BRACE@8..9 "{"
+                    ReturnExpr@9..18
+                      WHITESPACE@9..10 " "
+                      RETURN_KW@10..16 "return"
+                      PathExpr@16..18
+                        Path@16..18
+                          PathSegment@16..18
+                            NameRef@16..18
+                              WHITESPACE@16..17 " "
+                              IDENT@17..18 "x"
+                    WHITESPACE@18..19 " "
+                    R_BRACE@19..20 "}"
+            "#]],
+        );
+    }
 }

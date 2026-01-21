@@ -624,7 +624,6 @@ fn while_simple() {
 }
 
 #[test]
-#[ignore = "parser has issue with while loop condition/body"]
 fn while_with_body() {
     check(
         "fn main() { let mut x = 0; while x < 10 { x = x + 1; } let y = x; }",
@@ -653,7 +652,6 @@ fn loop_break_infers_type() {
 }
 
 #[test]
-#[ignore = "parser doesn't fully support for loops"]
 fn for_loop_simple() {
     // Use y after the for loop so it's found as the "last" binding by display_first_binding
     check("fn main() { let x = for i in 0..10 { }; let y = x; }", "()");
@@ -686,7 +684,6 @@ fn return_no_value() {
 }
 
 #[test]
-#[ignore = "divergence tracking in let initializers not yet implemented"]
 fn return_with_value() {
     check(
         "fn f() -> i32 { let x = return 42; } fn main() { let y = f(); }",
@@ -795,7 +792,6 @@ fn tuple_with_annotation() {
 }
 
 #[test]
-#[ignore = "parser doesn't support tuple field access"]
 fn tuple_access() {
     check("fn main() { let t = (1, 2); let x = t.0; }", "i32");
 }
@@ -830,13 +826,11 @@ fn array_with_annotation() {
 }
 
 #[test]
-#[ignore = "parser doesn't support array repeat syntax [val; len]"]
 fn array_repeat() {
     check("fn main() { let x = [0; 5]; }", "[i32; 5]");
 }
 
 #[test]
-#[ignore = "parser doesn't support array repeat syntax [val; len]"]
 fn array_repeat_with_annotation() {
     check("fn main() { let x: [i64; 5] = [0; 5]; }", "[i64; 5]");
 }
@@ -1022,7 +1016,6 @@ fn struct_in_function_return() {
 }
 
 #[test]
-#[ignore = "parser doesn't fully support impl blocks"]
 fn struct_method_call() {
     check(
         "struct S { a: i32 } impl S { fn get(&self) -> i32 { self.a } } fn main() { let s = S { a: 1 }; let x = s.get(); }",
@@ -1031,7 +1024,6 @@ fn struct_method_call() {
 }
 
 #[test]
-#[ignore = "parser doesn't fully support impl blocks"]
 fn struct_method_with_params() {
     check(
         "struct S { a: i32 } impl S { fn set(&mut self, v: i32) { self.a = v; } } fn main() { let mut s = S { a: 1 }; s.set(2); let x = s.a; }",
@@ -1040,7 +1032,6 @@ fn struct_method_with_params() {
 }
 
 #[test]
-#[ignore = "parser doesn't fully support impl blocks"]
 fn struct_multiple_impls() {
     check(
         "struct S {} impl S { fn a(&self) -> i32 { 1 } } impl S { fn b(&self) -> i32 { 2 } } fn main() { let s = S {}; let x = s.a(); }",
@@ -1049,7 +1040,6 @@ fn struct_multiple_impls() {
 }
 
 #[test]
-#[ignore = "parser doesn't fully support impl blocks"]
 fn struct_self_type() {
     check(
         "struct S { a: i32 } impl S { fn new() -> Self { S { a: 0 } } } fn main() { let x = S::new(); }",
@@ -1066,7 +1056,6 @@ fn struct_field_shorthand() {
 }
 
 #[test]
-#[ignore = "parser doesn't support struct update syntax"]
 fn struct_update_syntax() {
     check(
         "struct S { a: i32, b: i32 } fn main() { let s = S { a: 1, b: 2 }; let x = S { a: 3, ..s }; }",
@@ -1242,7 +1231,6 @@ fn error_access_nonexistent_field() {
 // =============================================================================
 
 #[test]
-#[ignore = "parser doesn't support ! return type"]
 fn never_from_return() {
     check("fn f() -> ! { loop {} } fn main() { let x = f(); }", "!");
 }
@@ -1386,4 +1374,135 @@ fn multiple_returns() {
 #[test]
 fn function_implicit_return() {
     check("fn f() -> i32 { 42 } fn main() { let x = f(); }", "i32");
+}
+
+// =============================================================================
+// 1.16 Type Inference Edge Cases (Additional)
+// =============================================================================
+
+#[test]
+fn inference_through_multiple_assignments() {
+    // Type propagates through a chain of assignments
+    check(
+        "fn main() { let mut x = 1; let y = x; x = y; let z: i64 = y; }",
+        "i64",
+    );
+}
+
+#[test]
+fn inference_nested_struct_fields() {
+    // Inference through nested struct field access
+    check(
+        "struct Inner { val: i64 } struct Outer { inner: Inner } fn main() { let o = Outer { inner: Inner { val: 42 } }; let x = o.inner.val; }",
+        "i64",
+    );
+}
+
+#[test]
+fn inference_array_of_tuples() {
+    // Array containing tuples
+    check(
+        "fn main() { let arr: [(i32, i64); 2] = [(1, 2), (3, 4)]; }",
+        "[(i32, i64); 2]",
+    );
+}
+
+#[test]
+fn inference_tuple_of_arrays() {
+    // Tuple containing arrays
+    check(
+        "fn main() { let t: ([i32; 2], [i64; 3]) = ([1, 2], [3, 4, 5]); }",
+        "([i32; 2], [i64; 3])",
+    );
+}
+
+#[test]
+fn inference_ref_to_array_element() {
+    // Reference to an array element
+    check(
+        "fn f(arr: [i64; 3]) { let x = &arr[0]; }",
+        "&i64",
+    );
+}
+
+#[test]
+fn inference_complex_expression_chain() {
+    // Complex expression with multiple operators and calls
+    check(
+        "fn f(x: i64) -> i64 { x } fn main() { let x = f(1) + f(2) + f(3); }",
+        "i64",
+    );
+}
+
+#[test]
+fn inference_block_tail_type() {
+    // Block returns the type of its tail expression
+    check(
+        "fn main() { let x: i64 = { 42 }; }",
+        "i64",
+    );
+}
+
+#[test]
+fn inference_nested_function_calls() {
+    // Deeply nested function calls
+    check(
+        "fn f(x: i64) -> i64 { x } fn g(x: i64) -> i64 { x } fn main() { let x = f(g(f(g(42)))); }",
+        "i64",
+    );
+}
+
+// =============================================================================
+// 1.17 Error Message Quality Tests
+// =============================================================================
+
+#[test]
+fn error_type_mismatch_basic() {
+    // Type mismatch error is reported
+    check_err(
+        "fn main() { let x: i32 = \"hello\"; }",
+        &["type mismatch"],
+    );
+}
+
+#[test]
+fn error_wrong_arg_count() {
+    // Error for wrong number of arguments
+    check_err(
+        "fn f(a: i32, b: i32) {} fn main() { f(1); }",
+        &["expected 2 argument"],
+    );
+}
+
+#[test]
+fn error_field_access_on_non_struct() {
+    // Accessing a field on a non-struct type
+    check_err("fn main() { let x = 42; x.foo; }", &["non-struct"]);
+}
+
+#[test]
+fn error_binary_op_on_incompatible() {
+    // Binary operation on incompatible types
+    check_err(
+        "fn main() { let x = true + 1; }",
+        &["cannot apply binary"],
+    );
+}
+
+#[test]
+fn error_call_with_wrong_type() {
+    // Calling function with wrong argument type
+    check_err(
+        "fn f(x: i32) {} fn main() { f(\"hello\"); }",
+        &["type mismatch"],
+    );
+}
+
+#[test]
+fn error_return_type_mismatch() {
+    // Function return type doesn't match
+    check_err(
+        "fn f() -> i32 { \"hello\" }",
+        &["type mismatch"],
+    );
 }

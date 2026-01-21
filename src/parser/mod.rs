@@ -685,6 +685,63 @@ pub(crate) mod tests {
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
+    // === Deep Nesting Stress Tests ===
+
+    #[test]
+    fn very_deeply_nested_blocks() {
+        // 10+ levels of nested blocks
+        let parse = parse("fn foo() { { { { { { { { { { { 1 } } } } } } } } } } }");
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+    }
+
+    #[test]
+    fn long_method_chain() {
+        // 10+ method calls in a chain
+        let parse = parse(
+            "fn foo() { obj.a().b().c().d().e().f().g().h().i().j().k().l(); }",
+        );
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+    }
+
+    #[test]
+    fn many_struct_fields_20() {
+        // 20+ struct fields
+        let parse = parse(
+            "struct S { a1: i32, a2: i32, a3: i32, a4: i32, a5: i32, a6: i32, a7: i32, a8: i32, a9: i32, a10: i32, a11: i32, a12: i32, a13: i32, a14: i32, a15: i32, a16: i32, a17: i32, a18: i32, a19: i32, a20: i32 }",
+        );
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+    }
+
+    #[test]
+    fn deeply_nested_if_else() {
+        // Many levels of if-else
+        let parse = parse(
+            "fn foo() { if a { if b { if c { if d { if e { 1 } else { 2 } } else { 3 } } else { 4 } } else { 5 } } else { 6 } }",
+        );
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+    }
+
+    #[test]
+    fn nested_array_expressions() {
+        // Arrays containing arrays containing arrays
+        let parse = parse("fn foo() { let x = [[[[1, 2], [3, 4]], [[5, 6], [7, 8]]]]; }");
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+    }
+
+    #[test]
+    fn nested_tuple_expressions() {
+        // Tuples containing tuples
+        let parse = parse("fn foo() { let x = ((((1, 2), (3, 4)), ((5, 6), (7, 8)))); }");
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+    }
+
+    #[test]
+    fn complex_index_chain() {
+        // Multiple index operations chained
+        let parse = parse("fn foo() { arr[0][1][2][3][4]; }");
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+    }
+
     // === Phase 11: Integration Tests ===
 
     #[test]
@@ -875,5 +932,37 @@ pub(crate) mod tests {
         "#,
         );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+    }
+
+    // === Error Recovery at Item Level ===
+    // Note: The parser recovers from garbage between items but may panic
+    // when encountering invalid syntax within constructs.
+
+    #[test]
+    fn recovery_garbage_before_function() {
+        // Garbage before a valid function should be skipped
+        let parse = parse("@@@ fn foo() {}");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    #[test]
+    fn recovery_garbage_after_function() {
+        // Garbage after a valid function should be reported
+        let parse = parse("fn foo() {} @@@");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    #[test]
+    fn recovery_mixed_valid_and_invalid_items() {
+        // Valid items with garbage between should all be parsed
+        let parse = parse("struct A {} @@@ fn foo() {} ### struct B {}");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert_eq!(tree.matches("StructDef").count(), 2);
+        assert!(tree.contains("FunctionDef"));
     }
 }

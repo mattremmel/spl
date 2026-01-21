@@ -1217,4 +1217,257 @@ mod tests {
             "#]],
         );
     }
+
+    // === Operator Precedence Edge Cases ===
+
+    #[test]
+    fn precedence_range_vs_arithmetic() {
+        // Range has lower precedence than arithmetic: 1+2..3+4 = (1+2)..(3+4)
+        check_expr(
+            "1+2..3+4",
+            &expect![[r#"
+                RangeExpr@0..8
+                  BinExpr@0..3
+                    LiteralExpr@0..1
+                      INT_LITERAL@0..1 "1"
+                    PLUS@1..2 "+"
+                    LiteralExpr@2..3
+                      INT_LITERAL@2..3 "2"
+                  DOT_DOT@3..5 ".."
+                  BinExpr@5..8
+                    LiteralExpr@5..6
+                      INT_LITERAL@5..6 "3"
+                    PLUS@6..7 "+"
+                    LiteralExpr@7..8
+                      INT_LITERAL@7..8 "4"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn precedence_assignment_chain() {
+        // Assignment is right associative: a = b = c = 1 = a = (b = (c = 1))
+        check_expr(
+            "a = b = c = 1",
+            &expect![[r#"
+                BinExpr@0..13
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  WHITESPACE@1..2 " "
+                  EQ@2..3 "="
+                  BinExpr@3..13
+                    PathExpr@3..5
+                      Path@3..5
+                        PathSegment@3..5
+                          NameRef@3..5
+                            WHITESPACE@3..4 " "
+                            IDENT@4..5 "b"
+                    WHITESPACE@5..6 " "
+                    EQ@6..7 "="
+                    BinExpr@7..13
+                      PathExpr@7..9
+                        Path@7..9
+                          PathSegment@7..9
+                            NameRef@7..9
+                              WHITESPACE@7..8 " "
+                              IDENT@8..9 "c"
+                      WHITESPACE@9..10 " "
+                      EQ@10..11 "="
+                      LiteralExpr@11..13
+                        WHITESPACE@11..12 " "
+                        INT_LITERAL@12..13 "1"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn precedence_mixed_logical_comparison() {
+        // a && b == c || d = (a && (b == c)) || d
+        check_expr(
+            "a && b == c || d",
+            &expect![[r#"
+                BinExpr@0..16
+                  BinExpr@0..11
+                    PathExpr@0..1
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "a"
+                    WHITESPACE@1..2 " "
+                    AND_AND@2..4 "&&"
+                    BinExpr@4..11
+                      PathExpr@4..6
+                        Path@4..6
+                          PathSegment@4..6
+                            NameRef@4..6
+                              WHITESPACE@4..5 " "
+                              IDENT@5..6 "b"
+                      WHITESPACE@6..7 " "
+                      EQ_EQ@7..9 "=="
+                      PathExpr@9..11
+                        Path@9..11
+                          PathSegment@9..11
+                            NameRef@9..11
+                              WHITESPACE@9..10 " "
+                              IDENT@10..11 "c"
+                  WHITESPACE@11..12 " "
+                  OR_OR@12..14 "||"
+                  PathExpr@14..16
+                    Path@14..16
+                      PathSegment@14..16
+                        NameRef@14..16
+                          WHITESPACE@14..15 " "
+                          IDENT@15..16 "d"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn precedence_comparison_vs_arithmetic() {
+        // a + b < c * d = (a + b) < (c * d)
+        check_expr(
+            "a + b < c * d",
+            &expect![[r#"
+                BinExpr@0..13
+                  BinExpr@0..5
+                    PathExpr@0..1
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "a"
+                    WHITESPACE@1..2 " "
+                    PLUS@2..3 "+"
+                    PathExpr@3..5
+                      Path@3..5
+                        PathSegment@3..5
+                          NameRef@3..5
+                            WHITESPACE@3..4 " "
+                            IDENT@4..5 "b"
+                  WHITESPACE@5..6 " "
+                  LT@6..7 "<"
+                  BinExpr@7..13
+                    PathExpr@7..9
+                      Path@7..9
+                        PathSegment@7..9
+                          NameRef@7..9
+                            WHITESPACE@7..8 " "
+                            IDENT@8..9 "c"
+                    WHITESPACE@9..10 " "
+                    STAR@10..11 "*"
+                    PathExpr@11..13
+                      Path@11..13
+                        PathSegment@11..13
+                          NameRef@11..13
+                            WHITESPACE@11..12 " "
+                            IDENT@12..13 "d"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn precedence_mul_vs_add() {
+        // Multiplication has higher precedence than addition: a + b * c = a + (b * c)
+        check_expr(
+            "a + b * c",
+            &expect![[r#"
+                BinExpr@0..9
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  WHITESPACE@1..2 " "
+                  PLUS@2..3 "+"
+                  BinExpr@3..9
+                    PathExpr@3..5
+                      Path@3..5
+                        PathSegment@3..5
+                          NameRef@3..5
+                            WHITESPACE@3..4 " "
+                            IDENT@4..5 "b"
+                    WHITESPACE@5..6 " "
+                    STAR@6..7 "*"
+                    PathExpr@7..9
+                      Path@7..9
+                        PathSegment@7..9
+                          NameRef@7..9
+                            WHITESPACE@7..8 " "
+                            IDENT@8..9 "c"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn precedence_postfix_vs_prefix() {
+        // Postfix operations bind tighter than prefix: -arr[0] = -(arr[0])
+        check_expr(
+            "-arr[0]",
+            &expect![[r#"
+                PrefixExpr@0..7
+                  MINUS@0..1 "-"
+                  IndexExpr@1..7
+                    PathExpr@1..4
+                      Path@1..4
+                        PathSegment@1..4
+                          NameRef@1..4
+                            IDENT@1..4 "arr"
+                    L_BRACKET@4..5 "["
+                    LiteralExpr@5..6
+                      INT_LITERAL@5..6 "0"
+                    R_BRACKET@6..7 "]"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn precedence_cast_chain() {
+        // Cast chains left to right: a as i32 as f64
+        check_expr(
+            "a as i32 as f64",
+            &expect![[r#"
+                CastExpr@0..15
+                  CastExpr@0..8
+                    PathExpr@0..1
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "a"
+                    WHITESPACE@1..2 " "
+                    AS_KW@2..4 "as"
+                    PathType@4..8
+                      Path@4..8
+                        PathSegment@4..8
+                          NameRef@4..8
+                            WHITESPACE@4..5 " "
+                            IDENT@5..8 "i32"
+                  WHITESPACE@8..9 " "
+                  AS_KW@9..11 "as"
+                  PathType@11..15
+                    Path@11..15
+                      PathSegment@11..15
+                        NameRef@11..15
+                          WHITESPACE@11..12 " "
+                          IDENT@12..15 "f64"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn precedence_unary_chain() {
+        // Multiple prefix operators: --x, !!b
+        check_expr(
+            "!!true",
+            &expect![[r#"
+                PrefixExpr@0..6
+                  BANG@0..1 "!"
+                  PrefixExpr@1..6
+                    BANG@1..2 "!"
+                    LiteralExpr@2..6
+                      TRUE_KW@2..6 "true"
+            "#]],
+        );
+    }
 }
