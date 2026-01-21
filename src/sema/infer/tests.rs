@@ -1951,6 +1951,40 @@ fn error_suffixed_u8_negative() {
     check_err("fn main() { let x = -1u8; }", &["out of range"]);
 }
 
+// Parenthesized negation tests (HIR lowering)
+
+#[test]
+fn parenthesized_negated_i8_min() {
+    check("fn main() { let x = -(128i8); }", "i8");
+}
+
+#[test]
+fn double_paren_negated_i8_min() {
+    check("fn main() { let x = (-(128i8)); }", "i8");
+}
+
+#[test]
+fn parenthesized_negated_i16_min() {
+    check("fn main() { let x = -(32768i16); }", "i16");
+}
+
+#[test]
+fn error_double_negation_i8() {
+    // --128i8 folds to +128, which is out of range for i8
+    check_err("fn main() { let x = --128i8; }", &["out of range"]);
+}
+
+#[test]
+fn error_parenthesized_positive_i8_overflow() {
+    // -(-(128i8)) folds to +128, which is out of range for i8
+    check_err("fn main() { let x = -(-(128i8)); }", &["out of range"]);
+}
+
+#[test]
+fn error_parenthesized_u8_negative() {
+    check_err("fn main() { let x = -(1u8); }", &["out of range"]);
+}
+
 // =============================================================================
 // 4.1 SEMA-5.2: Cast Validity Checking
 // =============================================================================
@@ -2071,12 +2105,18 @@ fn error_recursive_three_way() {
 
 #[test]
 fn recursive_with_ref_ok() {
-    check("struct Node { next: &Node } fn main() { let x: i32 = 0; }", "i32");
+    check(
+        "struct Node { next: &Node } fn main() { let x: i32 = 0; }",
+        "i32",
+    );
 }
 
 #[test]
 fn recursive_with_mut_ref_ok() {
-    check("struct Node { next: &mut Node } fn main() { let x: i32 = 0; }", "i32");
+    check(
+        "struct Node { next: &mut Node } fn main() { let x: i32 = 0; }",
+        "i32",
+    );
 }
 
 #[test]
@@ -2123,7 +2163,10 @@ fn error_alias_three_way() {
 #[test]
 #[ignore = "type alias resolution to target type not implemented yet"]
 fn alias_chain_ok() {
-    check("type A = i32; type B = A; fn main() { let x: B = 1; }", "i32");
+    check(
+        "type A = i32; type B = A; fn main() { let x: B = 1; }",
+        "i32",
+    );
 }
 
 #[test]
@@ -2152,7 +2195,10 @@ fn index_in_bounds_zero() {
 #[test]
 fn index_variable_no_check() {
     // Non-constant indices should not produce compile-time errors
-    check("fn main() { let a = [1, 2, 3]; let i: i32 = 0; let x = a[i]; }", "i32");
+    check(
+        "fn main() { let a = [1, 2, 3]; let i: i32 = 0; let x = a[i]; }",
+        "i32",
+    );
 }
 
 #[test]
@@ -2186,10 +2232,7 @@ fn error_index_empty_array() {
 
 #[test]
 fn warn_after_return() {
-    check_warn(
-        "fn f() { return; let x: i32 = 1; }",
-        &["unreachable"],
-    );
+    check_warn("fn f() { return; let x: i32 = 1; }", &["unreachable"]);
 }
 
 #[test]
@@ -2225,7 +2268,10 @@ fn no_warn_return_at_end() {
 #[test]
 fn no_warn_in_if_branch() {
     // No warning when return is in an if branch (other code still reachable)
-    check("fn f(b: bool) -> i32 { if b { return 1; } let x: i32 = 2; x }", "i32");
+    check(
+        "fn f(b: bool) -> i32 { if b { return 1; } let x: i32 = 2; x }",
+        "i32",
+    );
 }
 
 // =============================================================================
@@ -2319,7 +2365,10 @@ fn warn_after_return_in_nested_block() {
 #[test]
 fn warn_first_unreachable_only() {
     // Should only warn about first unreachable statement
-    check_warn("fn f() { return; let x: i32 = 1; let y: i32 = 2; }", &["unreachable"]);
+    check_warn(
+        "fn f() { return; let x: i32 = 1; let y: i32 = 2; }",
+        &["unreachable"],
+    );
 }
 
 // -----------------------------------------------------------------------------
@@ -2360,4 +2409,3 @@ fn error_very_large_index() {
         &["out of bounds"],
     );
 }
-

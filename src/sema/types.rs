@@ -84,21 +84,6 @@ impl PrimitiveKind {
         }
     }
 
-    /// Returns true if this is a signed integer type and the value equals abs(min).
-    /// Such values are invalid as positive literals but valid when negated (e.g., 128i8 -> -128i8).
-    pub fn is_negatable_boundary(self, value: i128) -> bool {
-        let boundary: Option<i128> = match self {
-            Self::I8 => Some((i8::MIN as i128).abs()),
-            Self::I16 => Some((i16::MIN as i128).abs()),
-            Self::I32 => Some((i32::MIN as i128).abs()),
-            Self::I64 => Some((i64::MIN as i128).abs()),
-            Self::I128 => Some(i128::MIN.unsigned_abs() as i128), // Note: i128::MIN.abs() overflows
-            Self::Isize => Some((isize::MIN as i128).abs()),
-            _ => None, // Unsigned types have no negatable boundary
-        };
-        boundary == Some(value)
-    }
-
     /// Returns the primitive kind for a given type name, if it exists.
     pub fn from_name(name: &str) -> Option<Self> {
         match name {

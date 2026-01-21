@@ -12,6 +12,7 @@ use crate::ast::{
     Stmt, StructExpr, TupleExpr, WhileExpr,
 };
 use crate::diagnostic::Diagnostic;
+use crate::hir::{LoweredExpr, lower::try_lower_expr};
 use crate::lexer::Span;
 use crate::sema::resolver::ResolveResult;
 use crate::sema::symbol::DefId;
@@ -807,6 +808,27 @@ impl InferEngine {
     /// Synthesize the type of an expression.
     fn synth_expr(&mut self, expr: &Expr) -> TypeId {
         let span = text_range_to_span(expr.syntax().text_range());
+
+        // Try lowering for negated literals first
+        let (lowered, was_lowered) = try_lower_expr(expr);
+        if was_lowered {
+            let type_id = match lowered {
+                LoweredExpr::IntLiteral {
+                    value,
+                    suffix,
+                    span: lit_span,
+                } => self.synth_lowered_int(value, suffix, lit_span),
+                LoweredExpr::FloatLiteral {
+                    value: _,
+                    suffix,
+                    span: _,
+                } => self.synth_lowered_float(suffix),
+                LoweredExpr::Passthrough => unreachable!(),
+            };
+            self.expr_types.insert(span, type_id);
+            return type_id;
+        }
+
         let type_id = match expr {
             Expr::Literal(lit) => self.synth_literal(lit),
             Expr::Path(path_expr) => self.synth_path(path_expr),
@@ -853,18 +875,14 @@ impl InferEngine {
                     // For signed types at the negatable boundary (e.g., 128i8), only skip
                     // validation if this literal is the direct operand of a negation prefix.
                     // The prefix handler will validate negated suffixed literals correctly.
+                    // Validate range for suffixed integer literals
                     if has_suffix
                         && let Some(value) = parse_int_literal_value(text)
                         && let Err(msg) = kind.validate_int_literal_range(value)
                     {
-                        // Check if this is a negatable boundary value under negation
-                        let is_being_negated = kind.is_negatable_boundary(value)
-                            && is_under_negation(lit);
-                        if !is_being_negated {
-                            let span = text_range_to_span(token.text_range());
-                            self.diagnostics
-                                .push(Diagnostic::error(&msg).with_label(span, "literal out of range"));
-                        }
+                        let span = text_range_to_span(token.text_range());
+                        self.diagnostics
+                            .push(Diagnostic::error(&msg).with_label(span, "literal out of range"));
                     }
                     self.ctx.types.primitive(kind)
                 } else {
@@ -887,6 +905,33 @@ impl InferEngine {
             SyntaxKind::CHAR_LITERAL => self.ctx.types.char(),
             SyntaxKind::STRING_LITERAL => self.ctx.types.string(),
             _ => self.ctx.types.error(),
+        }
+    }
+
+    /// Synthesize type for a lowered integer literal (from HIR lowering).
+    fn synth_lowered_int(
+        &mut self,
+        value: i128,
+        suffix: Option<PrimitiveKind>,
+        span: Span,
+    ) -> TypeId {
+        if let Some(kind) = suffix {
+            if let Err(msg) = kind.validate_int_literal_range(value) {
+                self.diagnostics
+                    .push(Diagnostic::error(&msg).with_label(span, "literal out of range"));
+            }
+            self.ctx.types.primitive(kind)
+        } else {
+            self.fresh_int_var()
+        }
+    }
+
+    /// Synthesize type for a lowered float literal (from HIR lowering).
+    fn synth_lowered_float(&mut self, suffix: Option<PrimitiveKind>) -> TypeId {
+        match suffix {
+            Some(PrimitiveKind::F32) => self.ctx.types.primitive(PrimitiveKind::F32),
+            Some(PrimitiveKind::F64) => self.ctx.types.primitive(PrimitiveKind::F64),
+            _ => self.fresh_float_var(),
         }
     }
 
@@ -1028,7 +1073,11 @@ impl InferEngine {
         };
 
         // Get struct type params and create substitution map
-        let type_params = self.struct_type_params.get(&def_id).cloned().unwrap_or_default();
+        let type_params = self
+            .struct_type_params
+            .get(&def_id)
+            .cloned()
+            .unwrap_or_default();
         let mut subst: FxHashMap<DefId, TypeId> = FxHashMap::default();
         let mut type_args = Vec::new();
         for param_def_id in &type_params {
@@ -1268,32 +1317,12 @@ impl InferEngine {
         match op.kind() {
             SyntaxKind::MINUS => {
                 // Negation is valid for numeric types
+                // Note: Negated suffixed literals (e.g., -128i8) are handled by HIR lowering
                 let resolved = self.resolve_type(inner_ty);
                 let ty = self.ctx.types.get(resolved).clone();
                 match &ty {
                     Type::IntVar(_) | Type::FloatVar(_) => inner_ty,
-                    Type::Primitive(p) if is_numeric_type(*p) => {
-                        // For suffixed literals (e.g., -1u8), validate the negated value
-                        if let Expr::Literal(lit) = &inner
-                            && let Some(token) = lit.token()
-                            && token.kind() == SyntaxKind::INT_LITERAL
-                        {
-                            let text = token.text();
-                            if parse_int_suffix(text).1
-                                && let Some(value) = parse_int_literal_value(text)
-                            {
-                                let negated = -value;
-                                if let Err(msg) = p.validate_int_literal_range(negated) {
-                                    let span = text_range_to_span(prefix.syntax().text_range());
-                                    self.diagnostics.push(
-                                        Diagnostic::error(&msg)
-                                            .with_label(span, "literal out of range"),
-                                    );
-                                }
-                            }
-                        }
-                        inner_ty
-                    }
+                    Type::Primitive(p) if is_numeric_type(*p) => inner_ty,
                     _ => {
                         let span = text_range_to_span(inner.syntax().text_range());
                         self.diagnostics.push(
@@ -1418,7 +1447,11 @@ impl InferEngine {
             let type_args = type_args.clone();
 
             // Build substitution map from struct's type params to type args
-            let type_params = self.struct_type_params.get(&def_id).cloned().unwrap_or_default();
+            let type_params = self
+                .struct_type_params
+                .get(&def_id)
+                .cloned()
+                .unwrap_or_default();
             let mut subst: FxHashMap<DefId, TypeId> = FxHashMap::default();
             for (param_def_id, type_arg) in type_params.iter().zip(type_args.iter()) {
                 subst.insert(*param_def_id, *type_arg);
@@ -1489,7 +1522,11 @@ impl InferEngine {
         // Look up method in struct_def_id's methods
         if let Some(def_id) = struct_def_id {
             // Get struct type params for building substitution map
-            let struct_type_params = self.struct_type_params.get(&def_id).cloned().unwrap_or_default();
+            let struct_type_params = self
+                .struct_type_params
+                .get(&def_id)
+                .cloned()
+                .unwrap_or_default();
 
             // Build substitution map from struct's type params to receiver's type args
             let mut subst: FxHashMap<DefId, TypeId> = FxHashMap::default();
@@ -1628,7 +1665,8 @@ impl InferEngine {
                             {
                                 let fn_name = fn_token.text().to_string();
                                 // Look up the function in the struct's methods
-                                if let Some(methods) = self.struct_methods.get(&struct_def_id).cloned()
+                                if let Some(methods) =
+                                    self.struct_methods.get(&struct_def_id).cloned()
                                 {
                                     for method_def_id in methods {
                                         let symbol = self.ctx.get_symbol(method_def_id);
@@ -1982,9 +2020,7 @@ impl InferEngine {
             (Type::Error, _) | (_, Type::Error) => true,
 
             // Numeric types can be cast to each other
-            (Type::Primitive(s), Type::Primitive(t)) => {
-                is_numeric_type(*s) && is_numeric_type(*t)
-            }
+            (Type::Primitive(s), Type::Primitive(t)) => is_numeric_type(*s) && is_numeric_type(*t),
 
             // Type variables are allowed (inference not complete)
             (Type::Var(_), _)
@@ -2653,14 +2689,8 @@ impl InferEngine {
                 let symbol = self.ctx.get_symbol(struct_id);
                 let name = self.ctx.resolve(symbol.name);
                 self.diagnostics.push(
-                    Diagnostic::error(format!(
-                        "recursive type `{}` has infinite size",
-                        name
-                    ))
-                    .with_label(
-                        symbol.span.clone(),
-                        "recursive without indirection",
-                    ),
+                    Diagnostic::error(format!("recursive type `{}` has infinite size", name))
+                        .with_label(symbol.span.clone(), "recursive without indirection"),
                 );
             }
         }
@@ -3165,19 +3195,6 @@ fn is_float_type(prim: PrimitiveKind) -> bool {
 
 fn is_numeric_type(prim: PrimitiveKind) -> bool {
     is_integer_type(prim) || is_float_type(prim)
-}
-
-/// Check if a literal expression is the direct operand of a negation prefix.
-fn is_under_negation(lit: &LiteralExpr) -> bool {
-    use rowan::ast::AstNode;
-    // Get the LiteralExpr's parent (should be the PrefixExpr if negated)
-    if let Some(parent) = lit.syntax().parent()
-        && let Some(prefix) = PrefixExpr::cast(parent)
-        && let Some(op_token) = prefix.op_token()
-    {
-        return op_token.kind() == SyntaxKind::MINUS;
-    }
-    false
 }
 
 /// Parse an integer literal suffix to determine the type.
