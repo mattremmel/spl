@@ -214,6 +214,10 @@ impl<'src> Parser<'src> {
 
     /// Consume the current token unconditionally.
     fn bump(&mut self) {
+        debug_assert!(
+            self.current().is_some(),
+            "precondition: bump requires current token"
+        );
         let token = self.source.bump().expect("bump called with no token");
         self.events.push(Event::Token {
             kind: token.kind(),
