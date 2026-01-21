@@ -806,7 +806,9 @@ mod tests {
             let mut ctx = SemanticContext::new();
             for i in 0..1000 {
                 let name = ctx.intern(&format!("sym_{}", i));
-                if let Ok(def_id) = ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1, false) {
+                if let Ok(def_id) =
+                    ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1, false)
+                {
                     let _ = ctx.get_symbol(def_id);
                 }
             }

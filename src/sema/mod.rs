@@ -419,7 +419,9 @@ mod tests {
 
         for (i, vis) in visibilities.iter().enumerate() {
             let name = ctx.intern(&format!("sym_{i}"));
-            let def_id = ctx.define(name, SymbolKind::Function, *vis, 0..1, false).unwrap();
+            let def_id = ctx
+                .define(name, SymbolKind::Function, *vis, 0..1, false)
+                .unwrap();
             assert_eq!(ctx.get_symbol(def_id).visibility, *vis);
         }
     }
@@ -441,7 +443,9 @@ mod tests {
 
         for (i, kind) in kinds.iter().enumerate() {
             let name = ctx.intern(&format!("sym_{i}"));
-            let def_id = ctx.define(name, *kind, Visibility::Private, 0..1, false).unwrap();
+            let def_id = ctx
+                .define(name, *kind, Visibility::Private, 0..1, false)
+                .unwrap();
             assert_eq!(ctx.get_symbol(def_id).kind, *kind);
         }
     }
@@ -621,7 +625,13 @@ mod tests {
             .unwrap();
 
         // Try to define again - should fail
-        let result = ctx.define(name, SymbolKind::Function, Visibility::Public, 10..11, false);
+        let result = ctx.define(
+            name,
+            SymbolKind::Function,
+            Visibility::Public,
+            10..11,
+            false,
+        );
         assert!(result.is_err());
 
         // The symbol should still have the original properties

@@ -294,7 +294,10 @@ fn tuple_field_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser
 }
 
 /// Parse a tuple field definition: `[pub] Type`
-fn tuple_field_def(p: &mut Parser<'_>, index: u32) -> Result<CompletedMarker, crate::parser::ParseError> {
+fn tuple_field_def(
+    p: &mut Parser<'_>,
+    index: u32,
+) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
     opt_visibility(p);
 

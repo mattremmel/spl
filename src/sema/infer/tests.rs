@@ -1412,10 +1412,7 @@ fn inference_tuple_of_arrays() {
 #[test]
 fn inference_ref_to_array_element() {
     // Reference to an array element
-    check(
-        "fn f(arr: [i64; 3]) { let x = &arr[0]; }",
-        "&i64",
-    );
+    check("fn f(arr: [i64; 3]) { let x = &arr[0]; }", "&i64");
 }
 
 #[test]
@@ -1430,10 +1427,7 @@ fn inference_complex_expression_chain() {
 #[test]
 fn inference_block_tail_type() {
     // Block returns the type of its tail expression
-    check(
-        "fn main() { let x: i64 = { 42 }; }",
-        "i64",
-    );
+    check("fn main() { let x: i64 = { 42 }; }", "i64");
 }
 
 #[test]
@@ -1452,10 +1446,7 @@ fn inference_nested_function_calls() {
 #[test]
 fn error_type_mismatch_basic() {
     // Type mismatch error is reported
-    check_err(
-        "fn main() { let x: i32 = \"hello\"; }",
-        &["type mismatch"],
-    );
+    check_err("fn main() { let x: i32 = \"hello\"; }", &["type mismatch"]);
 }
 
 #[test]
@@ -1476,10 +1467,7 @@ fn error_field_access_on_non_struct() {
 #[test]
 fn error_binary_op_on_incompatible() {
     // Binary operation on incompatible types
-    check_err(
-        "fn main() { let x = true + 1; }",
-        &["cannot apply binary"],
-    );
+    check_err("fn main() { let x = true + 1; }", &["cannot apply binary"]);
 }
 
 #[test]
@@ -1494,10 +1482,7 @@ fn error_call_with_wrong_type() {
 #[test]
 fn error_return_type_mismatch() {
     // Function return type doesn't match
-    check_err(
-        "fn f() -> i32 { \"hello\" }",
-        &["type mismatch"],
-    );
+    check_err("fn f() -> i32 { \"hello\" }", &["type mismatch"]);
 }
 
 // =============================================================================
@@ -1520,7 +1505,10 @@ fn assign_to_mutable_local() {
 
 #[test]
 fn error_mut_ref_to_immutable() {
-    check_err("fn main() { let x = 42; let y = &mut x; }", &["cannot borrow"]);
+    check_err(
+        "fn main() { let x = 42; let y = &mut x; }",
+        &["cannot borrow"],
+    );
 }
 
 #[test]
@@ -1579,10 +1567,16 @@ fn assign_field_mutable_binding() {
 
 #[test]
 fn error_assign_through_shared_ref() {
-    check_err("fn main() { let mut x = 1; let r = &x; *r = 2; }", &["cannot assign"]);
+    check_err(
+        "fn main() { let mut x = 1; let r = &x; *r = 2; }",
+        &["cannot assign"],
+    );
 }
 
 #[test]
 fn assign_through_mut_ref() {
-    check("fn main() { let mut x = 1; let r = &mut x; *r = 2; let y = x; }", "i32");
+    check(
+        "fn main() { let mut x = 1; let r = &mut x; *r = 2; let y = x; }",
+        "i32",
+    );
 }

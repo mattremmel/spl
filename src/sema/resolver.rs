@@ -111,7 +111,10 @@ impl<'ctx> Resolver<'ctx> {
         let span = Self::text_range_to_span(token.text_range());
         let interned = self.ctx.intern(&name_text);
 
-        match self.ctx.define(interned, kind, visibility, span.clone(), is_mutable) {
+        match self
+            .ctx
+            .define(interned, kind, visibility, span.clone(), is_mutable)
+        {
             Ok(def_id) => {
                 // Store span → DefId mapping for inference phase
                 self.resolutions.insert(span.clone(), def_id);

@@ -1079,9 +1079,8 @@ impl InferEngine {
                 // Check mutability of assignment target
                 if let Some(err_msg) = self.check_assignable(&lhs) {
                     let span = text_range_to_span(lhs.syntax().text_range());
-                    self.diagnostics.push(
-                        Diagnostic::error(err_msg).with_label(span, "cannot assign to this"),
-                    );
+                    self.diagnostics
+                        .push(Diagnostic::error(err_msg).with_label(span, "cannot assign to this"));
                 }
 
                 if !self.unify(lhs_ty, rhs_ty) {

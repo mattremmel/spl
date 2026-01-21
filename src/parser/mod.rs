@@ -697,9 +697,7 @@ pub(crate) mod tests {
     #[test]
     fn long_method_chain() {
         // 10+ method calls in a chain
-        let parse = parse(
-            "fn foo() { obj.a().b().c().d().e().f().g().h().i().j().k().l(); }",
-        );
+        let parse = parse("fn foo() { obj.a().b().c().d().e().f().g().h().i().j().k().l(); }");
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
