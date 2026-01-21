@@ -153,6 +153,8 @@ struct InferEngine {
     fn_signatures: FxHashMap<DefId, FnSignature>,
     /// Struct field info collected in first pass.
     struct_fields: FxHashMap<DefId, Vec<(String, TypeId)>>,
+    /// Struct type parameters collected in first pass.
+    struct_type_params: FxHashMap<DefId, Vec<DefId>>,
     /// Map from struct DefId to its methods' DefIds.
     struct_methods: FxHashMap<DefId, Vec<DefId>>,
     /// Current function's return type (for return statements).
@@ -188,6 +190,8 @@ struct FnSignature {
     /// Currently stored for future use (e.g., proper receiver type checking).
     #[allow(dead_code)]
     self_param: Option<SelfParam>,
+    /// Type parameters for generic functions (e.g., `T` in `fn foo<T>()`).
+    type_params: Vec<DefId>,
     params: Vec<(String, TypeId)>,
     ret: TypeId,
 }
@@ -203,6 +207,7 @@ impl InferEngine {
             diagnostics: resolve_result.diagnostics,
             fn_signatures: FxHashMap::default(),
             struct_fields: FxHashMap::default(),
+            struct_type_params: FxHashMap::default(),
             struct_methods: FxHashMap::default(),
             current_return_type: None,
             current_loop_break_type: None,
@@ -495,6 +500,113 @@ impl InferEngine {
         }
 
         result
+    }
+
+    // =========================================================================
+    // Generic Instantiation
+    // =========================================================================
+
+    /// Instantiate a generic function signature with fresh type variables.
+    /// Returns (instantiated_param_types, instantiated_return_type).
+    fn instantiate_signature(&mut self, sig: &FnSignature) -> (Vec<TypeId>, TypeId) {
+        if sig.type_params.is_empty() {
+            // No generics, return as-is
+            let param_types: Vec<_> = sig.params.iter().map(|(_, t)| *t).collect();
+            return (param_types, sig.ret);
+        }
+
+        // Create fresh type variables for each type parameter
+        let mut subst: FxHashMap<DefId, TypeId> = FxHashMap::default();
+        for &param_def_id in &sig.type_params {
+            subst.insert(param_def_id, self.fresh_type_var());
+        }
+
+        // Substitute in parameter types
+        let param_types: Vec<_> = sig
+            .params
+            .iter()
+            .map(|(_, t)| self.substitute_type_params(*t, &subst))
+            .collect();
+
+        // Substitute in return type
+        let ret = self.substitute_type_params(sig.ret, &subst);
+
+        (param_types, ret)
+    }
+
+    /// Substitute type parameters with their instantiated types.
+    fn substitute_type_params(
+        &mut self,
+        type_id: TypeId,
+        subst: &FxHashMap<DefId, TypeId>,
+    ) -> TypeId {
+        let ty = self.ctx.types.get(type_id).clone();
+        match ty {
+            Type::Param(def_id) => {
+                // Substitute if we have a mapping
+                subst.get(&def_id).copied().unwrap_or(type_id)
+            }
+            Type::Ref(mutability, inner) => {
+                let new_inner = self.substitute_type_params(inner, subst);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.ctx.types.mk_ref(mutability, new_inner)
+                }
+            }
+            Type::Array(elem, len) => {
+                let new_elem = self.substitute_type_params(elem, subst);
+                if new_elem == elem {
+                    type_id
+                } else {
+                    self.ctx.types.mk_array(new_elem, len)
+                }
+            }
+            Type::Slice(elem) => {
+                let new_elem = self.substitute_type_params(elem, subst);
+                if new_elem == elem {
+                    type_id
+                } else {
+                    self.ctx.types.mk_slice(new_elem)
+                }
+            }
+            Type::Tuple(elems) => {
+                let new_elems: Vec<_> = elems
+                    .iter()
+                    .map(|e| self.substitute_type_params(*e, subst))
+                    .collect();
+                if new_elems == elems {
+                    type_id
+                } else {
+                    self.ctx.types.mk_tuple(new_elems)
+                }
+            }
+            Type::Struct(def_id, type_args) => {
+                let new_args: Vec<_> = type_args
+                    .iter()
+                    .map(|a| self.substitute_type_params(*a, subst))
+                    .collect();
+                if new_args == type_args {
+                    type_id
+                } else {
+                    self.ctx.types.mk_struct(def_id, new_args)
+                }
+            }
+            Type::FnPtr { params, ret } => {
+                let new_params: Vec<_> = params
+                    .iter()
+                    .map(|p| self.substitute_type_params(*p, subst))
+                    .collect();
+                let new_ret = self.substitute_type_params(ret, subst);
+                if new_params == params && new_ret == ret {
+                    type_id
+                } else {
+                    self.ctx.types.mk_fn_ptr(new_params, new_ret)
+                }
+            }
+            // Primitives, variables, error, string, alias, selftype don't need substitution
+            _ => type_id,
+        }
     }
 
     // =========================================================================
@@ -802,11 +914,10 @@ impl InferEngine {
         }
 
         // Check if it's a function
-        if let Some(sig) = self.fn_signatures.get(&def_id) {
-            return self
-                .ctx
-                .types
-                .mk_fn_ptr(sig.params.iter().map(|(_, t)| *t).collect(), sig.ret);
+        if let Some(sig) = self.fn_signatures.get(&def_id).cloned() {
+            // Instantiate generic functions with fresh type variables
+            let (param_types, ret_ty) = self.instantiate_signature(&sig);
+            return self.ctx.types.mk_fn_ptr(param_types, ret_ty);
         }
 
         // Unknown binding - return error
@@ -903,15 +1014,29 @@ impl InferEngine {
             None => return self.ctx.types.error(),
         };
 
-        // Get struct field info
+        // Get struct type params and create substitution map
+        let type_params = self.struct_type_params.get(&def_id).cloned().unwrap_or_default();
+        let mut subst: FxHashMap<DefId, TypeId> = FxHashMap::default();
+        let mut type_args = Vec::new();
+        for param_def_id in &type_params {
+            let fresh_var = self.fresh_type_var();
+            subst.insert(*param_def_id, fresh_var);
+            type_args.push(fresh_var);
+        }
+
+        // Get struct field info and substitute type params
         let fields_info = self.struct_fields.get(&def_id).cloned().unwrap_or_default();
-        let field_map: FxHashMap<_, _> = fields_info.iter().cloned().collect();
+        let instantiated_fields: Vec<(String, TypeId)> = fields_info
+            .iter()
+            .map(|(name, ty)| (name.clone(), self.substitute_type_params(*ty, &subst)))
+            .collect();
+        let field_map: FxHashMap<_, _> = instantiated_fields.iter().cloned().collect();
 
         // Check for struct update syntax: ..base
         let has_update_base = if let Some(update_base) = struct_expr.update_base() {
             if let Some(base_expr) = update_base.expr() {
                 let base_ty = self.synth_expr(&base_expr);
-                let expected_struct_ty = self.ctx.types.mk_struct(def_id, vec![]);
+                let expected_struct_ty = self.ctx.types.mk_struct(def_id, type_args.clone());
                 if !self.unify(base_ty, expected_struct_ty) {
                     let span = text_range_to_span(base_expr.syntax().text_range());
                     self.diagnostics.push(
@@ -953,7 +1078,7 @@ impl InferEngine {
 
         // Check for missing fields (only if no update base)
         if !has_update_base {
-            for (field_name, _) in &fields_info {
+            for (field_name, _) in &instantiated_fields {
                 if !seen_fields.contains(field_name) {
                     let expr_span = text_range_to_span(struct_expr.syntax().text_range());
                     self.diagnostics.push(
@@ -967,12 +1092,12 @@ impl InferEngine {
         // Postcondition: either all fields provided or update base present
         debug_assert!(
             has_update_base
-                || seen_fields.len() == fields_info.len()
+                || seen_fields.len() == instantiated_fields.len()
                 || !self.diagnostics.is_empty(),
             "postcondition: struct expr must have all fields or update base (or emit diagnostic)"
         );
 
-        let result = self.ctx.types.mk_struct(def_id, vec![]);
+        let result = self.ctx.types.mk_struct(def_id, type_args);
 
         debug_assert!(
             matches!(self.ctx.types.get(result), Type::Struct(_, _)),
@@ -1254,11 +1379,22 @@ impl InferEngine {
         }
 
         // Handle struct field access
-        if let Type::Struct(def_id, _) = &base_type {
-            if let Some(fields) = self.struct_fields.get(def_id) {
+        if let Type::Struct(def_id, type_args) = &base_type {
+            let def_id = *def_id;
+            let type_args = type_args.clone();
+
+            // Build substitution map from struct's type params to type args
+            let type_params = self.struct_type_params.get(&def_id).cloned().unwrap_or_default();
+            let mut subst: FxHashMap<DefId, TypeId> = FxHashMap::default();
+            for (param_def_id, type_arg) in type_params.iter().zip(type_args.iter()) {
+                subst.insert(*param_def_id, *type_arg);
+            }
+
+            if let Some(fields) = self.struct_fields.get(&def_id).cloned() {
                 for (name, ty) in fields {
-                    if name == &field_name {
-                        return *ty;
+                    if name == field_name {
+                        // Substitute type parameters in field type
+                        return self.substitute_type_params(ty, &subst);
                     }
                 }
             }
@@ -1301,23 +1437,33 @@ impl InferEngine {
         let resolved = self.resolve_type(receiver_ty);
         let receiver_type = self.ctx.types.get(resolved).clone();
 
-        // Handle reference receivers (auto-deref)
-        let struct_def_id = match &receiver_type {
-            Type::Struct(def_id, _) => Some(*def_id),
+        // Handle reference receivers (auto-deref) and get type args
+        let (struct_def_id, receiver_type_args) = match &receiver_type {
+            Type::Struct(def_id, type_args) => (Some(*def_id), type_args.clone()),
             Type::Ref(_, inner) => {
                 let inner_resolved = self.resolve_type(*inner);
                 let inner_type = self.ctx.types.get(inner_resolved);
-                if let Type::Struct(def_id, _) = inner_type {
-                    Some(*def_id)
+                if let Type::Struct(def_id, type_args) = inner_type {
+                    (Some(*def_id), type_args.clone())
                 } else {
-                    None
+                    (None, vec![])
                 }
             }
-            _ => None,
+            _ => (None, vec![]),
         };
 
         // Look up method in struct_def_id's methods
         if let Some(def_id) = struct_def_id {
+            // Get struct type params for building substitution map
+            let struct_type_params = self.struct_type_params.get(&def_id).cloned().unwrap_or_default();
+
+            // Build substitution map from struct's type params to receiver's type args
+            let mut subst: FxHashMap<DefId, TypeId> = FxHashMap::default();
+            for (param_def_id, type_arg) in struct_type_params.iter().zip(receiver_type_args.iter())
+            {
+                subst.insert(*param_def_id, *type_arg);
+            }
+
             // Get the list of methods for this struct
             let method_def_ids = self
                 .struct_methods
@@ -1326,19 +1472,44 @@ impl InferEngine {
                 .unwrap_or_default();
 
             // Search for method with matching name
-            let mut found_sig: Option<(Vec<(String, TypeId)>, TypeId)> = None;
+            let mut found_sig: Option<FnSignature> = None;
             for method_def_id in method_def_ids {
                 let symbol = self.ctx.get_symbol(method_def_id);
                 let fn_name = self.ctx.resolve(symbol.name);
                 if fn_name == method_name
-                    && let Some(sig) = self.fn_signatures.get(&method_def_id)
+                    && let Some(sig) = self.fn_signatures.get(&method_def_id).cloned()
                 {
-                    found_sig = Some((sig.params.clone(), sig.ret));
+                    found_sig = Some(sig);
                     break;
                 }
             }
 
-            if let Some((params, ret)) = found_sig {
+            if let Some(sig) = found_sig {
+                // Also add impl type params to the substitution
+                // Method signature type_params includes impl type params
+                for &param_def_id in &sig.type_params {
+                    // If this type param is not already in subst and matches a receiver type arg position,
+                    // it's an impl type param that should be mapped to the receiver's type arg
+                    if !subst.contains_key(&param_def_id) {
+                        // Check if there's a corresponding struct type param
+                        for (i, _struct_param) in struct_type_params.iter().enumerate() {
+                            if i < receiver_type_args.len() {
+                                // The impl type param at position i maps to the same type arg
+                                subst.insert(param_def_id, receiver_type_args[i]);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Substitute in params and return type
+                let params: Vec<(String, TypeId)> = sig
+                    .params
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.substitute_type_params(*ty, &subst)))
+                    .collect();
+                let ret = self.substitute_type_params(sig.ret, &subst);
+
                 // Check arguments
                 if let Some(arg_list) = method.arg_list() {
                     let args: Vec<_> = arg_list.args().collect();
@@ -1402,11 +1573,10 @@ impl InferEngine {
                         {
                             let span = text_range_to_span(token.text_range());
                             if let Some(&def_id) = self.resolutions.get(&span)
-                                && let Some(sig) = self.fn_signatures.get(&def_id)
+                                && let Some(sig) = self.fn_signatures.get(&def_id).cloned()
                             {
-                                let param_types: Vec<_> =
-                                    sig.params.iter().map(|(_, t)| *t).collect();
-                                return self.check_call_args(call, &param_types, sig.ret);
+                                let (param_types, ret_ty) = self.instantiate_signature(&sig);
+                                return self.check_call_args(call, &param_types, ret_ty);
                             }
                         }
                     }
@@ -1423,20 +1593,21 @@ impl InferEngine {
                             {
                                 let fn_name = fn_token.text().to_string();
                                 // Look up the function in the struct's methods
-                                if let Some(methods) = self.struct_methods.get(&struct_def_id) {
-                                    for &method_def_id in methods {
+                                if let Some(methods) = self.struct_methods.get(&struct_def_id).cloned()
+                                {
+                                    for method_def_id in methods {
                                         let symbol = self.ctx.get_symbol(method_def_id);
                                         let method_name = self.ctx.resolve(symbol.name);
                                         if method_name == fn_name
                                             && let Some(sig) =
-                                                self.fn_signatures.get(&method_def_id)
+                                                self.fn_signatures.get(&method_def_id).cloned()
                                         {
-                                            let param_types: Vec<_> =
-                                                sig.params.iter().map(|(_, t)| *t).collect();
+                                            let (param_types, ret_ty) =
+                                                self.instantiate_signature(&sig);
                                             return self.check_call_args(
                                                 call,
                                                 &param_types,
-                                                sig.ret,
+                                                ret_ty,
                                             );
                                         }
                                     }
@@ -1933,6 +2104,11 @@ impl InferEngine {
                                 // Look up in resolutions
                                 let span = text_range_to_span(token.text_range());
                                 if let Some(&def_id) = self.resolutions.get(&span) {
+                                    // Check if it's a type parameter or a struct
+                                    let symbol = self.ctx.get_symbol(def_id);
+                                    if symbol.kind == SymbolKind::TypeParam {
+                                        return self.ctx.types.mk_param(def_id);
+                                    }
                                     // It's a struct or type alias
                                     return self.ctx.types.mk_struct(def_id, vec![]);
                                 }
@@ -2027,8 +2203,31 @@ impl InferEngine {
                 Item::Impl(impl_block) => {
                     // Get the struct this impl is for
                     let struct_def_id = self.get_impl_struct_def_id(impl_block);
-                    // Create the struct type if we have the struct DefId
-                    let struct_ty = struct_def_id.map(|id| self.ctx.types.mk_struct(id, vec![]));
+
+                    // Collect impl block type parameters
+                    let mut impl_type_params = Vec::new();
+                    if let Some(generics) = impl_block.generic_params() {
+                        for param in generics.params() {
+                            if let Some(name) = param.name()
+                                && let Some(token) = name.ident_token()
+                            {
+                                let span = text_range_to_span(token.text_range());
+                                if let Some(&param_def_id) = self.resolutions.get(&span) {
+                                    impl_type_params.push(param_def_id);
+                                }
+                            }
+                        }
+                    }
+
+                    // Create type args from impl type params (as Type::Param)
+                    let type_args: Vec<TypeId> = impl_type_params
+                        .iter()
+                        .map(|&def_id| self.ctx.types.mk_param(def_id))
+                        .collect();
+
+                    // Create the struct type with type args
+                    let struct_ty =
+                        struct_def_id.map(|id| self.ctx.types.mk_struct(id, type_args.clone()));
 
                     // Set current_self_type so that `Self` in signatures resolves correctly
                     self.current_self_type = struct_ty;
@@ -2061,6 +2260,15 @@ impl InferEngine {
                                         }
                                         SelfParamKind::Owned => sty,
                                     };
+                                }
+
+                                // Add impl type params to method signature
+                                if let Some(sig) = self.fn_signatures.get_mut(&method_def_id) {
+                                    for &param_def_id in impl_type_params.iter().rev() {
+                                        if !sig.type_params.contains(&param_def_id) {
+                                            sig.type_params.insert(0, param_def_id);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -2106,6 +2314,21 @@ impl InferEngine {
             None => return,
         };
 
+        // Collect type parameters
+        let mut type_params = Vec::new();
+        if let Some(generics) = func.generic_params() {
+            for param in generics.params() {
+                if let Some(name) = param.name()
+                    && let Some(token) = name.ident_token()
+                {
+                    let span = text_range_to_span(token.text_range());
+                    if let Some(&param_def_id) = self.resolutions.get(&span) {
+                        type_params.push(param_def_id);
+                    }
+                }
+            }
+        }
+
         // Collect parameters
         let mut params = Vec::new();
         let mut self_param = None;
@@ -2150,6 +2373,7 @@ impl InferEngine {
             def_id,
             FnSignature {
                 self_param,
+                type_params,
                 params,
                 ret,
             },
@@ -2172,6 +2396,22 @@ impl InferEngine {
             Some(id) => *id,
             None => return,
         };
+
+        // Collect type parameters
+        let mut type_params = Vec::new();
+        if let Some(generics) = struct_def.generic_params() {
+            for param in generics.params() {
+                if let Some(name) = param.name()
+                    && let Some(token) = name.ident_token()
+                {
+                    let span = text_range_to_span(token.text_range());
+                    if let Some(&param_def_id) = self.resolutions.get(&span) {
+                        type_params.push(param_def_id);
+                    }
+                }
+            }
+        }
+        self.struct_type_params.insert(def_id, type_params);
 
         let mut fields = Vec::new();
         if let Some(field_list) = struct_def.field_list() {

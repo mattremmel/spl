@@ -1611,3 +1611,99 @@ fn test_assign_field_through_immutable_ref() {
         &["cannot assign to field of immutable reference"],
     );
 }
+
+// =============================================================================
+// 3.0 Generic Function Instantiation (TDD tests for spl-7ab.4)
+// =============================================================================
+
+// Phase 1: Track Type Parameters in FnSignature
+
+#[test]
+fn generic_fn_identity_infers_from_arg() {
+    check(
+        "fn identity<T>(x: T) -> T { x } fn main() { let a = identity(42); }",
+        "i32",
+    );
+}
+
+#[test]
+fn generic_fn_identity_infers_from_context() {
+    check(
+        "fn identity<T>(x: T) -> T { x } fn main() { let a: i64 = identity(42); }",
+        "i64",
+    );
+}
+
+// Phase 2: Instantiate Generic Functions
+
+#[test]
+fn generic_fn_two_params_same_type() {
+    check(
+        "fn pair<T>(a: T, b: T) -> T { a } fn main() { let x = pair(1, 2); }",
+        "i32",
+    );
+}
+
+#[test]
+fn generic_fn_multiple_type_params() {
+    check(
+        "fn swap<A, B>(a: A, b: B) -> B { b } fn main() { let x = swap(1, true); }",
+        "bool",
+    );
+}
+
+// Phase 3: Generic Struct Instantiation
+
+#[test]
+fn generic_struct_field_access() {
+    check(
+        "struct Wrapper<T> { value: T } fn main() { let w = Wrapper { value: 42 }; let x = w.value; }",
+        "i32",
+    );
+}
+
+#[test]
+fn generic_struct_multiple_fields() {
+    check(
+        "struct Pair<A, B> { first: A, second: B } fn main() { let p = Pair { first: 1, second: true }; let x = p.second; }",
+        "bool",
+    );
+}
+
+// Phase 4: Generic Methods
+
+#[test]
+fn generic_struct_method_returns_param() {
+    check(
+        "struct Wrapper<T> { value: T } impl<T> Wrapper<T> { fn get(&self) -> T { self.value } } fn main() { let w = Wrapper { value: 42 }; let x = w.get(); }",
+        "i32",
+    );
+}
+
+// Phase 5: Error Cases
+
+#[test]
+fn error_generic_type_mismatch() {
+    check_err(
+        "fn pair<T>(a: T, b: T) -> T { a } fn main() { pair(1, true); }",
+        &["type mismatch"],
+    );
+}
+
+// Phase 6: Edge Cases
+
+#[test]
+fn generic_nested_calls() {
+    check(
+        "fn identity<T>(x: T) -> T { x } fn main() { let a = identity(identity(42)); }",
+        "i32",
+    );
+}
+
+#[test]
+fn generic_multiple_instantiations() {
+    check(
+        "fn identity<T>(x: T) -> T { x } fn main() { let a = identity(42); let b = identity(true); }",
+        "bool",
+    );
+}
