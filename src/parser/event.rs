@@ -24,6 +24,9 @@ pub enum Event {
         n_raw_tokens: u8,
     },
 
+    /// Synthetic token with specified text (not from source).
+    SyntheticToken { kind: SyntaxKind, text: String },
+
     /// A parse error.
     Error(ParseError),
 

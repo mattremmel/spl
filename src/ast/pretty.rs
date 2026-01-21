@@ -1048,9 +1048,7 @@ mod tests {
         }
 
         /// Tuple struct syntax: `struct Pair(i32, i32);`
-        /// Re-enable when parser supports tuple structs
         #[test]
-        #[ignore = "parser does not support tuple structs yet"]
         fn struct_tuple() {
             check(
                 "struct Pair(i32, i32);",

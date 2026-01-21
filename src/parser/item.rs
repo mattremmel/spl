@@ -201,8 +201,13 @@ pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
         generic_params(p)?;
     }
 
-    // Unit struct (semicolon) or field list (braces)
-    if !p.eat(SyntaxKind::SEMI) {
+    // Unit struct (semicolon), tuple struct (parens), or field list (braces)
+    if p.eat(SyntaxKind::SEMI) {
+        // Unit struct
+    } else if p.at(SyntaxKind::L_PAREN) {
+        tuple_field_list(p)?;
+        p.expect(SyntaxKind::SEMI)?;
+    } else {
         field_list(p)?;
     }
 
@@ -252,6 +257,53 @@ fn field_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
     p.expect(SyntaxKind::COLON)?;
     stmt::type_annotation(p)?;
 
+    Ok(m.complete(p, SyntaxKind::FieldDef))
+}
+
+/// Recovery set for tuple field list (type start or list end).
+const TUPLE_FIELD_RECOVERY_SET: &[SyntaxKind] = &[
+    SyntaxKind::IDENT,
+    SyntaxKind::PUB_KW,
+    SyntaxKind::COMMA,
+    SyntaxKind::R_PAREN,
+    SyntaxKind::AMP,
+    SyntaxKind::L_PAREN,
+    SyntaxKind::L_BRACKET,
+    SyntaxKind::FN_KW,
+];
+
+/// Parse a tuple field list: `([pub] Type, ...)`
+fn tuple_field_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    p.expect(SyntaxKind::L_PAREN)?;
+
+    let mut index = 0u32;
+    while !p.at(SyntaxKind::R_PAREN) && p.current().is_some() {
+        if let Err(err) = tuple_field_def(p, index) {
+            p.recover_with_error(err, TUPLE_FIELD_RECOVERY_SET);
+        }
+        index += 1;
+        if !p.eat(SyntaxKind::COMMA) && !p.at(SyntaxKind::R_PAREN) {
+            let err = p.error_at_current("expected ',' or ')'".to_string());
+            p.error(err);
+        }
+    }
+
+    p.expect(SyntaxKind::R_PAREN)?;
+    Ok(m.complete(p, SyntaxKind::FieldList))
+}
+
+/// Parse a tuple field definition: `[pub] Type`
+fn tuple_field_def(p: &mut Parser<'_>, index: u32) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    opt_visibility(p);
+
+    // Synthetic name node with index
+    let name_m = p.start();
+    p.emit_synthetic_token(SyntaxKind::INT_LITERAL, index.to_string());
+    name_m.complete(p, SyntaxKind::Name);
+
+    stmt::type_annotation(p)?;
     Ok(m.complete(p, SyntaxKind::FieldDef))
 }
 
@@ -1925,6 +1977,273 @@ mod tests {
                       L_BRACE@10..11 "{"
                       R_BRACE@11..12 "}"
                   WHITESPACE@12..15 "  \n"
+            "#]],
+        );
+    }
+
+    // === Tuple struct tests ===
+
+    #[test]
+    fn struct_tuple_basic() {
+        check_item(
+            "struct Pair(i32, i32);",
+            &expect![[r#"
+                StructDef@0..24
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..11
+                    WHITESPACE@6..7 " "
+                    IDENT@7..11 "Pair"
+                  FieldList@11..23
+                    L_PAREN@11..12 "("
+                    FieldDef@12..16
+                      Name@12..13
+                        INT_LITERAL@12..13 "0"
+                      PathType@13..16
+                        Path@13..16
+                          PathSegment@13..16
+                            NameRef@13..16
+                              IDENT@13..16 "i32"
+                    COMMA@16..17 ","
+                    FieldDef@17..22
+                      Name@17..19
+                        WHITESPACE@17..18 " "
+                        INT_LITERAL@18..19 "1"
+                      PathType@19..22
+                        Path@19..22
+                          PathSegment@19..22
+                            NameRef@19..22
+                              IDENT@19..22 "i32"
+                    R_PAREN@22..23 ")"
+                  SEMI@23..24 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_tuple_single_field() {
+        check_item(
+            "struct Wrapper(i32);",
+            &expect![[r#"
+                StructDef@0..21
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..14
+                    WHITESPACE@6..7 " "
+                    IDENT@7..14 "Wrapper"
+                  FieldList@14..20
+                    L_PAREN@14..15 "("
+                    FieldDef@15..19
+                      Name@15..16
+                        INT_LITERAL@15..16 "0"
+                      PathType@16..19
+                        Path@16..19
+                          PathSegment@16..19
+                            NameRef@16..19
+                              IDENT@16..19 "i32"
+                    R_PAREN@19..20 ")"
+                  SEMI@20..21 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_tuple_empty() {
+        check_item(
+            "struct Unit();",
+            &expect![[r#"
+                StructDef@0..14
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..11
+                    WHITESPACE@6..7 " "
+                    IDENT@7..11 "Unit"
+                  FieldList@11..13
+                    L_PAREN@11..12 "("
+                    R_PAREN@12..13 ")"
+                  SEMI@13..14 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_tuple_trailing_comma() {
+        check_item(
+            "struct Single(i32,);",
+            &expect![[r#"
+                StructDef@0..21
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..13
+                    WHITESPACE@6..7 " "
+                    IDENT@7..13 "Single"
+                  FieldList@13..20
+                    L_PAREN@13..14 "("
+                    FieldDef@14..18
+                      Name@14..15
+                        INT_LITERAL@14..15 "0"
+                      PathType@15..18
+                        Path@15..18
+                          PathSegment@15..18
+                            NameRef@15..18
+                              IDENT@15..18 "i32"
+                    COMMA@18..19 ","
+                    R_PAREN@19..20 ")"
+                  SEMI@20..21 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_tuple_with_visibility() {
+        check_item(
+            "struct Foo(pub i32, i32);",
+            &expect![[r#"
+                StructDef@0..27
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..10
+                    WHITESPACE@6..7 " "
+                    IDENT@7..10 "Foo"
+                  FieldList@10..26
+                    L_PAREN@10..11 "("
+                    FieldDef@11..19
+                      Visibility@11..14
+                        PUB_KW@11..14 "pub"
+                      Name@14..16
+                        WHITESPACE@14..15 " "
+                        INT_LITERAL@15..16 "0"
+                      PathType@16..19
+                        Path@16..19
+                          PathSegment@16..19
+                            NameRef@16..19
+                              IDENT@16..19 "i32"
+                    COMMA@19..20 ","
+                    FieldDef@20..25
+                      Name@20..22
+                        WHITESPACE@20..21 " "
+                        INT_LITERAL@21..22 "1"
+                      PathType@22..25
+                        Path@22..25
+                          PathSegment@22..25
+                            NameRef@22..25
+                              IDENT@22..25 "i32"
+                    R_PAREN@25..26 ")"
+                  SEMI@26..27 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_tuple_generic() {
+        check_item(
+            "struct Wrapper<T>(T);",
+            &expect![[r#"
+                StructDef@0..22
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..14
+                    WHITESPACE@6..7 " "
+                    IDENT@7..14 "Wrapper"
+                  GenericParams@14..17
+                    LT@14..15 "<"
+                    GenericParam@15..16
+                      Name@15..16
+                        IDENT@15..16 "T"
+                    GT@16..17 ">"
+                  FieldList@17..21
+                    L_PAREN@17..18 "("
+                    FieldDef@18..20
+                      Name@18..19
+                        INT_LITERAL@18..19 "0"
+                      PathType@19..20
+                        Path@19..20
+                          PathSegment@19..20
+                            NameRef@19..20
+                              IDENT@19..20 "T"
+                    R_PAREN@20..21 ")"
+                  SEMI@21..22 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_tuple_complex_types() {
+        check_item(
+            "struct Complex(&i32, (u8, u8));",
+            &expect![[r#"
+                StructDef@0..33
+                  STRUCT_KW@0..6 "struct"
+                  Name@6..14
+                    WHITESPACE@6..7 " "
+                    IDENT@7..14 "Complex"
+                  FieldList@14..32
+                    L_PAREN@14..15 "("
+                    FieldDef@15..20
+                      Name@15..16
+                        INT_LITERAL@15..16 "0"
+                      RefType@16..20
+                        AMP@16..17 "&"
+                        PathType@17..20
+                          Path@17..20
+                            PathSegment@17..20
+                              NameRef@17..20
+                                IDENT@17..20 "i32"
+                    COMMA@20..21 ","
+                    FieldDef@21..31
+                      Name@21..23
+                        WHITESPACE@21..22 " "
+                        INT_LITERAL@22..23 "1"
+                      TupleType@23..31
+                        L_PAREN@23..24 "("
+                        PathType@24..26
+                          Path@24..26
+                            PathSegment@24..26
+                              NameRef@24..26
+                                IDENT@24..26 "u8"
+                        COMMA@26..27 ","
+                        PathType@27..30
+                          Path@27..30
+                            PathSegment@27..30
+                              NameRef@27..30
+                                WHITESPACE@27..28 " "
+                                IDENT@28..30 "u8"
+                        R_PAREN@30..31 ")"
+                    R_PAREN@31..32 ")"
+                  SEMI@32..33 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_tuple_pub() {
+        check_item(
+            "pub struct Point(i32, i32);",
+            &expect![[r#"
+                StructDef@0..29
+                  Visibility@0..3
+                    PUB_KW@0..3 "pub"
+                  WHITESPACE@3..4 " "
+                  STRUCT_KW@4..10 "struct"
+                  Name@10..16
+                    WHITESPACE@10..11 " "
+                    IDENT@11..16 "Point"
+                  FieldList@16..28
+                    L_PAREN@16..17 "("
+                    FieldDef@17..21
+                      Name@17..18
+                        INT_LITERAL@17..18 "0"
+                      PathType@18..21
+                        Path@18..21
+                          PathSegment@18..21
+                            NameRef@18..21
+                              IDENT@18..21 "i32"
+                    COMMA@21..22 ","
+                    FieldDef@22..27
+                      Name@22..24
+                        WHITESPACE@22..23 " "
+                        INT_LITERAL@23..24 "1"
+                      PathType@24..27
+                        Path@24..27
+                          PathSegment@24..27
+                            NameRef@24..27
+                              IDENT@24..27 "i32"
+                    R_PAREN@27..28 ")"
+                  SEMI@28..29 ";"
             "#]],
         );
     }

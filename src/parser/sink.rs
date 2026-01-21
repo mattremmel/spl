@@ -74,6 +74,10 @@ impl<'src> Sink<'src> {
                     self.eat_trivia();
                     self.eat_n_tokens(n_raw_tokens as usize);
                 }
+                Event::SyntheticToken { kind, text } => {
+                    self.eat_trivia();
+                    self.builder.token(Lang::kind_to_raw(kind), &text);
+                }
                 Event::Error(error) => {
                     self.errors.push(error);
                 }

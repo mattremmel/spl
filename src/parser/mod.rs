@@ -243,6 +243,11 @@ impl<'src> Parser<'src> {
         self.events.push(Event::Error(error));
     }
 
+    /// Emit a synthetic token (not from source).
+    pub fn emit_synthetic_token(&mut self, kind: SyntaxKind, text: String) {
+        self.events.push(Event::SyntheticToken { kind, text });
+    }
+
     // === Error Recovery ===
 
     /// Check if we're at a token in the recovery set.

@@ -226,6 +226,7 @@ impl GenericArgs {
 impl Name {
     pub fn ident_token(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::IDENT)
+            .or_else(|| token(&self.0, SyntaxKind::INT_LITERAL))
     }
 }
 
