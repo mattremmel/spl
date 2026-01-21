@@ -2424,3 +2424,227 @@ fn error_very_large_index() {
         &["out of bounds"],
     );
 }
+
+// =============================================================================
+// 6.0 Control Flow Analysis (SEMA-6)
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// 6.1 Return Path Analysis - Valid Cases
+// -----------------------------------------------------------------------------
+
+#[test]
+fn return_path_explicit_return() {
+    // Explicit return is a valid return path
+    check(
+        "fn f() -> i32 { return 42; } fn main() { let x = f(); }",
+        "i32",
+    );
+}
+
+#[test]
+fn return_path_tail_expression() {
+    // Tail expression is a valid return path
+    check("fn f() -> i32 { 42 } fn main() { let x = f(); }", "i32");
+}
+
+#[test]
+fn return_path_if_else_both_return() {
+    // Both branches return a value - valid
+    check(
+        "fn f(b: bool) -> i32 { if b { 1 } else { 2 } } fn main() { let x = f(true); }",
+        "i32",
+    );
+}
+
+#[test]
+fn return_path_if_else_explicit() {
+    // Both branches have explicit return - valid
+    check(
+        "fn f(b: bool) -> i32 { if b { return 1; } else { return 2; } } fn main() { let x = f(true); }",
+        "i32",
+    );
+}
+
+#[test]
+fn return_path_diverging_then_tail() {
+    // If one branch returns, tail after if is still reachable - valid
+    check(
+        "fn f(b: bool) -> i32 { if b { return 1; } 0 } fn main() { let x = f(true); }",
+        "i32",
+    );
+}
+
+#[test]
+fn return_path_loop_with_break() {
+    // Loop with break value is a valid return path
+    check(
+        "fn f() -> i32 { loop { break 42; } } fn main() { let x = f(); }",
+        "i32",
+    );
+}
+
+#[test]
+fn return_path_nested_if() {
+    // Nested if/else chains - all paths return
+    check(
+        "fn f(a: bool, b: bool) -> i32 { if a { if b { 1 } else { 2 } } else { 3 } } fn main() { let x = f(true, false); }",
+        "i32",
+    );
+}
+
+#[test]
+fn return_path_infinite_loop() {
+    // Infinite loop has never type, so function "returns" (diverges)
+    check(
+        "fn f() -> i32 { loop {} } fn main() { let x: i32 = 0; }",
+        "i32",
+    );
+}
+
+// -----------------------------------------------------------------------------
+// 6.2 Return Path Analysis - Invalid Cases (Missing Returns)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn error_missing_return_if_no_else() {
+    // If without else doesn't always return a value
+    check_err(
+        "fn f(b: bool) -> i32 { if b { return 42; } }",
+        &["not all code paths return a value"],
+    );
+}
+
+#[test]
+fn error_missing_return_empty_body() {
+    // Empty body doesn't return a value for non-unit return type
+    check_err("fn f() -> i32 { }", &["not all code paths return a value"]);
+}
+
+#[test]
+fn error_missing_return_only_let() {
+    // Let statement doesn't produce a return value
+    check_err(
+        "fn f() -> i32 { let x = 1; }",
+        &["not all code paths return a value"],
+    );
+}
+
+#[test]
+fn error_missing_return_one_branch() {
+    // Only else branch returns, then branch has no value
+    check_err(
+        "fn f(b: bool) -> i32 { if b { let x = 1; } else { 2 } }",
+        &["type mismatch"],
+    );
+}
+
+#[test]
+fn error_missing_return_nested_if_incomplete() {
+    // Nested if missing inner else
+    check_err(
+        "fn f(a: bool, b: bool) -> i32 { if a { if b { 1 } } else { 2 } }",
+        &["type mismatch"],
+    );
+}
+
+// -----------------------------------------------------------------------------
+// 6.3 Break/Continue Validation
+// -----------------------------------------------------------------------------
+
+#[test]
+fn error_break_outside_loop() {
+    check_err("fn main() { break; }", &["break outside of loop"]);
+}
+
+#[test]
+fn error_continue_outside_loop() {
+    check_err("fn main() { continue; }", &["continue outside of loop"]);
+}
+
+#[test]
+fn error_break_in_if_outside_loop() {
+    check_err(
+        "fn main() { if true { break; } }",
+        &["break outside of loop"],
+    );
+}
+
+#[test]
+fn break_in_nested_loop_ok() {
+    // Break inside nested loop should work
+    check(
+        "fn main() { loop { loop { break; } break; } let x: i32 = 0; }",
+        "i32",
+    );
+}
+
+#[test]
+fn error_break_value_in_while() {
+    // Break with value is only allowed in loop expressions, not while
+    check_err(
+        "fn main() { while true { break 42; } }",
+        &["break with value only allowed in `loop`"],
+    );
+}
+
+#[test]
+fn error_break_value_in_for() {
+    // Break with value is only allowed in loop expressions, not for
+    check_err(
+        "fn main() { for i in 0..10 { break 42; } }",
+        &["break with value only allowed in `loop`"],
+    );
+}
+
+#[test]
+fn continue_in_while_ok() {
+    // Continue inside while is valid
+    check(
+        "fn main() { while true { continue; } let x: i32 = 0; }",
+        "i32",
+    );
+}
+
+#[test]
+fn continue_in_for_ok() {
+    // Continue inside for is valid
+    check(
+        "fn main() { for i in 0..10 { continue; } let x: i32 = 0; }",
+        "i32",
+    );
+}
+
+// -----------------------------------------------------------------------------
+// 6.4 Enhanced Dead Code Detection
+// -----------------------------------------------------------------------------
+
+#[test]
+fn warn_code_after_if_both_return() {
+    // Code after if where both branches return is unreachable
+    check_warn(
+        "fn f(b: bool) -> i32 { if b { return 1; } else { return 2; } let x = 3; x }",
+        &["unreachable"],
+    );
+}
+
+#[test]
+fn warn_code_after_loop_no_break() {
+    // Code after infinite loop is unreachable
+    check_warn("fn main() { loop {} let x: i32 = 1; }", &["unreachable"]);
+}
+
+#[test]
+fn no_warn_code_after_if_one_returns() {
+    // Code after if where only one branch returns is reachable
+    check(
+        "fn f(b: bool) -> i32 { if b { return 1; } let x = 2; x }",
+        "i32",
+    );
+}
+
+#[test]
+fn no_warn_code_after_loop_with_break() {
+    // Code after loop with break is reachable
+    check("fn main() { loop { break; } let x: i32 = 1; }", "i32");
+}

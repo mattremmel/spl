@@ -6,10 +6,10 @@
 //! - Unifies type constraints to resolve inference variables
 
 use crate::ast::{
-    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, FieldExpr, ForExpr,
-    FunctionDef, IfExpr, IndexExpr, Item, LetStmt, LiteralExpr, LoopExpr, MethodCallExpr,
-    ParenExpr, Pat, PathExpr, PrefixExpr, RangeExpr, RefExpr, ReturnExpr, SliceExpr, SourceFile,
-    Stmt, StructExpr, TupleExpr, WhileExpr,
+    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, ContinueExpr, Expr,
+    FieldExpr, ForExpr, FunctionDef, IfExpr, IndexExpr, Item, LetStmt, LiteralExpr, LoopExpr,
+    MethodCallExpr, ParenExpr, Pat, PathExpr, PrefixExpr, RangeExpr, RefExpr, ReturnExpr,
+    SliceExpr, SourceFile, Stmt, StructExpr, TupleExpr, WhileExpr,
 };
 use crate::diagnostic::Diagnostic;
 use crate::hir::{LoweredExpr, lower::try_lower_expr};
@@ -138,6 +138,17 @@ pub fn infer(source_file: &SourceFile, resolve_result: ResolveResult) -> InferRe
     engine.into_result()
 }
 
+/// The kind of loop for break/continue validation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LoopKind {
+    /// `loop { }` - allows break with value
+    Loop,
+    /// `while cond { }` - no break value allowed
+    While,
+    /// `for x in iter { }` - no break value allowed
+    For,
+}
+
 /// The type inference engine.
 struct InferEngine {
     ctx: SemanticContext,
@@ -168,6 +179,8 @@ struct InferEngine {
     current_loop_has_break: bool,
     /// Current impl block's Self type (for resolving Self in type positions).
     current_self_type: Option<TypeId>,
+    /// The kind of the innermost loop (for break/continue validation).
+    current_loop_kind: Option<LoopKind>,
 }
 
 /// The kind of receiver for a method.
@@ -219,6 +232,7 @@ impl InferEngine {
             current_loop_break_type: None,
             current_loop_has_break: false,
             current_self_type: None,
+            current_loop_kind: None,
         }
     }
 
@@ -849,7 +863,7 @@ impl InferEngine {
             Expr::For(for_expr) => self.synth_for(for_expr),
             Expr::Loop(loop_expr) => self.synth_loop(loop_expr),
             Expr::Break(break_expr) => self.synth_break(break_expr),
-            Expr::Continue(_) => self.ctx.types.never(),
+            Expr::Continue(continue_expr) => self.synth_continue(continue_expr),
             Expr::Return(return_expr) => self.synth_return(return_expr),
             Expr::Block(block_expr) => self.synth_block_expr(block_expr),
             Expr::Cast(cast) => self.synth_cast(cast),
@@ -1869,10 +1883,16 @@ impl InferEngine {
             }
         }
 
+        // Set loop context for break/continue validation
+        let old_loop_kind = self.current_loop_kind.replace(LoopKind::While);
+
         // Synthesize body
         if let Some(body) = while_expr.body() {
             self.synth_block(&body);
         }
+
+        // Restore loop context
+        self.current_loop_kind = old_loop_kind;
 
         // While loops always return unit
         self.ctx.types.unit()
@@ -1892,10 +1912,16 @@ impl InferEngine {
             self.define_pattern(&pat, elem_ty);
         }
 
+        // Set loop context for break/continue validation
+        let old_loop_kind = self.current_loop_kind.replace(LoopKind::For);
+
         // Synthesize body
         if let Some(body) = for_expr.body() {
             self.synth_block(&body);
         }
+
+        // Restore loop context
+        self.current_loop_kind = old_loop_kind;
 
         // For loops always return unit
         self.ctx.types.unit()
@@ -1907,6 +1933,8 @@ impl InferEngine {
         let old_break_ty = self.current_loop_break_type.replace(break_ty);
         let old_has_break = self.current_loop_has_break;
         self.current_loop_has_break = false;
+        // Set loop context for break/continue validation
+        let old_loop_kind = self.current_loop_kind.replace(LoopKind::Loop);
 
         if let Some(body) = loop_expr.body() {
             self.synth_block(&body);
@@ -1915,6 +1943,8 @@ impl InferEngine {
         let has_break = self.current_loop_has_break;
         self.current_loop_break_type = old_break_ty;
         self.current_loop_has_break = old_has_break;
+        // Restore loop context
+        self.current_loop_kind = old_loop_kind;
 
         // If no break was found, this is an infinite loop - return never type
         // If break with value exists, return that type
@@ -1926,18 +1956,38 @@ impl InferEngine {
     }
 
     fn synth_break(&mut self, break_expr: &BreakExpr) -> TypeId {
+        let span = text_range_to_span(break_expr.syntax().text_range());
+
+        // Check if we're inside a loop
+        let Some(loop_kind) = self.current_loop_kind else {
+            self.diagnostics.push(
+                Diagnostic::error("break outside of loop")
+                    .with_label(span, "`break` can only be used inside a loop"),
+            );
+            return self.ctx.types.never();
+        };
+
         // Mark that we found a break in the current loop
         self.current_loop_has_break = true;
 
         if let Some(value) = break_expr.expr() {
+            // Check if break with value is allowed (only in `loop`, not while/for)
+            if loop_kind != LoopKind::Loop {
+                let value_span = text_range_to_span(value.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("break with value only allowed in `loop`")
+                        .with_label(value_span, "break value not allowed here"),
+                );
+            }
+
             let value_ty = self.synth_expr(&value);
             if let Some(break_ty) = self.current_loop_break_type
                 && !self.unify(break_ty, value_ty)
             {
-                let span = text_range_to_span(value.syntax().text_range());
+                let value_span = text_range_to_span(value.syntax().text_range());
                 self.diagnostics.push(
                     Diagnostic::error("type mismatch in break value")
-                        .with_label(span, "mismatched types"),
+                        .with_label(value_span, "mismatched types"),
                 );
             }
         } else if let Some(break_ty) = self.current_loop_break_type {
@@ -1946,6 +1996,19 @@ impl InferEngine {
             let _ = self.unify(break_ty, unit_ty);
         }
         // Break is a diverging expression
+        self.ctx.types.never()
+    }
+
+    fn synth_continue(&mut self, continue_expr: &ContinueExpr) -> TypeId {
+        // Check if we're inside a loop
+        if self.current_loop_kind.is_none() {
+            let span = text_range_to_span(continue_expr.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error("continue outside of loop")
+                    .with_label(span, "`continue` can only be used inside a loop"),
+            );
+        }
+        // Continue is a diverging expression
         self.ctx.types.never()
     }
 
@@ -3005,14 +3068,40 @@ impl InferEngine {
             // Check return type matches
             if !self.unify(sig.ret, body_ty) {
                 let body_span = text_range_to_span(body.syntax().text_range());
-                self.diagnostics.push(
-                    Diagnostic::error("type mismatch: return type doesn't match body")
-                        .with_label(body_span, "body has wrong type"),
-                );
+
+                // Check if this is a "missing return" case:
+                // - Expected return type is non-unit
+                // - Body type is unit (no tail expression, no explicit return)
+                let resolved_ret = self.resolve_type(sig.ret);
+                let resolved_body = self.resolve_type(body_ty);
+
+                let ret_is_non_unit = !self.is_unit_type(resolved_ret);
+                let body_is_unit = self.is_unit_type(resolved_body);
+
+                if ret_is_non_unit && body_is_unit {
+                    self.diagnostics.push(
+                        Diagnostic::error("not all code paths return a value")
+                            .with_label(body_span, "missing return"),
+                    );
+                } else {
+                    self.diagnostics.push(
+                        Diagnostic::error("type mismatch: return type doesn't match body")
+                            .with_label(body_span, "body has wrong type"),
+                    );
+                }
             }
         }
 
         self.current_return_type = None;
+    }
+
+    /// Check if a type is the unit type (either Primitive::Unit or empty tuple)
+    fn is_unit_type(&self, type_id: TypeId) -> bool {
+        match self.ctx.types.get(type_id) {
+            Type::Primitive(PrimitiveKind::Unit) => true,
+            Type::Tuple(elems) => elems.is_empty(),
+            _ => false,
+        }
     }
 
     // =========================================================================
