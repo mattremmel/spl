@@ -208,8 +208,9 @@ pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser
                         } else if can_start_stmt_or_expr(p) {
                             // No semicolon but another expression follows
                             // This is valid for block-ending expressions (if, while, for, loop, block)
-                            // which don't require semicolons when used as statements
-                            expr_m.abandon(p);
+                            // which don't require semicolons when used as statements.
+                            // Wrap in ExprStmt for consistent AST structure.
+                            expr_m.complete(p, SyntaxKind::ExprStmt);
                         } else {
                             // Missing semicolon - emit error but continue
                             let err =

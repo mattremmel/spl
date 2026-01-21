@@ -6,6 +6,7 @@ use rowan::ast::AstNode;
 mod expressions;
 mod items;
 mod patterns;
+pub mod pretty;
 mod statements;
 mod types;
 
