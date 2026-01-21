@@ -160,9 +160,31 @@ struct InferEngine {
     current_loop_break_type: Option<TypeId>,
 }
 
+/// The kind of receiver for a method.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelfParamKind {
+    /// `self` - takes ownership
+    Owned,
+    /// `&self` - shared reference
+    Ref,
+    /// `&mut self` - mutable reference
+    RefMut,
+}
+
+/// A self parameter for method signatures.
+#[derive(Clone, Debug)]
+pub struct SelfParam {
+    pub kind: SelfParamKind,
+    pub self_ty: TypeId,
+}
+
 /// Function signature information.
 #[derive(Clone)]
 struct FnSignature {
+    /// The self parameter for methods, if present.
+    /// Currently stored for future use (e.g., proper receiver type checking).
+    #[allow(dead_code)]
+    self_param: Option<SelfParam>,
     params: Vec<(String, TypeId)>,
     ret: TypeId,
 }
@@ -939,16 +961,8 @@ impl InferEngine {
                 // Check arguments
                 if let Some(arg_list) = method.arg_list() {
                     let args: Vec<_> = arg_list.args().collect();
-                    // Skip self parameter in signature
-                    let expected_args: Vec<_> = if !params.is_empty()
-                        && (params[0].0 == "self"
-                            || params[0].0 == "&self"
-                            || params[0].0 == "&mut self")
-                    {
-                        params[1..].to_vec()
-                    } else {
-                        params
-                    };
+                    // params now contains only regular params (self is in self_param field)
+                    let expected_args = &params;
 
                     if args.len() != expected_args.len() {
                         let span = text_range_to_span(method.syntax().text_range());
@@ -1598,18 +1612,22 @@ impl InferEngine {
 
         // Collect parameters
         let mut params = Vec::new();
+        let mut self_param = None;
         if let Some(param_list) = func.param_list() {
             // Handle self parameter
-            if let Some(self_param) = param_list.self_param() {
-                let self_name = if self_param.mut_kw().is_some() {
-                    "&mut self"
-                } else if self_param.amp().is_some() {
-                    "&self"
+            if let Some(sp) = param_list.self_param() {
+                let kind = if sp.mut_kw().is_some() {
+                    SelfParamKind::RefMut
+                } else if sp.amp().is_some() {
+                    SelfParamKind::Ref
                 } else {
-                    "self"
+                    SelfParamKind::Owned
                 };
                 // Self type will be resolved when we have the impl block's type
-                params.push((self_name.to_string(), self.fresh_type_var()));
+                self_param = Some(SelfParam {
+                    kind,
+                    self_ty: self.fresh_type_var(),
+                });
             }
 
             for param in param_list.params() {
@@ -1632,7 +1650,7 @@ impl InferEngine {
             .map(|t| self.ast_type_to_type_id(&t))
             .unwrap_or_else(|| self.ctx.types.unit());
 
-        self.fn_signatures.insert(def_id, FnSignature { params, ret });
+        self.fn_signatures.insert(def_id, FnSignature { self_param, params, ret });
     }
 
     fn collect_struct_info(&mut self, struct_def: &crate::ast::StructDef) {
@@ -1699,9 +1717,8 @@ impl InferEngine {
 
         // Bind parameters by looking up their DefIds from the AST
         if let Some(param_list) = func.param_list() {
-            let param_types: Vec<_> = sig.params.iter().filter(|(n, _)| {
-                n != "self" && n != "&self" && n != "&mut self"
-            }).map(|(_, ty)| *ty).collect();
+            // params now contains only regular params (self is in self_param field)
+            let param_types: Vec<_> = sig.params.iter().map(|(_, ty)| *ty).collect();
 
             for (param, param_ty) in param_list.params().zip(param_types.iter()) {
                 if let Some(param_name) = param.name()
