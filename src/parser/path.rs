@@ -42,7 +42,7 @@ fn path_segment(p: &mut Parser<'_>, allow_generics: bool) -> Result<CompletedMar
 }
 
 /// Parse a name reference (identifier, self, Self, crate, or super).
-fn name_ref(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+pub(crate) fn name_ref(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     if p.at(SyntaxKind::IDENT)
         || p.at(SyntaxKind::SELF_VALUE_KW)

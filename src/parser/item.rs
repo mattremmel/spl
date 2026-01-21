@@ -75,7 +75,7 @@ pub(crate) fn function_def(
 }
 
 /// Parse a name (identifier).
-fn name(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+pub(crate) fn name(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
     if !p.at(SyntaxKind::IDENT) {
         let err = p.error_at_current("expected identifier".to_string());

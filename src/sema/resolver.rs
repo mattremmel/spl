@@ -691,22 +691,9 @@ impl<'ctx> Resolver<'ctx> {
     fn resolve_pattern_types(&mut self, pat: &Pat) {
         match pat {
             Pat::Struct(struct_pat) => {
-                // Handle qualified paths like `module::Point { x }`
+                // StructPat always has a Path (even for simple `Point { x }`)
                 if let Some(path) = struct_pat.path() {
                     self.resolve_path(&path);
-                } else if let Some(token) = struct_pat.ident_token() {
-                    // Handle simple struct patterns like `Point { x }`
-                    let name_text = token.text().to_string();
-                    let span = Self::text_range_to_span(token.text_range());
-                    let interned = self.ctx.intern(&name_text);
-                    match self.ctx.lookup(interned) {
-                        Some(def_id) => {
-                            self.resolutions.insert(span, def_id);
-                        }
-                        None => {
-                            self.error_undefined(&name_text, span);
-                        }
-                    }
                 }
                 for field in struct_pat.fields() {
                     if let Some(nested) = field.pat() {
@@ -808,20 +795,22 @@ impl<'ctx> Resolver<'ctx> {
         // If not, the field name itself becomes a binding
         if let Some(pat) = field.pat() {
             self.define_pattern(&pat);
-        } else if let Some(token) = field.ident_token() {
+        } else if let Some(name_ref) = field.name() {
             // Shorthand syntax: `Point { x, y }` means `Point { x: x, y: y }`
-            // The field name token becomes a local binding
-            let text = token.text().to_string();
-            let span = Self::text_range_to_span(token.text_range());
-            let interned = self.ctx.intern(&text);
-            if let Ok(def_id) = self.ctx.define(
-                interned,
-                SymbolKind::Local,
-                Visibility::Private,
-                span.clone(),
-            ) {
-                // Store span → DefId mapping for inference phase
-                self.resolutions.insert(span, def_id);
+            // The field name (NameRef) becomes a local binding
+            if let Some(token) = name_ref.token() {
+                let text = token.text().to_string();
+                let span = Self::text_range_to_span(token.text_range());
+                let interned = self.ctx.intern(&text);
+                if let Ok(def_id) = self.ctx.define(
+                    interned,
+                    SymbolKind::Local,
+                    Visibility::Private,
+                    span.clone(),
+                ) {
+                    // Store span → DefId mapping for inference phase
+                    self.resolutions.insert(span, def_id);
+                }
             }
         }
     }

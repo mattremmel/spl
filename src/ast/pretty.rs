@@ -3,7 +3,6 @@
 //! Provides a human-readable representation of the typed AST.
 
 use crate::ast::*;
-use rowan::ast::AstNode;
 use std::fmt::Write;
 
 /// Pretty-printer for AST nodes.
@@ -776,11 +775,9 @@ impl AstPrinter {
     }
 
     fn print_ident_pat(&mut self, ident: &IdentPat) {
-        // IdentPat stores the IDENT token directly, not wrapped in Name
         let name = ident
             .name()
             .and_then(|n| n.ident_token())
-            .or_else(|| crate::ast::token(ident.syntax(), crate::syntax::SyntaxKind::IDENT))
             .map(|t| t.text().to_string())
             .unwrap_or_else(|| "?".to_string());
         let mut_str = if ident.mut_kw().is_some() { "mut " } else { "" };
@@ -832,28 +829,22 @@ impl AstPrinter {
             .path()
             .map(|p| {
                 p.segments()
-                    .filter_map(|s| {
-                        s.name()
+                    .filter_map(|seg| {
+                        seg.name()
                             .and_then(|n| n.token())
                             .map(|t| t.text().to_string())
                     })
                     .collect::<Vec<_>>()
                     .join("::")
             })
-            .or_else(|| s.ident_token().map(|t| t.text().to_string()))
             .unwrap_or_else(|| "?".to_string());
         self.line(&format!("StructPat \"{name}\""));
         self.indented(|p| {
             for field in s.fields() {
                 let field_name = field
-                    .ident_token()
+                    .name()
+                    .and_then(|n| n.token())
                     .map(|t| t.text().to_string())
-                    .or_else(|| {
-                        field
-                            .name()
-                            .and_then(|n| n.token())
-                            .map(|t| t.text().to_string())
-                    })
                     .unwrap_or_else(|| "?".to_string());
                 if let Some(pat) = field.pat() {
                     p.line(&format!("Field \"{field_name}\""));

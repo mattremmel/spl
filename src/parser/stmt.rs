@@ -259,8 +259,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       WHITESPACE@7..8 " "
                       EQ@8..9 "="
                       LiteralExpr@9..11
@@ -287,8 +288,9 @@ mod tests {
                       WHITESPACE@5..6 " "
                       MUT_KW@6..9 "mut"
                       IdentPat@9..11
-                        WHITESPACE@9..10 " "
-                        IDENT@10..11 "x"
+                        Name@9..11
+                          WHITESPACE@9..10 " "
+                          IDENT@10..11 "x"
                       WHITESPACE@11..12 " "
                       EQ@12..13 "="
                       LiteralExpr@13..15
@@ -313,8 +315,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       PathType@8..12
                         Path@8..12
@@ -398,8 +401,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       WHITESPACE@7..8 " "
                       EQ@8..9 "="
                       LiteralExpr@9..11
@@ -410,8 +414,9 @@ mod tests {
                       WHITESPACE@12..13 " "
                       LET_KW@13..16 "let"
                       IdentPat@16..18
-                        WHITESPACE@16..17 " "
-                        IDENT@17..18 "y"
+                        Name@16..18
+                          WHITESPACE@16..17 " "
+                          IDENT@17..18 "y"
                       WHITESPACE@18..19 " "
                       EQ@19..20 "="
                       LiteralExpr@20..22
@@ -487,8 +492,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       PathType@8..12
                         Path@8..12
@@ -515,8 +521,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       RefType@8..13
                         WHITESPACE@8..9 " "
@@ -553,8 +560,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       RefType@8..17
                         WHITESPACE@8..9 " "
@@ -593,8 +601,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       ArrayType@8..17
                         WHITESPACE@8..9 " "
@@ -628,8 +637,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       SliceType@8..14
                         WHITESPACE@8..9 " "
@@ -659,8 +669,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       TupleType@8..20
                         WHITESPACE@8..9 " "
@@ -697,8 +708,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       PathType@8..17
                         Path@8..17
@@ -733,8 +745,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       PathType@8..29
                         Path@8..29
@@ -776,8 +789,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       PathType@8..25
                         Path@8..25
@@ -820,8 +834,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       FnPtrType@8..13
                         WHITESPACE@8..9 " "
@@ -847,8 +862,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       FnPtrType@8..22
                         WHITESPACE@8..9 " "
@@ -886,8 +902,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       FnPtrType@8..24
                         WHITESPACE@8..9 " "
@@ -926,8 +943,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       PathType@8..25
                         Path@8..25
@@ -970,8 +988,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       RefType@8..18
                         WHITESPACE@8..9 " "
@@ -1010,8 +1029,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       RefType@8..15
                         WHITESPACE@8..9 " "
@@ -1043,8 +1063,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       RefType@8..18
                         WHITESPACE@8..9 " "
@@ -1080,8 +1101,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       ArrayType@8..22
                         WHITESPACE@8..9 " "
@@ -1122,8 +1144,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       SliceType@8..21
                         WHITESPACE@8..9 " "
@@ -1163,8 +1186,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       TupleType@8..11
                         WHITESPACE@8..9 " "
@@ -1189,8 +1213,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       TupleType@8..35
                         WHITESPACE@8..9 " "
@@ -1247,8 +1272,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       FnPtrType@8..28
                         WHITESPACE@8..9 " "
@@ -1289,8 +1315,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       FnPtrType@8..35
                         WHITESPACE@8..9 " "
@@ -1341,8 +1368,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       COLON@7..8 ":"
                       PathType@8..38
                         Path@8..38

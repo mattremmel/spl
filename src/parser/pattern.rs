@@ -60,7 +60,7 @@ fn wildcard_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
 /// Parse an identifier pattern: `x`, `foo`
 fn ident_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
-    p.bump(); // consume identifier
+    crate::parser::item::name(p)?; // Wrap in Name (binding site)
     Ok(m.complete(p, SyntaxKind::IdentPat))
 }
 
@@ -105,7 +105,7 @@ fn path_or_struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError>
 /// Parse a struct pattern: `Point { x, y }`, `Point { x: a, y: b }`, `Point { x, .. }`
 fn struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
-    p.bump(); // consume struct name
+    crate::parser::path::path_no_generics(p)?; // Use Path for consistency (single-segment)
     parse_struct_fields(p)?;
     Ok(m.complete(p, SyntaxKind::StructPat))
 }
@@ -136,7 +136,7 @@ fn struct_pat_field(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     }
 
     let m = p.start();
-    p.expect(SyntaxKind::IDENT)?; // field name
+    crate::parser::path::name_ref(p)?; // Wrap in NameRef (field reference)
 
     // Check for `: pattern`
     if p.eat(SyntaxKind::COLON) {
@@ -262,8 +262,9 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "x"
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
                       WHITESPACE@7..8 " "
                       EQ@8..9 "="
                       LiteralExpr@9..11
@@ -436,7 +437,8 @@ mod tests {
                         WHITESPACE@5..6 " "
                         AMP@6..7 "&"
                         IdentPat@7..8
-                          IDENT@7..8 "x"
+                          Name@7..8
+                            IDENT@7..8 "x"
                       WHITESPACE@8..9 " "
                       EQ@9..10 "="
                       PathExpr@10..12
@@ -468,8 +470,9 @@ mod tests {
                         AMP@6..7 "&"
                         MUT_KW@7..10 "mut"
                         IdentPat@10..12
-                          WHITESPACE@10..11 " "
-                          IDENT@11..12 "x"
+                          Name@10..12
+                            WHITESPACE@10..11 " "
+                            IDENT@11..12 "x"
                       WHITESPACE@12..13 " "
                       EQ@13..14 "="
                       PathExpr@14..16
@@ -504,7 +507,8 @@ mod tests {
                           WHITESPACE@7..8 " "
                           AMP@8..9 "&"
                           IdentPat@9..10
-                            IDENT@9..10 "x"
+                            Name@9..10
+                              IDENT@9..10 "x"
                       WHITESPACE@10..11 " "
                       EQ@11..12 "="
                       PathExpr@12..14
@@ -566,11 +570,13 @@ mod tests {
                         WHITESPACE@5..6 " "
                         L_PAREN@6..7 "("
                         IdentPat@7..8
-                          IDENT@7..8 "a"
+                          Name@7..8
+                            IDENT@7..8 "a"
                         COMMA@8..9 ","
                         IdentPat@9..11
-                          WHITESPACE@9..10 " "
-                          IDENT@10..11 "b"
+                          Name@9..11
+                            WHITESPACE@9..10 " "
+                            IDENT@10..11 "b"
                         R_PAREN@11..12 ")"
                       WHITESPACE@12..13 " "
                       EQ@13..14 "="
@@ -602,7 +608,8 @@ mod tests {
                         WHITESPACE@5..6 " "
                         L_PAREN@6..7 "("
                         IdentPat@7..8
-                          IDENT@7..8 "a"
+                          Name@7..8
+                            IDENT@7..8 "a"
                         COMMA@8..9 ","
                         R_PAREN@9..10 ")"
                       WHITESPACE@10..11 " "
@@ -665,15 +672,18 @@ mod tests {
                         WHITESPACE@5..6 " "
                         L_BRACKET@6..7 "["
                         IdentPat@7..8
-                          IDENT@7..8 "a"
+                          Name@7..8
+                            IDENT@7..8 "a"
                         COMMA@8..9 ","
                         IdentPat@9..11
-                          WHITESPACE@9..10 " "
-                          IDENT@10..11 "b"
+                          Name@9..11
+                            WHITESPACE@9..10 " "
+                            IDENT@10..11 "b"
                         COMMA@11..12 ","
                         IdentPat@12..14
-                          WHITESPACE@12..13 " "
-                          IDENT@13..14 "c"
+                          Name@12..14
+                            WHITESPACE@12..13 " "
+                            IDENT@13..14 "c"
                         R_BRACKET@14..15 "]"
                       WHITESPACE@15..16 " "
                       EQ@16..17 "="
@@ -705,15 +715,17 @@ mod tests {
                         WHITESPACE@5..6 " "
                         L_BRACKET@6..7 "["
                         IdentPat@7..12
-                          IDENT@7..12 "first"
+                          Name@7..12
+                            IDENT@7..12 "first"
                         COMMA@12..13 ","
                         RestPat@13..16
                           WHITESPACE@13..14 " "
                           DOT_DOT@14..16 ".."
                         COMMA@16..17 ","
                         IdentPat@17..22
-                          WHITESPACE@17..18 " "
-                          IDENT@18..22 "last"
+                          Name@17..22
+                            WHITESPACE@17..18 " "
+                            IDENT@18..22 "last"
                         R_BRACKET@22..23 "]"
                       WHITESPACE@23..24 " "
                       EQ@24..25 "="
@@ -834,17 +846,22 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       StructPat@5..20
-                        WHITESPACE@5..6 " "
-                        IDENT@6..11 "Point"
+                        Path@5..11
+                          PathSegment@5..11
+                            NameRef@5..11
+                              WHITESPACE@5..6 " "
+                              IDENT@6..11 "Point"
                         WHITESPACE@11..12 " "
                         L_BRACE@12..13 "{"
                         StructPatField@13..15
-                          WHITESPACE@13..14 " "
-                          IDENT@14..15 "x"
+                          NameRef@13..15
+                            WHITESPACE@13..14 " "
+                            IDENT@14..15 "x"
                         COMMA@15..16 ","
                         StructPatField@16..18
-                          WHITESPACE@16..17 " "
-                          IDENT@17..18 "y"
+                          NameRef@16..18
+                            WHITESPACE@16..17 " "
+                            IDENT@17..18 "y"
                         WHITESPACE@18..19 " "
                         R_BRACE@19..20 "}"
                       WHITESPACE@20..21 " "
@@ -874,25 +891,32 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       StructPat@5..26
-                        WHITESPACE@5..6 " "
-                        IDENT@6..11 "Point"
+                        Path@5..11
+                          PathSegment@5..11
+                            NameRef@5..11
+                              WHITESPACE@5..6 " "
+                              IDENT@6..11 "Point"
                         WHITESPACE@11..12 " "
                         L_BRACE@12..13 "{"
                         StructPatField@13..18
-                          WHITESPACE@13..14 " "
-                          IDENT@14..15 "x"
+                          NameRef@13..15
+                            WHITESPACE@13..14 " "
+                            IDENT@14..15 "x"
                           COLON@15..16 ":"
                           IdentPat@16..18
-                            WHITESPACE@16..17 " "
-                            IDENT@17..18 "a"
+                            Name@16..18
+                              WHITESPACE@16..17 " "
+                              IDENT@17..18 "a"
                         COMMA@18..19 ","
                         StructPatField@19..24
-                          WHITESPACE@19..20 " "
-                          IDENT@20..21 "y"
+                          NameRef@19..21
+                            WHITESPACE@19..20 " "
+                            IDENT@20..21 "y"
                           COLON@21..22 ":"
                           IdentPat@22..24
-                            WHITESPACE@22..23 " "
-                            IDENT@23..24 "b"
+                            Name@22..24
+                              WHITESPACE@22..23 " "
+                              IDENT@23..24 "b"
                         WHITESPACE@24..25 " "
                         R_BRACE@25..26 "}"
                       WHITESPACE@26..27 " "
@@ -922,13 +946,17 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       StructPat@5..21
-                        WHITESPACE@5..6 " "
-                        IDENT@6..11 "Point"
+                        Path@5..11
+                          PathSegment@5..11
+                            NameRef@5..11
+                              WHITESPACE@5..6 " "
+                              IDENT@6..11 "Point"
                         WHITESPACE@11..12 " "
                         L_BRACE@12..13 "{"
                         StructPatField@13..15
-                          WHITESPACE@13..14 " "
-                          IDENT@14..15 "x"
+                          NameRef@13..15
+                            WHITESPACE@13..14 " "
+                            IDENT@14..15 "x"
                         COMMA@15..16 ","
                         RestPat@16..19
                           WHITESPACE@16..17 " "
@@ -974,8 +1002,9 @@ mod tests {
                         WHITESPACE@19..20 " "
                         L_BRACE@20..21 "{"
                         StructPatField@21..23
-                          WHITESPACE@21..22 " "
-                          IDENT@22..23 "x"
+                          NameRef@21..23
+                            WHITESPACE@21..22 " "
+                            IDENT@22..23 "x"
                         WHITESPACE@23..24 " "
                         R_BRACE@24..25 "}"
                       WHITESPACE@25..26 " "
@@ -1005,8 +1034,11 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       StructPat@5..13
-                        WHITESPACE@5..6 " "
-                        IDENT@6..10 "Unit"
+                        Path@5..10
+                          PathSegment@5..10
+                            NameRef@5..10
+                              WHITESPACE@5..6 " "
+                              IDENT@6..10 "Unit"
                         WHITESPACE@10..11 " "
                         L_BRACE@11..12 "{"
                         R_BRACE@12..13 "}"
@@ -1037,22 +1069,30 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       StructPat@5..34
-                        WHITESPACE@5..6 " "
-                        IDENT@6..11 "Outer"
+                        Path@5..11
+                          PathSegment@5..11
+                            NameRef@5..11
+                              WHITESPACE@5..6 " "
+                              IDENT@6..11 "Outer"
                         WHITESPACE@11..12 " "
                         L_BRACE@12..13 "{"
                         StructPatField@13..32
-                          WHITESPACE@13..14 " "
-                          IDENT@14..19 "inner"
+                          NameRef@13..19
+                            WHITESPACE@13..14 " "
+                            IDENT@14..19 "inner"
                           COLON@19..20 ":"
                           StructPat@20..32
-                            WHITESPACE@20..21 " "
-                            IDENT@21..26 "Inner"
+                            Path@20..26
+                              PathSegment@20..26
+                                NameRef@20..26
+                                  WHITESPACE@20..21 " "
+                                  IDENT@21..26 "Inner"
                             WHITESPACE@26..27 " "
                             L_BRACE@27..28 "{"
                             StructPatField@28..30
-                              WHITESPACE@28..29 " "
-                              IDENT@29..30 "x"
+                              NameRef@28..30
+                                WHITESPACE@28..29 " "
+                                IDENT@29..30 "x"
                             WHITESPACE@30..31 " "
                             R_BRACE@31..32 "}"
                         WHITESPACE@32..33 " "
@@ -1091,22 +1131,26 @@ mod tests {
                         TuplePat@7..13
                           L_PAREN@7..8 "("
                           IdentPat@8..9
-                            IDENT@8..9 "a"
+                            Name@8..9
+                              IDENT@8..9 "a"
                           COMMA@9..10 ","
                           IdentPat@10..12
-                            WHITESPACE@10..11 " "
-                            IDENT@11..12 "b"
+                            Name@10..12
+                              WHITESPACE@10..11 " "
+                              IDENT@11..12 "b"
                           R_PAREN@12..13 ")"
                         COMMA@13..14 ","
                         TuplePat@14..21
                           WHITESPACE@14..15 " "
                           L_PAREN@15..16 "("
                           IdentPat@16..17
-                            IDENT@16..17 "c"
+                            Name@16..17
+                              IDENT@16..17 "c"
                           COMMA@17..18 ","
                           IdentPat@18..20
-                            WHITESPACE@18..19 " "
-                            IDENT@19..20 "d"
+                            Name@18..20
+                              WHITESPACE@18..19 " "
+                              IDENT@19..20 "d"
                           R_PAREN@20..21 ")"
                         R_PAREN@21..22 ")"
                       WHITESPACE@22..23 " "
@@ -1139,15 +1183,17 @@ mod tests {
                         WHITESPACE@5..6 " "
                         L_PAREN@6..7 "("
                         IdentPat@7..8
-                          IDENT@7..8 "a"
+                          Name@7..8
+                            IDENT@7..8 "a"
                         COMMA@8..9 ","
                         WildcardPat@9..11
                           WHITESPACE@9..10 " "
                           IDENT@10..11 "_"
                         COMMA@11..12 ","
                         IdentPat@12..14
-                          WHITESPACE@12..13 " "
-                          IDENT@13..14 "c"
+                          Name@12..14
+                            WHITESPACE@12..13 " "
+                            IDENT@13..14 "c"
                         R_PAREN@14..15 ")"
                       WHITESPACE@15..16 " "
                       EQ@16..17 "="
@@ -1209,7 +1255,8 @@ mod tests {
                         WHITESPACE@5..6 " "
                         L_BRACKET@6..7 "["
                         IdentPat@7..8
-                          IDENT@7..8 "a"
+                          Name@7..8
+                            IDENT@7..8 "a"
                         R_BRACKET@8..9 "]"
                       WHITESPACE@9..10 " "
                       EQ@10..11 "="
@@ -1244,8 +1291,9 @@ mod tests {
                           DOT_DOT@7..9 ".."
                         COMMA@9..10 ","
                         IdentPat@10..15
-                          WHITESPACE@10..11 " "
-                          IDENT@11..15 "last"
+                          Name@10..15
+                            WHITESPACE@10..11 " "
+                            IDENT@11..15 "last"
                         R_BRACKET@15..16 "]"
                       WHITESPACE@16..17 " "
                       EQ@17..18 "="
@@ -1277,7 +1325,8 @@ mod tests {
                         WHITESPACE@5..6 " "
                         L_BRACKET@6..7 "["
                         IdentPat@7..12
-                          IDENT@7..12 "first"
+                          Name@7..12
+                            IDENT@7..12 "first"
                         COMMA@12..13 ","
                         RestPat@13..16
                           WHITESPACE@13..14 " "
@@ -1310,8 +1359,11 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       StructPat@5..18
-                        WHITESPACE@5..6 " "
-                        IDENT@6..11 "Point"
+                        Path@5..11
+                          PathSegment@5..11
+                            NameRef@5..11
+                              WHITESPACE@5..6 " "
+                              IDENT@6..11 "Point"
                         WHITESPACE@11..12 " "
                         L_BRACE@12..13 "{"
                         RestPat@13..16
@@ -1346,31 +1398,43 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       StructPat@5..31
-                        WHITESPACE@5..6 " "
-                        IDENT@6..7 "A"
+                        Path@5..7
+                          PathSegment@5..7
+                            NameRef@5..7
+                              WHITESPACE@5..6 " "
+                              IDENT@6..7 "A"
                         WHITESPACE@7..8 " "
                         L_BRACE@8..9 "{"
                         StructPatField@9..29
-                          WHITESPACE@9..10 " "
-                          IDENT@10..11 "b"
+                          NameRef@9..11
+                            WHITESPACE@9..10 " "
+                            IDENT@10..11 "b"
                           COLON@11..12 ":"
                           StructPat@12..29
-                            WHITESPACE@12..13 " "
-                            IDENT@13..14 "B"
+                            Path@12..14
+                              PathSegment@12..14
+                                NameRef@12..14
+                                  WHITESPACE@12..13 " "
+                                  IDENT@13..14 "B"
                             WHITESPACE@14..15 " "
                             L_BRACE@15..16 "{"
                             StructPatField@16..27
-                              WHITESPACE@16..17 " "
-                              IDENT@17..18 "c"
+                              NameRef@16..18
+                                WHITESPACE@16..17 " "
+                                IDENT@17..18 "c"
                               COLON@18..19 ":"
                               StructPat@19..27
-                                WHITESPACE@19..20 " "
-                                IDENT@20..21 "C"
+                                Path@19..21
+                                  PathSegment@19..21
+                                    NameRef@19..21
+                                      WHITESPACE@19..20 " "
+                                      IDENT@20..21 "C"
                                 WHITESPACE@21..22 " "
                                 L_BRACE@22..23 "{"
                                 StructPatField@23..25
-                                  WHITESPACE@23..24 " "
-                                  IDENT@24..25 "x"
+                                  NameRef@23..25
+                                    WHITESPACE@23..24 " "
+                                    IDENT@24..25 "x"
                                 WHITESPACE@25..26 " "
                                 R_BRACE@26..27 "}"
                             WHITESPACE@27..28 " "
@@ -1409,15 +1473,17 @@ mod tests {
                         RefPat@7..9
                           AMP@7..8 "&"
                           IdentPat@8..9
-                            IDENT@8..9 "a"
+                            Name@8..9
+                              IDENT@8..9 "a"
                         COMMA@9..10 ","
                         RefPat@10..17
                           WHITESPACE@10..11 " "
                           AMP@11..12 "&"
                           MUT_KW@12..15 "mut"
                           IdentPat@15..17
-                            WHITESPACE@15..16 " "
-                            IDENT@16..17 "b"
+                            Name@15..17
+                              WHITESPACE@15..16 " "
+                              IDENT@16..17 "b"
                         R_PAREN@17..18 ")"
                       WHITESPACE@18..19 " "
                       EQ@19..20 "="

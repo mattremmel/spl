@@ -122,15 +122,9 @@ impl SlicePat {
 }
 
 impl StructPat {
-    /// Get the struct type as a path (for qualified paths like `module::Point`).
+    /// Get the struct type as a path (always present, even for simple `Point { }`).
     pub fn path(&self) -> Option<Path> {
         child(&self.0)
-    }
-
-    /// Get the struct name as a raw IDENT token (for simple patterns like `Point`).
-    /// This is used when there's no Path child node.
-    pub fn ident_token(&self) -> Option<SyntaxToken> {
-        token(&self.0, SyntaxKind::IDENT)
     }
 
     pub fn fields(&self) -> impl Iterator<Item = StructPatField> {
@@ -143,14 +137,13 @@ impl StructPat {
 }
 
 impl StructPatField {
-    pub fn ident_token(&self) -> Option<SyntaxToken> {
-        token(&self.0, SyntaxKind::IDENT)
-    }
-
+    /// Get the field name (always wrapped in NameRef).
     pub fn name(&self) -> Option<NameRef> {
         child(&self.0)
     }
 
+    /// Get the nested pattern (for `field: pattern` syntax).
+    /// Returns None for shorthand syntax like `{ x }`.
     pub fn pat(&self) -> Option<Pat> {
         child(&self.0)
     }

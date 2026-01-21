@@ -374,8 +374,9 @@ mod tests {
                 ForExpr@0..20
                   FOR_KW@0..3 "for"
                   IdentPat@3..5
-                    WHITESPACE@3..4 " "
-                    IDENT@4..5 "i"
+                    Name@3..5
+                      WHITESPACE@3..4 " "
+                      IDENT@4..5 "i"
                   WHITESPACE@5..6 " "
                   IN_KW@6..8 "in"
                   PathExpr@8..14
@@ -407,8 +408,9 @@ mod tests {
                 ForExpr@0..20
                   FOR_KW@0..3 "for"
                   IdentPat@3..5
-                    WHITESPACE@3..4 " "
-                    IDENT@4..5 "i"
+                    Name@3..5
+                      WHITESPACE@3..4 " "
+                      IDENT@4..5 "i"
                   WHITESPACE@5..6 " "
                   IN_KW@6..8 "in"
                   RangeExpr@8..14
