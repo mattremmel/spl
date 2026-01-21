@@ -11,15 +11,15 @@ use crate::syntax::SyntaxKind;
 /// pattern = ref_pat | tuple_pat | slice_pat | wildcard_pat | literal_or_range_pat | rest_pat | ident_pat
 /// ```
 pub fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
-    match p.current() {
+    match_token!(p, {
         // Reference pattern: &x, &mut x
-        Some(SyntaxKind::AMP) => ref_pat(p),
+        AMP => ref_pat(p),
         // Tuple pattern: (a, b)
-        Some(SyntaxKind::L_PAREN) => tuple_pat(p),
+        L_PAREN => tuple_pat(p),
         // Slice pattern: [a, b]
-        Some(SyntaxKind::L_BRACKET) => slice_pat(p),
+        L_BRACKET => slice_pat(p),
         // Wildcard, identifier, or struct pattern
-        Some(SyntaxKind::IDENT) => {
+        IDENT => {
             if p.current_text() == Some("_") {
                 wildcard_pat(p)
             } else {
@@ -27,21 +27,18 @@ pub fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
                 // Lookahead to check if this is a struct pattern (path followed by {)
                 ident_or_struct_pat(p)
             }
-        }
+        },
         // Rest pattern: ..
-        Some(SyntaxKind::DOT_DOT) => rest_pat(p),
+        DOT_DOT => rest_pat(p),
         // Literal patterns (may be range pattern if followed by ..)
-        Some(SyntaxKind::INT_LITERAL)
-        | Some(SyntaxKind::FLOAT_LITERAL)
-        | Some(SyntaxKind::STRING_LITERAL)
-        | Some(SyntaxKind::CHAR_LITERAL)
-        | Some(SyntaxKind::TRUE_KW)
-        | Some(SyntaxKind::FALSE_KW) => literal_or_range_pat(p),
+        INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL | TRUE_KW | FALSE_KW => {
+            literal_or_range_pat(p)
+        },
         _ => {
             let err = p.error_at_current("expected pattern".to_string());
             Err(err)
-        }
-    }
+        },
+    })
 }
 
 /// Parse a reference pattern: `&x`, `&mut x`

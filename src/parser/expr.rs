@@ -344,90 +344,58 @@ fn path_expr(
 
 /// Parse a primary expression.
 fn primary_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    let current = match p.current() {
-        Some(kind) => kind,
-        None => return Ok(None),
-    };
-
-    match current {
+    match_token!(p, {
         // Literals
-        SyntaxKind::INT_LITERAL
-        | SyntaxKind::FLOAT_LITERAL
-        | SyntaxKind::STRING_LITERAL
-        | SyntaxKind::CHAR_LITERAL
-        | SyntaxKind::TRUE_KW
-        | SyntaxKind::FALSE_KW => literal_expr(p),
-
+        INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL | TRUE_KW | FALSE_KW => {
+            literal_expr(p)
+        },
         // Identifier / path
-        SyntaxKind::IDENT | SyntaxKind::SELF_VALUE_KW | SyntaxKind::SELF_TYPE_KW => {
-            path_or_struct_expr(p)
-        }
-
+        IDENT | SELF_VALUE_KW | SELF_TYPE_KW => path_or_struct_expr(p),
         // Grouped or tuple expression
-        SyntaxKind::L_PAREN => paren_or_tuple_expr(p),
-
+        L_PAREN => paren_or_tuple_expr(p),
         // Array expression
-        SyntaxKind::L_BRACKET => array_expr(p),
-
+        L_BRACKET => array_expr(p),
         // Block expression
-        SyntaxKind::L_BRACE => block_expr(p),
-
+        L_BRACE => block_expr(p),
         // Control flow
-        SyntaxKind::IF_KW => if_expr(p),
-        SyntaxKind::WHILE_KW => while_expr(p),
-        SyntaxKind::FOR_KW => for_expr(p),
-        SyntaxKind::LOOP_KW => loop_expr(p),
-        SyntaxKind::BREAK_KW => break_expr(p),
-        SyntaxKind::CONTINUE_KW => continue_expr(p),
-        SyntaxKind::RETURN_KW => return_expr(p),
-
+        IF_KW => if_expr(p),
+        WHILE_KW => while_expr(p),
+        FOR_KW => for_expr(p),
+        LOOP_KW => loop_expr(p),
+        BREAK_KW => break_expr(p),
+        CONTINUE_KW => continue_expr(p),
+        RETURN_KW => return_expr(p),
         _ => Ok(None),
-    }
+    })
 }
 
 /// Parse a primary expression, disallowing struct expressions.
 fn primary_expr_no_struct(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    let current = match p.current() {
-        Some(kind) => kind,
-        None => return Ok(None),
-    };
-
-    match current {
+    match_token!(p, {
         // Literals
-        SyntaxKind::INT_LITERAL
-        | SyntaxKind::FLOAT_LITERAL
-        | SyntaxKind::STRING_LITERAL
-        | SyntaxKind::CHAR_LITERAL
-        | SyntaxKind::TRUE_KW
-        | SyntaxKind::FALSE_KW => literal_expr(p),
-
+        INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL | TRUE_KW | FALSE_KW => {
+            literal_expr(p)
+        },
         // Identifier / path - use path_expr_only instead of path_or_struct_expr
-        SyntaxKind::IDENT | SyntaxKind::SELF_VALUE_KW | SyntaxKind::SELF_TYPE_KW => {
-            path_expr_only(p)
-        }
-
+        IDENT | SELF_VALUE_KW | SELF_TYPE_KW => path_expr_only(p),
         // Grouped or tuple expression
-        SyntaxKind::L_PAREN => paren_or_tuple_expr(p),
-
+        L_PAREN => paren_or_tuple_expr(p),
         // Array expression
-        SyntaxKind::L_BRACKET => array_expr(p),
-
+        L_BRACKET => array_expr(p),
         // Block expression
-        SyntaxKind::L_BRACE => block_expr(p),
-
+        L_BRACE => block_expr(p),
         // Control flow
-        SyntaxKind::IF_KW => if_expr(p),
-        SyntaxKind::WHILE_KW => while_expr(p),
-        SyntaxKind::FOR_KW => for_expr(p),
-        SyntaxKind::LOOP_KW => loop_expr(p),
-        SyntaxKind::BREAK_KW => break_expr(p),
-        SyntaxKind::CONTINUE_KW => continue_expr(p),
-        SyntaxKind::RETURN_KW => return_expr(p),
-
+        IF_KW => if_expr(p),
+        WHILE_KW => while_expr(p),
+        FOR_KW => for_expr(p),
+        LOOP_KW => loop_expr(p),
+        BREAK_KW => break_expr(p),
+        CONTINUE_KW => continue_expr(p),
+        RETURN_KW => return_expr(p),
         _ => Ok(None),
-    }
+    })
 }
 
 /// Parse a literal expression.

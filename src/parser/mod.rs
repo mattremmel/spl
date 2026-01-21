@@ -2,6 +2,8 @@
 //!
 //! Produces a lossless concrete syntax tree using rowan.
 
+#[macro_use]
+mod macros;
 mod event;
 mod expr;
 mod item;
