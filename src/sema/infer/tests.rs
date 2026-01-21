@@ -1185,14 +1185,7 @@ fn error_ref_type_mismatch() {
     check_err("fn main() { let x: &i32 = &true; }", &["type mismatch"]);
 }
 
-#[test]
-#[ignore = "mutability checking not yet implemented"]
-fn error_mut_ref_to_immutable() {
-    check_err(
-        "fn main() { let x = 42; let y = &mut x; }",
-        &["cannot borrow"],
-    );
-}
+// Moved to Phase 2 mutability tests below
 
 #[test]
 fn error_missing_field() {
@@ -1505,4 +1498,91 @@ fn error_return_type_mismatch() {
         "fn f() -> i32 { \"hello\" }",
         &["type mismatch"],
     );
+}
+
+// =============================================================================
+// 2.0 Mutability Checking Tests
+// =============================================================================
+
+// Phase 1: Assignment to immutable variables
+
+#[test]
+fn error_assign_to_immutable_local() {
+    check_err("fn main() { let x = 1; x = 2; }", &["cannot assign"]);
+}
+
+#[test]
+fn assign_to_mutable_local() {
+    check("fn main() { let mut x = 1; x = 2; let y = x; }", "i32");
+}
+
+// Phase 2: Mutable borrow of immutable variables
+
+#[test]
+fn error_mut_ref_to_immutable() {
+    check_err("fn main() { let x = 42; let y = &mut x; }", &["cannot borrow"]);
+}
+
+#[test]
+fn mut_ref_to_mutable() {
+    check("fn main() { let mut x = 42; let y = &mut x; }", "&mut i32");
+}
+
+#[test]
+fn shared_ref_to_immutable_ok() {
+    check("fn main() { let x = 42; let y = &x; }", "&i32");
+}
+
+// Phase 3: Parameters (immutable by default)
+
+#[test]
+fn error_assign_to_param() {
+    check_err("fn foo(x: i32) { x = 1; }", &["cannot assign"]);
+}
+
+#[test]
+fn error_mut_ref_to_param() {
+    check_err("fn foo(x: i32) { let y = &mut x; }", &["cannot borrow"]);
+}
+
+// Phase 4: Compound assignment
+
+#[test]
+fn error_add_assign_to_immutable() {
+    check_err("fn main() { let x = 1; x += 1; }", &["cannot assign"]);
+}
+
+#[test]
+fn add_assign_to_mutable() {
+    check("fn main() { let mut x = 1; x += 1; let y = x; }", "i32");
+}
+
+// Phase 5: Field assignment through mutable binding
+
+#[test]
+fn error_assign_field_immutable_binding() {
+    check_err(
+        "struct S { a: i32 } fn main() { let s = S { a: 1 }; s.a = 2; }",
+        &["cannot assign"],
+    );
+}
+
+#[test]
+fn assign_field_mutable_binding() {
+    check(
+        "struct S { a: i32 } fn main() { let mut s = S { a: 1 }; s.a = 2; let x = s.a; }",
+        "i32",
+    );
+}
+
+// Phase 6: Deref assignment
+
+#[test]
+fn error_assign_through_shared_ref() {
+    check_err("fn main() { let mut x = 1; let r = &x; *r = 2; }", &["cannot assign"]);
+}
+
+#[test]
+fn assign_through_mut_ref() {
+    check("fn main() { let mut x = 1; let r = &mut x; *r = 2; let y = x; }", "i32");
 }

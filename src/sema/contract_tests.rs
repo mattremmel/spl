@@ -806,7 +806,7 @@ mod tests {
             let mut ctx = SemanticContext::new();
             for i in 0..1000 {
                 let name = ctx.intern(&format!("sym_{}", i));
-                if let Ok(def_id) = ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1) {
+                if let Ok(def_id) = ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1, false) {
                     let _ = ctx.get_symbol(def_id);
                 }
             }
@@ -816,7 +816,7 @@ mod tests {
         fn lookup_traverses_valid_scope_chain() {
             let mut ctx = SemanticContext::new();
             let name = ctx.intern("target");
-            ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1)
+            ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1, false)
                 .unwrap();
 
             // Create deep scope chain

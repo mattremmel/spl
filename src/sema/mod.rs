@@ -120,6 +120,7 @@ impl SemanticContext {
         kind: SymbolKind,
         visibility: Visibility,
         span: Span,
+        is_mutable: bool,
     ) -> Result<DefId, DefId> {
         let def_id = DefId(self.symbols.len() as u32);
         let scope_id = self.current_scope;
@@ -129,7 +130,7 @@ impl SemanticContext {
         scope.define(name, def_id)?;
 
         // Success - create the symbol
-        let symbol = Symbol::new(def_id, name, kind, visibility, span, scope_id);
+        let symbol = Symbol::new(def_id, name, kind, visibility, span, scope_id, is_mutable);
         self.symbols.push(symbol);
 
         Ok(def_id)
@@ -264,7 +265,7 @@ mod tests {
         let name = ctx.intern("main");
 
         let def_id = ctx
-            .define(name, SymbolKind::Function, Visibility::Public, 0..4)
+            .define(name, SymbolKind::Function, Visibility::Public, 0..4, false)
             .unwrap();
 
         let found = ctx.lookup(name);
@@ -289,7 +290,7 @@ mod tests {
 
         ctx.enter_scope(ScopeKind::Block);
         let name = ctx.intern("x");
-        ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1)
+        ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1, false)
             .unwrap();
         ctx.exit_scope();
 
@@ -302,12 +303,12 @@ mod tests {
         let name = ctx.intern("x");
 
         let outer_def = ctx
-            .define(name, SymbolKind::Local, Visibility::Private, 0..1)
+            .define(name, SymbolKind::Local, Visibility::Private, 0..1, false)
             .unwrap();
 
         ctx.enter_scope(ScopeKind::Block);
         let inner_def = ctx
-            .define(name, SymbolKind::Local, Visibility::Private, 10..11)
+            .define(name, SymbolKind::Local, Visibility::Private, 10..11, false)
             .unwrap();
 
         // Inner scope sees inner definition
@@ -325,10 +326,10 @@ mod tests {
         let name = ctx.intern("x");
 
         let first_def = ctx
-            .define(name, SymbolKind::Local, Visibility::Private, 0..1)
+            .define(name, SymbolKind::Local, Visibility::Private, 0..1, false)
             .unwrap();
 
-        let result = ctx.define(name, SymbolKind::Local, Visibility::Private, 10..11);
+        let result = ctx.define(name, SymbolKind::Local, Visibility::Private, 10..11, false);
 
         assert_eq!(result, Err(first_def));
     }
@@ -339,7 +340,7 @@ mod tests {
         let name = ctx.intern("outer_var");
 
         let outer_def = ctx
-            .define(name, SymbolKind::Local, Visibility::Private, 0..9)
+            .define(name, SymbolKind::Local, Visibility::Private, 0..9, false)
             .unwrap();
 
         ctx.enter_scope(ScopeKind::Block);
@@ -354,7 +355,7 @@ mod tests {
         let mut ctx = SemanticContext::new();
         let name = ctx.intern("x");
 
-        ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1)
+        ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1, false)
             .unwrap();
 
         let inner_scope = ctx.enter_scope(ScopeKind::Block);
@@ -372,7 +373,7 @@ mod tests {
         let name = ctx.intern("my_var");
 
         let def_id = ctx
-            .define(name, SymbolKind::Local, Visibility::Private, 42..50)
+            .define(name, SymbolKind::Local, Visibility::Private, 42..50, false)
             .unwrap();
 
         let symbol = ctx.get_symbol(def_id);
@@ -386,13 +387,13 @@ mod tests {
 
         let name1 = ctx.intern("root_sym");
         let def1 = ctx
-            .define(name1, SymbolKind::Function, Visibility::Public, 0..8)
+            .define(name1, SymbolKind::Function, Visibility::Public, 0..8, false)
             .unwrap();
 
         let block_scope = ctx.enter_scope(ScopeKind::Block);
         let name2 = ctx.intern("block_sym");
         let def2 = ctx
-            .define(name2, SymbolKind::Local, Visibility::Private, 10..19)
+            .define(name2, SymbolKind::Local, Visibility::Private, 10..19, false)
             .unwrap();
 
         assert_eq!(ctx.get_symbol(def1).scope_id, root_scope);
@@ -418,7 +419,7 @@ mod tests {
 
         for (i, vis) in visibilities.iter().enumerate() {
             let name = ctx.intern(&format!("sym_{i}"));
-            let def_id = ctx.define(name, SymbolKind::Function, *vis, 0..1).unwrap();
+            let def_id = ctx.define(name, SymbolKind::Function, *vis, 0..1, false).unwrap();
             assert_eq!(ctx.get_symbol(def_id).visibility, *vis);
         }
     }
@@ -440,7 +441,7 @@ mod tests {
 
         for (i, kind) in kinds.iter().enumerate() {
             let name = ctx.intern(&format!("sym_{i}"));
-            let def_id = ctx.define(name, *kind, Visibility::Private, 0..1).unwrap();
+            let def_id = ctx.define(name, *kind, Visibility::Private, 0..1, false).unwrap();
             assert_eq!(ctx.get_symbol(def_id).kind, *kind);
         }
     }
@@ -501,13 +502,13 @@ mod tests {
         let c = ctx.intern("c");
 
         let def_a = ctx
-            .define(a, SymbolKind::Local, Visibility::Private, 0..1)
+            .define(a, SymbolKind::Local, Visibility::Private, 0..1, false)
             .unwrap();
         let def_b = ctx
-            .define(b, SymbolKind::Local, Visibility::Private, 2..3)
+            .define(b, SymbolKind::Local, Visibility::Private, 2..3, false)
             .unwrap();
         let def_c = ctx
-            .define(c, SymbolKind::Local, Visibility::Private, 4..5)
+            .define(c, SymbolKind::Local, Visibility::Private, 4..5, false)
             .unwrap();
 
         assert_eq!(ctx.lookup(a), Some(def_a));
@@ -524,13 +525,13 @@ mod tests {
         let name3 = ctx.intern("third");
 
         let def1 = ctx
-            .define(name1, SymbolKind::Local, Visibility::Private, 0..5)
+            .define(name1, SymbolKind::Local, Visibility::Private, 0..5, false)
             .unwrap();
         let def2 = ctx
-            .define(name2, SymbolKind::Local, Visibility::Private, 6..12)
+            .define(name2, SymbolKind::Local, Visibility::Private, 6..12, false)
             .unwrap();
         let def3 = ctx
-            .define(name3, SymbolKind::Local, Visibility::Private, 13..18)
+            .define(name3, SymbolKind::Local, Visibility::Private, 13..18, false)
             .unwrap();
 
         assert_eq!(def1.0, 0);
@@ -545,7 +546,7 @@ mod tests {
 
         // Enter first sibling scope and define x
         ctx.enter_scope(ScopeKind::Block);
-        ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1)
+        ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1, false)
             .unwrap();
         ctx.exit_scope();
 
@@ -555,7 +556,7 @@ mod tests {
 
         // Can define x again in this sibling
         let def2 = ctx
-            .define(name, SymbolKind::Local, Visibility::Private, 10..11)
+            .define(name, SymbolKind::Local, Visibility::Private, 10..11, false)
             .unwrap();
         assert_eq!(ctx.lookup(name), Some(def2));
     }
@@ -584,7 +585,7 @@ mod tests {
         let name = ctx.intern("deep");
 
         let outer_def = ctx
-            .define(name, SymbolKind::Local, Visibility::Private, 0..4)
+            .define(name, SymbolKind::Local, Visibility::Private, 0..4, false)
             .unwrap();
 
         // Nest 10 levels deep
@@ -616,11 +617,11 @@ mod tests {
         let name = ctx.intern("x");
 
         let first_def = ctx
-            .define(name, SymbolKind::Local, Visibility::Private, 0..1)
+            .define(name, SymbolKind::Local, Visibility::Private, 0..1, false)
             .unwrap();
 
         // Try to define again - should fail
-        let result = ctx.define(name, SymbolKind::Function, Visibility::Public, 10..11);
+        let result = ctx.define(name, SymbolKind::Function, Visibility::Public, 10..11, false);
         assert!(result.is_err());
 
         // The symbol should still have the original properties

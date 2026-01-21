@@ -104,13 +104,14 @@ impl<'ctx> Resolver<'ctx> {
         name: &Name,
         kind: SymbolKind,
         visibility: Visibility,
+        is_mutable: bool,
     ) -> Option<DefId> {
         let token = Self::get_ident_token(name)?;
         let name_text = token.text().to_string();
         let span = Self::text_range_to_span(token.text_range());
         let interned = self.ctx.intern(&name_text);
 
-        match self.ctx.define(interned, kind, visibility, span.clone()) {
+        match self.ctx.define(interned, kind, visibility, span.clone(), is_mutable) {
             Ok(def_id) => {
                 // Store span → DefId mapping for inference phase
                 self.resolutions.insert(span.clone(), def_id);
@@ -187,21 +188,21 @@ impl<'ctx> Resolver<'ctx> {
     fn collect_function(&mut self, func: &FunctionDef) {
         if let Some(name) = func.name() {
             let vis = self.convert_visibility(&func.visibility());
-            self.define_name(&name, SymbolKind::Function, vis);
+            self.define_name(&name, SymbolKind::Function, vis, false);
         }
     }
 
     fn collect_struct(&mut self, struct_def: &StructDef) {
         if let Some(name) = struct_def.name() {
             let vis = self.convert_visibility(&struct_def.visibility());
-            self.define_name(&name, SymbolKind::Struct, vis);
+            self.define_name(&name, SymbolKind::Struct, vis, false);
         }
     }
 
     fn collect_type_alias(&mut self, type_alias: &TypeAlias) {
         if let Some(name) = type_alias.name() {
             let vis = self.convert_visibility(&type_alias.visibility());
-            self.define_name(&name, SymbolKind::TypeAlias, vis);
+            self.define_name(&name, SymbolKind::TypeAlias, vis, false);
         }
     }
 
@@ -216,7 +217,7 @@ impl<'ctx> Resolver<'ctx> {
                 && let Some(name) = func.name()
             {
                 let vis = self.convert_visibility(&func.visibility());
-                self.define_name(&name, SymbolKind::Function, vis);
+                self.define_name(&name, SymbolKind::Function, vis, false);
             }
         }
 
@@ -289,7 +290,7 @@ impl<'ctx> Resolver<'ctx> {
         // Define the field name
         if let Some(name) = field.name() {
             let vis = self.convert_visibility(&field.visibility());
-            self.define_name(&name, SymbolKind::Field, vis);
+            self.define_name(&name, SymbolKind::Field, vis, false);
         }
 
         // Resolve the field type
@@ -345,7 +346,7 @@ impl<'ctx> Resolver<'ctx> {
 
     fn define_generic_param(&mut self, param: &GenericParam) {
         if let Some(name) = param.name() {
-            self.define_name(&name, SymbolKind::TypeParam, Visibility::Private);
+            self.define_name(&name, SymbolKind::TypeParam, Visibility::Private, false);
         }
     }
 
@@ -371,11 +372,13 @@ impl<'ctx> Resolver<'ctx> {
             .map(|t| Self::text_range_to_span(t.text_range()))
             .unwrap_or(0..0);
 
+        // Self is immutable by default (even `&mut self` - the self binding itself isn't reassignable)
         if let Ok(def_id) = self.ctx.define(
             interned,
             SymbolKind::SelfParam,
             Visibility::Private,
             span.clone(),
+            false,
         ) {
             // Store the mapping from span to DefId so inference can bind the type
             self.resolutions.insert(span, def_id);
@@ -383,9 +386,9 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn define_param(&mut self, param: &Param) {
-        // Define the parameter name
+        // Define the parameter name - parameters are immutable by default
         if let Some(name) = param.name() {
-            self.define_name(&name, SymbolKind::Parameter, Visibility::Private);
+            self.define_name(&name, SymbolKind::Parameter, Visibility::Private, false);
         }
 
         // Resolve the parameter type
@@ -452,8 +455,10 @@ impl<'ctx> Resolver<'ctx> {
         }
 
         // Define the pattern bindings
+        // For `let mut x = ...`, the `mut` is at the LetStmt level
+        let outer_mutable = let_stmt.mut_kw().is_some();
         if let Some(pat) = let_stmt.pat() {
-            self.define_pattern(&pat);
+            self.define_pattern(&pat, outer_mutable);
         }
     }
 
@@ -648,9 +653,9 @@ impl<'ctx> Resolver<'ctx> {
         // Enter for-loop scope
         self.ctx.enter_scope(ScopeKind::ForLoop);
 
-        // Define the loop variable bindings
+        // Define the loop variable bindings (immutable by default)
         if let Some(pat) = for_expr.pat() {
-            self.define_pattern(&pat);
+            self.define_pattern(&pat, false);
         }
 
         // Resolve body
@@ -720,7 +725,7 @@ impl<'ctx> Resolver<'ctx> {
         }
     }
 
-    fn define_pattern(&mut self, pat: &Pat) {
+    fn define_pattern(&mut self, pat: &Pat, outer_mutable: bool) {
         match pat {
             Pat::Ident(ident_pat) => {
                 // Get IDENT token directly from IdentPat (may be wrapped in Name or direct)
@@ -731,6 +736,10 @@ impl<'ctx> Resolver<'ctx> {
                         crate::ast::token(ident_pat.syntax(), crate::syntax::SyntaxKind::IDENT)
                     });
 
+                // Check if the pattern has a `mut` keyword (for nested patterns like `(mut a, b)`)
+                // or if the outer binding is mutable (for `let mut x = ...`)
+                let is_mutable = outer_mutable || ident_pat.mut_kw().is_some();
+
                 if let Some(token) = token {
                     let name_text = token.text().to_string();
                     let span = Self::text_range_to_span(token.text_range());
@@ -740,6 +749,7 @@ impl<'ctx> Resolver<'ctx> {
                         SymbolKind::Local,
                         Visibility::Private,
                         span.clone(),
+                        is_mutable,
                     ) {
                         Ok(def_id) => {
                             // Store span → DefId mapping for inference phase
@@ -755,46 +765,49 @@ impl<'ctx> Resolver<'ctx> {
             Pat::Wildcard(_) => {}
             Pat::Literal(_) => {}
             Pat::Range(range_pat) => {
+                // Patterns in ranges don't inherit outer mutability
                 if let Some(start) = range_pat.start() {
-                    self.define_pattern(&start);
+                    self.define_pattern(&start, false);
                 }
                 if let Some(end) = range_pat.end() {
-                    self.define_pattern(&end);
+                    self.define_pattern(&end, false);
                 }
             }
             Pat::Tuple(tuple_pat) => {
+                // For `let mut (a, b) = ...`, all bindings are mutable
+                // For `let (mut a, b) = ...`, only `a` is mutable (handled by ident_pat.mut_kw())
                 for inner in tuple_pat.patterns() {
-                    self.define_pattern(&inner);
+                    self.define_pattern(&inner, outer_mutable);
                 }
             }
             Pat::Slice(slice_pat) => {
                 for inner in slice_pat.patterns() {
-                    self.define_pattern(&inner);
+                    self.define_pattern(&inner, outer_mutable);
                 }
             }
-            Pat::Struct(struct_pat) => self.define_struct_pattern(struct_pat),
+            Pat::Struct(struct_pat) => self.define_struct_pattern(struct_pat, outer_mutable),
             Pat::Ref(ref_pat) => {
                 if let Some(inner) = ref_pat.pat() {
-                    self.define_pattern(&inner);
+                    self.define_pattern(&inner, outer_mutable);
                 }
             }
             Pat::Rest(_) => {}
         }
     }
 
-    fn define_struct_pattern(&mut self, struct_pat: &StructPat) {
+    fn define_struct_pattern(&mut self, struct_pat: &StructPat, outer_mutable: bool) {
         // Note: struct path already resolved in resolve_pattern_types
         // Define bindings in struct pattern fields
         for field in struct_pat.fields() {
-            self.define_struct_pat_field(&field);
+            self.define_struct_pat_field(&field, outer_mutable);
         }
     }
 
-    fn define_struct_pat_field(&mut self, field: &StructPatField) {
+    fn define_struct_pat_field(&mut self, field: &StructPatField, outer_mutable: bool) {
         // If there's a nested pattern, define it
         // If not, the field name itself becomes a binding
         if let Some(pat) = field.pat() {
-            self.define_pattern(&pat);
+            self.define_pattern(&pat, outer_mutable);
         } else if let Some(name_ref) = field.name() {
             // Shorthand syntax: `Point { x, y }` means `Point { x: x, y: y }`
             // The field name (NameRef) becomes a local binding
@@ -807,6 +820,7 @@ impl<'ctx> Resolver<'ctx> {
                     SymbolKind::Local,
                     Visibility::Private,
                     span.clone(),
+                    outer_mutable,
                 ) {
                     // Store span → DefId mapping for inference phase
                     self.resolutions.insert(span, def_id);
@@ -883,7 +897,7 @@ pub fn resolve(source_file: &SourceFile) -> ResolveResult {
     ] {
         let name = ctx.intern(builtin);
         // Define with a dummy span since these are built-in
-        let _ = ctx.define(name, SymbolKind::Struct, Visibility::Public, 0..0);
+        let _ = ctx.define(name, SymbolKind::Struct, Visibility::Public, 0..0, false);
     }
 
     let resolver = Resolver::new(&mut ctx);

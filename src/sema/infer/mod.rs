@@ -498,6 +498,164 @@ impl InferEngine {
     }
 
     // =========================================================================
+    // Mutability Checking
+    // =========================================================================
+
+    /// Check if an expression is a valid assignment target (a mutable place).
+    /// Returns an error message if not assignable, None if OK.
+    fn check_assignable(&self, expr: &Expr) -> Option<String> {
+        match expr {
+            Expr::Path(path_expr) => {
+                // Look up the path to get the DefId
+                let path = path_expr.path()?;
+                let segment = path.segments().next()?;
+                let name_ref = segment.name()?;
+                let token = name_ref.token()?;
+                let span = text_range_to_span(token.text_range());
+
+                if let Some(&def_id) = self.resolutions.get(&span) {
+                    let symbol = self.ctx.get_symbol(def_id);
+                    if !symbol.is_mutable {
+                        let name = self.ctx.resolve(symbol.name);
+                        return Some(format!("cannot assign to immutable variable `{name}`"));
+                    }
+                }
+                None
+            }
+            Expr::Field(field_expr) => {
+                // For field assignment (s.a = x), the base must be mutable
+                // However, if the base is a mutable reference (&mut T), assignment is allowed
+                if let Some(base) = field_expr.expr() {
+                    // Check if the base's type is a mutable reference
+                    let base_span = text_range_to_span(base.syntax().text_range());
+                    if let Some(&base_ty) = self.expr_types.get(&base_span) {
+                        let resolved = self.resolve_type(base_ty);
+                        let ty = self.ctx.types.get(resolved);
+                        if let Type::Ref(mutability, _) = ty {
+                            return if *mutability == Mutability::Mutable {
+                                None // OK - mutable reference
+                            } else {
+                                Some("cannot assign to field of immutable reference".to_string())
+                            };
+                        }
+                    }
+                    // Not a reference - check if the base itself is mutable
+                    self.check_assignable(&base)
+                } else {
+                    None
+                }
+            }
+            Expr::Prefix(prefix_expr) => {
+                // For deref assignment (*r = x), check the reference is mutable
+                if let Some(op) = prefix_expr.op_token()
+                    && op.kind() == SyntaxKind::STAR
+                    && let Some(inner) = prefix_expr.expr()
+                {
+                    let inner_ty = self
+                        .expr_types
+                        .get(&text_range_to_span(inner.syntax().text_range()))?;
+                    let resolved = self.resolve_type(*inner_ty);
+                    let ty = self.ctx.types.get(resolved);
+                    if let Type::Ref(Mutability::Shared, _) = ty {
+                        return Some("cannot assign to immutable reference".to_string());
+                    }
+                }
+                None
+            }
+            Expr::Index(index_expr) => {
+                // For index assignment (arr[i] = x), the base must be mutable
+                if let Some(base) = index_expr.base() {
+                    self.check_assignable(&base)
+                } else {
+                    None
+                }
+            }
+            _ => Some("invalid assignment target".to_string()),
+        }
+    }
+
+    /// Check if we can take a mutable borrow of an expression.
+    /// Returns an error message if not borrowable as mutable, None if OK.
+    fn check_mutable_borrow(&self, expr: &Expr) -> Option<String> {
+        match expr {
+            Expr::Path(path_expr) => {
+                // Look up the path to get the DefId
+                let path = path_expr.path()?;
+                let segment = path.segments().next()?;
+                let name_ref = segment.name()?;
+                let token = name_ref.token()?;
+                let span = text_range_to_span(token.text_range());
+
+                if let Some(&def_id) = self.resolutions.get(&span) {
+                    let symbol = self.ctx.get_symbol(def_id);
+                    if !symbol.is_mutable {
+                        let name = self.ctx.resolve(symbol.name);
+                        return Some(format!(
+                            "cannot borrow `{name}` as mutable, as it is not declared as mutable"
+                        ));
+                    }
+                }
+                None
+            }
+            Expr::Field(field_expr) => {
+                // For &mut s.a, the base must be mutable
+                // However, if the base is a mutable reference (&mut T), borrowing is allowed
+                if let Some(base) = field_expr.expr() {
+                    // Check if the base's type is a mutable reference
+                    let base_span = text_range_to_span(base.syntax().text_range());
+                    if let Some(&base_ty) = self.expr_types.get(&base_span) {
+                        let resolved = self.resolve_type(base_ty);
+                        let ty = self.ctx.types.get(resolved);
+                        if let Type::Ref(mutability, _) = ty {
+                            return if *mutability == Mutability::Mutable {
+                                None // OK - mutable reference
+                            } else {
+                                Some(
+                                    "cannot borrow field of immutable reference as mutable"
+                                        .to_string(),
+                                )
+                            };
+                        }
+                    }
+                    // Not a reference - check if the base itself is mutable
+                    self.check_mutable_borrow(&base)
+                } else {
+                    None
+                }
+            }
+            Expr::Prefix(prefix_expr) => {
+                // For &mut *r, the deref target must be mutable
+                if let Some(op) = prefix_expr.op_token()
+                    && op.kind() == SyntaxKind::STAR
+                    && let Some(inner) = prefix_expr.expr()
+                {
+                    // Check if the reference being dereferenced is mutable
+                    let inner_span = text_range_to_span(inner.syntax().text_range());
+                    if let Some(&inner_ty) = self.expr_types.get(&inner_span) {
+                        let resolved = self.resolve_type(inner_ty);
+                        let ty = self.ctx.types.get(resolved);
+                        if let Type::Ref(Mutability::Shared, _) = ty {
+                            return Some(
+                                "cannot borrow through shared reference as mutable".to_string(),
+                            );
+                        }
+                    }
+                }
+                None
+            }
+            Expr::Index(index_expr) => {
+                // For &mut arr[i], the base must be mutable
+                if let Some(base) = index_expr.base() {
+                    self.check_mutable_borrow(&base)
+                } else {
+                    None
+                }
+            }
+            _ => None, // Other expressions can be borrowed as mutable (e.g., temporaries)
+        }
+    }
+
+    // =========================================================================
     // Type Synthesis (Bottom-up)
     // =========================================================================
 
@@ -918,6 +1076,14 @@ impl InferEngine {
                 let lhs_ty = self.synth_expr(&lhs);
                 let rhs_ty = self.synth_expr(&rhs);
 
+                // Check mutability of assignment target
+                if let Some(err_msg) = self.check_assignable(&lhs) {
+                    let span = text_range_to_span(lhs.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(err_msg).with_label(span, "cannot assign to this"),
+                    );
+                }
+
                 if !self.unify(lhs_ty, rhs_ty) {
                     let span = text_range_to_span(rhs.syntax().text_range());
                     self.diagnostics.push(
@@ -1006,17 +1172,10 @@ impl InferEngine {
         let inner_ty = self.synth_expr(&inner);
         let mutability = if ref_expr.mut_kw().is_some() {
             // Check that the referenced expression is mutable
-            // For now, we'll just check if it's a path to a mutable binding
-            // A full implementation would track mutability through the AST
-            if let Expr::Path(_path_expr) = &inner {
-                // TODO: Check that the path refers to a mutable binding
-                // For now, we'll just allow it
-            } else {
+            if let Some(err_msg) = self.check_mutable_borrow(&inner) {
                 let span = text_range_to_span(inner.syntax().text_range());
-                self.diagnostics.push(
-                    Diagnostic::error("cannot borrow as mutable")
-                        .with_label(span, "cannot borrow as mutable"),
-                );
+                self.diagnostics
+                    .push(Diagnostic::error(err_msg).with_label(span, "cannot borrow as mutable"));
             }
             Mutability::Mutable
         } else {

@@ -42,6 +42,8 @@ pub struct Symbol {
     pub visibility: Visibility,
     pub span: Span,
     pub scope_id: ScopeId,
+    /// Whether this symbol was declared with `mut`.
+    pub is_mutable: bool,
 }
 
 impl Symbol {
@@ -52,6 +54,7 @@ impl Symbol {
         visibility: Visibility,
         span: Span,
         scope_id: ScopeId,
+        is_mutable: bool,
     ) -> Self {
         Self {
             def_id,
@@ -60,6 +63,7 @@ impl Symbol {
             visibility,
             span,
             scope_id,
+            is_mutable,
         }
     }
 }
