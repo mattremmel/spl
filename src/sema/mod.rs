@@ -2,6 +2,9 @@
 //!
 //! This module provides the symbol table infrastructure for name resolution and type checking.
 
+#[cfg(test)]
+mod contract_tests;
+
 pub mod infer;
 pub mod resolver;
 pub mod scope;
@@ -79,6 +82,11 @@ impl SemanticContext {
     /// # Panics
     /// Panics if called when already at the root scope.
     pub fn exit_scope(&mut self) {
+        debug_assert!(
+            !self.is_at_root_scope(),
+            "precondition: cannot exit root scope"
+        );
+
         let current = &self.scopes[self.current_scope.0 as usize];
         self.current_scope = current.parent.expect("cannot exit root scope");
     }
@@ -146,6 +154,29 @@ impl SemanticContext {
     /// Get a symbol by its DefId.
     pub fn get_symbol(&self, def_id: DefId) -> &Symbol {
         &self.symbols[def_id.0 as usize]
+    }
+
+    // ===== Contract Helpers =====
+
+    /// Returns true if currently at the root scope (scope 0).
+    /// Used for contract assertions to prevent exiting the root scope.
+    pub fn is_at_root_scope(&self) -> bool {
+        self.current_scope.0 == 0
+    }
+
+    /// Returns the current scope depth (number of scopes from root).
+    /// Used for contract assertions to verify scope balance.
+    pub fn scope_depth(&self) -> usize {
+        let mut depth = 0;
+        let mut scope_id = Some(self.current_scope);
+        while let Some(id) = scope_id {
+            if id.0 == 0 {
+                break;
+            }
+            depth += 1;
+            scope_id = self.scopes[id.0 as usize].parent;
+        }
+        depth
     }
 }
 

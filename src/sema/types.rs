@@ -405,6 +405,14 @@ impl TypeInterner {
     pub fn self_type(&mut self) -> TypeId {
         self.intern(Type::SelfType)
     }
+
+    // ===== Contract Helpers =====
+
+    /// Returns the number of interned types.
+    /// Used for contract assertions to validate TypeId bounds.
+    pub fn types_len(&self) -> usize {
+        self.types.len()
+    }
 }
 
 #[cfg(test)]

@@ -53,8 +53,18 @@ impl<'ctx> Resolver<'ctx> {
         // Pass 1: Collect top-level definitions
         self.collect_source_file(source_file);
 
+        #[cfg(debug_assertions)]
+        let resolutions_after_pass1 = self.resolutions.len();
+
         // Pass 2: Resolve all references
         self.resolve_source_file(source_file);
+
+        debug_assert!(
+            self.resolutions.len() >= resolutions_after_pass1,
+            "invariant: pass 2 can only add resolutions, never remove (before: {}, after: {})",
+            resolutions_after_pass1,
+            self.resolutions.len()
+        );
 
         (self.resolutions, self.diagnostics)
     }
@@ -103,7 +113,13 @@ impl<'ctx> Resolver<'ctx> {
         match self.ctx.define(interned, kind, visibility, span.clone()) {
             Ok(def_id) => {
                 // Store span → DefId mapping for inference phase
-                self.resolutions.insert(span, def_id);
+                self.resolutions.insert(span.clone(), def_id);
+
+                debug_assert!(
+                    self.ctx.lookup_in_scope(interned, self.ctx.current_scope_id()) == Some(def_id),
+                    "postcondition: name must be defined in current scope after define_name"
+                );
+
                 Some(def_id)
             }
             Err(existing_def_id) => {
@@ -368,6 +384,9 @@ impl<'ctx> Resolver<'ctx> {
     fn resolve_block(&mut self, block: &Block) {
         use rowan::ast::AstNode;
 
+        #[cfg(debug_assertions)]
+        let scope_depth_before = self.ctx.scope_depth();
+
         self.ctx.enter_scope(ScopeKind::Block);
 
         // Process all children in source order (statements and bare expressions)
@@ -384,6 +403,12 @@ impl<'ctx> Resolver<'ctx> {
         }
 
         self.ctx.exit_scope();
+
+        debug_assert_eq!(
+            self.ctx.scope_depth(),
+            scope_depth_before,
+            "invariant: scope must be balanced after resolve_block"
+        );
     }
 
     fn resolve_stmt(&mut self, stmt: &Stmt) {

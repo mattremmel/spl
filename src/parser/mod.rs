@@ -277,6 +277,14 @@ impl<'src> Parser<'src> {
     fn recover_to_stmt(&mut self, error: ParseError) -> CompletedMarker {
         self.recover_with_error(error, STMT_RECOVERY_SET)
     }
+
+    // ===== Contract Helpers =====
+
+    /// Returns the current token position.
+    /// Used for contract assertions to verify parser advancement.
+    pub(crate) fn current_offset(&self) -> usize {
+        self.source.token_position()
+    }
 }
 
 /// Marks the start of a syntax node.

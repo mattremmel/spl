@@ -15,6 +15,9 @@ fn expr_bp(
     p: &mut Parser<'_>,
     min_bp: u8,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+    #[cfg(debug_assertions)]
+    let start_offset = p.current_offset();
+
     let mut lhs = match lhs(p)? {
         Some(lhs) => lhs,
         None => return Ok(None),
@@ -42,6 +45,11 @@ fn expr_bp(
         // Not an operator we recognize, stop
         break;
     }
+
+    debug_assert!(
+        p.current_offset() > start_offset,
+        "postcondition: parser must advance when successfully parsing an expression"
+    );
 
     Ok(Some(lhs))
 }

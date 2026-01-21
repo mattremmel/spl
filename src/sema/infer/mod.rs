@@ -239,10 +239,85 @@ impl InferEngine {
         self.ctx.types.fresh_float_var()
     }
 
+    // =========================================================================
+    // Contract Helpers
+    // =========================================================================
+
+    /// Check if a TypeId is valid (within bounds of the type interner).
+    fn is_valid_type_id(&self, id: TypeId) -> bool {
+        (id.0 as usize) < self.ctx.types.types_len()
+    }
+
+    /// Extract the TypeVar from a type if it's a variable type.
+    fn extract_type_var(&self, id: TypeId) -> Option<TypeVar> {
+        match self.ctx.types.get(id) {
+            Type::Var(v) | Type::IntVar(v) | Type::FloatVar(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Check if following the substitution chain from `start` forms a cycle.
+    /// Uses Floyd's tortoise-and-hare algorithm.
+    fn has_cycle(&self, start: TypeVar) -> bool {
+        // Tortoise moves one step at a time, hare moves two steps
+        let mut tortoise = start;
+        let mut hare = start;
+
+        loop {
+            // Move tortoise one step
+            let tortoise_next = match self.substitution.get(&tortoise) {
+                Some(&type_id) => self.extract_type_var(type_id),
+                None => return false, // End of chain, no cycle
+            };
+
+            tortoise = match tortoise_next {
+                Some(v) => v,
+                None => return false, // Reached concrete type, no cycle
+            };
+
+            // Move hare two steps
+            for _ in 0..2 {
+                let hare_next = match self.substitution.get(&hare) {
+                    Some(&type_id) => self.extract_type_var(type_id),
+                    None => return false, // End of chain, no cycle
+                };
+
+                hare = match hare_next {
+                    Some(v) => v,
+                    None => return false, // Reached concrete type, no cycle
+                };
+            }
+
+            // If they meet, there's a cycle
+            if tortoise == hare {
+                return true;
+            }
+        }
+    }
+
+    /// Check if the resolved type is concrete or an unbound variable.
+    /// Returns true if the type is concrete or an unbound type variable.
+    #[cfg(debug_assertions)]
+    fn is_resolved_or_unbound(&self, type_id: TypeId) -> bool {
+        match self.ctx.types.get(type_id) {
+            Type::Var(v) | Type::IntVar(v) | Type::FloatVar(v) => {
+                !self.substitution.contains_key(v)
+            }
+            _ => true, // Concrete type
+        }
+    }
+
     /// Resolve a type through the substitution chain.
     fn resolve_type(&self, type_id: TypeId) -> TypeId {
+        debug_assert!(
+            self.is_valid_type_id(type_id),
+            "precondition: type_id {} must be valid (< {})",
+            type_id.0,
+            self.ctx.types.types_len()
+        );
+
         let ty = self.ctx.types.get(type_id);
-        match ty {
+        let result = match ty {
             Type::Var(var) | Type::IntVar(var) | Type::FloatVar(var) => {
                 if let Some(&subst) = self.substitution.get(var) {
                     self.resolve_type(subst)
@@ -251,11 +326,29 @@ impl InferEngine {
                 }
             }
             _ => type_id,
-        }
+        };
+
+        debug_assert!(
+            self.is_resolved_or_unbound(result),
+            "postcondition: resolve_type must return concrete type or unbound variable"
+        );
+
+        result
     }
 
     /// Unify two types, returning true if successful.
     fn unify(&mut self, a: TypeId, b: TypeId) -> bool {
+        debug_assert!(
+            self.is_valid_type_id(a),
+            "precondition: type a ({}) must be valid",
+            a.0
+        );
+        debug_assert!(
+            self.is_valid_type_id(b),
+            "precondition: type b ({}) must be valid",
+            b.0
+        );
+
         let a = self.resolve_type(a);
         let b = self.resolve_type(b);
 
@@ -266,7 +359,7 @@ impl InferEngine {
         let ty_a = self.ctx.types.get(a).clone();
         let ty_b = self.ctx.types.get(b).clone();
 
-        match (&ty_a, &ty_b) {
+        let result = match (&ty_a, &ty_b) {
             // Error type unifies with anything
             (Type::Error, _) | (_, Type::Error) => true,
 
@@ -389,7 +482,20 @@ impl InferEngine {
 
             // Everything else fails
             _ => false,
+        };
+
+        // Postcondition: no cycles in the substitution
+        #[cfg(debug_assertions)]
+        if result {
+            for &var in self.substitution.keys() {
+                debug_assert!(
+                    !self.has_cycle(var),
+                    "invariant: unify must not create cycles in substitution"
+                );
+            }
         }
+
+        result
     }
 
     // =========================================================================
@@ -557,7 +663,14 @@ impl InferEngine {
             let elem_type = self.synth_expr(&exprs[0]);
             // Second expression is the count - evaluate as constant
             let count = self.eval_const_usize(&exprs[1]).unwrap_or(0);
-            return self.ctx.types.mk_array(elem_type, count as u64);
+            let result = self.ctx.types.mk_array(elem_type, count as u64);
+
+            debug_assert!(
+                matches!(self.ctx.types.get(result), Type::Array(_, _)),
+                "postcondition: synth_array must return Array type"
+            );
+
+            return result;
         }
 
         // Array literal [a, b, c]
@@ -576,7 +689,14 @@ impl InferEngine {
             }
         }
 
-        self.ctx.types.mk_array(first_type, exprs.len() as u64)
+        let result = self.ctx.types.mk_array(first_type, exprs.len() as u64);
+
+        debug_assert!(
+            matches!(self.ctx.types.get(result), Type::Array(_, _)),
+            "postcondition: synth_array must return Array type"
+        );
+
+        result
     }
 
     fn synth_struct(&mut self, struct_expr: &StructExpr) -> TypeId {
@@ -668,7 +788,20 @@ impl InferEngine {
             }
         }
 
-        self.ctx.types.mk_struct(def_id, vec![])
+        // Postcondition: either all fields provided or update base present
+        debug_assert!(
+            has_update_base || seen_fields.len() == fields_info.len() || !self.diagnostics.is_empty(),
+            "postcondition: struct expr must have all fields or update base (or emit diagnostic)"
+        );
+
+        let result = self.ctx.types.mk_struct(def_id, vec![]);
+
+        debug_assert!(
+            matches!(self.ctx.types.get(result), Type::Struct(_, _)),
+            "postcondition: synth_struct must return Struct type"
+        );
+
+        result
     }
 
     fn synth_binary(&mut self, bin: &BinExpr) -> TypeId {
@@ -890,6 +1023,8 @@ impl InferEngine {
     }
 
     fn synth_field(&mut self, field: &FieldExpr) -> TypeId {
+        const MAX_DEREF: usize = 100;
+
         let base = match field.expr() {
             Some(e) => e,
             None => return self.ctx.types.error(),
@@ -900,7 +1035,20 @@ impl InferEngine {
         let mut base_type = self.ctx.types.get(resolved).clone();
 
         // Auto-deref references for field access
+        #[cfg(debug_assertions)]
+        let mut deref_count = 0;
+
         while let Type::Ref(_, inner) = &base_type {
+            #[cfg(debug_assertions)]
+            {
+                deref_count += 1;
+                debug_assert!(
+                    deref_count < MAX_DEREF,
+                    "invariant: auto-deref must terminate (hit {} derefs)",
+                    MAX_DEREF
+                );
+            }
+
             let inner_resolved = self.resolve_type(*inner);
             base_type = self.ctx.types.get(inner_resolved).clone();
         }
@@ -1434,14 +1582,29 @@ impl InferEngine {
         }
 
         // The block's type is the tail expression's type, or unit if none
-        if let Some(tail) = block.tail_expr() {
+        let result = if let Some(tail) = block.tail_expr() {
             self.synth_expr(&tail)
         } else if diverges {
             // If the block diverges, its type is never
             self.ctx.types.never()
         } else {
             self.ctx.types.unit()
+        };
+
+        // Postcondition: if block diverges and has no tail, result must be never type
+        #[cfg(debug_assertions)]
+        if diverges && block.tail_expr().is_none() {
+            let resolved = self.resolve_type(result);
+            debug_assert!(
+                matches!(
+                    self.ctx.types.get(resolved),
+                    Type::Primitive(PrimitiveKind::Never)
+                ),
+                "postcondition: diverging block without tail must return never type"
+            );
         }
+
+        result
     }
 
     // =========================================================================

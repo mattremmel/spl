@@ -117,4 +117,12 @@ impl<'src> Source<'src> {
             self.pos += 1;
         }
     }
+
+    // ===== Contract Helpers =====
+
+    /// Returns the current token position (index into tokens array).
+    /// Used for contract assertions to verify parser advancement.
+    pub fn token_position(&self) -> usize {
+        self.pos
+    }
 }
