@@ -163,6 +163,8 @@ struct InferEngine {
     current_return_type: Option<TypeId>,
     /// Current loop's break type (for break statements with values).
     current_loop_break_type: Option<TypeId>,
+    /// Whether the current loop has a break statement (for detecting infinite loops).
+    current_loop_has_break: bool,
     /// Current impl block's Self type (for resolving Self in type positions).
     current_self_type: Option<TypeId>,
 }
@@ -214,6 +216,7 @@ impl InferEngine {
             type_alias_targets: FxHashMap::default(),
             current_return_type: None,
             current_loop_break_type: None,
+            current_loop_has_break: false,
             current_self_type: None,
         }
     }
@@ -1856,19 +1859,30 @@ impl InferEngine {
         // Create a fresh type variable for the loop's break value
         let break_ty = self.fresh_type_var();
         let old_break_ty = self.current_loop_break_type.replace(break_ty);
+        let old_has_break = self.current_loop_has_break;
+        self.current_loop_has_break = false;
 
         if let Some(body) = loop_expr.body() {
             self.synth_block(&body);
         }
 
+        let has_break = self.current_loop_has_break;
         self.current_loop_break_type = old_break_ty;
+        self.current_loop_has_break = old_has_break;
 
-        // If no break with value, the loop type is ! (never returns normally)
-        // But if break with value exists, return that type
-        break_ty
+        // If no break was found, this is an infinite loop - return never type
+        // If break with value exists, return that type
+        if has_break {
+            break_ty
+        } else {
+            self.ctx.types.never()
+        }
     }
 
     fn synth_break(&mut self, break_expr: &BreakExpr) -> TypeId {
+        // Mark that we found a break in the current loop
+        self.current_loop_has_break = true;
+
         if let Some(value) = break_expr.expr() {
             let value_ty = self.synth_expr(&value);
             if let Some(break_ty) = self.current_loop_break_type
@@ -2782,6 +2796,7 @@ impl InferEngine {
     }
 
     /// Get the alias DefId if this type directly references a type alias.
+    /// Also traverses arrays and tuples to find aliases in compound types.
     fn get_referenced_alias(&self, type_id: TypeId) -> Option<DefId> {
         let ty = self.ctx.types.get(type_id);
         match ty {
@@ -2794,6 +2809,18 @@ impl InferEngine {
                     None
                 }
             }
+            // Type::Alias is also used for type aliases
+            Type::Alias(def_id, _) => {
+                if self.type_alias_targets.contains_key(def_id) {
+                    Some(*def_id)
+                } else {
+                    None
+                }
+            }
+            // Traverse array element types
+            Type::Array(elem_id, _) => self.get_referenced_alias(*elem_id),
+            // Traverse tuple field types
+            Type::Tuple(fields) => fields.iter().find_map(|f| self.get_referenced_alias(*f)),
             _ => None,
         }
     }

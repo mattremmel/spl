@@ -2234,3 +2234,136 @@ fn no_warn_in_if_branch() {
     check("fn f(b: bool) -> i32 { if b { return 1; } let x: i32 = 2; x }", "i32");
 }
 
+// =============================================================================
+// 5.0 Additional Tests for SEMA-5 QA
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// 5.1 i32/i64 Boundary Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn int_literal_i32_max() {
+    check("fn main() { let x: i32 = 2147483647; }", "i32");
+}
+
+#[test]
+fn int_literal_i32_min() {
+    check("fn main() { let x: i32 = -2147483648; }", "i32");
+}
+
+#[test]
+fn error_i32_overflow() {
+    check_err("fn main() { let x: i32 = 2147483648; }", &["out of range"]);
+}
+
+#[test]
+fn error_i32_underflow() {
+    check_err("fn main() { let x: i32 = -2147483649; }", &["out of range"]);
+}
+
+#[test]
+fn int_literal_i64_max() {
+    check("fn main() { let x: i64 = 9223372036854775807; }", "i64");
+}
+
+#[test]
+fn int_literal_i64_min() {
+    check("fn main() { let x: i64 = -9223372036854775808; }", "i64");
+}
+
+#[test]
+fn error_i64_overflow() {
+    check_err(
+        "fn main() { let x: i64 = 9223372036854775808; }",
+        &["out of range"],
+    );
+}
+
+// -----------------------------------------------------------------------------
+// 5.2 Recursive Types via Arrays/Tuples
+// -----------------------------------------------------------------------------
+
+#[test]
+fn error_recursive_via_array() {
+    check_err("struct Foo { arr: [Foo; 1] }", &["recursive"]);
+}
+
+#[test]
+fn error_recursive_via_tuple() {
+    check_err("struct Foo { tup: (i32, Foo) }", &["recursive"]);
+}
+
+// -----------------------------------------------------------------------------
+// 5.3 Type Alias Cycles via Compound Types
+// -----------------------------------------------------------------------------
+
+#[test]
+fn error_alias_via_array() {
+    check_err("type A = [B; 1]; type B = A;", &["cyclic"]);
+}
+
+#[test]
+fn error_alias_via_tuple() {
+    check_err("type A = (B, i32); type B = A;", &["cyclic"]);
+}
+
+// -----------------------------------------------------------------------------
+// 5.4 Unreachable Code After Infinite Loop
+// -----------------------------------------------------------------------------
+
+#[test]
+fn warn_after_infinite_loop() {
+    check_warn("fn main() { loop {} let x: i32 = 1; }", &["unreachable"]);
+}
+
+#[test]
+fn warn_after_return_in_nested_block() {
+    check_warn("fn f() { { return; } let x: i32 = 1; }", &["unreachable"]);
+}
+
+#[test]
+fn warn_first_unreachable_only() {
+    // Should only warn about first unreachable statement
+    check_warn("fn f() { return; let x: i32 = 1; let y: i32 = 2; }", &["unreachable"]);
+}
+
+// -----------------------------------------------------------------------------
+// 5.5 Additional Cast Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn cast_u8_to_i32() {
+    check("fn main() { let x: u8 = 1; let y = x as i32; }", "i32");
+}
+
+#[test]
+fn cast_u32_to_i32() {
+    check("fn main() { let x: u32 = 1; let y = x as i32; }", "i32");
+}
+
+#[test]
+fn error_unit_to_int() {
+    check_err("fn main() { let x = () as i32; }", &["invalid cast"]);
+}
+
+// -----------------------------------------------------------------------------
+// 5.6 Additional Array Bounds Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn index_nested_array() {
+    check(
+        "fn main() { let a = [[1, 2], [3, 4]]; let x = a[0][1]; }",
+        "i32",
+    );
+}
+
+#[test]
+fn error_very_large_index() {
+    check_err(
+        "fn main() { let a = [1]; let x = a[999999]; }",
+        &["out of bounds"],
+    );
+}
+
