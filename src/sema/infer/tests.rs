@@ -1580,3 +1580,34 @@ fn assign_through_mut_ref() {
         "i32",
     );
 }
+
+// =============================================================================
+// 2.1 Invalid Assignment Targets and Mutable Borrows (TDD tests for ? chain fixes)
+// =============================================================================
+
+#[test]
+fn test_assign_to_literal_produces_error() {
+    check_err("fn main() { 42 = 1; }", &["invalid assignment target"]);
+}
+
+#[test]
+fn test_assign_to_binary_expr_produces_error() {
+    check_err("fn main() { (1 + 2) = 3; }", &["invalid assignment target"]);
+}
+
+#[test]
+fn test_mutable_borrow_of_literal_produces_error() {
+    // This tests the silent failure in check_mutable_borrow's catch-all
+    check_err(
+        "fn main() { let x = &mut 42; }",
+        &["cannot take mutable reference"],
+    );
+}
+
+#[test]
+fn test_assign_field_through_immutable_ref() {
+    check_err(
+        "struct S { x: i32 } fn main() { let s = S { x: 1 }; let r = &s; r.x = 2; }",
+        &["cannot assign to field of immutable reference"],
+    );
+}

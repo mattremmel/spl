@@ -507,10 +507,18 @@ impl InferEngine {
         match expr {
             Expr::Path(path_expr) => {
                 // Look up the path to get the DefId
-                let path = path_expr.path()?;
-                let segment = path.segments().next()?;
-                let name_ref = segment.name()?;
-                let token = name_ref.token()?;
+                let Some(path) = path_expr.path() else {
+                    return Some("invalid assignment target".to_string());
+                };
+                let Some(segment) = path.segments().next() else {
+                    return Some("invalid assignment target".to_string());
+                };
+                let Some(name_ref) = segment.name() else {
+                    return Some("invalid assignment target".to_string());
+                };
+                let Some(token) = name_ref.token() else {
+                    return Some("invalid assignment target".to_string());
+                };
                 let span = text_range_to_span(token.text_range());
 
                 if let Some(&def_id) = self.resolutions.get(&span) {
@@ -580,10 +588,18 @@ impl InferEngine {
         match expr {
             Expr::Path(path_expr) => {
                 // Look up the path to get the DefId
-                let path = path_expr.path()?;
-                let segment = path.segments().next()?;
-                let name_ref = segment.name()?;
-                let token = name_ref.token()?;
+                let Some(path) = path_expr.path() else {
+                    return Some("cannot take mutable reference of a temporary value".to_string());
+                };
+                let Some(segment) = path.segments().next() else {
+                    return Some("cannot take mutable reference of a temporary value".to_string());
+                };
+                let Some(name_ref) = segment.name() else {
+                    return Some("cannot take mutable reference of a temporary value".to_string());
+                };
+                let Some(token) = name_ref.token() else {
+                    return Some("cannot take mutable reference of a temporary value".to_string());
+                };
                 let span = text_range_to_span(token.text_range());
 
                 if let Some(&def_id) = self.resolutions.get(&span) {
@@ -651,7 +667,7 @@ impl InferEngine {
                     None
                 }
             }
-            _ => None, // Other expressions can be borrowed as mutable (e.g., temporaries)
+            _ => Some("cannot take mutable reference of a temporary value".to_string()),
         }
     }
 
