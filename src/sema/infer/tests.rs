@@ -1883,19 +1883,16 @@ fn int_literal_u64_max() {
 // Suffixed literals at boundaries
 
 #[test]
-#[ignore = "parser does not support suffixed integer literals (e.g., 255u8)"]
 fn int_literal_suffixed_u8_max() {
     check("fn main() { let x = 255u8; }", "u8");
 }
 
 #[test]
-#[ignore = "parser does not support suffixed integer literals (e.g., 127i8)"]
 fn int_literal_suffixed_i8_max() {
     check("fn main() { let x = 127i8; }", "i8");
 }
 
 #[test]
-#[ignore = "parser does not support negated suffixed integer literals (e.g., -128i8)"]
 fn int_literal_suffixed_i8_min() {
     check("fn main() { let x = -128i8; }", "i8");
 }
@@ -1940,19 +1937,16 @@ fn error_i16_overflow() {
 // Suffixed literal overflow
 
 #[test]
-#[ignore = "parser does not support suffixed integer literals (e.g., 256u8)"]
 fn error_suffixed_u8_overflow() {
     check_err("fn main() { let x = 256u8; }", &["out of range"]);
 }
 
 #[test]
-#[ignore = "parser does not support suffixed integer literals (e.g., 128i8)"]
 fn error_suffixed_i8_overflow() {
     check_err("fn main() { let x = 128i8; }", &["out of range"]);
 }
 
 #[test]
-#[ignore = "parser does not support negated suffixed integer literals (e.g., -1u8)"]
 fn error_suffixed_u8_negative() {
     check_err("fn main() { let x = -1u8; }", &["out of range"]);
 }

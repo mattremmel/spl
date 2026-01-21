@@ -164,10 +164,12 @@ pub enum Token {
     #[regex(r"[0-9][0-9_]*e[+-]?[0-9][0-9_]*")]
     Float,
 
-    #[regex(r"0x[0-9a-fA-F][0-9a-fA-F_]*")]
-    #[regex(r"0b[01][01_]*")]
-    #[regex(r"0o[0-7][0-7_]*")]
-    #[regex(r"[0-9][0-9_]*")]
+    // Integer suffixes: i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize
+    // Compact pattern: [iu](8|16|32|64|128|size)
+    #[regex(r"0x[0-9a-fA-F][0-9a-fA-F_]*([iu](8|16|32|64|128|size))?")]
+    #[regex(r"0b[01][01_]*([iu](8|16|32|64|128|size))?")]
+    #[regex(r"0o[0-7][0-7_]*([iu](8|16|32|64|128|size))?")]
+    #[regex(r"[0-9][0-9_]*([iu](8|16|32|64|128|size))?")]
     Integer,
 
     #[regex(r#""([^"\\]|\\.)*""#)]
@@ -1711,6 +1713,45 @@ mod tests {
     #[test]
     fn edge_octal_max_digits() {
         check_single("0o77777777", Token::Integer);
+    }
+
+    // ============================================================
+    // Integer Literals with Suffixes
+    // ============================================================
+
+    #[test]
+    fn int_decimal_suffix_u8() {
+        check_single("255u8", Token::Integer);
+    }
+
+    #[test]
+    fn int_decimal_suffix_i32() {
+        check_single("42i32", Token::Integer);
+    }
+
+    #[test]
+    fn int_decimal_suffix_usize() {
+        check_single("100usize", Token::Integer);
+    }
+
+    #[test]
+    fn int_hex_suffix_u8() {
+        check_single("0xFFu8", Token::Integer);
+    }
+
+    #[test]
+    fn int_binary_suffix_i8() {
+        check_single("0b1111i8", Token::Integer);
+    }
+
+    #[test]
+    fn int_octal_suffix_u32() {
+        check_single("0o777u32", Token::Integer);
+    }
+
+    #[test]
+    fn int_suffix_with_underscores() {
+        check_single("1_000_000u64", Token::Integer);
     }
 
     #[test]

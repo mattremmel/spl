@@ -850,13 +850,21 @@ impl InferEngine {
                 let (prim_kind, has_suffix) = parse_int_suffix(text);
                 if let Some(kind) = prim_kind {
                     // Has suffix - validate range
+                    // For signed types at the negatable boundary (e.g., 128i8), only skip
+                    // validation if this literal is the direct operand of a negation prefix.
+                    // The prefix handler will validate negated suffixed literals correctly.
                     if has_suffix
                         && let Some(value) = parse_int_literal_value(text)
                         && let Err(msg) = kind.validate_int_literal_range(value)
                     {
-                        let span = text_range_to_span(token.text_range());
-                        self.diagnostics
-                            .push(Diagnostic::error(&msg).with_label(span, "literal out of range"));
+                        // Check if this is a negatable boundary value under negation
+                        let is_being_negated = kind.is_negatable_boundary(value)
+                            && is_under_negation(lit);
+                        if !is_being_negated {
+                            let span = text_range_to_span(token.text_range());
+                            self.diagnostics
+                                .push(Diagnostic::error(&msg).with_label(span, "literal out of range"));
+                        }
                     }
                     self.ctx.types.primitive(kind)
                 } else {
@@ -3159,6 +3167,19 @@ fn is_numeric_type(prim: PrimitiveKind) -> bool {
     is_integer_type(prim) || is_float_type(prim)
 }
 
+/// Check if a literal expression is the direct operand of a negation prefix.
+fn is_under_negation(lit: &LiteralExpr) -> bool {
+    use rowan::ast::AstNode;
+    // Get the LiteralExpr's parent (should be the PrefixExpr if negated)
+    if let Some(parent) = lit.syntax().parent()
+        && let Some(prefix) = PrefixExpr::cast(parent)
+        && let Some(op_token) = prefix.op_token()
+    {
+        return op_token.kind() == SyntaxKind::MINUS;
+    }
+    false
+}
+
 /// Parse an integer literal suffix to determine the type.
 /// Returns (Some(kind), true) if there's a suffix, (None, false) otherwise.
 fn parse_int_suffix(text: &str) -> (Option<PrimitiveKind>, bool) {
@@ -3188,8 +3209,17 @@ fn parse_int_suffix(text: &str) -> (Option<PrimitiveKind>, bool) {
 
 /// Parse the numeric value of an integer literal (stripping any suffix).
 fn parse_int_literal_value(text: &str) -> Option<i128> {
-    // Strip the type suffix
-    let num_text = text.trim_end_matches(|c: char| c.is_alphabetic());
+    // Strip the type suffix (e.g., u8, i32, usize)
+    // Must check longer suffixes first to avoid partial matches
+    let suffixes = [
+        "i128", "u128", "isize", "usize", "i64", "u64", "i32", "u32", "i16", "u16", "i8", "u8",
+    ];
+    let num_text = suffixes
+        .iter()
+        .find(|s| text.ends_with(*s))
+        .map(|s| &text[..text.len() - s.len()])
+        .unwrap_or(text);
+
     // Handle hex, octal, binary prefixes
     if num_text.starts_with("0x") || num_text.starts_with("0X") {
         i128::from_str_radix(&num_text[2..].replace('_', ""), 16).ok()
