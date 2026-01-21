@@ -201,8 +201,10 @@ pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
         generic_params(p)?;
     }
 
-    // Field list
-    field_list(p)?;
+    // Unit struct (semicolon) or field list (braces)
+    if !p.eat(SyntaxKind::SEMI) {
+        field_list(p)?;
+    }
 
     Ok(m.complete(p, SyntaxKind::StructDef))
 }
@@ -253,7 +255,7 @@ fn field_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
     Ok(m.complete(p, SyntaxKind::FieldDef))
 }
 
-/// Parse a type alias: `[pub] type Name = Type;`
+/// Parse a type alias: `[pub] type Name[<generics>] = Type;`
 pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
 
@@ -265,6 +267,11 @@ pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
 
     // Alias name
     name(p)?;
+
+    // Optional generic parameters
+    if p.at(SyntaxKind::LT) {
+        generic_params(p)?;
+    }
 
     // = Type
     p.expect(SyntaxKind::EQ)?;

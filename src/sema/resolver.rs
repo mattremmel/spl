@@ -299,10 +299,21 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_type_alias(&mut self, type_alias: &TypeAlias) {
+        // Enter scope for generic parameters
+        self.ctx.enter_scope(ScopeKind::Block);
+
+        // Define generic parameters
+        if let Some(generics) = type_alias.generic_params() {
+            self.define_generic_params(&generics);
+        }
+
         // Resolve the aliased type
         if let Some(ty) = type_alias.ty() {
             self.resolve_type(&ty);
         }
+
+        // Exit scope
+        self.ctx.exit_scope();
     }
 
     fn resolve_impl_block(&mut self, impl_block: &ImplBlock) {

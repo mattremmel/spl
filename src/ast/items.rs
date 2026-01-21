@@ -142,6 +142,10 @@ impl TypeAlias {
         child(&self.0)
     }
 
+    pub fn generic_params(&self) -> Option<GenericParams> {
+        child(&self.0)
+    }
+
     pub fn ty(&self) -> Option<Type> {
         child(&self.0)
     }

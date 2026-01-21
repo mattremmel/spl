@@ -3,8 +3,8 @@
 //! Run with: cargo run --example ast_demo
 
 use rowan::ast::AstNode;
-use spl::ast::pretty::pretty_print;
 use spl::ast::SourceFile;
+use spl::ast::pretty::pretty_print;
 use spl::parse;
 
 fn main() {

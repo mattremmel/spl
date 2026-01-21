@@ -135,6 +135,9 @@ impl AstPrinter {
         self.line(&format!("{vis}TypeAlias \"{name}\""));
 
         self.indented(|p| {
+            if let Some(generics) = alias.generic_params() {
+                p.print_generic_params(&generics);
+            }
             if let Some(ty) = alias.ty() {
                 p.print_type(&ty);
             }
@@ -780,11 +783,7 @@ impl AstPrinter {
             .or_else(|| crate::ast::token(ident.syntax(), crate::syntax::SyntaxKind::IDENT))
             .map(|t| t.text().to_string())
             .unwrap_or_else(|| "?".to_string());
-        let mut_str = if ident.mut_kw().is_some() {
-            "mut "
-        } else {
-            ""
-        };
+        let mut_str = if ident.mut_kw().is_some() { "mut " } else { "" };
         self.line(&format!("IdentPat \"{mut_str}{name}\""));
     }
 
@@ -1030,9 +1029,7 @@ mod tests {
         }
 
         /// Unit struct syntax: `struct Empty;`
-        /// Re-enable when parser supports unit structs (no braces)
         #[test]
-        #[ignore = "parser does not support unit structs yet"]
         fn struct_unit() {
             check(
                 "struct Empty;",
@@ -1154,9 +1151,7 @@ mod tests {
         }
 
         /// Generic type alias: `type Result<T> = Option<T>;`
-        /// Re-enable when parser supports generic parameters on type aliases
         #[test]
-        #[ignore = "parser does not support generic parameters on type aliases yet"]
         fn type_alias_generic() {
             check(
                 "type Result<T> = Option<T>;",
