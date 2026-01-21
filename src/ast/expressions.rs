@@ -285,7 +285,12 @@ impl PrefixExpr {
         self.0
             .children_with_tokens()
             .filter_map(|it| it.into_token())
-            .find(|t| matches!(t.kind(), SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR))
+            .find(|t| {
+                matches!(
+                    t.kind(),
+                    SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR
+                )
+            })
     }
 }
 

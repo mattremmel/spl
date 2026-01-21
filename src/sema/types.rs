@@ -150,10 +150,7 @@ pub enum Type {
     Alias(DefId, Vec<TypeId>),
 
     /// A function pointer type `fn(T, U) -> R`.
-    FnPtr {
-        params: Vec<TypeId>,
-        ret: TypeId,
-    },
+    FnPtr { params: Vec<TypeId>, ret: TypeId },
 
     /// A generic type parameter `T` (refers to a type parameter definition).
     Param(DefId),
@@ -263,6 +260,12 @@ impl TypeInterner {
             return id;
         }
 
+        debug_assert!(
+            self.types.len() < u32::MAX as usize,
+            "precondition: type interner overflow - {} types exceeds u32::MAX",
+            self.types.len()
+        );
+
         let id = TypeId(self.types.len() as u32);
         self.types.push(ty.clone());
         self.type_to_id.insert(ty, id);
@@ -271,6 +274,12 @@ impl TypeInterner {
 
     /// Get the type for a given ID.
     pub fn get(&self, id: TypeId) -> &Type {
+        debug_assert!(
+            (id.0 as usize) < self.types.len(),
+            "precondition: TypeId {} must be valid (< {})",
+            id.0,
+            self.types.len()
+        );
         &self.types[id.0 as usize]
     }
 
@@ -278,6 +287,10 @@ impl TypeInterner {
 
     /// Create a fresh general type variable.
     pub fn fresh_type_var(&mut self) -> TypeId {
+        debug_assert!(
+            self.next_type_var < u32::MAX,
+            "precondition: type variable ID overflow"
+        );
         let var = TypeVar(self.next_type_var);
         self.next_type_var += 1;
         self.intern(Type::Var(var))
@@ -285,6 +298,10 @@ impl TypeInterner {
 
     /// Create a fresh integer type variable (defaults to i32 if unconstrained).
     pub fn fresh_int_var(&mut self) -> TypeId {
+        debug_assert!(
+            self.next_type_var < u32::MAX,
+            "precondition: type variable ID overflow"
+        );
         let var = TypeVar(self.next_type_var);
         self.next_type_var += 1;
         self.intern(Type::IntVar(var))
@@ -292,6 +309,10 @@ impl TypeInterner {
 
     /// Create a fresh float type variable (defaults to f64 if unconstrained).
     pub fn fresh_float_var(&mut self) -> TypeId {
+        debug_assert!(
+            self.next_type_var < u32::MAX,
+            "precondition: type variable ID overflow"
+        );
         let var = TypeVar(self.next_type_var);
         self.next_type_var += 1;
         self.intern(Type::FloatVar(var))
@@ -669,8 +690,14 @@ mod tests {
         assert_eq!(PrimitiveKind::from_name("f64"), Some(PrimitiveKind::F64));
         assert_eq!(PrimitiveKind::from_name("str"), Some(PrimitiveKind::Str));
         assert_eq!(PrimitiveKind::from_name("char"), Some(PrimitiveKind::Char));
-        assert_eq!(PrimitiveKind::from_name("isize"), Some(PrimitiveKind::Isize));
-        assert_eq!(PrimitiveKind::from_name("usize"), Some(PrimitiveKind::Usize));
+        assert_eq!(
+            PrimitiveKind::from_name("isize"),
+            Some(PrimitiveKind::Isize)
+        );
+        assert_eq!(
+            PrimitiveKind::from_name("usize"),
+            Some(PrimitiveKind::Usize)
+        );
         assert_eq!(PrimitiveKind::from_name("unknown"), None);
         assert_eq!(PrimitiveKind::from_name("String"), None); // String is not a primitive
     }
@@ -698,10 +725,7 @@ mod tests {
         let interner = TypeInterner::new();
 
         let never = interner.never();
-        assert_eq!(
-            interner.get(never),
-            &Type::Primitive(PrimitiveKind::Never)
-        );
+        assert_eq!(interner.get(never), &Type::Primitive(PrimitiveKind::Never));
     }
 
     #[test]
@@ -900,15 +924,42 @@ mod tests {
         let interner = TypeInterner::new();
 
         // Test all pre-interned accessors return correct types
-        assert_eq!(interner.get(interner.unit()), &Type::Primitive(PrimitiveKind::Unit));
-        assert_eq!(interner.get(interner.bool()), &Type::Primitive(PrimitiveKind::Bool));
-        assert_eq!(interner.get(interner.i32()), &Type::Primitive(PrimitiveKind::I32));
-        assert_eq!(interner.get(interner.i64()), &Type::Primitive(PrimitiveKind::I64));
-        assert_eq!(interner.get(interner.f32()), &Type::Primitive(PrimitiveKind::F32));
-        assert_eq!(interner.get(interner.f64()), &Type::Primitive(PrimitiveKind::F64));
-        assert_eq!(interner.get(interner.never()), &Type::Primitive(PrimitiveKind::Never));
-        assert_eq!(interner.get(interner.char()), &Type::Primitive(PrimitiveKind::Char));
-        assert_eq!(interner.get(interner.str()), &Type::Primitive(PrimitiveKind::Str));
+        assert_eq!(
+            interner.get(interner.unit()),
+            &Type::Primitive(PrimitiveKind::Unit)
+        );
+        assert_eq!(
+            interner.get(interner.bool()),
+            &Type::Primitive(PrimitiveKind::Bool)
+        );
+        assert_eq!(
+            interner.get(interner.i32()),
+            &Type::Primitive(PrimitiveKind::I32)
+        );
+        assert_eq!(
+            interner.get(interner.i64()),
+            &Type::Primitive(PrimitiveKind::I64)
+        );
+        assert_eq!(
+            interner.get(interner.f32()),
+            &Type::Primitive(PrimitiveKind::F32)
+        );
+        assert_eq!(
+            interner.get(interner.f64()),
+            &Type::Primitive(PrimitiveKind::F64)
+        );
+        assert_eq!(
+            interner.get(interner.never()),
+            &Type::Primitive(PrimitiveKind::Never)
+        );
+        assert_eq!(
+            interner.get(interner.char()),
+            &Type::Primitive(PrimitiveKind::Char)
+        );
+        assert_eq!(
+            interner.get(interner.str()),
+            &Type::Primitive(PrimitiveKind::Str)
+        );
         assert_eq!(interner.get(interner.error()), &Type::Error);
         assert_eq!(interner.get(interner.string()), &Type::String);
     }
@@ -947,7 +998,11 @@ mod tests {
         }
 
         // No new types should have been added
-        assert_eq!(interner.types.len(), initial_count, "primitives were not pre-interned");
+        assert_eq!(
+            interner.types.len(),
+            initial_count,
+            "primitives were not pre-interned"
+        );
     }
 
     #[test]
@@ -1158,24 +1213,18 @@ mod tests {
 
         // Verify structure
         match interner.get(outer_ref) {
-            Type::Ref(Mutability::Mutable, slice_id) => {
-                match interner.get(*slice_id) {
-                    Type::Slice(ref_id) => {
-                        match interner.get(*ref_id) {
-                            Type::Ref(Mutability::Shared, arr_id) => {
-                                match interner.get(*arr_id) {
-                                    Type::Array(elem, 5) => {
-                                        assert_eq!(*elem, interner.i32());
-                                    }
-                                    other => panic!("expected Array, got {other:?}"),
-                                }
-                            }
-                            other => panic!("expected Ref(Shared), got {other:?}"),
+            Type::Ref(Mutability::Mutable, slice_id) => match interner.get(*slice_id) {
+                Type::Slice(ref_id) => match interner.get(*ref_id) {
+                    Type::Ref(Mutability::Shared, arr_id) => match interner.get(*arr_id) {
+                        Type::Array(elem, 5) => {
+                            assert_eq!(*elem, interner.i32());
                         }
-                    }
-                    other => panic!("expected Slice, got {other:?}"),
-                }
-            }
+                        other => panic!("expected Array, got {other:?}"),
+                    },
+                    other => panic!("expected Ref(Shared), got {other:?}"),
+                },
+                other => panic!("expected Slice, got {other:?}"),
+            },
             other => panic!("expected Ref(Mutable), got {other:?}"),
         }
     }

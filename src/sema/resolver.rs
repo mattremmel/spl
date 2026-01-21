@@ -116,7 +116,9 @@ impl<'ctx> Resolver<'ctx> {
                 self.resolutions.insert(span.clone(), def_id);
 
                 debug_assert!(
-                    self.ctx.lookup_in_scope(interned, self.ctx.current_scope_id()) == Some(def_id),
+                    self.ctx
+                        .lookup_in_scope(interned, self.ctx.current_scope_id())
+                        == Some(def_id),
                     "postcondition: name must be defined in current scope after define_name"
                 );
 
@@ -801,10 +803,12 @@ impl<'ctx> Resolver<'ctx> {
             let text = token.text().to_string();
             let span = Self::text_range_to_span(token.text_range());
             let interned = self.ctx.intern(&text);
-            if let Ok(def_id) = self
-                .ctx
-                .define(interned, SymbolKind::Local, Visibility::Private, span.clone())
-            {
+            if let Ok(def_id) = self.ctx.define(
+                interned,
+                SymbolKind::Local,
+                Visibility::Private,
+                span.clone(),
+            ) {
                 // Store span → DefId mapping for inference phase
                 self.resolutions.insert(span, def_id);
             }
@@ -1143,7 +1147,10 @@ mod tests {
 
     #[test]
     fn resolve_break_undefined() {
-        check_err("fn main() { loop { break undefined; } }", &["cannot find `undefined`"]);
+        check_err(
+            "fn main() { loop { break undefined; } }",
+            &["cannot find `undefined`"],
+        );
     }
 
     // ===== Cast, prefix, ref expressions =====
@@ -1160,7 +1167,10 @@ mod tests {
 
     #[test]
     fn resolve_cast_to_undefined_type() {
-        check_err("fn main() { let x = 1; x as Undefined; }", &["cannot find `Undefined`"]);
+        check_err(
+            "fn main() { let x = 1; x as Undefined; }",
+            &["cannot find `Undefined`"],
+        );
     }
 
     #[test]
@@ -1192,7 +1202,9 @@ mod tests {
 
     #[test]
     fn resolve_field_access_nested() {
-        check_ok("struct Inner { v: i32 } struct Outer { inner: Inner } fn main() { let o: Outer; o.inner.v; }");
+        check_ok(
+            "struct Inner { v: i32 } struct Outer { inner: Inner } fn main() { let o: Outer; o.inner.v; }",
+        );
     }
 
     #[test]
@@ -1212,7 +1224,10 @@ mod tests {
 
     #[test]
     fn resolve_index_expr_undefined() {
-        check_err("fn main() { let arr = [1, 2, 3]; arr[undefined]; }", &["cannot find `undefined`"]);
+        check_err(
+            "fn main() { let arr = [1, 2, 3]; arr[undefined]; }",
+            &["cannot find `undefined`"],
+        );
     }
 
     #[test]
@@ -1222,7 +1237,10 @@ mod tests {
 
     #[test]
     fn resolve_slice_expr_undefined() {
-        check_err("fn main() { let arr = [1, 2, 3]; arr[start..end]; }", &["cannot find `start`", "cannot find `end`"]);
+        check_err(
+            "fn main() { let arr = [1, 2, 3]; arr[start..end]; }",
+            &["cannot find `start`", "cannot find `end`"],
+        );
     }
 
     // ===== Range expressions =====
@@ -1246,7 +1264,10 @@ mod tests {
 
     #[test]
     fn resolve_block_expr_scope() {
-        check_err("fn main() { let result = { let x = 1; x }; x; }", &["cannot find `x`"]);
+        check_err(
+            "fn main() { let result = { let x = 1; x }; x; }",
+            &["cannot find `x`"],
+        );
     }
 
     // ===== Paren expressions =====
@@ -1319,17 +1340,26 @@ mod tests {
 
     #[test]
     fn resolve_undefined_type() {
-        check_err("fn foo(x: UndefinedType) {}", &["cannot find `UndefinedType`"]);
+        check_err(
+            "fn foo(x: UndefinedType) {}",
+            &["cannot find `UndefinedType`"],
+        );
     }
 
     #[test]
     fn resolve_undefined_in_ref_type() {
-        check_err("fn foo(x: &UndefinedType) {}", &["cannot find `UndefinedType`"]);
+        check_err(
+            "fn foo(x: &UndefinedType) {}",
+            &["cannot find `UndefinedType`"],
+        );
     }
 
     #[test]
     fn resolve_undefined_in_array_type() {
-        check_err("fn foo(x: [UndefinedType; 10]) {}", &["cannot find `UndefinedType`"]);
+        check_err(
+            "fn foo(x: [UndefinedType; 10]) {}",
+            &["cannot find `UndefinedType`"],
+        );
     }
 
     // ===== Pattern resolution =====
@@ -1351,17 +1381,24 @@ mod tests {
 
     #[test]
     fn resolve_struct_pattern() {
-        check_ok("struct Point { x: i32, y: i32 } fn main() { let Point { x: a, y: b } = Point { x: 1, y: 2 }; a + b; }");
+        check_ok(
+            "struct Point { x: i32, y: i32 } fn main() { let Point { x: a, y: b } = Point { x: 1, y: 2 }; a + b; }",
+        );
     }
 
     #[test]
     fn resolve_struct_pattern_shorthand() {
-        check_ok("struct Point { x: i32, y: i32 } fn main() { let Point { x, y } = Point { x: 1, y: 2 }; x + y; }");
+        check_ok(
+            "struct Point { x: i32, y: i32 } fn main() { let Point { x, y } = Point { x: 1, y: 2 }; x + y; }",
+        );
     }
 
     #[test]
     fn resolve_struct_pattern_undefined_struct() {
-        check_err("fn main() { let UndefinedStruct { x } = foo; }", &["cannot find `UndefinedStruct`"]);
+        check_err(
+            "fn main() { let UndefinedStruct { x } = foo; }",
+            &["cannot find `UndefinedStruct`"],
+        );
     }
 
     #[test]
@@ -1389,7 +1426,10 @@ mod tests {
 
     #[test]
     fn resolve_duplicate_type_alias() {
-        check_err("type Foo = i32; type Foo = i64;", &["defined multiple times"]);
+        check_err(
+            "type Foo = i32; type Foo = i64;",
+            &["defined multiple times"],
+        );
     }
 
     #[test]
@@ -1404,7 +1444,10 @@ mod tests {
 
     #[test]
     fn resolve_multiple_undefined() {
-        check_err("fn main() { a + b + c; }", &["cannot find `a`", "cannot find `b`", "cannot find `c`"]);
+        check_err(
+            "fn main() { a + b + c; }",
+            &["cannot find `a`", "cannot find `b`", "cannot find `c`"],
+        );
     }
 
     // ===== Visibility modifiers =====
@@ -1438,12 +1481,16 @@ mod tests {
 
     #[test]
     fn resolve_nested_if_else() {
-        check_ok("fn main() { let x = 1; if x > 0 { if x > 1 { x; } else { x + 1; } } else { x - 1; } }");
+        check_ok(
+            "fn main() { let x = 1; if x > 0 { if x > 1 { x; } else { x + 1; } } else { x - 1; } }",
+        );
     }
 
     #[test]
     fn resolve_complex_for_loop() {
-        check_ok("fn main() { let arr = [1, 2, 3]; for item in arr { let doubled = item * 2; doubled; } }");
+        check_ok(
+            "fn main() { let arr = [1, 2, 3]; for item in arr { let doubled = item * 2; doubled; } }",
+        );
     }
 
     #[test]
@@ -1460,12 +1507,17 @@ mod tests {
 
     #[test]
     fn resolve_struct_expr_with_var_fields() {
-        check_ok("struct Point { x: i32, y: i32 } fn main() { let a = 1; let b = 2; Point { x: a, y: b }; }");
+        check_ok(
+            "struct Point { x: i32, y: i32 } fn main() { let a = 1; let b = 2; Point { x: a, y: b }; }",
+        );
     }
 
     #[test]
     fn resolve_struct_expr_undefined_in_field() {
-        check_err("struct Point { x: i32, y: i32 } fn main() { Point { x: undef, y: 0 }; }", &["cannot find `undef`"]);
+        check_err(
+            "struct Point { x: i32, y: i32 } fn main() { Point { x: undef, y: 0 }; }",
+            &["cannot find `undef`"],
+        );
     }
 
     // ===== Return type resolution =====
@@ -1482,7 +1534,10 @@ mod tests {
 
     #[test]
     fn resolve_return_type_undefined() {
-        check_err("fn foo() -> UndefinedType {}", &["cannot find `UndefinedType`"]);
+        check_err(
+            "fn foo() -> UndefinedType {}",
+            &["cannot find `UndefinedType`"],
+        );
     }
 
     // ===== Let statement type annotations =====
@@ -1494,7 +1549,10 @@ mod tests {
 
     #[test]
     fn resolve_let_type_annotation_undefined() {
-        check_err("fn main() { let x: UndefinedType = 0; }", &["cannot find `UndefinedType`"]);
+        check_err(
+            "fn main() { let x: UndefinedType = 0; }",
+            &["cannot find `UndefinedType`"],
+        );
     }
 
     #[test]

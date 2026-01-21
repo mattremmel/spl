@@ -22,14 +22,22 @@ fn check(source: &str, expected: &str) {
     assert!(
         resolve_result.diagnostics.is_empty(),
         "resolution errors: {:?}",
-        resolve_result.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        resolve_result
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
     );
 
     let infer_result = infer(&source_file, resolve_result);
     assert!(
         infer_result.diagnostics.is_empty(),
         "expected no inference errors, got: {:?}",
-        infer_result.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        infer_result
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
     );
 
     let actual = infer_result.display_first_binding();
@@ -65,7 +73,11 @@ fn check_err(source: &str, expected: &[&str]) {
             found,
             "expected error containing '{}', got: {:?}",
             pattern,
-            infer_result.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+            infer_result
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -201,7 +213,10 @@ fn infer_int_from_fn_param() {
 fn infer_int_from_fn_param_multiple() {
     // Both literals infer their types from the function parameters
     // The check function returns the last binding's type, so we check y's type (i64)
-    check("fn f(a: i32, b: i64) {} fn main() { let x = 1; let y = 2; f(x, y); }", "i64");
+    check(
+        "fn f(a: i32, b: i64) {} fn main() { let x = 1; let y = 2; f(x, y); }",
+        "i64",
+    );
 }
 
 #[test]
@@ -256,7 +271,10 @@ fn infer_chain_through_binary() {
 
 #[test]
 fn infer_from_assignment_target() {
-    check("fn main() { let mut x: i64 = 0; let y = 42; x = y; }", "i64");
+    check(
+        "fn main() { let mut x: i64 = 0; let y = 42; x = y; }",
+        "i64",
+    );
 }
 
 #[test]
@@ -287,22 +305,34 @@ fn infer_tuple_elements_from_annotation() {
 #[test]
 fn infer_multiple_constraints_same() {
     // Same variable used in multiple calls with same type
-    check("fn f(x: i64) {} fn main() { let a = 42; f(a); f(a); }", "i64");
+    check(
+        "fn f(x: i64) {} fn main() { let a = 42; f(a); f(a); }",
+        "i64",
+    );
 }
 
 #[test]
 fn infer_multiple_usages_consistent() {
-    check("fn main() { let x = 42; let y: i64 = x; let z: i64 = x; }", "i64");
+    check(
+        "fn main() { let x = 42; let y: i64 = x; let z: i64 = x; }",
+        "i64",
+    );
 }
 
 #[test]
 fn infer_if_from_context() {
-    check("fn main() { let x: i64 = if true { 1 } else { 2 }; }", "i64");
+    check(
+        "fn main() { let x: i64 = if true { 1 } else { 2 }; }",
+        "i64",
+    );
 }
 
 #[test]
 fn infer_if_branches_unify() {
-    check("fn f() -> i64 { if true { 1 } else { 2 } } fn main() { let x = f(); }", "i64");
+    check(
+        "fn f() -> i64 { if true { 1 } else { 2 } } fn main() { let x = f(); }",
+        "i64",
+    );
 }
 
 #[test]
@@ -469,7 +499,10 @@ fn call_one_arg() {
 
 #[test]
 fn call_multiple_args() {
-    check("fn f(a: i32, b: bool) {} fn main() { let x = f(1, true); }", "()");
+    check(
+        "fn f(a: i32, b: bool) {} fn main() { let x = f(1, true); }",
+        "()",
+    );
 }
 
 #[test]
@@ -489,17 +522,26 @@ fn call_return_used_in_binary() {
 
 #[test]
 fn call_return_passed_to_fn() {
-    check("fn f() -> i32 { 1 } fn g(x: i32) {} fn main() { let y = g(f()); }", "()");
+    check(
+        "fn f() -> i32 { 1 } fn g(x: i32) {} fn main() { let y = g(f()); }",
+        "()",
+    );
 }
 
 #[test]
 fn call_nested() {
-    check("fn f(x: i32) -> i32 { x } fn main() { let y = f(f(1)); }", "i32");
+    check(
+        "fn f(x: i32) -> i32 { x } fn main() { let y = f(f(1)); }",
+        "i32",
+    );
 }
 
 #[test]
 fn call_in_binary() {
-    check("fn f() -> i32 { 1 } fn main() { let x = f() + f(); }", "i32");
+    check(
+        "fn f() -> i32 { 1 } fn main() { let x = f() + f(); }",
+        "i32",
+    );
 }
 
 #[test]
@@ -509,7 +551,10 @@ fn call_forward_reference() {
 
 #[test]
 fn call_mutual_recursion() {
-    check("fn a() -> i32 { b() } fn b() -> i32 { a() } fn main() { let x = a(); }", "i32");
+    check(
+        "fn a() -> i32 { b() } fn b() -> i32 { a() } fn main() { let x = a(); }",
+        "i32",
+    );
 }
 
 #[test]
@@ -551,7 +596,10 @@ fn if_no_else_unit() {
 
 #[test]
 fn if_with_blocks() {
-    check("fn main() { let x = if true { let a = 1; a } else { 2 }; }", "i32");
+    check(
+        "fn main() { let x = if true { let a = 1; a } else { 2 }; }",
+        "i32",
+    );
 }
 
 #[test]
@@ -564,7 +612,10 @@ fn if_nested() {
 
 #[test]
 fn if_in_function() {
-    check("fn f() -> i32 { if true { 1 } else { 2 } } fn main() { let x = f(); }", "i32");
+    check(
+        "fn f() -> i32 { if true { 1 } else { 2 } } fn main() { let x = f(); }",
+        "i32",
+    );
 }
 
 #[test]
@@ -575,7 +626,10 @@ fn while_simple() {
 #[test]
 #[ignore = "parser has issue with while loop condition/body"]
 fn while_with_body() {
-    check("fn main() { let mut x = 0; while x < 10 { x = x + 1; } let y = x; }", "i32");
+    check(
+        "fn main() { let mut x = 0; while x < 10 { x = x + 1; } let y = x; }",
+        "i32",
+    );
 }
 
 #[test]
@@ -634,7 +688,10 @@ fn return_no_value() {
 #[test]
 #[ignore = "divergence tracking in let initializers not yet implemented"]
 fn return_with_value() {
-    check("fn f() -> i32 { let x = return 42; } fn main() { let y = f(); }", "i32");
+    check(
+        "fn f() -> i32 { let x = return 42; } fn main() { let y = f(); }",
+        "i32",
+    );
 }
 
 // =============================================================================
@@ -658,7 +715,10 @@ fn block_with_semi_no_tail() {
 
 #[test]
 fn block_multiple_stmts() {
-    check("fn main() { let x = { let a = 1; let b = 2; a + b }; }", "i32");
+    check(
+        "fn main() { let x = { let a = 1; let b = 2; a + b }; }",
+        "i32",
+    );
 }
 
 #[test]
@@ -668,7 +728,10 @@ fn block_nested() {
 
 #[test]
 fn block_shadowing() {
-    check("fn main() { let x = { let x = 1; { let x = 2; x } }; }", "i32");
+    check(
+        "fn main() { let x = { let x = 1; { let x = 2; x } }; }",
+        "i32",
+    );
 }
 
 #[test]
@@ -720,7 +783,10 @@ fn tuple_mixed() {
 
 #[test]
 fn tuple_nested() {
-    check("fn main() { let x = ((1, 2), (3, 4)); }", "((i32, i32), (i32, i32))");
+    check(
+        "fn main() { let x = ((1, 2), (3, 4)); }",
+        "((i32, i32), (i32, i32))",
+    );
 }
 
 #[test]
@@ -782,7 +848,10 @@ fn array_index() {
 
 #[test]
 fn array_index_type() {
-    check("fn main() { let arr: [i64; 3] = [1, 2, 3]; let x = arr[0]; }", "i64");
+    check(
+        "fn main() { let arr: [i64; 3] = [1, 2, 3]; let x = arr[0]; }",
+        "i64",
+    );
 }
 
 #[test]
@@ -816,7 +885,10 @@ fn ref_type_annotation() {
 
 #[test]
 fn ref_mut_type_annotation() {
-    check("fn main() { let mut x = 42; let y: &mut i32 = &mut x; }", "&mut i32");
+    check(
+        "fn main() { let mut x = 42; let y: &mut i32 = &mut x; }",
+        "&mut i32",
+    );
 }
 
 #[test]
@@ -827,7 +899,10 @@ fn deref_shared() {
 #[test]
 fn deref_mutable() {
     // Deref of mutable ref, then assign
-    check("fn main() { let mut x = 42; let y = &mut x; *y = 43; let z = x; }", "i32");
+    check(
+        "fn main() { let mut x = 42; let y = &mut x; *y = 43; let z = x; }",
+        "i32",
+    );
 }
 
 #[test]
@@ -837,23 +912,35 @@ fn ref_to_ref() {
 
 #[test]
 fn ref_in_function() {
-    check("fn f(x: &i32) {} fn main() { let a = 42; f(&a); let b = a; }", "i32");
+    check(
+        "fn f(x: &i32) {} fn main() { let a = 42; f(&a); let b = a; }",
+        "i32",
+    );
 }
 
 #[test]
 fn ref_mut_in_function() {
-    check("fn f(x: &mut i32) {} fn main() { let mut a = 42; f(&mut a); let b = a; }", "i32");
+    check(
+        "fn f(x: &mut i32) {} fn main() { let mut a = 42; f(&mut a); let b = a; }",
+        "i32",
+    );
 }
 
 #[test]
 fn ref_return() {
-    check("fn f(x: &i32) -> &i32 { x } fn main() { let a = 42; let b = f(&a); }", "&i32");
+    check(
+        "fn f(x: &i32) -> &i32 { x } fn main() { let a = 42; let b = f(&a); }",
+        "&i32",
+    );
 }
 
 #[test]
 fn ref_coercion() {
     // Mutable reference can be coerced to shared reference
-    check("fn f(x: &i32) {} fn main() { let mut a = 42; f(&a); let b = a; }", "i32");
+    check(
+        "fn f(x: &i32) {} fn main() { let mut a = 42; f(&a); let b = a; }",
+        "i32",
+    );
 }
 
 #[test]
@@ -872,7 +959,10 @@ fn struct_construct_empty() {
 
 #[test]
 fn struct_construct_one_field() {
-    check("struct S { a: i32 } fn main() { let x = S { a: 42 }; }", "S");
+    check(
+        "struct S { a: i32 } fn main() { let x = S { a: 42 }; }",
+        "S",
+    );
 }
 
 #[test]
@@ -885,17 +975,26 @@ fn struct_construct_multiple_fields() {
 
 #[test]
 fn struct_field_access() {
-    check("struct S { a: i32 } fn main() { let x = S { a: 42 }; let y = x.a; }", "i32");
+    check(
+        "struct S { a: i32 } fn main() { let x = S { a: 42 }; let y = x.a; }",
+        "i32",
+    );
 }
 
 #[test]
 fn struct_field_type() {
-    check("struct S { a: i64 } fn main() { let x = S { a: 42 }; let y = x.a; }", "i64");
+    check(
+        "struct S { a: i64 } fn main() { let x = S { a: 42 }; let y = x.a; }",
+        "i64",
+    );
 }
 
 #[test]
 fn struct_field_infers_literal() {
-    check("struct S { a: i64 } fn main() { let x = S { a: 42 }; }", "S");
+    check(
+        "struct S { a: i64 } fn main() { let x = S { a: 42 }; }",
+        "S",
+    );
 }
 
 #[test]
@@ -908,7 +1007,10 @@ fn struct_nested() {
 
 #[test]
 fn struct_in_function_param() {
-    check("struct S { a: i32 } fn f(s: S) {} fn main() { let x = S { a: 1 }; f(x); }", "S");
+    check(
+        "struct S { a: i32 } fn f(s: S) {} fn main() { let x = S { a: 1 }; f(x); }",
+        "S",
+    );
 }
 
 #[test]
@@ -988,7 +1090,10 @@ fn error_let_mismatch_string() {
 
 #[test]
 fn error_assign_mismatch() {
-    check_err("fn main() { let mut x: i32 = 0; x = true; }", &["type mismatch"]);
+    check_err(
+        "fn main() { let mut x: i32 = 0; x = true; }",
+        &["type mismatch"],
+    );
 }
 
 #[test]
@@ -998,7 +1103,10 @@ fn error_return_mismatch() {
 
 #[test]
 fn error_if_branch_mismatch() {
-    check_err("fn main() { let x = if true { 1 } else { true }; }", &["type mismatch"]);
+    check_err(
+        "fn main() { let x = if true { 1 } else { true }; }",
+        &["type mismatch"],
+    );
 }
 
 #[test]
@@ -1013,12 +1121,18 @@ fn error_comparison_mismatch() {
 
 #[test]
 fn error_too_few_args() {
-    check_err("fn f(x: i32) {} fn main() { f(); }", &["expected 1 argument"]);
+    check_err(
+        "fn f(x: i32) {} fn main() { f(); }",
+        &["expected 1 argument"],
+    );
 }
 
 #[test]
 fn error_too_many_args() {
-    check_err("fn f(x: i32) {} fn main() { f(1, 2); }", &["expected 1 argument"]);
+    check_err(
+        "fn f(x: i32) {} fn main() { f(1, 2); }",
+        &["expected 1 argument"],
+    );
 }
 
 #[test]
@@ -1066,7 +1180,10 @@ fn error_not_int() {
 
 #[test]
 fn error_add_bool() {
-    check_err("fn main() { let x = true + false; }", &["cannot apply binary"]);
+    check_err(
+        "fn main() { let x = true + false; }",
+        &["cannot apply binary"],
+    );
 }
 
 #[test]
@@ -1082,17 +1199,26 @@ fn error_ref_type_mismatch() {
 #[test]
 #[ignore = "mutability checking not yet implemented"]
 fn error_mut_ref_to_immutable() {
-    check_err("fn main() { let x = 42; let y = &mut x; }", &["cannot borrow"]);
+    check_err(
+        "fn main() { let x = 42; let y = &mut x; }",
+        &["cannot borrow"],
+    );
 }
 
 #[test]
 fn error_missing_field() {
-    check_err("struct S { a: i32 } fn main() { let x = S {}; }", &["missing field"]);
+    check_err(
+        "struct S { a: i32 } fn main() { let x = S {}; }",
+        &["missing field"],
+    );
 }
 
 #[test]
 fn error_unknown_field() {
-    check_err("struct S { a: i32 } fn main() { let x = S { b: 1 }; }", &["unknown field"]);
+    check_err(
+        "struct S { a: i32 } fn main() { let x = S { b: 1 }; }",
+        &["unknown field"],
+    );
 }
 
 #[test]
@@ -1128,7 +1254,10 @@ fn never_coerces_to_any() {
 
 #[test]
 fn never_in_if() {
-    check("fn main() { let x = if true { 1 } else { return }; }", "i32");
+    check(
+        "fn main() { let x = if true { 1 } else { return }; }",
+        "i32",
+    );
 }
 
 #[test]
@@ -1240,7 +1369,10 @@ fn empty_function() {
 
 #[test]
 fn function_only_return() {
-    check("fn f() -> i32 { return 42; } fn main() { let x = f(); }", "i32");
+    check(
+        "fn f() -> i32 { return 42; } fn main() { let x = f(); }",
+        "i32",
+    );
 }
 
 #[test]

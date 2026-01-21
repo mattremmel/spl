@@ -99,7 +99,17 @@ impl<'src> Sink<'src> {
             {
                 // Walk the entire chain and mark all targets
                 let mut current = i + offset;
+                let mut chain_len = 0;
+
                 while current < self.events.len() {
+                    chain_len += 1;
+                    debug_assert!(
+                        chain_len <= self.events.len(),
+                        "invariant: forward-link chain length ({}) exceeds events count ({}), possible cycle",
+                        chain_len,
+                        self.events.len()
+                    );
+
                     forward_linked[current] = true;
                     if let Event::Start {
                         forward_parent: Some(next_offset),
@@ -126,8 +136,17 @@ impl<'src> Sink<'src> {
     ) -> Vec<crate::syntax::SyntaxKind> {
         let mut kinds = vec![first_kind];
         let mut current = start + first_offset;
+        let mut chain_len = 0;
 
         while current < self.events.len() {
+            chain_len += 1;
+            debug_assert!(
+                chain_len <= self.events.len(),
+                "invariant: parent chain length ({}) exceeds events count ({}), possible cycle",
+                chain_len,
+                self.events.len()
+            );
+
             match &self.events[current] {
                 Event::Start {
                     kind,

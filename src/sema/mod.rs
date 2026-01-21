@@ -98,6 +98,12 @@ impl SemanticContext {
 
     /// Get a scope by its ID.
     pub fn get_scope(&self, scope_id: ScopeId) -> &Scope {
+        debug_assert!(
+            self.is_valid_scope_id(scope_id),
+            "precondition: scope_id {} must be valid (< {})",
+            scope_id.0,
+            self.scopes.len()
+        );
         &self.scopes[scope_id.0 as usize]
     }
 
@@ -136,6 +142,11 @@ impl SemanticContext {
         let mut scope_id = Some(self.current_scope);
 
         while let Some(id) = scope_id {
+            debug_assert!(
+                self.is_valid_scope_id(id),
+                "invariant: scope chain contains invalid scope_id {}",
+                id.0
+            );
             let scope = &self.scopes[id.0 as usize];
             if let Some(def_id) = scope.lookup(name) {
                 return Some(def_id);
@@ -153,6 +164,12 @@ impl SemanticContext {
 
     /// Get a symbol by its DefId.
     pub fn get_symbol(&self, def_id: DefId) -> &Symbol {
+        debug_assert!(
+            self.is_valid_def_id(def_id),
+            "precondition: def_id {} must be valid (< {})",
+            def_id.0,
+            self.symbols.len()
+        );
         &self.symbols[def_id.0 as usize]
     }
 
@@ -177,6 +194,20 @@ impl SemanticContext {
             scope_id = self.scopes[id.0 as usize].parent;
         }
         depth
+    }
+
+    // ===== ID Validation Helpers =====
+
+    /// Returns true if the given ScopeId is valid (within bounds).
+    #[cfg(debug_assertions)]
+    fn is_valid_scope_id(&self, scope_id: ScopeId) -> bool {
+        (scope_id.0 as usize) < self.scopes.len()
+    }
+
+    /// Returns true if the given DefId is valid (within bounds).
+    #[cfg(debug_assertions)]
+    fn is_valid_def_id(&self, def_id: DefId) -> bool {
+        (def_id.0 as usize) < self.symbols.len()
     }
 }
 

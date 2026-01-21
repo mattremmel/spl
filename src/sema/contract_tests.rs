@@ -5,8 +5,8 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::sema::{ScopeKind, SemanticContext};
     use crate::sema::types::TypeInterner;
+    use crate::sema::{ScopeKind, SemanticContext};
 
     // =========================================================================
     // Phase 1: Helper Function Tests
@@ -19,7 +19,10 @@ mod tests {
         fn types_len_starts_with_builtins() {
             let interner = TypeInterner::new();
             // Built-in primitives are pre-interned (i8, i16, i32, i64, etc.)
-            assert!(interner.types_len() > 0, "interner should have built-in types");
+            assert!(
+                interner.types_len() > 0,
+                "interner should have built-in types"
+            );
         }
 
         #[test]
@@ -101,10 +104,10 @@ mod tests {
     // =========================================================================
 
     mod type_inference {
-        use crate::parser::parse;
         use crate::ast::SourceFile;
-        use crate::sema::resolver::resolve;
+        use crate::parser::parse;
         use crate::sema::infer::infer;
+        use crate::sema::resolver::resolve;
         use rowan::ast::AstNode;
 
         #[test]
@@ -247,8 +250,8 @@ mod tests {
     // =========================================================================
 
     mod resolver_contracts {
-        use crate::parser::parse;
         use crate::ast::SourceFile;
+        use crate::parser::parse;
         use crate::sema::resolver::resolve;
         use rowan::ast::AstNode;
 
@@ -415,10 +418,10 @@ mod tests {
     // =========================================================================
 
     mod synth_contracts {
-        use crate::parser::parse;
         use crate::ast::SourceFile;
-        use crate::sema::resolver::resolve;
+        use crate::parser::parse;
         use crate::sema::infer::infer;
+        use crate::sema::resolver::resolve;
         use rowan::ast::AstNode;
 
         #[test]
@@ -498,7 +501,10 @@ mod tests {
 
             // Should have a diagnostic about missing field
             assert!(
-                infer_result.diagnostics.iter().any(|d| d.message.contains("missing field")),
+                infer_result
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.message.contains("missing field")),
                 "expected missing field diagnostic"
             );
         }
@@ -606,10 +612,10 @@ mod tests {
     // =========================================================================
 
     mod integration {
-        use crate::parser::parse;
         use crate::ast::SourceFile;
-        use crate::sema::resolver::resolve;
+        use crate::parser::parse;
         use crate::sema::infer::infer;
+        use crate::sema::resolver::resolve;
         use rowan::ast::AstNode;
 
         #[test]
@@ -668,7 +674,11 @@ mod tests {
             assert!(
                 resolve_result.diagnostics.is_empty(),
                 "resolve errors: {:?}",
-                resolve_result.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+                resolve_result
+                    .diagnostics
+                    .iter()
+                    .map(|d| &d.message)
+                    .collect::<Vec<_>>()
             );
 
             let _infer_result = infer(&source_file, resolve_result);
@@ -725,6 +735,164 @@ mod tests {
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
             let _infer_result = infer(&source_file, resolve_result);
+        }
+    }
+
+    // =========================================================================
+    // Parser Sink Contracts
+    // =========================================================================
+
+    mod parser_sink_contracts {
+        use crate::parser::parse;
+
+        #[test]
+        fn forward_link_chain_terminates_on_deep_nesting() {
+            // Deeply nested expressions stress forward-link chains
+            let source = "(((((((((1 + 2) + 3) + 4) + 5) + 6) + 7) + 8) + 9) + 10)";
+            let source = format!("fn test() {{ {}; }}", source);
+            let result = parse(&source);
+            // Just verify parse completed - assertions in sink verify chain termination
+            assert!(result.ok(), "parse should succeed: {:?}", result.errors());
+        }
+
+        #[test]
+        fn parent_chain_terminates_on_nested_parens() {
+            // Nested parentheses create parent chains in the parser sink
+            let source = "fn test() { ((((((((((1)))))))))); }";
+            let result = parse(source);
+            assert!(result.ok(), "parse should succeed: {:?}", result.errors());
+        }
+
+        #[test]
+        fn deeply_nested_binary_expressions() {
+            // Many levels of binary expression nesting
+            let source =
+                "fn test() { 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 + 11 + 12 + 13 + 14 + 15; }";
+            let result = parse(source);
+            assert!(result.ok(), "parse should succeed: {:?}", result.errors());
+        }
+
+        #[test]
+        fn nested_array_literals() {
+            // Nested array literals stress the parser sink
+            let source = "fn test() { [[[[[[[[1]]]]]]]]; }";
+            let result = parse(source);
+            assert!(result.ok(), "parse should succeed: {:?}", result.errors());
+        }
+    }
+
+    // =========================================================================
+    // ID Validation Contracts
+    // =========================================================================
+
+    mod id_validation_contracts {
+        use super::*;
+        use crate::sema::symbol::{SymbolKind, Visibility};
+
+        #[test]
+        fn scope_ids_valid_in_deep_nesting() {
+            let mut ctx = SemanticContext::new();
+            for _ in 0..100 {
+                let id = ctx.enter_scope(ScopeKind::Block);
+                let _ = ctx.get_scope(id);
+            }
+            for _ in 0..100 {
+                ctx.exit_scope();
+            }
+        }
+
+        #[test]
+        fn def_ids_valid_after_many_definitions() {
+            let mut ctx = SemanticContext::new();
+            for i in 0..1000 {
+                let name = ctx.intern(&format!("sym_{}", i));
+                if let Ok(def_id) = ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1) {
+                    let _ = ctx.get_symbol(def_id);
+                }
+            }
+        }
+
+        #[test]
+        fn lookup_traverses_valid_scope_chain() {
+            let mut ctx = SemanticContext::new();
+            let name = ctx.intern("target");
+            ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1)
+                .unwrap();
+
+            // Create deep scope chain
+            for _ in 0..50 {
+                ctx.enter_scope(ScopeKind::Block);
+            }
+
+            // Lookup should traverse entire chain without hitting invalid scope
+            let _ = ctx.lookup(name);
+        }
+    }
+
+    // =========================================================================
+    // Type Interner Contracts
+    // =========================================================================
+
+    mod type_interner_contracts {
+        use super::*;
+
+        #[test]
+        fn type_ids_valid_after_many_interns() {
+            let mut interner = TypeInterner::new();
+            for i in 0..1000 {
+                let arr = interner.mk_array(interner.i32(), i);
+                let _ = interner.get(arr);
+            }
+        }
+
+        #[test]
+        fn fresh_vars_are_unique() {
+            let mut interner = TypeInterner::new();
+            let vars: Vec<_> = (0..100).map(|_| interner.fresh_type_var()).collect();
+            for i in 0..vars.len() {
+                for j in (i + 1)..vars.len() {
+                    assert_ne!(vars[i], vars[j]);
+                }
+            }
+        }
+
+        #[test]
+        fn fresh_int_vars_are_unique() {
+            let mut interner = TypeInterner::new();
+            let vars: Vec<_> = (0..100).map(|_| interner.fresh_int_var()).collect();
+            for i in 0..vars.len() {
+                for j in (i + 1)..vars.len() {
+                    assert_ne!(vars[i], vars[j]);
+                }
+            }
+        }
+
+        #[test]
+        fn fresh_float_vars_are_unique() {
+            let mut interner = TypeInterner::new();
+            let vars: Vec<_> = (0..100).map(|_| interner.fresh_float_var()).collect();
+            for i in 0..vars.len() {
+                for j in (i + 1)..vars.len() {
+                    assert_ne!(vars[i], vars[j]);
+                }
+            }
+        }
+
+        #[test]
+        fn interned_types_retrievable() {
+            let mut interner = TypeInterner::new();
+
+            // Intern various complex types
+            let ref_i32 = interner.mk_ref(crate::sema::Mutability::Shared, interner.i32());
+            let slice = interner.mk_slice(interner.bool());
+            let tuple = interner.mk_tuple(vec![interner.i32(), interner.f64()]);
+            let array = interner.mk_array(interner.char(), 42);
+
+            // All should be retrievable
+            let _ = interner.get(ref_i32);
+            let _ = interner.get(slice);
+            let _ = interner.get(tuple);
+            let _ = interner.get(array);
         }
     }
 }

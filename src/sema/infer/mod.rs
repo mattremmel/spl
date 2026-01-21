@@ -6,8 +6,8 @@
 //! - Unifies type constraints to resolve inference variables
 
 use crate::ast::{
-    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, FieldExpr,
-    ForExpr, FunctionDef, IfExpr, IndexExpr, Item, LetStmt, LiteralExpr, LoopExpr, MethodCallExpr,
+    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, FieldExpr, ForExpr,
+    FunctionDef, IfExpr, IndexExpr, Item, LetStmt, LiteralExpr, LoopExpr, MethodCallExpr,
     ParenExpr, Pat, PathExpr, PrefixExpr, RangeExpr, RefExpr, ReturnExpr, SliceExpr, SourceFile,
     Stmt, StructExpr, TupleExpr, WhileExpr,
 };
@@ -102,8 +102,7 @@ impl InferResult {
                     let elem_str = self.type_to_string(elems[0]);
                     format!("({},)", elem_str)
                 } else {
-                    let elem_strs: Vec<_> =
-                        elems.iter().map(|e| self.type_to_string(*e)).collect();
+                    let elem_strs: Vec<_> = elems.iter().map(|e| self.type_to_string(*e)).collect();
                     format!("({})", elem_strs.join(", "))
                 }
             }
@@ -630,7 +629,10 @@ impl InferEngine {
 
         // Check if it's a function
         if let Some(sig) = self.fn_signatures.get(&def_id) {
-            return self.ctx.types.mk_fn_ptr(sig.params.iter().map(|(_, t)| *t).collect(), sig.ret);
+            return self
+                .ctx
+                .types
+                .mk_fn_ptr(sig.params.iter().map(|(_, t)| *t).collect(), sig.ret);
         }
 
         // Unknown binding - return error
@@ -790,7 +792,9 @@ impl InferEngine {
 
         // Postcondition: either all fields provided or update base present
         debug_assert!(
-            has_update_base || seen_fields.len() == fields_info.len() || !self.diagnostics.is_empty(),
+            has_update_base
+                || seen_fields.len() == fields_info.len()
+                || !self.diagnostics.is_empty(),
             "postcondition: struct expr must have all fields or update base (or emit diagnostic)"
         );
 
@@ -1094,8 +1098,7 @@ impl InferEngine {
 
         let span = text_range_to_span(field.syntax().text_range());
         self.diagnostics.push(
-            Diagnostic::error("field access on non-struct type")
-                .with_label(span, "not a struct"),
+            Diagnostic::error("field access on non-struct type").with_label(span, "not a struct"),
         );
         self.ctx.types.error()
     }
@@ -1142,7 +1145,11 @@ impl InferEngine {
         // Look up method in struct_def_id's methods
         if let Some(def_id) = struct_def_id {
             // Get the list of methods for this struct
-            let method_def_ids = self.struct_methods.get(&def_id).cloned().unwrap_or_default();
+            let method_def_ids = self
+                .struct_methods
+                .get(&def_id)
+                .cloned()
+                .unwrap_or_default();
 
             // Search for method with matching name
             let mut found_sig: Option<(Vec<(String, TypeId)>, TypeId)> = None;
@@ -1247,11 +1254,16 @@ impl InferEngine {
                                         let symbol = self.ctx.get_symbol(method_def_id);
                                         let method_name = self.ctx.resolve(symbol.name);
                                         if method_name == fn_name
-                                            && let Some(sig) = self.fn_signatures.get(&method_def_id)
+                                            && let Some(sig) =
+                                                self.fn_signatures.get(&method_def_id)
                                         {
                                             let param_types: Vec<_> =
                                                 sig.params.iter().map(|(_, t)| *t).collect();
-                                            return self.check_call_args(call, &param_types, sig.ret);
+                                            return self.check_call_args(
+                                                call,
+                                                &param_types,
+                                                sig.ret,
+                                            );
                                         }
                                     }
                                 }
@@ -1261,8 +1273,7 @@ impl InferEngine {
                 }
                 let span = text_range_to_span(callee.syntax().text_range());
                 self.diagnostics.push(
-                    Diagnostic::error("value is not a function")
-                        .with_label(span, "not a function"),
+                    Diagnostic::error("value is not a function").with_label(span, "not a function"),
                 );
                 return self.ctx.types.error();
             }
@@ -1271,7 +1282,12 @@ impl InferEngine {
         self.check_call_args(call, &param_types, ret_ty)
     }
 
-    fn check_call_args(&mut self, call: &CallExpr, param_types: &[TypeId], ret_ty: TypeId) -> TypeId {
+    fn check_call_args(
+        &mut self,
+        call: &CallExpr,
+        param_types: &[TypeId],
+        ret_ty: TypeId,
+    ) -> TypeId {
         let args: Vec<_> = call
             .arg_list()
             .map(|al| al.args().collect())
@@ -1353,8 +1369,7 @@ impl InferEngine {
             _ => {
                 let span = text_range_to_span(base.syntax().text_range());
                 self.diagnostics.push(
-                    Diagnostic::error("cannot slice this type")
-                        .with_label(span, "not sliceable"),
+                    Diagnostic::error("cannot slice this type").with_label(span, "not sliceable"),
                 );
                 self.ctx.types.error()
             }
@@ -1616,10 +1631,8 @@ impl InferEngine {
         let actual = self.synth_expr(expr);
         if !self.unify(actual, expected) {
             let span = text_range_to_span(expr.syntax().text_range());
-            self.diagnostics.push(
-                Diagnostic::error("type mismatch")
-                    .with_label(span, "mismatched types"),
-            );
+            self.diagnostics
+                .push(Diagnostic::error("type mismatch").with_label(span, "mismatched types"));
         }
     }
 
@@ -1649,7 +1662,10 @@ impl InferEngine {
             (ty, diverges)
         } else {
             // No initializer - use annotation or error
-            (annotation_ty.unwrap_or_else(|| self.fresh_type_var()), false)
+            (
+                annotation_ty.unwrap_or_else(|| self.fresh_type_var()),
+                false,
+            )
         };
 
         // Bind the pattern
@@ -1664,13 +1680,10 @@ impl InferEngine {
         match pat {
             Pat::Ident(ident_pat) => {
                 // Get the DefId from the resolution
-                let token = ident_pat
-                    .name()
-                    .and_then(|n| n.ident_token())
-                    .or_else(|| {
-                        use crate::ast::token;
-                        token(ident_pat.syntax(), SyntaxKind::IDENT)
-                    });
+                let token = ident_pat.name().and_then(|n| n.ident_token()).or_else(|| {
+                    use crate::ast::token;
+                    token(ident_pat.syntax(), SyntaxKind::IDENT)
+                });
 
                 if let Some(token) = token {
                     let span = text_range_to_span(token.text_range());
@@ -1841,8 +1854,7 @@ impl InferEngine {
                     // Get the struct this impl is for
                     let struct_def_id = self.get_impl_struct_def_id(impl_block);
                     // Create the struct type if we have the struct DefId
-                    let struct_ty =
-                        struct_def_id.map(|id| self.ctx.types.mk_struct(id, vec![]));
+                    let struct_ty = struct_def_id.map(|id| self.ctx.types.mk_struct(id, vec![]));
 
                     // Set current_self_type so that `Self` in signatures resolves correctly
                     self.current_self_type = struct_ty;
@@ -1960,7 +1972,14 @@ impl InferEngine {
             .map(|t| self.ast_type_to_type_id(&t))
             .unwrap_or_else(|| self.ctx.types.unit());
 
-        self.fn_signatures.insert(def_id, FnSignature { self_param, params, ret });
+        self.fn_signatures.insert(
+            def_id,
+            FnSignature {
+                self_param,
+                params,
+                ret,
+            },
+        );
     }
 
     fn collect_struct_info(&mut self, struct_def: &crate::ast::StructDef) {
