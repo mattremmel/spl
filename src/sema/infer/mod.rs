@@ -592,6 +592,17 @@ impl InferEngine {
                     self.ctx.types.mk_struct(def_id, new_args)
                 }
             }
+            Type::Alias(def_id, type_args) => {
+                let new_args: Vec<_> = type_args
+                    .iter()
+                    .map(|a| self.substitute_type_params(*a, subst))
+                    .collect();
+                if new_args == type_args {
+                    type_id
+                } else {
+                    self.ctx.types.mk_alias(def_id, new_args)
+                }
+            }
             Type::FnPtr { params, ret } => {
                 let new_params: Vec<_> = params
                     .iter()
@@ -604,7 +615,7 @@ impl InferEngine {
                     self.ctx.types.mk_fn_ptr(new_params, new_ret)
                 }
             }
-            // Primitives, variables, error, string, alias, selftype don't need substitution
+            // Primitives, variables, error, string, selftype don't need substitution
             _ => type_id,
         }
     }
@@ -1485,21 +1496,22 @@ impl InferEngine {
             }
 
             if let Some(sig) = found_sig {
-                // Also add impl type params to the substitution
-                // Method signature type_params includes impl type params
-                for &param_def_id in &sig.type_params {
-                    // If this type param is not already in subst and matches a receiver type arg position,
-                    // it's an impl type param that should be mapped to the receiver's type arg
-                    if !subst.contains_key(&param_def_id) {
-                        // Check if there's a corresponding struct type param
-                        for (i, _struct_param) in struct_type_params.iter().enumerate() {
-                            if i < receiver_type_args.len() {
-                                // The impl type param at position i maps to the same type arg
-                                subst.insert(param_def_id, receiver_type_args[i]);
-                                break;
-                            }
-                        }
+                // Map impl type params to receiver type args by position.
+                // sig.type_params structure: [impl_params..., method_params...]
+                // where impl_params.len() == struct_type_params.len()
+                let impl_param_count = struct_type_params.len();
+                for (i, &param_def_id) in sig.type_params.iter().enumerate() {
+                    if subst.contains_key(&param_def_id) {
+                        continue;
                     }
+                    let type_arg = if i < impl_param_count && i < receiver_type_args.len() {
+                        // This is an impl type param at position i, map to receiver's type arg
+                        receiver_type_args[i]
+                    } else {
+                        // This is a method-specific type param, create fresh type var
+                        self.fresh_type_var()
+                    };
+                    subst.insert(param_def_id, type_arg);
                 }
 
                 // Substitute in params and return type

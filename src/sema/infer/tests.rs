@@ -1707,3 +1707,94 @@ fn generic_multiple_instantiations() {
         "bool",
     );
 }
+
+// Phase 7: Method-Specific Type Parameters
+
+#[test]
+fn generic_method_with_own_type_param() {
+    // Method has its own type parameter U distinct from impl type param T
+    check(
+        r#"
+        struct Wrapper<T> { value: T }
+        impl<T> Wrapper<T> {
+            fn transform<U>(&self, other: U) -> U { other }
+        }
+        fn main() {
+            let w = Wrapper { value: 42 };
+            let x = w.transform(true);
+        }
+        "#,
+        "bool",
+    );
+}
+
+#[test]
+fn generic_method_uses_both_impl_and_own_type_param() {
+    // Method returns T (from impl) but takes U (method-specific)
+    check(
+        r#"
+        struct Wrapper<T> { value: T }
+        impl<T> Wrapper<T> {
+            fn with_other<U>(&self, _other: U) -> T { self.value }
+        }
+        fn main() {
+            let w = Wrapper { value: 42 };
+            let x = w.with_other(true);
+        }
+        "#,
+        "i32",
+    );
+}
+
+// Phase 8: Generic Functions Returning Generic Structs
+
+#[test]
+#[ignore = "requires unification of Type::Param with struct literal's fresh type vars in return position"]
+fn generic_fn_returns_generic_struct() {
+    check(
+        r#"
+        struct Wrapper<T> { value: T }
+        fn wrap<T>(x: T) -> Wrapper<T> { Wrapper { value: x } }
+        fn main() {
+            let w = wrap(42);
+            let x = w.value;
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+#[ignore = "requires unification of Type::Param with struct literal's fresh type vars in return position"]
+fn generic_fn_returns_generic_struct_inferred_from_context() {
+    check(
+        r#"
+        struct Wrapper<T> { value: T }
+        fn wrap<T>(x: T) -> Wrapper<T> { Wrapper { value: x } }
+        fn main() {
+            let w: Wrapper<i64> = wrap(42);
+            let x = w.value;
+        }
+        "#,
+        "i64",
+    );
+}
+
+// Phase 9: Nested Generic Types
+
+#[test]
+#[ignore = "requires proper unification of nested generic struct field types"]
+fn nested_generic_struct() {
+    check(
+        r#"
+        struct Inner<T> { value: T }
+        struct Outer<T> { inner: Inner<T> }
+        fn main() {
+            let o = Outer { inner: Inner { value: 42 } };
+            let x = o.inner.value;
+        }
+        "#,
+        "i32",
+    );
+}
+
