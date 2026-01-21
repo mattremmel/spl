@@ -489,12 +489,21 @@ impl CastExpr {
 }
 
 impl RangeExpr {
-    pub fn start(&self) -> Option<Expr> {
-        children::<Expr>(&self.0).next()
+    /// Get the `..` token.
+    pub fn op_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::DOT_DOT)
     }
 
+    /// Get the start expression (before the `..` token), if any.
+    pub fn start(&self) -> Option<Expr> {
+        let dot_dot_offset = self.op_token()?.text_range().start();
+        children::<Expr>(&self.0).find(|expr| expr.syntax().text_range().end() <= dot_dot_offset)
+    }
+
+    /// Get the end expression (after the `..` token), if any.
     pub fn end(&self) -> Option<Expr> {
-        children::<Expr>(&self.0).nth(1)
+        let dot_dot_offset = self.op_token()?.text_range().end();
+        children::<Expr>(&self.0).find(|expr| expr.syntax().text_range().start() >= dot_dot_offset)
     }
 }
 

@@ -2011,9 +2011,7 @@ mod tests {
         }
 
         /// RangeFull expression: `..`
-        /// Re-enable when parser supports `..` as a prefix/standalone expression
         #[test]
-        #[ignore = "parser does not support RangeFull (..) as standalone expression yet"]
         fn range_full() {
             check(
                 "fn main() { .. }",
@@ -2046,9 +2044,7 @@ mod tests {
         }
 
         /// RangeTo expression: `..10`
-        /// Re-enable when parser supports `..expr` as a prefix expression
         #[test]
-        #[ignore = "parser does not support RangeTo (..expr) as prefix expression yet"]
         fn range_to() {
             check(
                 "fn main() { ..10 }",

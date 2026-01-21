@@ -21,6 +21,13 @@ pub(super) fn prefix_expr(
         return Ok(Some(m.complete(p, SyntaxKind::RefExpr)));
     }
 
+    // Handle range prefix specially (..expr or ..)
+    if op == SyntaxKind::DOT_DOT {
+        p.bump(); // ..
+        let _ = expr_bp(p, r_bp)?; // Optional RHS
+        return Ok(Some(m.complete(p, SyntaxKind::RangeExpr)));
+    }
+
     // Regular prefix operator
     p.bump();
     let _ = expr_bp(p, r_bp)?;
@@ -47,6 +54,13 @@ pub(super) fn prefix_expr_no_struct(
         p.eat(SyntaxKind::MUT_KW); // optional mut
         let _ = expr_no_struct_bp(p, r_bp)?;
         return Ok(Some(m.complete(p, SyntaxKind::RefExpr)));
+    }
+
+    // Handle range prefix specially (..expr or ..)
+    if op == SyntaxKind::DOT_DOT {
+        p.bump(); // ..
+        let _ = expr_no_struct_bp(p, r_bp)?; // Optional RHS
+        return Ok(Some(m.complete(p, SyntaxKind::RangeExpr)));
     }
 
     // Regular prefix operator
@@ -1160,6 +1174,46 @@ mod tests {
                   LiteralExpr@4..6
                     WHITESPACE@4..5 " "
                     INT_LITERAL@5..6 "3"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn range_to_expr() {
+        check_expr(
+            "..10",
+            &expect![[r#"
+                RangeExpr@0..4
+                  DOT_DOT@0..2 ".."
+                  LiteralExpr@2..4
+                    INT_LITERAL@2..4 "10"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn range_full_expr() {
+        check_expr(
+            "..",
+            &expect![[r#"
+                RangeExpr@0..2
+                  DOT_DOT@0..2 ".."
+            "#]],
+        );
+    }
+
+    #[test]
+    fn range_to_with_path() {
+        check_expr(
+            "..end",
+            &expect![[r#"
+                RangeExpr@0..5
+                  DOT_DOT@0..2 ".."
+                  PathExpr@2..5
+                    Path@2..5
+                      PathSegment@2..5
+                        NameRef@2..5
+                          IDENT@2..5 "end"
             "#]],
         );
     }

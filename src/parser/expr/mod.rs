@@ -147,6 +147,7 @@ fn prefix_bp(op: SyntaxKind) -> Option<((), u8)> {
     match op {
         SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR => Some(((), 19)), // Unary: prec 10
         SyntaxKind::AMP => Some(((), 19)),                                         // Reference
+        SyntaxKind::DOT_DOT => Some(((), 12)), // Range prefix: same r_bp as infix range
         _ => None,
     }
 }
