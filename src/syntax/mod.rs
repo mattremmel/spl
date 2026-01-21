@@ -115,6 +115,7 @@ pub enum SyntaxKind {
     ArrayExpr,
     StructExpr,
     StructExprField,
+    StructUpdateBase,
     BinExpr,
     PrefixExpr,
     RefExpr,
@@ -142,6 +143,7 @@ pub enum SyntaxKind {
     TupleType,
     FnPtrType,
     PathType,
+    NeverType,
 
     // Patterns
     IdentPat,

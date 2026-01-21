@@ -195,6 +195,10 @@ impl SelfParam {
     pub fn mut_kw(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::MUT_KW)
     }
+
+    pub fn self_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::SELF_VALUE_KW)
+    }
 }
 
 impl GenericParams {
@@ -224,6 +228,14 @@ impl Name {
 impl NameRef {
     pub fn ident_token(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::IDENT)
+    }
+
+    /// Get the token for this name reference.
+    /// Returns an IDENT, SELF_VALUE_KW (for `self`), or SELF_TYPE_KW (for `Self`) token.
+    pub fn token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::IDENT)
+            .or_else(|| token(&self.0, SyntaxKind::SELF_VALUE_KW))
+            .or_else(|| token(&self.0, SyntaxKind::SELF_TYPE_KW))
     }
 }
 

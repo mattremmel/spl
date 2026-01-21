@@ -6,7 +6,7 @@
 //! - Unifies type constraints to resolve inference variables
 
 use crate::ast::{
-    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, ExprStmt, FieldExpr,
+    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, FieldExpr,
     ForExpr, FunctionDef, IfExpr, IndexExpr, Item, LetStmt, LiteralExpr, LoopExpr, MethodCallExpr,
     ParenExpr, Pat, PathExpr, PrefixExpr, RangeExpr, RefExpr, ReturnExpr, SliceExpr, SourceFile,
     Stmt, StructExpr, TupleExpr, WhileExpr,
@@ -154,10 +154,14 @@ struct InferEngine {
     fn_signatures: FxHashMap<DefId, FnSignature>,
     /// Struct field info collected in first pass.
     struct_fields: FxHashMap<DefId, Vec<(String, TypeId)>>,
+    /// Map from struct DefId to its methods' DefIds.
+    struct_methods: FxHashMap<DefId, Vec<DefId>>,
     /// Current function's return type (for return statements).
     current_return_type: Option<TypeId>,
     /// Current loop's break type (for break statements with values).
     current_loop_break_type: Option<TypeId>,
+    /// Current impl block's Self type (for resolving Self in type positions).
+    current_self_type: Option<TypeId>,
 }
 
 /// The kind of receiver for a method.
@@ -200,8 +204,10 @@ impl InferEngine {
             diagnostics: resolve_result.diagnostics,
             fn_signatures: FxHashMap::default(),
             struct_fields: FxHashMap::default(),
+            struct_methods: FxHashMap::default(),
             current_return_type: None,
             current_loop_break_type: None,
+            current_self_type: None,
         }
     }
 
@@ -497,7 +503,8 @@ impl InferEngine {
             None => return self.ctx.types.error(),
         };
 
-        let token = match name_ref.ident_token() {
+        // Use token() instead of ident_token() to handle `self` keyword
+        let token = match name_ref.token() {
             Some(t) => t,
             None => return self.ctx.types.error(),
         };
@@ -544,6 +551,16 @@ impl InferEngine {
             return self.ctx.types.mk_array(elem, 0);
         }
 
+        // Check for repeat syntax [elem; count]
+        if array.is_repeat() && exprs.len() == 2 {
+            // First expression is the element value
+            let elem_type = self.synth_expr(&exprs[0]);
+            // Second expression is the count - evaluate as constant
+            let count = self.eval_const_usize(&exprs[1]).unwrap_or(0);
+            return self.ctx.types.mk_array(elem_type, count as u64);
+        }
+
+        // Array literal [a, b, c]
         // Synthesize the first element's type
         let first_type = self.synth_expr(&exprs[0]);
 
@@ -594,6 +611,24 @@ impl InferEngine {
         let fields_info = self.struct_fields.get(&def_id).cloned().unwrap_or_default();
         let field_map: FxHashMap<_, _> = fields_info.iter().cloned().collect();
 
+        // Check for struct update syntax: ..base
+        let has_update_base = if let Some(update_base) = struct_expr.update_base() {
+            if let Some(base_expr) = update_base.expr() {
+                let base_ty = self.synth_expr(&base_expr);
+                let expected_struct_ty = self.ctx.types.mk_struct(def_id, vec![]);
+                if !self.unify(base_ty, expected_struct_ty) {
+                    let span = text_range_to_span(base_expr.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("struct update base has wrong type")
+                            .with_label(span, "wrong type"),
+                    );
+                }
+            }
+            true
+        } else {
+            false
+        };
+
         // Check fields in struct expression
         let mut seen_fields = std::collections::HashSet::new();
         for field in struct_expr.fields() {
@@ -620,14 +655,16 @@ impl InferEngine {
             }
         }
 
-        // Check for missing fields
-        for (field_name, _) in &fields_info {
-            if !seen_fields.contains(field_name) {
-                let expr_span = text_range_to_span(struct_expr.syntax().text_range());
-                self.diagnostics.push(
-                    Diagnostic::error(format!("missing field `{}`", field_name))
-                        .with_label(expr_span, "missing field"),
-                );
+        // Check for missing fields (only if no update base)
+        if !has_update_base {
+            for (field_name, _) in &fields_info {
+                if !seen_fields.contains(field_name) {
+                    let expr_span = text_range_to_span(struct_expr.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("missing field `{}`", field_name))
+                            .with_label(expr_span, "missing field"),
+                    );
+                }
             }
         }
 
@@ -860,15 +897,25 @@ impl InferEngine {
 
         let base_ty = self.synth_expr(&base);
         let resolved = self.resolve_type(base_ty);
-        let base_type = self.ctx.types.get(resolved).clone();
+        let mut base_type = self.ctx.types.get(resolved).clone();
+
+        // Auto-deref references for field access
+        while let Type::Ref(_, inner) = &base_type {
+            let inner_resolved = self.resolve_type(*inner);
+            base_type = self.ctx.types.get(inner_resolved).clone();
+        }
 
         // Handle tuple field access (e.g., t.0, t.1)
-        // Try name_token() first (raw IDENT), then fall back to name() (NameRef)
-        let field_name = match field.name_token() {
+        // Try tuple_index_token first (INT_LITERAL), then name_token (raw IDENT),
+        // then fall back to name() (NameRef)
+        let field_name = match field.tuple_index_token() {
             Some(t) => t.text().to_string(),
-            None => match field.name().and_then(|n| n.ident_token()) {
+            None => match field.name_token() {
                 Some(t) => t.text().to_string(),
-                None => return self.ctx.types.error(),
+                None => match field.name().and_then(|n| n.ident_token()) {
+                    Some(t) => t.text().to_string(),
+                    None => return self.ctx.types.error(),
+                },
             },
         };
 
@@ -913,14 +960,16 @@ impl InferEngine {
 
         let receiver_ty = self.synth_expr(&receiver);
 
-        // For now, we'll just look up methods in the struct's impl blocks
-        // This is a simplified implementation
-        let method_name = match method.name() {
-            Some(n) => match n.ident_token() {
-                Some(t) => t.text().to_string(),
+        // Get method name from raw IDENT token first, then try NameRef
+        let method_name = match method.name_token() {
+            Some(t) => t.text().to_string(),
+            None => match method.name() {
+                Some(n) => match n.ident_token() {
+                    Some(t) => t.text().to_string(),
+                    None => return self.ctx.types.error(),
+                },
                 None => return self.ctx.types.error(),
             },
-            None => return self.ctx.types.error(),
         };
 
         // Resolve receiver type to find struct DefId
@@ -942,16 +991,19 @@ impl InferEngine {
             _ => None,
         };
 
-        // Look up method in struct_def_id's methods (stored in fn_signatures)
-        // For now, we'll use a naming convention: StructName::method_name
-        if let Some(_def_id) = struct_def_id {
-            // Search for method signature - collect data first to avoid borrow conflicts
+        // Look up method in struct_def_id's methods
+        if let Some(def_id) = struct_def_id {
+            // Get the list of methods for this struct
+            let method_def_ids = self.struct_methods.get(&def_id).cloned().unwrap_or_default();
+
+            // Search for method with matching name
             let mut found_sig: Option<(Vec<(String, TypeId)>, TypeId)> = None;
-            for (fn_def_id, sig) in &self.fn_signatures {
-                let symbol = self.ctx.get_symbol(*fn_def_id);
+            for method_def_id in method_def_ids {
+                let symbol = self.ctx.get_symbol(method_def_id);
                 let fn_name = self.ctx.resolve(symbol.name);
-                if fn_name == method_name {
-                    // Clone params to avoid borrow conflict
+                if fn_name == method_name
+                    && let Some(sig) = self.fn_signatures.get(&method_def_id)
+                {
                     found_sig = Some((sig.params.clone(), sig.ret));
                     break;
                 }
@@ -961,7 +1013,7 @@ impl InferEngine {
                 // Check arguments
                 if let Some(arg_list) = method.arg_list() {
                     let args: Vec<_> = arg_list.args().collect();
-                    // params now contains only regular params (self is in self_param field)
+                    // params contains only regular params (self is handled separately)
                     let expected_args = &params;
 
                     if args.len() != expected_args.len() {
@@ -985,8 +1037,13 @@ impl InferEngine {
             }
         }
 
-        // Method not found - this is OK for now, return a fresh type var
-        self.fresh_type_var()
+        // Method not found
+        let span = text_range_to_span(method.syntax().text_range());
+        self.diagnostics.push(
+            Diagnostic::error(format!("method `{}` not found", method_name))
+                .with_label(span, "unknown method"),
+        );
+        self.ctx.types.error()
     }
 
     fn synth_call(&mut self, call: &CallExpr) -> TypeId {
@@ -1006,17 +1063,52 @@ impl InferEngine {
                 // Check if it's a path to a function
                 if let Expr::Path(path_expr) = &callee
                     && let Some(path) = path_expr.path()
-                    && let Some(segment) = path.segments().next()
-                    && let Some(name_ref) = segment.name()
-                    && let Some(token) = name_ref.ident_token()
                 {
-                    let span = text_range_to_span(token.text_range());
-                    if let Some(&def_id) = self.resolutions.get(&span)
-                        && let Some(sig) = self.fn_signatures.get(&def_id)
-                    {
-                        let param_types: Vec<_> =
-                            sig.params.iter().map(|(_, t)| *t).collect();
-                        return self.check_call_args(call, &param_types, sig.ret);
+                    let segments: Vec<_> = path.segments().collect();
+
+                    // Handle single-segment path (simple function call like `foo()`)
+                    if segments.len() == 1 {
+                        if let Some(name_ref) = segments[0].name()
+                            && let Some(token) = name_ref.token()
+                        {
+                            let span = text_range_to_span(token.text_range());
+                            if let Some(&def_id) = self.resolutions.get(&span)
+                                && let Some(sig) = self.fn_signatures.get(&def_id)
+                            {
+                                let param_types: Vec<_> =
+                                    sig.params.iter().map(|(_, t)| *t).collect();
+                                return self.check_call_args(call, &param_types, sig.ret);
+                            }
+                        }
+                    }
+                    // Handle two-segment path (associated function like `S::new()`)
+                    else if segments.len() == 2 {
+                        // Get the type name from the first segment
+                        if let Some(type_name_ref) = segments[0].name()
+                            && let Some(type_token) = type_name_ref.token()
+                        {
+                            let type_span = text_range_to_span(type_token.text_range());
+                            if let Some(&struct_def_id) = self.resolutions.get(&type_span)
+                                && let Some(fn_name_ref) = segments[1].name()
+                                && let Some(fn_token) = fn_name_ref.token()
+                            {
+                                let fn_name = fn_token.text().to_string();
+                                // Look up the function in the struct's methods
+                                if let Some(methods) = self.struct_methods.get(&struct_def_id) {
+                                    for &method_def_id in methods {
+                                        let symbol = self.ctx.get_symbol(method_def_id);
+                                        let method_name = self.ctx.resolve(symbol.name);
+                                        if method_name == fn_name
+                                            && let Some(sig) = self.fn_signatures.get(&method_def_id)
+                                        {
+                                            let param_types: Vec<_> =
+                                                sig.params.iter().map(|(_, t)| *t).collect();
+                                            return self.check_call_args(call, &param_types, sig.ret);
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 let span = text_range_to_span(callee.syntax().text_range());
@@ -1305,32 +1397,33 @@ impl InferEngine {
         // Track if the block diverges
         let mut diverges = false;
 
-        // Process all statements
-        for stmt in block.statements() {
-            // Check if this statement is a diverging expression
-            if let Stmt::Expr(expr_stmt) = &stmt {
-                if let Some(expr) = expr_stmt.expr() {
-                    let ty = self.synth_expr(&expr);
-                    // Check if this expression has the never type
-                    let resolved = self.resolve_type(ty);
-                    let inner = self.ctx.types.get(resolved);
-                    if matches!(inner, Type::Primitive(PrimitiveKind::Never)) {
-                        diverges = true;
+        // Process all children in source order (statements and bare expressions)
+        // This is important because bare expressions (like `while` without semicolon)
+        // must be processed in order with surrounding statements.
+        for child in block.syntax().children() {
+            // Try to cast as a statement first
+            if let Some(stmt) = Stmt::cast(child.clone()) {
+                match &stmt {
+                    Stmt::Expr(expr_stmt) => {
+                        if let Some(expr) = expr_stmt.expr() {
+                            let ty = self.synth_expr(&expr);
+                            // Check if this expression has the never type
+                            let resolved = self.resolve_type(ty);
+                            let inner = self.ctx.types.get(resolved);
+                            if matches!(inner, Type::Primitive(PrimitiveKind::Never)) {
+                                diverges = true;
+                            }
+                        }
+                    }
+                    Stmt::Let(let_stmt) => {
+                        let stmt_diverges = self.infer_let_stmt(let_stmt);
+                        if stmt_diverges {
+                            diverges = true;
+                        }
                     }
                 }
-            } else {
-                self.infer_stmt(&stmt);
-            }
-        }
-
-        // Also process bare expressions that aren't wrapped in ExprStmt
-        // (like standalone if expressions without semicolons)
-        for child in block.syntax().children() {
-            if let Some(expr) = Expr::cast(child.clone()) {
-                // Skip if this is wrapped in an ExprStmt (already processed above)
-                if child.parent().and_then(ExprStmt::cast).is_some() {
-                    continue;
-                }
+            } else if let Some(expr) = Expr::cast(child.clone()) {
+                // Bare expression (not wrapped in ExprStmt)
                 let ty = self.synth_expr(&expr);
                 let resolved = self.resolve_type(ty);
                 let inner = self.ctx.types.get(resolved);
@@ -1371,38 +1464,37 @@ impl InferEngine {
     // Statement Inference
     // =========================================================================
 
-    fn infer_stmt(&mut self, stmt: &Stmt) {
-        match stmt {
-            Stmt::Let(let_stmt) => self.infer_let_stmt(let_stmt),
-            Stmt::Expr(expr_stmt) => {
-                if let Some(expr) = expr_stmt.expr() {
-                    self.synth_expr(&expr);
-                }
-            }
-        }
-    }
-
-    fn infer_let_stmt(&mut self, let_stmt: &LetStmt) {
+    /// Infer types for a let statement. Returns true if the initializer diverges.
+    fn infer_let_stmt(&mut self, let_stmt: &LetStmt) -> bool {
         // Get the type annotation if present
         let annotation_ty = let_stmt.ty().map(|ty| self.ast_type_to_type_id(&ty));
 
         // Synthesize or check the initializer
-        let init_ty = if let Some(init) = let_stmt.initializer() {
-            if let Some(expected) = annotation_ty {
+        let (init_ty, diverges) = if let Some(init) = let_stmt.initializer() {
+            let ty = if let Some(expected) = annotation_ty {
                 self.check_expr(&init, expected);
                 expected
             } else {
                 self.synth_expr(&init)
-            }
+            };
+
+            // Check if initializer diverges (e.g., let x = return 42;)
+            let resolved = self.resolve_type(ty);
+            let inner = self.ctx.types.get(resolved);
+            let diverges = matches!(inner, Type::Primitive(PrimitiveKind::Never));
+
+            (ty, diverges)
         } else {
             // No initializer - use annotation or error
-            annotation_ty.unwrap_or_else(|| self.fresh_type_var())
+            (annotation_ty.unwrap_or_else(|| self.fresh_type_var()), false)
         };
 
         // Bind the pattern
         if let Some(pat) = let_stmt.pat() {
             self.define_pattern(&pat, init_ty);
         }
+
+        diverges
     }
 
     fn define_pattern(&mut self, pat: &Pat, ty: TypeId) {
@@ -1459,28 +1551,43 @@ impl InferEngine {
     fn ast_type_to_type_id(&mut self, ty: &crate::ast::Type) -> TypeId {
         match ty {
             crate::ast::Type::Path(path_type) => {
-                if let Some(path) = path_type.path()
-                    && let Some(segment) = path.segments().next()
-                    && let Some(name_ref) = segment.name()
-                    && let Some(token) = name_ref.ident_token()
-                {
-                    let name = token.text();
+                let path = path_type.path();
+                if let Some(path) = path {
+                    let segment = path.segments().next();
+                    if let Some(segment) = segment {
+                        let name_ref = segment.name();
+                        if let Some(name_ref) = name_ref {
+                            let token = name_ref.token();
+                            if let Some(token) = token {
+                                let name = token.text();
 
-                    // Check for primitive types
-                    if let Some(prim) = PrimitiveKind::from_name(name) {
-                        return self.ctx.types.primitive(prim);
-                    }
+                                // Handle Self type
+                                if token.kind() == SyntaxKind::SELF_TYPE_KW || name == "Self" {
+                                    if let Some(self_ty) = self.current_self_type {
+                                        return self_ty;
+                                    }
+                                    // Self used outside impl block - error
+                                    return self.ctx.types.error();
+                                }
 
-                    // Check for String
-                    if name == "String" {
-                        return self.ctx.types.string();
-                    }
+                                // Check for primitive types
+                                if let Some(prim) = PrimitiveKind::from_name(name) {
+                                    return self.ctx.types.primitive(prim);
+                                }
 
-                    // Look up in resolutions
-                    let span = text_range_to_span(token.text_range());
-                    if let Some(&def_id) = self.resolutions.get(&span) {
-                        // It's a struct or type alias
-                        return self.ctx.types.mk_struct(def_id, vec![]);
+                                // Check for String
+                                if name == "String" {
+                                    return self.ctx.types.string();
+                                }
+
+                                // Look up in resolutions
+                                let span = text_range_to_span(token.text_range());
+                                if let Some(&def_id) = self.resolutions.get(&span) {
+                                    // It's a struct or type alias
+                                    return self.ctx.types.mk_struct(def_id, vec![]);
+                                }
+                            }
+                        }
                     }
                 }
                 self.ctx.types.error()
@@ -1553,6 +1660,7 @@ impl InferEngine {
                     .unwrap_or_else(|| self.ctx.types.unit());
                 self.ctx.types.mk_fn_ptr(params, ret)
             }
+            crate::ast::Type::Never(_) => self.ctx.types.never(),
         }
     }
 
@@ -1567,11 +1675,50 @@ impl InferEngine {
                 Item::Function(func) => self.collect_function_signature(func),
                 Item::Struct(struct_def) => self.collect_struct_info(struct_def),
                 Item::Impl(impl_block) => {
+                    // Get the struct this impl is for
+                    let struct_def_id = self.get_impl_struct_def_id(impl_block);
+                    // Create the struct type if we have the struct DefId
+                    let struct_ty =
+                        struct_def_id.map(|id| self.ctx.types.mk_struct(id, vec![]));
+
+                    // Set current_self_type so that `Self` in signatures resolves correctly
+                    self.current_self_type = struct_ty;
+
                     for item in impl_block.items() {
                         if let Item::Function(func) = item {
                             self.collect_function_signature(&func);
+
+                            // Register this method with its struct and update self_ty
+                            if let Some(struct_id) = struct_def_id
+                                && let Some(method_def_id) = self.get_function_def_id(&func)
+                            {
+                                self.struct_methods
+                                    .entry(struct_id)
+                                    .or_default()
+                                    .push(method_def_id);
+
+                                // Update self_ty in the method signature
+                                if let Some(sig) = self.fn_signatures.get_mut(&method_def_id)
+                                    && let Some(ref mut sp) = sig.self_param
+                                    && let Some(sty) = struct_ty
+                                {
+                                    // Apply the appropriate wrapper based on receiver kind
+                                    sp.self_ty = match sp.kind {
+                                        SelfParamKind::Ref => {
+                                            self.ctx.types.mk_ref(Mutability::Shared, sty)
+                                        }
+                                        SelfParamKind::RefMut => {
+                                            self.ctx.types.mk_ref(Mutability::Mutable, sty)
+                                        }
+                                        SelfParamKind::Owned => sty,
+                                    };
+                                }
+                            }
                         }
                     }
+
+                    // Clear current_self_type after processing impl block
+                    self.current_self_type = None;
                 }
                 _ => {}
             }
@@ -1689,6 +1836,30 @@ impl InferEngine {
         self.struct_fields.insert(def_id, fields);
     }
 
+    /// Get the struct DefId for an impl block.
+    fn get_impl_struct_def_id(&self, impl_block: &crate::ast::ImplBlock) -> Option<DefId> {
+        let ty = impl_block.self_ty()?;
+        // For a path type like `impl S`, get the struct's DefId
+        if let crate::ast::Type::Path(path_type) = ty {
+            let path = path_type.path()?;
+            let segment = path.segments().next()?;
+            let name_ref = segment.name()?;
+            let token = name_ref.ident_token()?;
+            let span = text_range_to_span(token.text_range());
+            self.resolutions.get(&span).copied()
+        } else {
+            None
+        }
+    }
+
+    /// Get the DefId for a function definition.
+    fn get_function_def_id(&self, func: &FunctionDef) -> Option<DefId> {
+        let name = func.name()?;
+        let token = name.ident_token()?;
+        let span = text_range_to_span(token.text_range());
+        self.resolutions.get(&span).copied()
+    }
+
     fn infer_function(&mut self, func: &FunctionDef) {
         let name = match func.name() {
             Some(n) => n,
@@ -1717,7 +1888,23 @@ impl InferEngine {
 
         // Bind parameters by looking up their DefIds from the AST
         if let Some(param_list) = func.param_list() {
-            // params now contains only regular params (self is in self_param field)
+            // Handle self parameter if present
+            if let Some(self_param) = param_list.self_param() {
+                // Find the impl block's struct type from the function's context
+                if let Some(self_param_info) = &sig.self_param {
+                    // Get the self keyword's span and look up its DefId
+                    if let Some(self_token) = self_param.self_kw() {
+                        let self_span = text_range_to_span(self_token.text_range());
+                        if let Some(&self_def_id) = self.resolutions.get(&self_span) {
+                            // Determine self type based on receiver kind
+                            let self_ty = self_param_info.self_ty;
+                            self.binding_types.insert(self_def_id, self_ty);
+                        }
+                    }
+                }
+            }
+
+            // Bind regular parameters
             let param_types: Vec<_> = sig.params.iter().map(|(_, ty)| *ty).collect();
 
             for (param, param_ty) in param_list.params().zip(param_types.iter()) {
@@ -1873,6 +2060,26 @@ impl InferEngine {
                 self.ctx.types.mk_fn_ptr(resolved_params, resolved_ret)
             }
             _ => resolved,
+        }
+    }
+
+    /// Evaluate an expression as a constant usize value.
+    /// Used for array repeat counts like `[0; 5]`.
+    fn eval_const_usize(&self, expr: &Expr) -> Option<usize> {
+        match expr {
+            Expr::Literal(lit) => {
+                let token = lit.token()?;
+                if token.kind() == SyntaxKind::INT_LITERAL {
+                    // Parse the integer, stripping any type suffix
+                    let text = token.text();
+                    let num_text = text.trim_end_matches(|c: char| c.is_alphabetic());
+                    num_text.parse().ok()
+                } else {
+                    None
+                }
+            }
+            Expr::Paren(paren) => paren.expr().and_then(|e| self.eval_const_usize(&e)),
+            _ => None,
         }
     }
 }

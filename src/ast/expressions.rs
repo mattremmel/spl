@@ -189,6 +189,11 @@ impl ArrayExpr {
     pub fn exprs(&self) -> impl Iterator<Item = Expr> {
         children(&self.0)
     }
+
+    /// Check if this is array repeat syntax [elem; count] vs array literal [a, b, c].
+    pub fn is_repeat(&self) -> bool {
+        token(&self.0, SyntaxKind::SEMI).is_some()
+    }
 }
 
 impl StructExpr {
@@ -198,6 +203,20 @@ impl StructExpr {
 
     pub fn fields(&self) -> impl Iterator<Item = StructExprField> {
         children(&self.0)
+    }
+
+    /// Get the struct update base expression: `..base` in `S { field: value, ..base }`
+    pub fn update_base(&self) -> Option<StructUpdateBase> {
+        child(&self.0)
+    }
+}
+
+ast_node!(StructUpdateBase);
+
+impl StructUpdateBase {
+    /// Get the base expression in `..base`
+    pub fn expr(&self) -> Option<Expr> {
+        child(&self.0)
     }
 }
 
@@ -298,6 +317,11 @@ impl FieldExpr {
     pub fn name_token(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::IDENT)
     }
+
+    /// Get the tuple index token for tuple field access (e.g., `t.0`, `t.1`).
+    pub fn tuple_index_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::INT_LITERAL)
+    }
 }
 
 impl MethodCallExpr {
@@ -307,6 +331,12 @@ impl MethodCallExpr {
 
     pub fn name(&self) -> Option<NameRef> {
         child(&self.0)
+    }
+
+    /// Get the method name token directly (for method calls where
+    /// the method name is stored as a raw IDENT token, not wrapped in NameRef).
+    pub fn name_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::IDENT)
     }
 
     pub fn arg_list(&self) -> Option<ArgList> {

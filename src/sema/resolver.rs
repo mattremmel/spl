@@ -70,7 +70,8 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn get_name_ref_token(name_ref: &NameRef) -> Option<crate::syntax::SyntaxToken> {
-        name_ref.ident_token()
+        // Use token() to handle both IDENT and SELF_VALUE_KW (for `self`)
+        name_ref.token()
     }
 
     fn error_undefined(&mut self, name: &str, span: Span) {
@@ -331,13 +332,25 @@ impl<'ctx> Resolver<'ctx> {
         }
     }
 
-    fn define_self_param(&mut self, _self_param: &SelfParam) {
+    fn define_self_param(&mut self, self_param: &SelfParam) {
         // Define `self` as a special parameter
         let interned = self.ctx.intern("self");
-        // Use a dummy span for self - we could compute it from the token if needed
-        let _ = self
-            .ctx
-            .define(interned, SymbolKind::SelfParam, Visibility::Private, 0..0);
+
+        // Get the span from the self keyword token
+        let span = self_param
+            .self_kw()
+            .map(|t| Self::text_range_to_span(t.text_range()))
+            .unwrap_or(0..0);
+
+        if let Ok(def_id) = self.ctx.define(
+            interned,
+            SymbolKind::SelfParam,
+            Visibility::Private,
+            span.clone(),
+        ) {
+            // Store the mapping from span to DefId so inference can bind the type
+            self.resolutions.insert(span, def_id);
+        }
     }
 
     fn define_param(&mut self, param: &Param) {
@@ -353,14 +366,21 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_block(&mut self, block: &Block) {
+        use rowan::ast::AstNode;
+
         self.ctx.enter_scope(ScopeKind::Block);
 
-        for stmt in block.statements() {
-            self.resolve_stmt(&stmt);
-        }
-
-        if let Some(tail_expr) = block.tail_expr() {
-            self.resolve_expr(&tail_expr);
+        // Process all children in source order (statements and bare expressions)
+        // This is important because bare expressions (like `while` without semicolon)
+        // must be resolved in order with surrounding statements.
+        for child in block.syntax().children() {
+            // Try to cast as a statement first
+            if let Some(stmt) = Stmt::cast(child.clone()) {
+                self.resolve_stmt(&stmt);
+            } else if let Some(expr) = Expr::cast(child.clone()) {
+                // Bare expression (not wrapped in ExprStmt), including tail expressions
+                self.resolve_expr(&expr);
+            }
         }
 
         self.ctx.exit_scope();
@@ -772,6 +792,14 @@ impl<'ctx> Resolver<'ctx> {
         match ty {
             Type::Path(path_type) => {
                 if let Some(path) = path_type.path() {
+                    // Skip resolution for Self type - it's handled at inference time
+                    if let Some(segment) = path.segments().next()
+                        && let Some(name_ref) = segment.name()
+                        && let Some(token) = name_ref.token()
+                        && token.kind() == crate::syntax::SyntaxKind::SELF_TYPE_KW
+                    {
+                        return; // Self is handled during inference
+                    }
                     self.resolve_path(&path);
                 }
             }
@@ -805,6 +833,9 @@ impl<'ctx> Resolver<'ctx> {
                 if let Some(ret_ty) = fn_ptr.ret_type() {
                     self.resolve_type(&ret_ty);
                 }
+            }
+            Type::Never(_) => {
+                // Never type has no inner types to resolve
             }
         }
     }

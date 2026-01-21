@@ -284,7 +284,7 @@ fn index_or_slice_expr(
     }
 }
 
-/// Parse field access or method call: expr.field or expr.method(args)
+/// Parse field access or method call: expr.field or expr.method(args) or expr.0 (tuple)
 fn field_or_method_expr(
     p: &mut Parser<'_>,
     lhs: CompletedMarker,
@@ -292,18 +292,22 @@ fn field_or_method_expr(
     let m = lhs.precede(p);
     p.expect(SyntaxKind::DOT)?;
 
-    // Expect identifier
-    if !p.at(SyntaxKind::IDENT) {
-        return Err(p.error_at_current("expected identifier after '.'".to_string()));
-    }
-    p.bump();
-
-    // Check for method call
-    if p.at(SyntaxKind::L_PAREN) {
-        arg_list(p)?;
-        Ok(m.complete(p, SyntaxKind::MethodCallExpr))
-    } else {
+    // Accept identifier or integer literal (for tuple field access like t.0)
+    if p.at(SyntaxKind::IDENT) {
+        p.bump();
+        // Check for method call (only for identifier, not for tuple index)
+        if p.at(SyntaxKind::L_PAREN) {
+            arg_list(p)?;
+            Ok(m.complete(p, SyntaxKind::MethodCallExpr))
+        } else {
+            Ok(m.complete(p, SyntaxKind::FieldExpr))
+        }
+    } else if p.at(SyntaxKind::INT_LITERAL) {
+        // Tuple field access: t.0, t.1, etc.
+        p.bump();
         Ok(m.complete(p, SyntaxKind::FieldExpr))
+    } else {
+        Err(p.error_at_current("expected identifier or integer after '.'".to_string()))
     }
 }
 
@@ -467,6 +471,13 @@ fn struct_expr_rest(
     p.expect(SyntaxKind::L_BRACE)?;
 
     while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
+        // Check for struct update syntax: ..base
+        if p.at(SyntaxKind::DOT_DOT) {
+            struct_update_base(p)?;
+            // Struct update base must be last
+            break;
+        }
+
         struct_field(p)?;
         if !p.at(SyntaxKind::R_BRACE) && !p.eat(SyntaxKind::COMMA) {
             break;
@@ -475,6 +486,14 @@ fn struct_expr_rest(
 
     p.expect(SyntaxKind::R_BRACE)?;
     Ok(Some(m.complete(p, SyntaxKind::StructExpr)))
+}
+
+/// Parse struct update base: ..expr
+fn struct_update_base(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    p.expect(SyntaxKind::DOT_DOT)?;
+    let _ = expr(p)?;
+    Ok(m.complete(p, SyntaxKind::StructUpdateBase))
 }
 
 /// Parse a struct field: name or name: expr

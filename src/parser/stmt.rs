@@ -8,9 +8,11 @@ use crate::syntax::SyntaxKind;
 use super::expr;
 use super::pattern;
 
-/// Check if the current token can start an expression.
+/// Check if the current token can start a statement or expression.
 /// Used to distinguish between missing semicolons and block-ending expressions.
-fn can_start_expr(p: &mut Parser<'_>) -> bool {
+/// Block-ending expressions (if, while, for, loop, blocks) don't need semicolons
+/// when followed by another statement.
+fn can_start_stmt_or_expr(p: &mut Parser<'_>) -> bool {
     matches!(
         p.current(),
         Some(
@@ -35,6 +37,7 @@ fn can_start_expr(p: &mut Parser<'_>) -> bool {
                 | SyntaxKind::STAR
                 | SyntaxKind::MINUS
                 | SyntaxKind::BANG
+                | SyntaxKind::LET_KW
         )
     )
 }
@@ -69,6 +72,12 @@ pub(crate) fn type_annotation(
     p: &mut Parser<'_>,
 ) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
+
+    // Never type: !
+    if p.at(SyntaxKind::BANG) {
+        p.bump();
+        return Ok(m.complete(p, SyntaxKind::NeverType));
+    }
 
     // Reference type: &T or &mut T
     if p.at(SyntaxKind::AMP) {
@@ -131,8 +140,12 @@ pub(crate) fn type_annotation(
         return Ok(m.complete(p, SyntaxKind::FnPtrType));
     }
 
-    // Path type: identifier or path::to::Type<Args>
-    if !p.at(SyntaxKind::IDENT) {
+    // Path type: identifier, Self, crate, super, or path::to::Type<Args>
+    if !p.at(SyntaxKind::IDENT)
+        && !p.at(SyntaxKind::SELF_TYPE_KW)
+        && !p.at(SyntaxKind::CRATE_KW)
+        && !p.at(SyntaxKind::SUPER_KW)
+    {
         let err = p.error_at_current("expected type".to_string());
         m.abandon(p);
         return Err(err);
@@ -192,7 +205,7 @@ pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser
                         } else if p.at(SyntaxKind::R_BRACE) {
                             // Tail expression (no semicolon, at end of block)
                             expr_m.abandon(p);
-                        } else if can_start_expr(p) {
+                        } else if can_start_stmt_or_expr(p) {
                             // No semicolon but another expression follows
                             // This is valid for block-ending expressions (if, while, for, loop, block)
                             // which don't require semicolons when used as statements

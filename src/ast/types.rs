@@ -10,6 +10,7 @@ ast_node!(SliceType);
 ast_node!(TupleType);
 ast_node!(FnPtrType);
 ast_node!(PathType);
+ast_node!(NeverType);
 
 /// Type enum - all type syntax variants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -20,6 +21,7 @@ pub enum Type {
     Tuple(TupleType),
     FnPtr(FnPtrType),
     Path(PathType),
+    Never(NeverType),
 }
 
 impl AstNode for Type {
@@ -34,6 +36,7 @@ impl AstNode for Type {
                 | SyntaxKind::TupleType
                 | SyntaxKind::FnPtrType
                 | SyntaxKind::PathType
+                | SyntaxKind::NeverType
         )
     }
 
@@ -45,6 +48,7 @@ impl AstNode for Type {
             SyntaxKind::TupleType => Some(Type::Tuple(TupleType(node))),
             SyntaxKind::FnPtrType => Some(Type::FnPtr(FnPtrType(node))),
             SyntaxKind::PathType => Some(Type::Path(PathType(node))),
+            SyntaxKind::NeverType => Some(Type::Never(NeverType(node))),
             _ => None,
         }
     }
@@ -57,6 +61,7 @@ impl AstNode for Type {
             Type::Tuple(it) => it.syntax(),
             Type::FnPtr(it) => it.syntax(),
             Type::Path(it) => it.syntax(),
+            Type::Never(it) => it.syntax(),
         }
     }
 }

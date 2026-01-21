@@ -601,13 +601,14 @@ fn loop_break_infers_type() {
 #[test]
 #[ignore = "parser doesn't fully support for loops"]
 fn for_loop_simple() {
-    check("fn main() { let x = for i in 0..10 { }; }", "()");
+    // Use y after the for loop so it's found as the "last" binding by display_first_binding
+    check("fn main() { let x = for i in 0..10 { }; let y = x; }", "()");
 }
 
 #[test]
-#[ignore = "parser doesn't fully support for loops"]
 fn for_loop_result_unit() {
-    check("fn main() { let x = for i in 0..10 { }; }", "()");
+    // Use y after the for loop so it's found as the "last" binding by display_first_binding
+    check("fn main() { let x = for i in 0..10 { }; let y = x; }", "()");
 }
 
 #[test]
@@ -1174,13 +1175,6 @@ fn diamond_inference() {
         "fn f(x: i64) {} fn g(x: i64) {} fn main() { let a = 42; f(a); g(a); }",
         "i64",
     );
-}
-
-#[test]
-#[ignore = "test uses variable before declaration which is invalid"]
-fn inference_order_independent() {
-    // The order of usage shouldn't matter
-    check("fn f(x: i64) {} fn main() { f(a); let a = 42; }", "i64");
 }
 
 #[test]
