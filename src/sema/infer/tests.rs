@@ -1749,7 +1749,6 @@ fn generic_method_uses_both_impl_and_own_type_param() {
 // Phase 8: Generic Functions Returning Generic Structs
 
 #[test]
-#[ignore = "requires unification of Type::Param with struct literal's fresh type vars in return position"]
 fn generic_fn_returns_generic_struct() {
     check(
         r#"
@@ -1765,7 +1764,6 @@ fn generic_fn_returns_generic_struct() {
 }
 
 #[test]
-#[ignore = "requires unification of Type::Param with struct literal's fresh type vars in return position"]
 fn generic_fn_returns_generic_struct_inferred_from_context() {
     check(
         r#"
@@ -1783,7 +1781,6 @@ fn generic_fn_returns_generic_struct_inferred_from_context() {
 // Phase 9: Nested Generic Types
 
 #[test]
-#[ignore = "requires proper unification of nested generic struct field types"]
 fn nested_generic_struct() {
     check(
         r#"

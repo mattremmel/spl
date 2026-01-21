@@ -2121,8 +2121,16 @@ impl InferEngine {
                                     if symbol.kind == SymbolKind::TypeParam {
                                         return self.ctx.types.mk_param(def_id);
                                     }
-                                    // It's a struct or type alias
-                                    return self.ctx.types.mk_struct(def_id, vec![]);
+                                    // It's a struct or type alias - parse generic arguments
+                                    let type_args: Vec<TypeId> = segment
+                                        .generic_args()
+                                        .map(|args| {
+                                            args.args()
+                                                .map(|t| self.ast_type_to_type_id(&t))
+                                                .collect()
+                                        })
+                                        .unwrap_or_default();
+                                    return self.ctx.types.mk_struct(def_id, type_args);
                                 }
                             }
                         }
