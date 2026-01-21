@@ -9,25 +9,35 @@ mod primary;
 use crate::parser::{CompletedMarker, Parser};
 use crate::syntax::SyntaxKind;
 
-use operators::{infix_expr, postfix_expr, prefix_expr, prefix_expr_no_struct};
-use primary::{primary_expr, primary_expr_no_struct};
+use operators::{infix_expr, postfix_expr, prefix_expr};
+use primary::primary_expr;
 
 pub(crate) use control_flow::block;
 
 /// Parse an expression.
 pub fn expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    expr_bp(p, 0)
+    expr_bp(p, 0, true)
+}
+
+/// Parse an expression, but don't allow struct expressions.
+/// Used in control flow contexts where `identifier {` should be parsed as
+/// identifier followed by block, not as a struct expression.
+pub(crate) fn expr_no_struct(
+    p: &mut Parser<'_>,
+) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+    expr_bp(p, 0, false)
 }
 
 /// Parse an expression with minimum binding power.
 fn expr_bp(
     p: &mut Parser<'_>,
     min_bp: u8,
+    allow_struct: bool,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     #[cfg(debug_assertions)]
     let start_offset = p.current_offset();
 
-    let mut lhs = match lhs(p)? {
+    let mut lhs = match lhs(p, allow_struct)? {
         Some(lhs) => lhs,
         None => return Ok(None),
     };
@@ -47,7 +57,7 @@ fn expr_bp(
             if l_bp < min_bp {
                 break;
             }
-            lhs = infix_expr(p, lhs, r_bp)?;
+            lhs = infix_expr(p, lhs, r_bp, allow_struct)?;
             continue;
         }
 
@@ -63,53 +73,11 @@ fn expr_bp(
     Ok(Some(lhs))
 }
 
-/// Parse an expression, but don't allow struct expressions.
-/// Used in control flow contexts where `identifier {` should be parsed as
-/// identifier followed by block, not as a struct expression.
-pub(crate) fn expr_no_struct(
-    p: &mut Parser<'_>,
-) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    expr_no_struct_bp(p, 0)
-}
-
-/// Parse an expression with minimum binding power, disallowing struct expressions.
-fn expr_no_struct_bp(
-    p: &mut Parser<'_>,
-    min_bp: u8,
-) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    let mut lhs = match lhs_no_struct(p)? {
-        Some(lhs) => lhs,
-        None => return Ok(None),
-    };
-
-    while let Some(op) = p.current() {
-        // Check for postfix operators first (highest precedence)
-        if let Some((l_bp, ())) = postfix_bp(op) {
-            if l_bp < min_bp {
-                break;
-            }
-            lhs = postfix_expr(p, lhs, op)?;
-            continue;
-        }
-
-        // Check for infix operators
-        if let Some((l_bp, r_bp)) = infix_bp(op) {
-            if l_bp < min_bp {
-                break;
-            }
-            lhs = infix_expr(p, lhs, r_bp)?;
-            continue;
-        }
-
-        // Not an operator we recognize, stop
-        break;
-    }
-
-    Ok(Some(lhs))
-}
-
 /// Parse the left-hand side of an expression (prefix or primary).
-fn lhs(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+fn lhs(
+    p: &mut Parser<'_>,
+    allow_struct: bool,
+) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let current = match p.current() {
         Some(kind) => kind,
         None => return Ok(None),
@@ -117,27 +85,11 @@ fn lhs(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser::Par
 
     // Check for prefix operators
     if let Some(((), r_bp)) = prefix_bp(current) {
-        return prefix_expr(p, r_bp);
+        return prefix_expr(p, r_bp, allow_struct);
     }
 
     // Otherwise, parse a primary expression
-    primary_expr(p)
-}
-
-/// Parse the left-hand side of an expression, disallowing struct expressions.
-fn lhs_no_struct(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    let current = match p.current() {
-        Some(kind) => kind,
-        None => return Ok(None),
-    };
-
-    // Check for prefix operators
-    if let Some(((), r_bp)) = prefix_bp(current) {
-        return prefix_expr_no_struct(p, r_bp);
-    }
-
-    // Otherwise, parse a primary expression (no struct)
-    primary_expr_no_struct(p)
+    primary_expr(p, allow_struct)
 }
 
 // === Binding power tables ===

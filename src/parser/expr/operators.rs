@@ -3,12 +3,13 @@
 use crate::parser::{CompletedMarker, Parser};
 use crate::syntax::SyntaxKind;
 
-use super::{expr, expr_bp, expr_no_struct_bp};
+use super::{expr, expr_bp};
 
 /// Parse a prefix expression.
 pub(super) fn prefix_expr(
     p: &mut Parser<'_>,
     r_bp: u8,
+    allow_struct: bool,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
     let op = p.current().unwrap();
@@ -17,55 +18,20 @@ pub(super) fn prefix_expr(
     if op == SyntaxKind::AMP {
         p.bump(); // &
         p.eat(SyntaxKind::MUT_KW); // optional mut
-        let _ = expr_bp(p, r_bp)?;
+        let _ = expr_bp(p, r_bp, allow_struct)?;
         return Ok(Some(m.complete(p, SyntaxKind::RefExpr)));
     }
 
     // Handle range prefix specially (..expr or ..)
     if op == SyntaxKind::DOT_DOT {
         p.bump(); // ..
-        let _ = expr_bp(p, r_bp)?; // Optional RHS
+        let _ = expr_bp(p, r_bp, allow_struct)?; // Optional RHS
         return Ok(Some(m.complete(p, SyntaxKind::RangeExpr)));
     }
 
     // Regular prefix operator
     p.bump();
-    let _ = expr_bp(p, r_bp)?;
-
-    let kind = match op {
-        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR => SyntaxKind::PrefixExpr,
-        _ => unreachable!("unexpected prefix operator: {:?}", op),
-    };
-
-    Ok(Some(m.complete(p, kind)))
-}
-
-/// Parse a prefix expression, disallowing struct expressions.
-pub(super) fn prefix_expr_no_struct(
-    p: &mut Parser<'_>,
-    r_bp: u8,
-) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    let m = p.start();
-    let op = p.current().unwrap();
-
-    // Handle &mut specially
-    if op == SyntaxKind::AMP {
-        p.bump(); // &
-        p.eat(SyntaxKind::MUT_KW); // optional mut
-        let _ = expr_no_struct_bp(p, r_bp)?;
-        return Ok(Some(m.complete(p, SyntaxKind::RefExpr)));
-    }
-
-    // Handle range prefix specially (..expr or ..)
-    if op == SyntaxKind::DOT_DOT {
-        p.bump(); // ..
-        let _ = expr_no_struct_bp(p, r_bp)?; // Optional RHS
-        return Ok(Some(m.complete(p, SyntaxKind::RangeExpr)));
-    }
-
-    // Regular prefix operator
-    p.bump();
-    let _ = expr_no_struct_bp(p, r_bp)?;
+    let _ = expr_bp(p, r_bp, allow_struct)?;
 
     let kind = match op {
         SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR => SyntaxKind::PrefixExpr,
@@ -80,6 +46,7 @@ pub(super) fn infix_expr(
     p: &mut Parser<'_>,
     lhs: CompletedMarker,
     r_bp: u8,
+    allow_struct: bool,
 ) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = lhs.precede(p);
     let op = p.current().unwrap();
@@ -94,7 +61,7 @@ pub(super) fn infix_expr(
 
     // Regular binary operator
     p.bump();
-    let _ = expr_bp(p, r_bp)?;
+    let _ = expr_bp(p, r_bp, allow_struct)?;
 
     // Determine the node kind based on operator
     let kind = match op {

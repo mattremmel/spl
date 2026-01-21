@@ -11,6 +11,7 @@ use super::expr;
 /// Parse a primary expression.
 pub(super) fn primary_expr(
     p: &mut Parser<'_>,
+    allow_struct: bool,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     match_token!(p, {
         // Literals
@@ -18,36 +19,13 @@ pub(super) fn primary_expr(
             literal_expr(p)
         },
         // Identifier / path
-        IDENT | SELF_VALUE_KW | SELF_TYPE_KW => path_or_struct_expr(p),
-        // Grouped or tuple expression
-        L_PAREN => paren_or_tuple_expr(p),
-        // Array expression
-        L_BRACKET => array_expr(p),
-        // Block expression
-        L_BRACE => block_expr(p),
-        // Control flow
-        IF_KW => if_expr(p),
-        WHILE_KW => while_expr(p),
-        FOR_KW => for_expr(p),
-        LOOP_KW => loop_expr(p),
-        BREAK_KW => break_expr(p),
-        CONTINUE_KW => continue_expr(p),
-        RETURN_KW => return_expr(p),
-        _ => Ok(None),
-    })
-}
-
-/// Parse a primary expression, disallowing struct expressions.
-pub(super) fn primary_expr_no_struct(
-    p: &mut Parser<'_>,
-) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    match_token!(p, {
-        // Literals
-        INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL | TRUE_KW | FALSE_KW => {
-            literal_expr(p)
+        IDENT | SELF_VALUE_KW | SELF_TYPE_KW => {
+            if allow_struct {
+                path_or_struct_expr(p)
+            } else {
+                path_expr_only(p)
+            }
         },
-        // Identifier / path - use path_expr_only instead of path_or_struct_expr
-        IDENT | SELF_VALUE_KW | SELF_TYPE_KW => path_expr_only(p),
         // Grouped or tuple expression
         L_PAREN => paren_or_tuple_expr(p),
         // Array expression
