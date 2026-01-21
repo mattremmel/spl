@@ -160,8 +160,8 @@ pub enum Token {
 
     // === Literals ===
     // Float must come before Integer to handle 3.14 correctly
-    #[regex(r"[0-9][0-9_]*\.[0-9][0-9_]*(e[+-]?[0-9][0-9_]*)?")]
-    #[regex(r"[0-9][0-9_]*e[+-]?[0-9][0-9_]*")]
+    #[regex(r"[0-9][0-9_]*\.[0-9][0-9_]*(e[+-]?[0-9][0-9_]*)?(f32|f64)?")]
+    #[regex(r"[0-9][0-9_]*e[+-]?[0-9][0-9_]*(f32|f64)?")]
     Float,
 
     // Integer suffixes: i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize
@@ -967,6 +967,31 @@ mod tests {
     #[test]
     fn float_full_with_underscores() {
         check_single("1_0.2_5e1_0", Token::Float);
+    }
+
+    #[test]
+    fn float_suffix_f32() {
+        check_single("3.14f32", Token::Float);
+    }
+
+    #[test]
+    fn float_suffix_f64() {
+        check_single("3.14f64", Token::Float);
+    }
+
+    #[test]
+    fn float_exponent_suffix_f32() {
+        check_single("1.5e10f32", Token::Float);
+    }
+
+    #[test]
+    fn float_exponent_only_suffix_f64() {
+        check_single("1e10f64", Token::Float);
+    }
+
+    #[test]
+    fn float_suffix_with_underscores() {
+        check_single("1_000.5_5f32", Token::Float);
     }
 
     // ============================================================

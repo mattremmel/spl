@@ -166,6 +166,21 @@ fn float_literal_scientific() {
 }
 
 #[test]
+fn float_literal_suffixed_f32() {
+    check("fn main() { let x = 3.14f32; }", "f32");
+}
+
+#[test]
+fn float_literal_suffixed_f64() {
+    check("fn main() { let x = 3.14f64; }", "f64");
+}
+
+#[test]
+fn float_negated_suffixed_f32() {
+    check("fn main() { let x = -1.5f32; }", "f32");
+}
+
+#[test]
 fn bool_literal_true() {
     check("fn main() { let x = true; }", "bool");
 }

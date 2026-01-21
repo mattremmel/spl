@@ -316,7 +316,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: Add float suffix support to lexer/parser
     fn lower_negated_float() {
         let expr = parse_expr("-1.5f32");
         let (lowered, was_lowered) = try_lower_expr(&expr);
