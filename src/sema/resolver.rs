@@ -100,7 +100,11 @@ impl<'ctx> Resolver<'ctx> {
         let interned = self.ctx.intern(&name_text);
 
         match self.ctx.define(interned, kind, visibility, span.clone()) {
-            Ok(def_id) => Some(def_id),
+            Ok(def_id) => {
+                // Store span → DefId mapping for inference phase
+                self.resolutions.insert(span, def_id);
+                Some(def_id)
+            }
             Err(existing_def_id) => {
                 let existing = self.ctx.get_symbol(existing_def_id);
                 self.error_duplicate(&name_text, span, existing.span.clone());
@@ -495,8 +499,12 @@ impl<'ctx> Resolver<'ctx> {
                 if let Some(then_branch) = if_expr.then_branch() {
                     self.resolve_block(&then_branch);
                 }
+                // else_branch() handles else-if chains (returns Expr)
+                // else_block() handles simple else { ... } (returns Block directly)
                 if let Some(else_branch) = if_expr.else_branch() {
                     self.resolve_expr(&else_branch);
+                } else if let Some(else_block) = if_expr.else_block() {
+                    self.resolve_block(&else_block);
                 }
             }
             Expr::While(while_expr) => {
@@ -688,7 +696,10 @@ impl<'ctx> Resolver<'ctx> {
                         Visibility::Private,
                         span.clone(),
                     ) {
-                        Ok(_) => {}
+                        Ok(def_id) => {
+                            // Store span → DefId mapping for inference phase
+                            self.resolutions.insert(span, def_id);
+                        }
                         Err(existing_def_id) => {
                             let existing = self.ctx.get_symbol(existing_def_id);
                             self.error_duplicate(&name_text, span, existing.span.clone());
@@ -745,9 +756,13 @@ impl<'ctx> Resolver<'ctx> {
             let text = token.text().to_string();
             let span = Self::text_range_to_span(token.text_range());
             let interned = self.ctx.intern(&text);
-            let _ = self
+            if let Ok(def_id) = self
                 .ctx
-                .define(interned, SymbolKind::Local, Visibility::Private, span);
+                .define(interned, SymbolKind::Local, Visibility::Private, span.clone())
+            {
+                // Store span → DefId mapping for inference phase
+                self.resolutions.insert(span, def_id);
+            }
         }
     }
 

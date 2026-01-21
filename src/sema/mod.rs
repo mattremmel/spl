@@ -2,11 +2,13 @@
 //!
 //! This module provides the symbol table infrastructure for name resolution and type checking.
 
+pub mod infer;
 pub mod resolver;
 pub mod scope;
 pub mod symbol;
 pub mod types;
 
+pub use infer::{InferResult, infer};
 pub use resolver::{ResolveResult, Resolver, resolve};
 pub use scope::{Scope, ScopeId, ScopeKind};
 pub use symbol::{DefId, Symbol, SymbolKind, Visibility};

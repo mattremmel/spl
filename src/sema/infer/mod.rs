@@ -1,0 +1,1895 @@
+//! Bidirectional type inference for SPL.
+//!
+//! This module implements a bidirectional type inference algorithm that:
+//! - Synthesizes types bottom-up from expressions
+//! - Checks types top-down from expected types
+//! - Unifies type constraints to resolve inference variables
+
+use crate::ast::{
+    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, ExprStmt, FieldExpr,
+    ForExpr, FunctionDef, IfExpr, IndexExpr, Item, LetStmt, LiteralExpr, LoopExpr, MethodCallExpr,
+    ParenExpr, Pat, PathExpr, PrefixExpr, RangeExpr, RefExpr, ReturnExpr, SliceExpr, SourceFile,
+    Stmt, StructExpr, TupleExpr, WhileExpr,
+};
+use crate::diagnostic::Diagnostic;
+use crate::lexer::Span;
+use crate::sema::resolver::ResolveResult;
+use crate::sema::symbol::DefId;
+use crate::sema::types::{Mutability, PrimitiveKind, Type, TypeId, TypeVar};
+use crate::sema::{SemanticContext, SymbolKind};
+use crate::syntax::SyntaxKind;
+use rowan::ast::AstNode;
+use rustc_hash::FxHashMap;
+
+#[cfg(test)]
+mod tests;
+
+/// Result of type inference.
+pub struct InferResult {
+    /// The semantic context with symbol table and types.
+    pub ctx: SemanticContext,
+    /// Map from expression spans to their inferred types.
+    pub expr_types: FxHashMap<Span, TypeId>,
+    /// Map from local bindings (DefId) to their inferred types.
+    pub binding_types: FxHashMap<DefId, TypeId>,
+    /// Diagnostics produced during inference.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+impl InferResult {
+    /// Display the type of the last let binding in the source (by position).
+    /// Used for testing.
+    pub fn display_first_binding(&self) -> String {
+        // Find the last binding by source position (largest span start)
+        let mut best: Option<(DefId, TypeId, usize)> = None;
+
+        for (&def_id, &type_id) in &self.binding_types {
+            let symbol = self.ctx.get_symbol(def_id);
+            // Skip built-in primitives (they have span 0..0)
+            if symbol.span == (0..0) {
+                continue;
+            }
+            // Skip functions
+            if symbol.kind == SymbolKind::Function {
+                continue;
+            }
+            let span_start = symbol.span.start;
+            match &best {
+                Some((_, _, best_start)) if span_start <= *best_start => {}
+                _ => {
+                    best = Some((def_id, type_id, span_start));
+                }
+            }
+        }
+
+        match best {
+            Some((_, type_id, _)) => self.type_to_string(type_id),
+            None => "???".to_string(),
+        }
+    }
+
+    /// Convert a type ID to a human-readable string.
+    pub fn type_to_string(&self, type_id: TypeId) -> String {
+        let ty = self.ctx.types.get(type_id);
+        self.type_repr(ty, type_id)
+    }
+
+    fn type_repr(&self, ty: &Type, _type_id: TypeId) -> String {
+        match ty {
+            Type::Primitive(prim) => prim.as_str().to_string(),
+            Type::Var(var) => format!("?{}", var.0),
+            Type::IntVar(var) => format!("?int{}", var.0),
+            Type::FloatVar(var) => format!("?float{}", var.0),
+            Type::Ref(mutability, inner) => {
+                let inner_str = self.type_to_string(*inner);
+                match mutability {
+                    Mutability::Shared => format!("&{}", inner_str),
+                    Mutability::Mutable => format!("&mut {}", inner_str),
+                }
+            }
+            Type::Array(elem, len) => {
+                let elem_str = self.type_to_string(*elem);
+                format!("[{}; {}]", elem_str, len)
+            }
+            Type::Slice(elem) => {
+                let elem_str = self.type_to_string(*elem);
+                format!("[{}]", elem_str)
+            }
+            Type::Tuple(elems) => {
+                if elems.is_empty() {
+                    "()".to_string()
+                } else if elems.len() == 1 {
+                    let elem_str = self.type_to_string(elems[0]);
+                    format!("({},)", elem_str)
+                } else {
+                    let elem_strs: Vec<_> =
+                        elems.iter().map(|e| self.type_to_string(*e)).collect();
+                    format!("({})", elem_strs.join(", "))
+                }
+            }
+            Type::Struct(def_id, _type_args) => {
+                let symbol = self.ctx.get_symbol(*def_id);
+                self.ctx.resolve(symbol.name).to_string()
+            }
+            Type::FnPtr { params, ret } => {
+                let param_strs: Vec<_> = params.iter().map(|p| self.type_to_string(*p)).collect();
+                let ret_str = self.type_to_string(*ret);
+                format!("fn({}) -> {}", param_strs.join(", "), ret_str)
+            }
+            Type::String => "String".to_string(),
+            Type::Error => "<error>".to_string(),
+            Type::Alias(_, _) => "<alias>".to_string(),
+            Type::Param(def_id) => {
+                let symbol = self.ctx.get_symbol(*def_id);
+                self.ctx.resolve(symbol.name).to_string()
+            }
+            Type::SelfType => "Self".to_string(),
+        }
+    }
+}
+
+/// Run type inference on a source file.
+///
+/// Takes the resolved AST and produces type assignments for all expressions and bindings.
+pub fn infer(source_file: &SourceFile, resolve_result: ResolveResult) -> InferResult {
+    let mut engine = InferEngine::new(resolve_result);
+    engine.infer_source_file(source_file);
+    engine.apply_defaults();
+    engine.into_result()
+}
+
+/// The type inference engine.
+struct InferEngine {
+    ctx: SemanticContext,
+    resolutions: FxHashMap<Span, DefId>,
+    /// Map from expression spans to their inferred types.
+    expr_types: FxHashMap<Span, TypeId>,
+    /// Map from local bindings (DefId) to their inferred types.
+    binding_types: FxHashMap<DefId, TypeId>,
+    /// Type substitution table for union-find.
+    substitution: FxHashMap<TypeVar, TypeId>,
+    /// Collected diagnostics.
+    diagnostics: Vec<Diagnostic>,
+    /// Function signatures collected in first pass.
+    fn_signatures: FxHashMap<DefId, FnSignature>,
+    /// Struct field info collected in first pass.
+    struct_fields: FxHashMap<DefId, Vec<(String, TypeId)>>,
+    /// Current function's return type (for return statements).
+    current_return_type: Option<TypeId>,
+    /// Current loop's break type (for break statements with values).
+    current_loop_break_type: Option<TypeId>,
+}
+
+/// Function signature information.
+#[derive(Clone)]
+struct FnSignature {
+    params: Vec<(String, TypeId)>,
+    ret: TypeId,
+}
+
+impl InferEngine {
+    fn new(resolve_result: ResolveResult) -> Self {
+        Self {
+            ctx: resolve_result.ctx,
+            resolutions: resolve_result.resolutions,
+            expr_types: FxHashMap::default(),
+            binding_types: FxHashMap::default(),
+            substitution: FxHashMap::default(),
+            diagnostics: resolve_result.diagnostics,
+            fn_signatures: FxHashMap::default(),
+            struct_fields: FxHashMap::default(),
+            current_return_type: None,
+            current_loop_break_type: None,
+        }
+    }
+
+    fn into_result(self) -> InferResult {
+        InferResult {
+            ctx: self.ctx,
+            expr_types: self.expr_types,
+            binding_types: self.binding_types,
+            diagnostics: self.diagnostics,
+        }
+    }
+
+    // =========================================================================
+    // Union-Find Operations
+    // =========================================================================
+
+    /// Create a fresh type variable.
+    fn fresh_type_var(&mut self) -> TypeId {
+        self.ctx.types.fresh_type_var()
+    }
+
+    /// Create a fresh integer type variable (defaults to i32 if unconstrained).
+    fn fresh_int_var(&mut self) -> TypeId {
+        self.ctx.types.fresh_int_var()
+    }
+
+    /// Create a fresh float type variable (defaults to f64 if unconstrained).
+    fn fresh_float_var(&mut self) -> TypeId {
+        self.ctx.types.fresh_float_var()
+    }
+
+    /// Resolve a type through the substitution chain.
+    fn resolve_type(&self, type_id: TypeId) -> TypeId {
+        let ty = self.ctx.types.get(type_id);
+        match ty {
+            Type::Var(var) | Type::IntVar(var) | Type::FloatVar(var) => {
+                if let Some(&subst) = self.substitution.get(var) {
+                    self.resolve_type(subst)
+                } else {
+                    type_id
+                }
+            }
+            _ => type_id,
+        }
+    }
+
+    /// Unify two types, returning true if successful.
+    fn unify(&mut self, a: TypeId, b: TypeId) -> bool {
+        let a = self.resolve_type(a);
+        let b = self.resolve_type(b);
+
+        if a == b {
+            return true;
+        }
+
+        let ty_a = self.ctx.types.get(a).clone();
+        let ty_b = self.ctx.types.get(b).clone();
+
+        match (&ty_a, &ty_b) {
+            // Error type unifies with anything
+            (Type::Error, _) | (_, Type::Error) => true,
+
+            // Never type unifies with anything (it's the bottom type)
+            (Type::Primitive(PrimitiveKind::Never), _)
+            | (_, Type::Primitive(PrimitiveKind::Never)) => true,
+
+            // Type variable binds to anything
+            (Type::Var(var), _) => {
+                self.substitution.insert(*var, b);
+                true
+            }
+            (_, Type::Var(var)) => {
+                self.substitution.insert(*var, a);
+                true
+            }
+
+            // Int variable binds to any integer type or another int variable
+            (Type::IntVar(var), Type::Primitive(prim)) if is_integer_type(*prim) => {
+                self.substitution.insert(*var, b);
+                true
+            }
+            (Type::Primitive(prim), Type::IntVar(var)) if is_integer_type(*prim) => {
+                self.substitution.insert(*var, a);
+                true
+            }
+            (Type::IntVar(var1), Type::IntVar(_var2)) => {
+                // Bind one to the other
+                self.substitution.insert(*var1, b);
+                true
+            }
+
+            // Float variable binds to any float type or another float variable
+            (Type::FloatVar(var), Type::Primitive(prim)) if is_float_type(*prim) => {
+                self.substitution.insert(*var, b);
+                true
+            }
+            (Type::Primitive(prim), Type::FloatVar(var)) if is_float_type(*prim) => {
+                self.substitution.insert(*var, a);
+                true
+            }
+            (Type::FloatVar(var1), Type::FloatVar(_var2)) => {
+                self.substitution.insert(*var1, b);
+                true
+            }
+
+            // Primitives must match exactly
+            (Type::Primitive(p1), Type::Primitive(p2)) => p1 == p2,
+
+            // Unit type is the same as empty tuple
+            (Type::Primitive(PrimitiveKind::Unit), Type::Tuple(elems))
+            | (Type::Tuple(elems), Type::Primitive(PrimitiveKind::Unit)) => elems.is_empty(),
+
+            // References must match in mutability and inner type
+            (Type::Ref(m1, inner1), Type::Ref(m2, inner2)) => {
+                // Allow coercion from &mut to & (but not vice versa)
+                let mutability_ok =
+                    m1 == m2 || (*m1 == Mutability::Mutable && *m2 == Mutability::Shared);
+                mutability_ok && self.unify(*inner1, *inner2)
+            }
+
+            // Arrays must match in element type and length
+            (Type::Array(elem1, len1), Type::Array(elem2, len2)) => {
+                len1 == len2 && self.unify(*elem1, *elem2)
+            }
+
+            // Slices must match in element type
+            (Type::Slice(elem1), Type::Slice(elem2)) => self.unify(*elem1, *elem2),
+
+            // Tuples must match in arity and element types
+            (Type::Tuple(elems1), Type::Tuple(elems2)) => {
+                if elems1.len() != elems2.len() {
+                    return false;
+                }
+                for (e1, e2) in elems1.iter().zip(elems2.iter()) {
+                    if !self.unify(*e1, *e2) {
+                        return false;
+                    }
+                }
+                true
+            }
+
+            // Structs must have same DefId and unifiable type args
+            (Type::Struct(def1, args1), Type::Struct(def2, args2)) => {
+                if def1 != def2 || args1.len() != args2.len() {
+                    return false;
+                }
+                for (a1, a2) in args1.iter().zip(args2.iter()) {
+                    if !self.unify(*a1, *a2) {
+                        return false;
+                    }
+                }
+                true
+            }
+
+            // Function pointers must match in params and return type
+            (
+                Type::FnPtr {
+                    params: p1,
+                    ret: r1,
+                },
+                Type::FnPtr {
+                    params: p2,
+                    ret: r2,
+                },
+            ) => {
+                if p1.len() != p2.len() {
+                    return false;
+                }
+                for (a, b) in p1.iter().zip(p2.iter()) {
+                    if !self.unify(*a, *b) {
+                        return false;
+                    }
+                }
+                self.unify(*r1, *r2)
+            }
+
+            // String type must match exactly
+            (Type::String, Type::String) => true,
+
+            // Everything else fails
+            _ => false,
+        }
+    }
+
+    // =========================================================================
+    // Type Synthesis (Bottom-up)
+    // =========================================================================
+
+    /// Synthesize the type of an expression.
+    fn synth_expr(&mut self, expr: &Expr) -> TypeId {
+        let span = text_range_to_span(expr.syntax().text_range());
+        let type_id = match expr {
+            Expr::Literal(lit) => self.synth_literal(lit),
+            Expr::Path(path_expr) => self.synth_path(path_expr),
+            Expr::Paren(paren) => self.synth_paren(paren),
+            Expr::Tuple(tuple) => self.synth_tuple(tuple),
+            Expr::Array(array) => self.synth_array(array),
+            Expr::Struct(struct_expr) => self.synth_struct(struct_expr),
+            Expr::Binary(bin) => self.synth_binary(bin),
+            Expr::Prefix(prefix) => self.synth_prefix(prefix),
+            Expr::Ref(ref_expr) => self.synth_ref(ref_expr),
+            Expr::Field(field) => self.synth_field(field),
+            Expr::MethodCall(method) => self.synth_method_call(method),
+            Expr::Call(call) => self.synth_call(call),
+            Expr::Index(index) => self.synth_index(index),
+            Expr::Slice(slice) => self.synth_slice(slice),
+            Expr::If(if_expr) => self.synth_if(if_expr),
+            Expr::While(while_expr) => self.synth_while(while_expr),
+            Expr::For(for_expr) => self.synth_for(for_expr),
+            Expr::Loop(loop_expr) => self.synth_loop(loop_expr),
+            Expr::Break(break_expr) => self.synth_break(break_expr),
+            Expr::Continue(_) => self.ctx.types.never(),
+            Expr::Return(return_expr) => self.synth_return(return_expr),
+            Expr::Block(block_expr) => self.synth_block_expr(block_expr),
+            Expr::Cast(cast) => self.synth_cast(cast),
+            Expr::Range(range) => self.synth_range(range),
+        };
+        self.expr_types.insert(span, type_id);
+        type_id
+    }
+
+    fn synth_literal(&mut self, lit: &LiteralExpr) -> TypeId {
+        let token = match lit.token() {
+            Some(t) => t,
+            None => return self.ctx.types.error(),
+        };
+
+        match token.kind() {
+            SyntaxKind::INT_LITERAL => {
+                let text = token.text();
+                // Check for type suffix
+                if text.ends_with("i8") {
+                    self.ctx.types.primitive(PrimitiveKind::I8)
+                } else if text.ends_with("i16") {
+                    self.ctx.types.primitive(PrimitiveKind::I16)
+                } else if text.ends_with("i32") {
+                    self.ctx.types.primitive(PrimitiveKind::I32)
+                } else if text.ends_with("i64") {
+                    self.ctx.types.primitive(PrimitiveKind::I64)
+                } else if text.ends_with("i128") {
+                    self.ctx.types.primitive(PrimitiveKind::I128)
+                } else if text.ends_with("isize") {
+                    self.ctx.types.primitive(PrimitiveKind::Isize)
+                } else if text.ends_with("u8") {
+                    self.ctx.types.primitive(PrimitiveKind::U8)
+                } else if text.ends_with("u16") {
+                    self.ctx.types.primitive(PrimitiveKind::U16)
+                } else if text.ends_with("u32") {
+                    self.ctx.types.primitive(PrimitiveKind::U32)
+                } else if text.ends_with("u64") {
+                    self.ctx.types.primitive(PrimitiveKind::U64)
+                } else if text.ends_with("u128") {
+                    self.ctx.types.primitive(PrimitiveKind::U128)
+                } else if text.ends_with("usize") {
+                    self.ctx.types.primitive(PrimitiveKind::Usize)
+                } else {
+                    // No suffix - create an int inference variable
+                    self.fresh_int_var()
+                }
+            }
+            SyntaxKind::FLOAT_LITERAL => {
+                let text = token.text();
+                if text.ends_with("f32") {
+                    self.ctx.types.primitive(PrimitiveKind::F32)
+                } else if text.ends_with("f64") {
+                    self.ctx.types.primitive(PrimitiveKind::F64)
+                } else {
+                    // No suffix - create a float inference variable
+                    self.fresh_float_var()
+                }
+            }
+            SyntaxKind::TRUE_KW | SyntaxKind::FALSE_KW => self.ctx.types.bool(),
+            SyntaxKind::CHAR_LITERAL => self.ctx.types.char(),
+            SyntaxKind::STRING_LITERAL => self.ctx.types.string(),
+            _ => self.ctx.types.error(),
+        }
+    }
+
+    fn synth_path(&mut self, path_expr: &PathExpr) -> TypeId {
+        let path = match path_expr.path() {
+            Some(p) => p,
+            None => return self.ctx.types.error(),
+        };
+
+        // Get the span of the first segment to look up the resolution
+        let segment = match path.segments().next() {
+            Some(s) => s,
+            None => return self.ctx.types.error(),
+        };
+
+        let name_ref = match segment.name() {
+            Some(n) => n,
+            None => return self.ctx.types.error(),
+        };
+
+        let token = match name_ref.ident_token() {
+            Some(t) => t,
+            None => return self.ctx.types.error(),
+        };
+
+        let span = text_range_to_span(token.text_range());
+
+        // Look up the resolved DefId
+        let def_id = match self.resolutions.get(&span) {
+            Some(id) => *id,
+            None => return self.ctx.types.error(),
+        };
+
+        // Get the type from binding_types
+        if let Some(&type_id) = self.binding_types.get(&def_id) {
+            return type_id;
+        }
+
+        // Check if it's a function
+        if let Some(sig) = self.fn_signatures.get(&def_id) {
+            return self.ctx.types.mk_fn_ptr(sig.params.iter().map(|(_, t)| *t).collect(), sig.ret);
+        }
+
+        // Unknown binding - return error
+        self.ctx.types.error()
+    }
+
+    fn synth_paren(&mut self, paren: &ParenExpr) -> TypeId {
+        match paren.expr() {
+            Some(inner) => self.synth_expr(&inner),
+            None => self.ctx.types.error(),
+        }
+    }
+
+    fn synth_tuple(&mut self, tuple: &TupleExpr) -> TypeId {
+        let elem_types: Vec<TypeId> = tuple.exprs().map(|e| self.synth_expr(&e)).collect();
+        self.ctx.types.mk_tuple(elem_types)
+    }
+
+    fn synth_array(&mut self, array: &ArrayExpr) -> TypeId {
+        let exprs: Vec<_> = array.exprs().collect();
+        if exprs.is_empty() {
+            // Empty array needs type annotation
+            let elem = self.fresh_type_var();
+            return self.ctx.types.mk_array(elem, 0);
+        }
+
+        // Synthesize the first element's type
+        let first_type = self.synth_expr(&exprs[0]);
+
+        // Check/unify all elements
+        for expr in &exprs[1..] {
+            let elem_type = self.synth_expr(expr);
+            if !self.unify(first_type, elem_type) {
+                let span = text_range_to_span(expr.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("type mismatch: array elements must have the same type")
+                        .with_label(span, "has different type"),
+                );
+            }
+        }
+
+        self.ctx.types.mk_array(first_type, exprs.len() as u64)
+    }
+
+    fn synth_struct(&mut self, struct_expr: &StructExpr) -> TypeId {
+        let path = match struct_expr.path() {
+            Some(p) => p,
+            None => return self.ctx.types.error(),
+        };
+
+        // Get the struct's DefId
+        let segment = match path.segments().next() {
+            Some(s) => s,
+            None => return self.ctx.types.error(),
+        };
+
+        let name_ref = match segment.name() {
+            Some(n) => n,
+            None => return self.ctx.types.error(),
+        };
+
+        let token = match name_ref.ident_token() {
+            Some(t) => t,
+            None => return self.ctx.types.error(),
+        };
+
+        let span = text_range_to_span(token.text_range());
+        let def_id = match self.resolutions.get(&span) {
+            Some(id) => *id,
+            None => return self.ctx.types.error(),
+        };
+
+        // Get struct field info
+        let fields_info = self.struct_fields.get(&def_id).cloned().unwrap_or_default();
+        let field_map: FxHashMap<_, _> = fields_info.iter().cloned().collect();
+
+        // Check fields in struct expression
+        let mut seen_fields = std::collections::HashSet::new();
+        for field in struct_expr.fields() {
+            // Try name_token() first (raw IDENT), then fall back to name() (NameRef)
+            let field_name = match field.name_token() {
+                Some(t) => t.text().to_string(),
+                None => match field.name().and_then(|n| n.ident_token()) {
+                    Some(t) => t.text().to_string(),
+                    None => continue,
+                },
+            };
+
+            if let Some(&expected_type) = field_map.get(&field_name) {
+                seen_fields.insert(field_name.clone());
+                if let Some(value_expr) = field.expr() {
+                    self.check_expr(&value_expr, expected_type);
+                }
+            } else {
+                let field_span = text_range_to_span(field.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error(format!("unknown field `{}`", field_name))
+                        .with_label(field_span, "unknown field"),
+                );
+            }
+        }
+
+        // Check for missing fields
+        for (field_name, _) in &fields_info {
+            if !seen_fields.contains(field_name) {
+                let expr_span = text_range_to_span(struct_expr.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error(format!("missing field `{}`", field_name))
+                        .with_label(expr_span, "missing field"),
+                );
+            }
+        }
+
+        self.ctx.types.mk_struct(def_id, vec![])
+    }
+
+    fn synth_binary(&mut self, bin: &BinExpr) -> TypeId {
+        let op = match bin.op_token() {
+            Some(t) => t,
+            None => return self.ctx.types.error(),
+        };
+
+        let lhs = match bin.lhs() {
+            Some(e) => e,
+            None => return self.ctx.types.error(),
+        };
+
+        let rhs = match bin.rhs() {
+            Some(e) => e,
+            None => return self.ctx.types.error(),
+        };
+
+        match op.kind() {
+            // Arithmetic operators - result is same as operands
+            SyntaxKind::PLUS
+            | SyntaxKind::MINUS
+            | SyntaxKind::STAR
+            | SyntaxKind::SLASH
+            | SyntaxKind::PERCENT => {
+                let lhs_ty = self.synth_expr(&lhs);
+                let rhs_ty = self.synth_expr(&rhs);
+
+                // Check operand types are numeric
+                let lhs_resolved = self.resolve_type(lhs_ty);
+                let lhs_type = self.ctx.types.get(lhs_resolved).clone();
+                let is_lhs_numeric = match &lhs_type {
+                    Type::IntVar(_) | Type::FloatVar(_) => true,
+                    Type::Primitive(p) => is_numeric_type(*p),
+                    _ => false,
+                };
+                if !is_lhs_numeric {
+                    let span = text_range_to_span(lhs.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("cannot apply binary operator to non-numeric type")
+                            .with_label(span, "not a numeric type"),
+                    );
+                    return self.ctx.types.error();
+                }
+
+                if !self.unify(lhs_ty, rhs_ty) {
+                    let span = text_range_to_span(rhs.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("type mismatch in binary operation")
+                            .with_label(span, "mismatched operand types"),
+                    );
+                    return self.ctx.types.error();
+                }
+
+                lhs_ty
+            }
+
+            // Comparison operators - result is bool
+            SyntaxKind::EQ_EQ
+            | SyntaxKind::NE
+            | SyntaxKind::LT
+            | SyntaxKind::LE
+            | SyntaxKind::GT
+            | SyntaxKind::GE => {
+                let lhs_ty = self.synth_expr(&lhs);
+                let rhs_ty = self.synth_expr(&rhs);
+
+                if !self.unify(lhs_ty, rhs_ty) {
+                    let span = text_range_to_span(rhs.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("type mismatch in comparison")
+                            .with_label(span, "mismatched operand types"),
+                    );
+                }
+
+                self.ctx.types.bool()
+            }
+
+            // Logical operators - operands and result are bool
+            SyntaxKind::AND_AND | SyntaxKind::OR_OR => {
+                let lhs_ty = self.synth_expr(&lhs);
+                let rhs_ty = self.synth_expr(&rhs);
+                let bool_ty = self.ctx.types.bool();
+
+                if !self.unify(lhs_ty, bool_ty) {
+                    let span = text_range_to_span(lhs.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("type mismatch: expected bool for logical operator")
+                            .with_label(span, "not a bool"),
+                    );
+                }
+                if !self.unify(rhs_ty, bool_ty) {
+                    let span = text_range_to_span(rhs.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("type mismatch: expected bool for logical operator")
+                            .with_label(span, "not a bool"),
+                    );
+                }
+
+                bool_ty
+            }
+
+            // Assignment operators - result is unit
+            SyntaxKind::EQ
+            | SyntaxKind::PLUS_EQ
+            | SyntaxKind::MINUS_EQ
+            | SyntaxKind::STAR_EQ
+            | SyntaxKind::SLASH_EQ
+            | SyntaxKind::PERCENT_EQ => {
+                let lhs_ty = self.synth_expr(&lhs);
+                let rhs_ty = self.synth_expr(&rhs);
+
+                if !self.unify(lhs_ty, rhs_ty) {
+                    let span = text_range_to_span(rhs.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("type mismatch in assignment")
+                            .with_label(span, "mismatched types"),
+                    );
+                }
+
+                self.ctx.types.unit()
+            }
+
+            _ => self.ctx.types.error(),
+        }
+    }
+
+    fn synth_prefix(&mut self, prefix: &PrefixExpr) -> TypeId {
+        let op = match prefix.op_token() {
+            Some(t) => t,
+            None => return self.ctx.types.error(),
+        };
+
+        let inner = match prefix.expr() {
+            Some(e) => e,
+            None => return self.ctx.types.error(),
+        };
+
+        let inner_ty = self.synth_expr(&inner);
+
+        match op.kind() {
+            SyntaxKind::MINUS => {
+                // Negation is valid for numeric types
+                let resolved = self.resolve_type(inner_ty);
+                let ty = self.ctx.types.get(resolved).clone();
+                match &ty {
+                    Type::IntVar(_) | Type::FloatVar(_) => inner_ty,
+                    Type::Primitive(p) if is_numeric_type(*p) => inner_ty,
+                    _ => {
+                        let span = text_range_to_span(inner.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error("cannot apply unary `-` to non-numeric type")
+                                .with_label(span, "not a numeric type"),
+                        );
+                        self.ctx.types.error()
+                    }
+                }
+            }
+            SyntaxKind::BANG => {
+                // Logical not is valid for bool
+                let bool_ty = self.ctx.types.bool();
+                if !self.unify(inner_ty, bool_ty) {
+                    let span = text_range_to_span(inner.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("cannot apply unary `!` to non-bool type")
+                            .with_label(span, "not a bool"),
+                    );
+                    return self.ctx.types.error();
+                }
+                bool_ty
+            }
+            SyntaxKind::STAR => {
+                // Dereference
+                let resolved = self.resolve_type(inner_ty);
+                let ty = self.ctx.types.get(resolved).clone();
+                match ty {
+                    Type::Ref(_, inner) => inner,
+                    _ => {
+                        let span = text_range_to_span(inner.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error("cannot dereference non-reference type")
+                                .with_label(span, "not a reference"),
+                        );
+                        self.ctx.types.error()
+                    }
+                }
+            }
+            _ => self.ctx.types.error(),
+        }
+    }
+
+    fn synth_ref(&mut self, ref_expr: &RefExpr) -> TypeId {
+        let inner = match ref_expr.expr() {
+            Some(e) => e,
+            None => return self.ctx.types.error(),
+        };
+
+        let inner_ty = self.synth_expr(&inner);
+        let mutability = if ref_expr.mut_kw().is_some() {
+            // Check that the referenced expression is mutable
+            // For now, we'll just check if it's a path to a mutable binding
+            // A full implementation would track mutability through the AST
+            if let Expr::Path(_path_expr) = &inner {
+                // TODO: Check that the path refers to a mutable binding
+                // For now, we'll just allow it
+            } else {
+                let span = text_range_to_span(inner.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("cannot borrow as mutable")
+                        .with_label(span, "cannot borrow as mutable"),
+                );
+            }
+            Mutability::Mutable
+        } else {
+            Mutability::Shared
+        };
+
+        self.ctx.types.mk_ref(mutability, inner_ty)
+    }
+
+    fn synth_field(&mut self, field: &FieldExpr) -> TypeId {
+        let base = match field.expr() {
+            Some(e) => e,
+            None => return self.ctx.types.error(),
+        };
+
+        let base_ty = self.synth_expr(&base);
+        let resolved = self.resolve_type(base_ty);
+        let base_type = self.ctx.types.get(resolved).clone();
+
+        // Handle tuple field access (e.g., t.0, t.1)
+        // Try name_token() first (raw IDENT), then fall back to name() (NameRef)
+        let field_name = match field.name_token() {
+            Some(t) => t.text().to_string(),
+            None => match field.name().and_then(|n| n.ident_token()) {
+                Some(t) => t.text().to_string(),
+                None => return self.ctx.types.error(),
+            },
+        };
+
+        // Check if it's a tuple index
+        if let Ok(idx) = field_name.parse::<usize>()
+            && let Type::Tuple(elems) = &base_type
+            && idx < elems.len()
+        {
+            return elems[idx];
+        }
+
+        // Handle struct field access
+        if let Type::Struct(def_id, _) = &base_type {
+            if let Some(fields) = self.struct_fields.get(def_id) {
+                for (name, ty) in fields {
+                    if name == &field_name {
+                        return *ty;
+                    }
+                }
+            }
+            let span = text_range_to_span(field.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error(format!("no field `{}` on struct", field_name))
+                    .with_label(span, "unknown field"),
+            );
+            return self.ctx.types.error();
+        }
+
+        let span = text_range_to_span(field.syntax().text_range());
+        self.diagnostics.push(
+            Diagnostic::error("field access on non-struct type")
+                .with_label(span, "not a struct"),
+        );
+        self.ctx.types.error()
+    }
+
+    fn synth_method_call(&mut self, method: &MethodCallExpr) -> TypeId {
+        let receiver = match method.receiver() {
+            Some(e) => e,
+            None => return self.ctx.types.error(),
+        };
+
+        let receiver_ty = self.synth_expr(&receiver);
+
+        // For now, we'll just look up methods in the struct's impl blocks
+        // This is a simplified implementation
+        let method_name = match method.name() {
+            Some(n) => match n.ident_token() {
+                Some(t) => t.text().to_string(),
+                None => return self.ctx.types.error(),
+            },
+            None => return self.ctx.types.error(),
+        };
+
+        // Resolve receiver type to find struct DefId
+        let resolved = self.resolve_type(receiver_ty);
+        let receiver_type = self.ctx.types.get(resolved).clone();
+
+        // Handle reference receivers (auto-deref)
+        let struct_def_id = match &receiver_type {
+            Type::Struct(def_id, _) => Some(*def_id),
+            Type::Ref(_, inner) => {
+                let inner_resolved = self.resolve_type(*inner);
+                let inner_type = self.ctx.types.get(inner_resolved);
+                if let Type::Struct(def_id, _) = inner_type {
+                    Some(*def_id)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+
+        // Look up method in struct_def_id's methods (stored in fn_signatures)
+        // For now, we'll use a naming convention: StructName::method_name
+        if let Some(_def_id) = struct_def_id {
+            // Search for method signature - collect data first to avoid borrow conflicts
+            let mut found_sig: Option<(Vec<(String, TypeId)>, TypeId)> = None;
+            for (fn_def_id, sig) in &self.fn_signatures {
+                let symbol = self.ctx.get_symbol(*fn_def_id);
+                let fn_name = self.ctx.resolve(symbol.name);
+                if fn_name == method_name {
+                    // Clone params to avoid borrow conflict
+                    found_sig = Some((sig.params.clone(), sig.ret));
+                    break;
+                }
+            }
+
+            if let Some((params, ret)) = found_sig {
+                // Check arguments
+                if let Some(arg_list) = method.arg_list() {
+                    let args: Vec<_> = arg_list.args().collect();
+                    // Skip self parameter in signature
+                    let expected_args: Vec<_> = if !params.is_empty()
+                        && (params[0].0 == "self"
+                            || params[0].0 == "&self"
+                            || params[0].0 == "&mut self")
+                    {
+                        params[1..].to_vec()
+                    } else {
+                        params
+                    };
+
+                    if args.len() != expected_args.len() {
+                        let span = text_range_to_span(method.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "expected {} argument{}, found {}",
+                                expected_args.len(),
+                                if expected_args.len() == 1 { "" } else { "s" },
+                                args.len()
+                            ))
+                            .with_label(span, "wrong number of arguments"),
+                        );
+                    } else {
+                        for (arg, (_, expected_ty)) in args.iter().zip(expected_args.iter()) {
+                            self.check_expr(arg, *expected_ty);
+                        }
+                    }
+                }
+                return ret;
+            }
+        }
+
+        // Method not found - this is OK for now, return a fresh type var
+        self.fresh_type_var()
+    }
+
+    fn synth_call(&mut self, call: &CallExpr) -> TypeId {
+        let callee = match call.callee() {
+            Some(e) => e,
+            None => return self.ctx.types.error(),
+        };
+
+        let callee_ty = self.synth_expr(&callee);
+        let resolved = self.resolve_type(callee_ty);
+        let callee_type = self.ctx.types.get(resolved).clone();
+
+        // Check if callee is a function
+        let (param_types, ret_ty) = match callee_type {
+            Type::FnPtr { params, ret } => (params, ret),
+            _ => {
+                // Check if it's a path to a function
+                if let Expr::Path(path_expr) = &callee
+                    && let Some(path) = path_expr.path()
+                    && let Some(segment) = path.segments().next()
+                    && let Some(name_ref) = segment.name()
+                    && let Some(token) = name_ref.ident_token()
+                {
+                    let span = text_range_to_span(token.text_range());
+                    if let Some(&def_id) = self.resolutions.get(&span)
+                        && let Some(sig) = self.fn_signatures.get(&def_id)
+                    {
+                        let param_types: Vec<_> =
+                            sig.params.iter().map(|(_, t)| *t).collect();
+                        return self.check_call_args(call, &param_types, sig.ret);
+                    }
+                }
+                let span = text_range_to_span(callee.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("value is not a function")
+                        .with_label(span, "not a function"),
+                );
+                return self.ctx.types.error();
+            }
+        };
+
+        self.check_call_args(call, &param_types, ret_ty)
+    }
+
+    fn check_call_args(&mut self, call: &CallExpr, param_types: &[TypeId], ret_ty: TypeId) -> TypeId {
+        let args: Vec<_> = call
+            .arg_list()
+            .map(|al| al.args().collect())
+            .unwrap_or_default();
+
+        if args.len() != param_types.len() {
+            let span = text_range_to_span(call.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error(format!(
+                    "expected {} argument{}, found {}",
+                    param_types.len(),
+                    if param_types.len() == 1 { "" } else { "s" },
+                    args.len()
+                ))
+                .with_label(span, "wrong number of arguments"),
+            );
+            return ret_ty;
+        }
+
+        for (arg, expected_ty) in args.iter().zip(param_types.iter()) {
+            self.check_expr(arg, *expected_ty);
+        }
+
+        ret_ty
+    }
+
+    fn synth_index(&mut self, index: &IndexExpr) -> TypeId {
+        let base = match index.base() {
+            Some(e) => e,
+            None => return self.ctx.types.error(),
+        };
+
+        let idx = match index.index() {
+            Some(e) => e,
+            None => return self.ctx.types.error(),
+        };
+
+        let base_ty = self.synth_expr(&base);
+        let _ = self.synth_expr(&idx); // Check index expression
+
+        let resolved = self.resolve_type(base_ty);
+        let base_type = self.ctx.types.get(resolved).clone();
+
+        match base_type {
+            Type::Array(elem, _) => elem,
+            Type::Slice(elem) => elem,
+            _ => {
+                let span = text_range_to_span(base.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("cannot index into this type")
+                        .with_label(span, "not indexable"),
+                );
+                self.ctx.types.error()
+            }
+        }
+    }
+
+    fn synth_slice(&mut self, slice: &SliceExpr) -> TypeId {
+        let base = match slice.base() {
+            Some(e) => e,
+            None => return self.ctx.types.error(),
+        };
+
+        let base_ty = self.synth_expr(&base);
+
+        // Check range bounds if present
+        if let Some(start) = slice.start() {
+            self.synth_expr(&start);
+        }
+        if let Some(end) = slice.end() {
+            self.synth_expr(&end);
+        }
+
+        let resolved = self.resolve_type(base_ty);
+        let base_type = self.ctx.types.get(resolved).clone();
+
+        match base_type {
+            Type::Array(elem, _) | Type::Slice(elem) => self.ctx.types.mk_slice(elem),
+            _ => {
+                let span = text_range_to_span(base.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("cannot slice this type")
+                        .with_label(span, "not sliceable"),
+                );
+                self.ctx.types.error()
+            }
+        }
+    }
+
+    fn synth_if(&mut self, if_expr: &IfExpr) -> TypeId {
+        // Check condition is bool
+        if let Some(cond) = if_expr.condition() {
+            let cond_ty = self.synth_expr(&cond);
+            let bool_ty = self.ctx.types.bool();
+            if !self.unify(cond_ty, bool_ty) {
+                let span = text_range_to_span(cond.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("if condition must be bool")
+                        .with_label(span, "expected bool"),
+                );
+            }
+        }
+
+        // Synthesize then branch
+        let then_ty = if let Some(then_block) = if_expr.then_branch() {
+            self.synth_block(&then_block)
+        } else {
+            self.ctx.types.unit()
+        };
+
+        // Synthesize else branch (if present)
+        // The else branch can be an Expr (for else-if) or a direct Block (for else { ... })
+        let else_ty = if let Some(else_expr) = if_expr.else_branch() {
+            // else-if case: else_expr is another IfExpr
+            self.synth_expr(&else_expr)
+        } else if let Some(else_block) = if_expr.else_block() {
+            // else { ... } case: direct Block
+            self.synth_block(&else_block)
+        } else {
+            // No else branch - if expression returns unit
+            return self.ctx.types.unit();
+        };
+
+        // Unify branches
+        if !self.unify(then_ty, else_ty) {
+            let span = text_range_to_span(if_expr.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error("type mismatch between if branches")
+                    .with_label(span, "branches have different types"),
+            );
+        }
+
+        then_ty
+    }
+
+    fn synth_while(&mut self, while_expr: &WhileExpr) -> TypeId {
+        // Check condition is bool
+        if let Some(cond) = while_expr.condition() {
+            let cond_ty = self.synth_expr(&cond);
+            let bool_ty = self.ctx.types.bool();
+            if !self.unify(cond_ty, bool_ty) {
+                let span = text_range_to_span(cond.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("while condition must be bool")
+                        .with_label(span, "expected bool"),
+                );
+            }
+        }
+
+        // Synthesize body
+        if let Some(body) = while_expr.body() {
+            self.synth_block(&body);
+        }
+
+        // While loops always return unit
+        self.ctx.types.unit()
+    }
+
+    fn synth_for(&mut self, for_expr: &ForExpr) -> TypeId {
+        // Synthesize iterable
+        if let Some(iterable) = for_expr.iterable() {
+            self.synth_expr(&iterable);
+        }
+
+        // Define loop variable binding
+        if let Some(pat) = for_expr.pat() {
+            // For now, assume the pattern is a simple identifier
+            // TODO: Handle complex patterns
+            let elem_ty = self.fresh_type_var();
+            self.define_pattern(&pat, elem_ty);
+        }
+
+        // Synthesize body
+        if let Some(body) = for_expr.body() {
+            self.synth_block(&body);
+        }
+
+        // For loops always return unit
+        self.ctx.types.unit()
+    }
+
+    fn synth_loop(&mut self, loop_expr: &LoopExpr) -> TypeId {
+        // Create a fresh type variable for the loop's break value
+        let break_ty = self.fresh_type_var();
+        let old_break_ty = self.current_loop_break_type.replace(break_ty);
+
+        if let Some(body) = loop_expr.body() {
+            self.synth_block(&body);
+        }
+
+        self.current_loop_break_type = old_break_ty;
+
+        // If no break with value, the loop type is ! (never returns normally)
+        // But if break with value exists, return that type
+        break_ty
+    }
+
+    fn synth_break(&mut self, break_expr: &BreakExpr) -> TypeId {
+        if let Some(value) = break_expr.expr() {
+            let value_ty = self.synth_expr(&value);
+            if let Some(break_ty) = self.current_loop_break_type
+                && !self.unify(break_ty, value_ty)
+            {
+                let span = text_range_to_span(value.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("type mismatch in break value")
+                        .with_label(span, "mismatched types"),
+                );
+            }
+        } else if let Some(break_ty) = self.current_loop_break_type {
+            // Break without value - unify with unit
+            let unit_ty = self.ctx.types.unit();
+            let _ = self.unify(break_ty, unit_ty);
+        }
+        // Break is a diverging expression
+        self.ctx.types.never()
+    }
+
+    fn synth_return(&mut self, return_expr: &ReturnExpr) -> TypeId {
+        let value_ty = if let Some(value) = return_expr.expr() {
+            self.synth_expr(&value)
+        } else {
+            self.ctx.types.unit()
+        };
+
+        if let Some(ret_ty) = self.current_return_type
+            && !self.unify(ret_ty, value_ty)
+        {
+            let span = text_range_to_span(return_expr.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error("type mismatch in return")
+                    .with_label(span, "mismatched return type"),
+            );
+        }
+
+        // Return is a diverging expression
+        self.ctx.types.never()
+    }
+
+    fn synth_block_expr(&mut self, block_expr: &BlockExpr) -> TypeId {
+        match block_expr.block() {
+            Some(block) => self.synth_block(&block),
+            None => self.ctx.types.unit(),
+        }
+    }
+
+    fn synth_cast(&mut self, cast: &CastExpr) -> TypeId {
+        // Synthesize the source expression
+        if let Some(expr) = cast.expr() {
+            self.synth_expr(&expr);
+        }
+
+        // Get the target type
+        if let Some(ty) = cast.ty() {
+            self.ast_type_to_type_id(&ty)
+        } else {
+            self.ctx.types.error()
+        }
+    }
+
+    fn synth_range(&mut self, _range: &RangeExpr) -> TypeId {
+        // Range expressions have a Range type
+        // For now, return a placeholder
+        // TODO: Implement Range type properly
+        self.fresh_type_var()
+    }
+
+    fn synth_block(&mut self, block: &Block) -> TypeId {
+        use rowan::ast::AstNode;
+
+        // Track if the block diverges
+        let mut diverges = false;
+
+        // Process all statements
+        for stmt in block.statements() {
+            // Check if this statement is a diverging expression
+            if let Stmt::Expr(expr_stmt) = &stmt {
+                if let Some(expr) = expr_stmt.expr() {
+                    let ty = self.synth_expr(&expr);
+                    // Check if this expression has the never type
+                    let resolved = self.resolve_type(ty);
+                    let inner = self.ctx.types.get(resolved);
+                    if matches!(inner, Type::Primitive(PrimitiveKind::Never)) {
+                        diverges = true;
+                    }
+                }
+            } else {
+                self.infer_stmt(&stmt);
+            }
+        }
+
+        // Also process bare expressions that aren't wrapped in ExprStmt
+        // (like standalone if expressions without semicolons)
+        for child in block.syntax().children() {
+            if let Some(expr) = Expr::cast(child.clone()) {
+                // Skip if this is wrapped in an ExprStmt (already processed above)
+                if child.parent().and_then(ExprStmt::cast).is_some() {
+                    continue;
+                }
+                let ty = self.synth_expr(&expr);
+                let resolved = self.resolve_type(ty);
+                let inner = self.ctx.types.get(resolved);
+                if matches!(inner, Type::Primitive(PrimitiveKind::Never)) {
+                    diverges = true;
+                }
+            }
+        }
+
+        // The block's type is the tail expression's type, or unit if none
+        if let Some(tail) = block.tail_expr() {
+            self.synth_expr(&tail)
+        } else if diverges {
+            // If the block diverges, its type is never
+            self.ctx.types.never()
+        } else {
+            self.ctx.types.unit()
+        }
+    }
+
+    // =========================================================================
+    // Type Checking (Top-down)
+    // =========================================================================
+
+    /// Check an expression against an expected type.
+    fn check_expr(&mut self, expr: &Expr, expected: TypeId) {
+        let actual = self.synth_expr(expr);
+        if !self.unify(actual, expected) {
+            let span = text_range_to_span(expr.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error("type mismatch")
+                    .with_label(span, "mismatched types"),
+            );
+        }
+    }
+
+    // =========================================================================
+    // Statement Inference
+    // =========================================================================
+
+    fn infer_stmt(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::Let(let_stmt) => self.infer_let_stmt(let_stmt),
+            Stmt::Expr(expr_stmt) => {
+                if let Some(expr) = expr_stmt.expr() {
+                    self.synth_expr(&expr);
+                }
+            }
+        }
+    }
+
+    fn infer_let_stmt(&mut self, let_stmt: &LetStmt) {
+        // Get the type annotation if present
+        let annotation_ty = let_stmt.ty().map(|ty| self.ast_type_to_type_id(&ty));
+
+        // Synthesize or check the initializer
+        let init_ty = if let Some(init) = let_stmt.initializer() {
+            if let Some(expected) = annotation_ty {
+                self.check_expr(&init, expected);
+                expected
+            } else {
+                self.synth_expr(&init)
+            }
+        } else {
+            // No initializer - use annotation or error
+            annotation_ty.unwrap_or_else(|| self.fresh_type_var())
+        };
+
+        // Bind the pattern
+        if let Some(pat) = let_stmt.pat() {
+            self.define_pattern(&pat, init_ty);
+        }
+    }
+
+    fn define_pattern(&mut self, pat: &Pat, ty: TypeId) {
+        match pat {
+            Pat::Ident(ident_pat) => {
+                // Get the DefId from the resolution
+                let token = ident_pat
+                    .name()
+                    .and_then(|n| n.ident_token())
+                    .or_else(|| {
+                        use crate::ast::token;
+                        token(ident_pat.syntax(), SyntaxKind::IDENT)
+                    });
+
+                if let Some(token) = token {
+                    let span = text_range_to_span(token.text_range());
+                    // The resolver already defined this binding, we just need to record its type
+                    // Look up in resolutions first
+                    if let Some(&def_id) = self.resolutions.get(&span) {
+                        self.binding_types.insert(def_id, ty);
+                    } else {
+                        // Try to find by name in current scope
+                        let name = token.text();
+                        let interned = self.ctx.intern(name);
+                        if let Some(def_id) = self.ctx.lookup(interned) {
+                            self.binding_types.insert(def_id, ty);
+                        }
+                    }
+                }
+            }
+            Pat::Tuple(tuple_pat) => {
+                let resolved = self.resolve_type(ty);
+                let ty_data = self.ctx.types.get(resolved).clone();
+                if let Type::Tuple(elem_types) = ty_data {
+                    for (inner_pat, elem_ty) in tuple_pat.patterns().zip(elem_types.iter()) {
+                        self.define_pattern(&inner_pat, *elem_ty);
+                    }
+                }
+            }
+            Pat::Struct(_struct_pat) => {
+                // TODO: Handle struct patterns
+            }
+            Pat::Wildcard(_) => {
+                // Wildcard doesn't bind anything
+            }
+            _ => {}
+        }
+    }
+
+    // =========================================================================
+    // AST Type to TypeId Conversion
+    // =========================================================================
+
+    fn ast_type_to_type_id(&mut self, ty: &crate::ast::Type) -> TypeId {
+        match ty {
+            crate::ast::Type::Path(path_type) => {
+                if let Some(path) = path_type.path()
+                    && let Some(segment) = path.segments().next()
+                    && let Some(name_ref) = segment.name()
+                    && let Some(token) = name_ref.ident_token()
+                {
+                    let name = token.text();
+
+                    // Check for primitive types
+                    if let Some(prim) = PrimitiveKind::from_name(name) {
+                        return self.ctx.types.primitive(prim);
+                    }
+
+                    // Check for String
+                    if name == "String" {
+                        return self.ctx.types.string();
+                    }
+
+                    // Look up in resolutions
+                    let span = text_range_to_span(token.text_range());
+                    if let Some(&def_id) = self.resolutions.get(&span) {
+                        // It's a struct or type alias
+                        return self.ctx.types.mk_struct(def_id, vec![]);
+                    }
+                }
+                self.ctx.types.error()
+            }
+            crate::ast::Type::Ref(ref_type) => {
+                let mutability = if ref_type.mut_kw().is_some() {
+                    Mutability::Mutable
+                } else {
+                    Mutability::Shared
+                };
+                if let Some(inner) = ref_type.ty() {
+                    let inner_ty = self.ast_type_to_type_id(&inner);
+                    self.ctx.types.mk_ref(mutability, inner_ty)
+                } else {
+                    self.ctx.types.error()
+                }
+            }
+            crate::ast::Type::Array(array_type) => {
+                if let Some(elem_ty) = array_type.elem_ty() {
+                    let elem = self.ast_type_to_type_id(&elem_ty);
+                    // Get length from expression
+                    let len = if let Some(len_expr) = array_type.len() {
+                        // Try to evaluate as a constant
+                        if let Expr::Literal(lit) = Expr::cast(len_expr.syntax().clone())
+                            .unwrap_or_else(|| panic!("expected literal"))
+                        {
+                            if let Some(token) = lit.token() {
+                                if token.kind() == SyntaxKind::INT_LITERAL {
+                                    token.text().parse().unwrap_or(0)
+                                } else {
+                                    0
+                                }
+                            } else {
+                                0
+                            }
+                        } else {
+                            0
+                        }
+                    } else {
+                        0
+                    };
+                    self.ctx.types.mk_array(elem, len)
+                } else {
+                    self.ctx.types.error()
+                }
+            }
+            crate::ast::Type::Slice(slice_type) => {
+                if let Some(elem_ty) = slice_type.elem_ty() {
+                    let elem = self.ast_type_to_type_id(&elem_ty);
+                    self.ctx.types.mk_slice(elem)
+                } else {
+                    self.ctx.types.error()
+                }
+            }
+            crate::ast::Type::Tuple(tuple_type) => {
+                let elems: Vec<_> = tuple_type
+                    .types()
+                    .map(|t| self.ast_type_to_type_id(&t))
+                    .collect();
+                self.ctx.types.mk_tuple(elems)
+            }
+            crate::ast::Type::FnPtr(fn_ptr) => {
+                let params: Vec<_> = fn_ptr
+                    .param_types()
+                    .map(|t| self.ast_type_to_type_id(&t))
+                    .collect();
+                let ret = fn_ptr
+                    .ret_type()
+                    .map(|t| self.ast_type_to_type_id(&t))
+                    .unwrap_or_else(|| self.ctx.types.unit());
+                self.ctx.types.mk_fn_ptr(params, ret)
+            }
+        }
+    }
+
+    // =========================================================================
+    // Top-Level Inference
+    // =========================================================================
+
+    fn infer_source_file(&mut self, source_file: &SourceFile) {
+        // First pass: collect function signatures and struct info
+        for item in source_file.items() {
+            match &item {
+                Item::Function(func) => self.collect_function_signature(func),
+                Item::Struct(struct_def) => self.collect_struct_info(struct_def),
+                Item::Impl(impl_block) => {
+                    for item in impl_block.items() {
+                        if let Item::Function(func) = item {
+                            self.collect_function_signature(&func);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Second pass: infer function bodies
+        for item in source_file.items() {
+            match &item {
+                Item::Function(func) => self.infer_function(func),
+                Item::Impl(impl_block) => {
+                    for item in impl_block.items() {
+                        if let Item::Function(func) = item {
+                            self.infer_function(&func);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn collect_function_signature(&mut self, func: &FunctionDef) {
+        let name = match func.name() {
+            Some(n) => n,
+            None => return,
+        };
+
+        let token = match name.ident_token() {
+            Some(t) => t,
+            None => return,
+        };
+
+        let span = text_range_to_span(token.text_range());
+        let def_id = match self.resolutions.get(&span) {
+            Some(id) => *id,
+            None => return,
+        };
+
+        // Collect parameters
+        let mut params = Vec::new();
+        if let Some(param_list) = func.param_list() {
+            // Handle self parameter
+            if let Some(self_param) = param_list.self_param() {
+                let self_name = if self_param.mut_kw().is_some() {
+                    "&mut self"
+                } else if self_param.amp().is_some() {
+                    "&self"
+                } else {
+                    "self"
+                };
+                // Self type will be resolved when we have the impl block's type
+                params.push((self_name.to_string(), self.fresh_type_var()));
+            }
+
+            for param in param_list.params() {
+                let param_name = param
+                    .name()
+                    .and_then(|n| n.ident_token())
+                    .map(|t| t.text().to_string())
+                    .unwrap_or_default();
+                let param_ty = param
+                    .ty()
+                    .map(|t| self.ast_type_to_type_id(&t))
+                    .unwrap_or_else(|| self.fresh_type_var());
+                params.push((param_name, param_ty));
+            }
+        }
+
+        // Get return type
+        let ret = func
+            .ret_type()
+            .map(|t| self.ast_type_to_type_id(&t))
+            .unwrap_or_else(|| self.ctx.types.unit());
+
+        self.fn_signatures.insert(def_id, FnSignature { params, ret });
+    }
+
+    fn collect_struct_info(&mut self, struct_def: &crate::ast::StructDef) {
+        let name = match struct_def.name() {
+            Some(n) => n,
+            None => return,
+        };
+
+        let token = match name.ident_token() {
+            Some(t) => t,
+            None => return,
+        };
+
+        let span = text_range_to_span(token.text_range());
+        let def_id = match self.resolutions.get(&span) {
+            Some(id) => *id,
+            None => return,
+        };
+
+        let mut fields = Vec::new();
+        if let Some(field_list) = struct_def.field_list() {
+            for field in field_list.fields() {
+                let field_name = field
+                    .name()
+                    .and_then(|n| n.ident_token())
+                    .map(|t| t.text().to_string())
+                    .unwrap_or_default();
+                let field_ty = field
+                    .ty()
+                    .map(|t| self.ast_type_to_type_id(&t))
+                    .unwrap_or_else(|| self.fresh_type_var());
+                fields.push((field_name, field_ty));
+            }
+        }
+
+        self.struct_fields.insert(def_id, fields);
+    }
+
+    fn infer_function(&mut self, func: &FunctionDef) {
+        let name = match func.name() {
+            Some(n) => n,
+            None => return,
+        };
+
+        let token = match name.ident_token() {
+            Some(t) => t,
+            None => return,
+        };
+
+        let span = text_range_to_span(token.text_range());
+        let def_id = match self.resolutions.get(&span) {
+            Some(id) => *id,
+            None => return,
+        };
+
+        // Get signature
+        let sig = match self.fn_signatures.get(&def_id) {
+            Some(s) => s.clone(),
+            None => return,
+        };
+
+        // Set current return type
+        self.current_return_type = Some(sig.ret);
+
+        // Bind parameters by looking up their DefIds from the AST
+        if let Some(param_list) = func.param_list() {
+            let param_types: Vec<_> = sig.params.iter().filter(|(n, _)| {
+                n != "self" && n != "&self" && n != "&mut self"
+            }).map(|(_, ty)| *ty).collect();
+
+            for (param, param_ty) in param_list.params().zip(param_types.iter()) {
+                if let Some(param_name) = param.name()
+                    && let Some(token) = param_name.ident_token()
+                {
+                    let param_span = text_range_to_span(token.text_range());
+                    if let Some(&param_def_id) = self.resolutions.get(&param_span) {
+                        self.binding_types.insert(param_def_id, *param_ty);
+                    }
+                }
+            }
+        }
+
+        // Infer body
+        if let Some(body) = func.body() {
+            let body_ty = self.synth_block(&body);
+
+            // Check return type matches
+            if !self.unify(sig.ret, body_ty) {
+                let body_span = text_range_to_span(body.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("type mismatch: return type doesn't match body")
+                        .with_label(body_span, "body has wrong type"),
+                );
+            }
+        }
+
+        self.current_return_type = None;
+    }
+
+    // =========================================================================
+    // Default Application
+    // =========================================================================
+
+    fn apply_defaults(&mut self) {
+        // Collect all type variables that haven't been resolved
+        let mut defaults: Vec<(TypeVar, TypeId)> = Vec::new();
+
+        // Go through all bindings and apply defaults
+        for (_def_id, &type_id) in self.binding_types.iter() {
+            self.collect_defaults(type_id, &mut defaults);
+        }
+
+        // Apply defaults
+        for (var, default) in defaults {
+            self.substitution.entry(var).or_insert(default);
+        }
+
+        // Resolve all binding types
+        // First collect all the bindings to avoid borrow conflicts
+        let bindings: Vec<_> = self.binding_types.drain().collect();
+        for (def_id, type_id) in bindings {
+            let resolved = self.fully_resolve_type(type_id);
+            self.binding_types.insert(def_id, resolved);
+        }
+    }
+
+    fn collect_defaults(&self, type_id: TypeId, defaults: &mut Vec<(TypeVar, TypeId)>) {
+        let ty = self.ctx.types.get(type_id).clone();
+        match ty {
+            Type::IntVar(var) => {
+                if !self.substitution.contains_key(&var) {
+                    defaults.push((var, self.ctx.types.i32()));
+                }
+            }
+            Type::FloatVar(var) => {
+                if !self.substitution.contains_key(&var) {
+                    defaults.push((var, self.ctx.types.f64()));
+                }
+            }
+            Type::Var(_var) => {
+                // General type variables don't have defaults - this is an error
+                // For now, we'll leave them as-is
+            }
+            Type::Ref(_, inner) => self.collect_defaults(inner, defaults),
+            Type::Array(elem, _) => self.collect_defaults(elem, defaults),
+            Type::Slice(elem) => self.collect_defaults(elem, defaults),
+            Type::Tuple(elems) => {
+                for elem in elems {
+                    self.collect_defaults(elem, defaults);
+                }
+            }
+            Type::Struct(_, args) => {
+                for arg in args {
+                    self.collect_defaults(arg, defaults);
+                }
+            }
+            Type::FnPtr { params, ret } => {
+                for param in params {
+                    self.collect_defaults(param, defaults);
+                }
+                self.collect_defaults(ret, defaults);
+            }
+            _ => {}
+        }
+    }
+
+    fn fully_resolve_type(&mut self, type_id: TypeId) -> TypeId {
+        let resolved = self.resolve_type(type_id);
+        let ty = self.ctx.types.get(resolved).clone();
+
+        match ty {
+            Type::IntVar(var) => {
+                if let Some(&subst) = self.substitution.get(&var) {
+                    self.fully_resolve_type(subst)
+                } else {
+                    // Apply default
+                    self.ctx.types.i32()
+                }
+            }
+            Type::FloatVar(var) => {
+                if let Some(&subst) = self.substitution.get(&var) {
+                    self.fully_resolve_type(subst)
+                } else {
+                    // Apply default
+                    self.ctx.types.f64()
+                }
+            }
+            Type::Var(var) => {
+                if let Some(&subst) = self.substitution.get(&var) {
+                    self.fully_resolve_type(subst)
+                } else {
+                    resolved
+                }
+            }
+            Type::Ref(mutability, inner) => {
+                let inner_resolved = self.fully_resolve_type(inner);
+                self.ctx.types.mk_ref(mutability, inner_resolved)
+            }
+            Type::Array(elem, len) => {
+                let elem_resolved = self.fully_resolve_type(elem);
+                self.ctx.types.mk_array(elem_resolved, len)
+            }
+            Type::Slice(elem) => {
+                let elem_resolved = self.fully_resolve_type(elem);
+                self.ctx.types.mk_slice(elem_resolved)
+            }
+            Type::Tuple(elems) => {
+                let resolved_elems: Vec<_> =
+                    elems.iter().map(|e| self.fully_resolve_type(*e)).collect();
+                self.ctx.types.mk_tuple(resolved_elems)
+            }
+            Type::Struct(def_id, args) => {
+                let resolved_args: Vec<_> =
+                    args.iter().map(|a| self.fully_resolve_type(*a)).collect();
+                self.ctx.types.mk_struct(def_id, resolved_args)
+            }
+            Type::FnPtr { params, ret } => {
+                let resolved_params: Vec<_> =
+                    params.iter().map(|p| self.fully_resolve_type(*p)).collect();
+                let resolved_ret = self.fully_resolve_type(ret);
+                self.ctx.types.mk_fn_ptr(resolved_params, resolved_ret)
+            }
+            _ => resolved,
+        }
+    }
+}
+
+// =========================================================================
+// Helper Functions
+// =========================================================================
+
+fn text_range_to_span(range: rowan::TextRange) -> Span {
+    range.start().into()..range.end().into()
+}
+
+fn is_integer_type(prim: PrimitiveKind) -> bool {
+    matches!(
+        prim,
+        PrimitiveKind::I8
+            | PrimitiveKind::I16
+            | PrimitiveKind::I32
+            | PrimitiveKind::I64
+            | PrimitiveKind::I128
+            | PrimitiveKind::Isize
+            | PrimitiveKind::U8
+            | PrimitiveKind::U16
+            | PrimitiveKind::U32
+            | PrimitiveKind::U64
+            | PrimitiveKind::U128
+            | PrimitiveKind::Usize
+    )
+}
+
+fn is_float_type(prim: PrimitiveKind) -> bool {
+    matches!(prim, PrimitiveKind::F32 | PrimitiveKind::F64)
+}
+
+fn is_numeric_type(prim: PrimitiveKind) -> bool {
+    is_integer_type(prim) || is_float_type(prim)
+}

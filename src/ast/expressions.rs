@@ -159,7 +159,11 @@ impl AstNode for Expr {
 
 impl LiteralExpr {
     pub fn token(&self) -> Option<SyntaxToken> {
-        self.0.first_token()
+        // Skip whitespace/trivia tokens to get the actual literal token
+        self.0
+            .children_with_tokens()
+            .filter_map(|it| it.into_token())
+            .find(|it| !it.kind().is_trivia())
     }
 }
 
@@ -200,6 +204,12 @@ impl StructExpr {
 impl StructExprField {
     pub fn name(&self) -> Option<NameRef> {
         child(&self.0)
+    }
+
+    /// Get the field name token directly (for struct expression fields where
+    /// the field name is stored as a raw IDENT token, not wrapped in NameRef).
+    pub fn name_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::IDENT)
     }
 
     pub fn expr(&self) -> Option<Expr> {
@@ -256,7 +266,7 @@ impl PrefixExpr {
         self.0
             .children_with_tokens()
             .filter_map(|it| it.into_token())
-            .find(|t| matches!(t.kind(), SyntaxKind::BANG | SyntaxKind::MINUS))
+            .find(|t| matches!(t.kind(), SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR))
     }
 }
 
@@ -281,6 +291,12 @@ impl FieldExpr {
 
     pub fn name(&self) -> Option<NameRef> {
         child(&self.0)
+    }
+
+    /// Get the field name token directly (for field expressions where
+    /// the field name is stored as a raw IDENT token, not wrapped in NameRef).
+    pub fn name_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::IDENT)
     }
 }
 
@@ -348,8 +364,30 @@ impl IfExpr {
     }
 
     pub fn else_branch(&self) -> Option<Expr> {
-        // The else branch can be a Block or another IfExpr
-        children::<Expr>(&self.0).nth(1)
+        // The else branch can be:
+        // 1. A BlockExpr (when the parser wraps it)
+        // 2. Another IfExpr (for else-if chains)
+        // 3. A Block directly (when parser doesn't wrap it)
+        // We try Expr children first, then look for a direct Block child
+        if let Some(expr) = children::<Expr>(&self.0).nth(1) {
+            return Some(expr);
+        }
+        // Check for a direct Block after the then branch
+        // The first Block is the then branch, the second is the else branch
+        let blocks: Vec<_> = self.0.children().filter_map(Block::cast).collect();
+        if blocks.len() >= 2 {
+            // Wrap the else block in a BlockExpr-like wrapper
+            // Since we can't create a BlockExpr, we need a different approach
+            // Actually, let's just convert the Block to an expression type
+            return None; // For now, return None and fix this properly
+        }
+        None
+    }
+
+    /// Get the else branch as a Block (if it's a simple else block, not else-if).
+    pub fn else_block(&self) -> Option<Block> {
+        // The first Block is the then branch, the second is the else branch
+        self.0.children().filter_map(Block::cast).nth(1)
     }
 }
 

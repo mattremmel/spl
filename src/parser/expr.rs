@@ -144,7 +144,7 @@ fn prefix_expr(
     let _ = expr_bp(p, r_bp)?;
 
     let kind = match op {
-        SyntaxKind::BANG | SyntaxKind::MINUS => SyntaxKind::PrefixExpr,
+        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR => SyntaxKind::PrefixExpr,
         _ => unreachable!("unexpected prefix operator: {:?}", op),
     };
 
@@ -172,7 +172,7 @@ fn prefix_expr_no_struct(
     let _ = expr_no_struct_bp(p, r_bp)?;
 
     let kind = match op {
-        SyntaxKind::BANG | SyntaxKind::MINUS => SyntaxKind::PrefixExpr,
+        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR => SyntaxKind::PrefixExpr,
         _ => unreachable!("unexpected prefix operator: {:?}", op),
     };
 
@@ -697,8 +697,8 @@ fn type_expr(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
 /// Prefix operator binding power ((), right).
 fn prefix_bp(op: SyntaxKind) -> Option<((), u8)> {
     match op {
-        SyntaxKind::BANG | SyntaxKind::MINUS => Some(((), 19)), // Unary: prec 10
-        SyntaxKind::AMP => Some(((), 19)),                      // Reference
+        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR => Some(((), 19)), // Unary: prec 10
+        SyntaxKind::AMP => Some(((), 19)),                                         // Reference
         _ => None,
     }
 }

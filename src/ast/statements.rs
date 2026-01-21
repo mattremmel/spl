@@ -46,10 +46,16 @@ impl Block {
     }
 
     pub fn tail_expr(&self) -> Option<Expr> {
-        // The tail expression is the last expression without a semicolon
-        // This is determined by the parser, so we just look for an Expr child
-        // that isn't wrapped in ExprStmt
-        self.0.children().filter_map(Expr::cast).last()
+        // The tail expression is the last expression without a semicolon.
+        // It must be the very last meaningful child in the block (ignoring trivia).
+        // We find the last child that is either an Expr or a Stmt, and only
+        // return it if it's an Expr.
+        let last_child = self
+            .0
+            .children()
+            .filter(|child| Expr::can_cast(child.kind()) || Stmt::can_cast(child.kind()))
+            .last()?;
+        Expr::cast(last_child)
     }
 }
 
