@@ -53,6 +53,37 @@ pub enum PrimitiveKind {
 }
 
 impl PrimitiveKind {
+    /// Validate that an integer literal value is in range for this primitive type.
+    /// Returns `Ok(())` if in range, or `Err(message)` with a descriptive error.
+    pub fn validate_int_literal_range(self, value: i128) -> Result<(), String> {
+        let (min, max): (i128, i128) = match self {
+            Self::I8 => (i8::MIN as i128, i8::MAX as i128),
+            Self::I16 => (i16::MIN as i128, i16::MAX as i128),
+            Self::I32 => (i32::MIN as i128, i32::MAX as i128),
+            Self::I64 => (i64::MIN as i128, i64::MAX as i128),
+            Self::I128 => (i128::MIN, i128::MAX),
+            Self::Isize => (isize::MIN as i128, isize::MAX as i128),
+            Self::U8 => (0, u8::MAX as i128),
+            Self::U16 => (0, u16::MAX as i128),
+            Self::U32 => (0, u32::MAX as i128),
+            Self::U64 => (0, u64::MAX as i128),
+            Self::U128 => (0, i128::MAX), // Can't represent u128::MAX in i128
+            Self::Usize => (0, usize::MAX as i128),
+            // Non-integer types
+            _ => return Ok(()),
+        };
+
+        if value < min || value > max {
+            Err(format!(
+                "literal `{}` is out of range for `{}`",
+                value,
+                self.as_str()
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
     /// Returns the primitive kind for a given type name, if it exists.
     pub fn from_name(name: &str) -> Option<Self> {
         match name {

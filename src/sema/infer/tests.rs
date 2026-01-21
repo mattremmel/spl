@@ -82,6 +82,45 @@ fn check_err(source: &str, expected: &[&str]) {
     }
 }
 
+/// Parse source, run resolution, run inference, and verify warning messages.
+/// Unlike check_err, this allows successful type checking while expecting warnings.
+fn check_warn(source: &str, expected: &[&str]) {
+    let parse_result = parse(source);
+    assert!(
+        parse_result.errors().is_empty(),
+        "parse errors: {:?}",
+        parse_result.errors()
+    );
+    let source_file = SourceFile::cast(parse_result.syntax()).expect("expected SourceFile");
+    let resolve_result = resolve(&source_file);
+
+    let infer_result = infer(&source_file, resolve_result);
+
+    // For warnings, we expect some diagnostics but type inference still succeeds
+    assert!(
+        !infer_result.diagnostics.is_empty(),
+        "expected warnings containing {:?}, got none",
+        expected
+    );
+
+    for pattern in expected {
+        let found = infer_result
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains(pattern));
+        assert!(
+            found,
+            "expected warning containing '{}', got: {:?}",
+            pattern,
+            infer_result
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
 // =============================================================================
 // 1.1 Literal Type Inference (12 tests)
 // =============================================================================
@@ -1793,5 +1832,405 @@ fn nested_generic_struct() {
         "#,
         "i32",
     );
+}
+
+// =============================================================================
+// 4.0 SEMA-5.1: Integer Literal Range Validation
+// =============================================================================
+
+// Valid literals at boundaries
+
+#[test]
+fn int_literal_u8_max() {
+    check("fn main() { let x: u8 = 255; }", "u8");
+}
+
+#[test]
+fn int_literal_u8_min() {
+    check("fn main() { let x: u8 = 0; }", "u8");
+}
+
+#[test]
+fn int_literal_i8_max() {
+    check("fn main() { let x: i8 = 127; }", "i8");
+}
+
+#[test]
+fn int_literal_i8_min() {
+    check("fn main() { let x: i8 = -128; }", "i8");
+}
+
+#[test]
+fn int_literal_u16_max() {
+    check("fn main() { let x: u16 = 65535; }", "u16");
+}
+
+#[test]
+fn int_literal_i16_range() {
+    check("fn main() { let x: i16 = -32768; }", "i16");
+}
+
+#[test]
+fn int_literal_u32_max() {
+    check("fn main() { let x: u32 = 4294967295; }", "u32");
+}
+
+#[test]
+fn int_literal_u64_max() {
+    check("fn main() { let x: u64 = 18446744073709551615; }", "u64");
+}
+
+// Suffixed literals at boundaries
+
+#[test]
+#[ignore = "parser does not support suffixed integer literals (e.g., 255u8)"]
+fn int_literal_suffixed_u8_max() {
+    check("fn main() { let x = 255u8; }", "u8");
+}
+
+#[test]
+#[ignore = "parser does not support suffixed integer literals (e.g., 127i8)"]
+fn int_literal_suffixed_i8_max() {
+    check("fn main() { let x = 127i8; }", "i8");
+}
+
+#[test]
+#[ignore = "parser does not support negated suffixed integer literals (e.g., -128i8)"]
+fn int_literal_suffixed_i8_min() {
+    check("fn main() { let x = -128i8; }", "i8");
+}
+
+// Invalid literals - overflow
+
+#[test]
+fn error_u8_overflow() {
+    check_err("fn main() { let x: u8 = 256; }", &["out of range"]);
+}
+
+#[test]
+fn error_u8_large_overflow() {
+    check_err("fn main() { let x: u8 = 1000; }", &["out of range"]);
+}
+
+#[test]
+fn error_u8_negative() {
+    check_err("fn main() { let x: u8 = -1; }", &["out of range"]);
+}
+
+#[test]
+fn error_i8_overflow_positive() {
+    check_err("fn main() { let x: i8 = 128; }", &["out of range"]);
+}
+
+#[test]
+fn error_i8_overflow_negative() {
+    check_err("fn main() { let x: i8 = -129; }", &["out of range"]);
+}
+
+#[test]
+fn error_u16_overflow() {
+    check_err("fn main() { let x: u16 = 65536; }", &["out of range"]);
+}
+
+#[test]
+fn error_i16_overflow() {
+    check_err("fn main() { let x: i16 = 32768; }", &["out of range"]);
+}
+
+// Suffixed literal overflow
+
+#[test]
+#[ignore = "parser does not support suffixed integer literals (e.g., 256u8)"]
+fn error_suffixed_u8_overflow() {
+    check_err("fn main() { let x = 256u8; }", &["out of range"]);
+}
+
+#[test]
+#[ignore = "parser does not support suffixed integer literals (e.g., 128i8)"]
+fn error_suffixed_i8_overflow() {
+    check_err("fn main() { let x = 128i8; }", &["out of range"]);
+}
+
+#[test]
+#[ignore = "parser does not support negated suffixed integer literals (e.g., -1u8)"]
+fn error_suffixed_u8_negative() {
+    check_err("fn main() { let x = -1u8; }", &["out of range"]);
+}
+
+// =============================================================================
+// 4.1 SEMA-5.2: Cast Validity Checking
+// =============================================================================
+
+// Valid numeric casts
+
+#[test]
+fn cast_i32_to_i64() {
+    check("fn main() { let x: i32 = 42; let y = x as i64; }", "i64");
+}
+
+#[test]
+fn cast_i64_to_i32() {
+    check("fn main() { let x: i64 = 42; let y = x as i32; }", "i32");
+}
+
+#[test]
+fn cast_u8_to_u32() {
+    check("fn main() { let x: u8 = 42; let y = x as u32; }", "u32");
+}
+
+#[test]
+fn cast_i32_to_u32() {
+    check("fn main() { let x: i32 = 42; let y = x as u32; }", "u32");
+}
+
+#[test]
+fn cast_int_to_float() {
+    check("fn main() { let x: i32 = 42; let y = x as f64; }", "f64");
+}
+
+#[test]
+fn cast_float_to_int() {
+    check("fn main() { let x: f64 = 3.14; let y = x as i32; }", "i32");
+}
+
+#[test]
+fn cast_f32_to_f64() {
+    check("fn main() { let x: f32 = 3.14; let y = x as f64; }", "f64");
+}
+
+#[test]
+fn cast_f64_to_f32() {
+    check("fn main() { let x: f64 = 3.14; let y = x as f32; }", "f32");
+}
+
+// Invalid casts
+
+#[test]
+fn error_bool_to_int() {
+    check_err(
+        "fn main() { let x = true; let y = x as i32; }",
+        &["invalid cast"],
+    );
+}
+
+#[test]
+fn error_int_to_bool() {
+    check_err(
+        "fn main() { let x: i32 = 1; let y = x as bool; }",
+        &["invalid cast"],
+    );
+}
+
+#[test]
+fn error_struct_to_int() {
+    check_err(
+        "struct S {} fn main() { let s = S{}; let x = s as i32; }",
+        &["invalid cast"],
+    );
+}
+
+#[test]
+fn error_int_to_struct() {
+    check_err(
+        "struct S {} fn main() { let x: i32 = 1; let s = x as S; }",
+        &["invalid cast"],
+    );
+}
+
+#[test]
+fn error_tuple_to_int() {
+    check_err(
+        "fn main() { let t = (1, 2); let x = t as i32; }",
+        &["invalid cast"],
+    );
+}
+
+#[test]
+fn error_array_to_int() {
+    check_err(
+        "fn main() { let a = [1, 2, 3]; let x = a as i32; }",
+        &["invalid cast"],
+    );
+}
+
+// =============================================================================
+// 4.2 SEMA-5.3: Recursive Type Detection
+// =============================================================================
+
+#[test]
+fn error_recursive_direct() {
+    check_err("struct Foo { x: Foo }", &["recursive", "infinite"]);
+}
+
+#[test]
+fn error_recursive_indirect() {
+    check_err("struct A { b: B } struct B { a: A }", &["recursive"]);
+}
+
+#[test]
+fn error_recursive_three_way() {
+    check_err(
+        "struct A { b: B } struct B { c: C } struct C { a: A }",
+        &["recursive"],
+    );
+}
+
+#[test]
+fn recursive_with_ref_ok() {
+    check("struct Node { next: &Node } fn main() { let x: i32 = 0; }", "i32");
+}
+
+#[test]
+fn recursive_with_mut_ref_ok() {
+    check("struct Node { next: &mut Node } fn main() { let x: i32 = 0; }", "i32");
+}
+
+#[test]
+fn non_recursive_ok() {
+    check(
+        "struct A { x: i32 } struct B { a: A } fn main() { let x: i32 = 0; }",
+        "i32",
+    );
+}
+
+#[test]
+fn non_recursive_chain_ok() {
+    check(
+        "struct A { x: i32 } struct B { a: A } struct C { b: B } fn main() { let x: i32 = 0; }",
+        "i32",
+    );
+}
+
+// =============================================================================
+// 4.3 SEMA-5.4: Type Alias Cycle Detection
+// =============================================================================
+
+#[test]
+fn error_alias_self() {
+    check_err("type A = A; fn main() { let x: i32 = 0; }", &["cyclic"]);
+}
+
+#[test]
+fn error_alias_mutual() {
+    check_err(
+        "type A = B; type B = A; fn main() { let x: i32 = 0; }",
+        &["cyclic"],
+    );
+}
+
+#[test]
+fn error_alias_three_way() {
+    check_err(
+        "type A = B; type B = C; type C = A; fn main() { let x: i32 = 0; }",
+        &["cyclic"],
+    );
+}
+
+#[test]
+#[ignore = "type alias resolution to target type not implemented yet"]
+fn alias_chain_ok() {
+    check("type A = i32; type B = A; fn main() { let x: B = 1; }", "i32");
+}
+
+#[test]
+#[ignore = "type alias resolution to target type not implemented yet"]
+fn alias_to_struct_ok() {
+    check(
+        "struct S { x: i32 } type Alias = S; fn main() { let a = Alias { x: 42 }; }",
+        "S",
+    );
+}
+
+// =============================================================================
+// 4.4 SEMA-5.5: Constant Array Index Bounds Checking
+// =============================================================================
+
+#[test]
+fn index_in_bounds() {
+    check("fn main() { let a = [1, 2, 3]; let x = a[2]; }", "i32");
+}
+
+#[test]
+fn index_in_bounds_zero() {
+    check("fn main() { let a = [1, 2, 3]; let x = a[0]; }", "i32");
+}
+
+#[test]
+fn index_variable_no_check() {
+    // Non-constant indices should not produce compile-time errors
+    check("fn main() { let a = [1, 2, 3]; let i: i32 = 0; let x = a[i]; }", "i32");
+}
+
+#[test]
+fn error_index_oob() {
+    check_err(
+        "fn main() { let a = [1, 2, 3]; let x = a[5]; }",
+        &["out of bounds"],
+    );
+}
+
+#[test]
+fn error_index_oob_exact() {
+    // Array of length 3, index 3 is out of bounds
+    check_err(
+        "fn main() { let a = [1, 2, 3]; let x = a[3]; }",
+        &["out of bounds"],
+    );
+}
+
+#[test]
+fn error_index_empty_array() {
+    check_err(
+        "fn main() { let a: [i32; 0] = []; let x = a[0]; }",
+        &["out of bounds"],
+    );
+}
+
+// =============================================================================
+// 4.5 SEMA-5.6: Unreachable Code Detection
+// =============================================================================
+
+#[test]
+fn warn_after_return() {
+    check_warn(
+        "fn f() { return; let x: i32 = 1; }",
+        &["unreachable"],
+    );
+}
+
+#[test]
+fn warn_after_return_value() {
+    check_warn(
+        "fn f() -> i32 { return 1; let x: i32 = 2; x }",
+        &["unreachable"],
+    );
+}
+
+#[test]
+fn warn_after_break() {
+    check_warn(
+        "fn main() { loop { break; let x: i32 = 1; } }",
+        &["unreachable"],
+    );
+}
+
+#[test]
+fn warn_after_continue() {
+    check_warn(
+        "fn main() { loop { continue; let x: i32 = 1; } }",
+        &["unreachable"],
+    );
+}
+
+#[test]
+fn no_warn_return_at_end() {
+    // No warning when return is the last statement
+    check("fn f() -> i32 { let x: i32 = 1; return x; }", "i32");
+}
+
+#[test]
+fn no_warn_in_if_branch() {
+    // No warning when return is in an if branch (other code still reachable)
+    check("fn f(b: bool) -> i32 { if b { return 1; } let x: i32 = 2; x }", "i32");
 }
 

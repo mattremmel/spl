@@ -157,6 +157,8 @@ struct InferEngine {
     struct_type_params: FxHashMap<DefId, Vec<DefId>>,
     /// Map from struct DefId to its methods' DefIds.
     struct_methods: FxHashMap<DefId, Vec<DefId>>,
+    /// Type alias targets collected in first pass (alias DefId -> target type).
+    type_alias_targets: FxHashMap<DefId, TypeId>,
     /// Current function's return type (for return statements).
     current_return_type: Option<TypeId>,
     /// Current loop's break type (for break statements with values).
@@ -209,6 +211,7 @@ impl InferEngine {
             struct_fields: FxHashMap::default(),
             struct_type_params: FxHashMap::default(),
             struct_methods: FxHashMap::default(),
+            type_alias_targets: FxHashMap::default(),
             current_return_type: None,
             current_loop_break_type: None,
             current_self_type: None,
@@ -840,31 +843,19 @@ impl InferEngine {
         match token.kind() {
             SyntaxKind::INT_LITERAL => {
                 let text = token.text();
-                // Check for type suffix
-                if text.ends_with("i8") {
-                    self.ctx.types.primitive(PrimitiveKind::I8)
-                } else if text.ends_with("i16") {
-                    self.ctx.types.primitive(PrimitiveKind::I16)
-                } else if text.ends_with("i32") {
-                    self.ctx.types.primitive(PrimitiveKind::I32)
-                } else if text.ends_with("i64") {
-                    self.ctx.types.primitive(PrimitiveKind::I64)
-                } else if text.ends_with("i128") {
-                    self.ctx.types.primitive(PrimitiveKind::I128)
-                } else if text.ends_with("isize") {
-                    self.ctx.types.primitive(PrimitiveKind::Isize)
-                } else if text.ends_with("u8") {
-                    self.ctx.types.primitive(PrimitiveKind::U8)
-                } else if text.ends_with("u16") {
-                    self.ctx.types.primitive(PrimitiveKind::U16)
-                } else if text.ends_with("u32") {
-                    self.ctx.types.primitive(PrimitiveKind::U32)
-                } else if text.ends_with("u64") {
-                    self.ctx.types.primitive(PrimitiveKind::U64)
-                } else if text.ends_with("u128") {
-                    self.ctx.types.primitive(PrimitiveKind::U128)
-                } else if text.ends_with("usize") {
-                    self.ctx.types.primitive(PrimitiveKind::Usize)
+                // Check for type suffix and validate range
+                let (prim_kind, has_suffix) = parse_int_suffix(text);
+                if let Some(kind) = prim_kind {
+                    // Has suffix - validate range
+                    if has_suffix
+                        && let Some(value) = parse_int_literal_value(text)
+                        && let Err(msg) = kind.validate_int_literal_range(value)
+                    {
+                        let span = text_range_to_span(token.text_range());
+                        self.diagnostics
+                            .push(Diagnostic::error(&msg).with_label(span, "literal out of range"));
+                    }
+                    self.ctx.types.primitive(kind)
                 } else {
                     // No suffix - create an int inference variable
                     self.fresh_int_var()
@@ -1270,7 +1261,28 @@ impl InferEngine {
                 let ty = self.ctx.types.get(resolved).clone();
                 match &ty {
                     Type::IntVar(_) | Type::FloatVar(_) => inner_ty,
-                    Type::Primitive(p) if is_numeric_type(*p) => inner_ty,
+                    Type::Primitive(p) if is_numeric_type(*p) => {
+                        // For suffixed literals (e.g., -1u8), validate the negated value
+                        if let Expr::Literal(lit) = &inner
+                            && let Some(token) = lit.token()
+                            && token.kind() == SyntaxKind::INT_LITERAL
+                        {
+                            let text = token.text();
+                            if parse_int_suffix(text).1
+                                && let Some(value) = parse_int_literal_value(text)
+                            {
+                                let negated = -value;
+                                if let Err(msg) = p.validate_int_literal_range(negated) {
+                                    let span = text_range_to_span(prefix.syntax().text_range());
+                                    self.diagnostics.push(
+                                        Diagnostic::error(&msg)
+                                            .with_label(span, "literal out of range"),
+                                    );
+                                }
+                            }
+                        }
+                        inner_ty
+                    }
                     _ => {
                         let span = text_range_to_span(inner.syntax().text_range());
                         self.diagnostics.push(
@@ -1689,7 +1701,22 @@ impl InferEngine {
         let base_type = self.ctx.types.get(resolved).clone();
 
         match base_type {
-            Type::Array(elem, _) => elem,
+            Type::Array(elem, len) => {
+                // Check constant index bounds
+                if let Some(idx_val) = self.eval_const_usize(&idx)
+                    && idx_val >= len as usize
+                {
+                    let span = text_range_to_span(idx.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(format!(
+                            "index {} is out of bounds for array of length {}",
+                            idx_val, len
+                        ))
+                        .with_label(span, "index out of bounds"),
+                    );
+                }
+                elem
+            }
             Type::Slice(elem) => elem,
             _ => {
                 let span = text_range_to_span(base.syntax().text_range());
@@ -1892,15 +1919,112 @@ impl InferEngine {
 
     fn synth_cast(&mut self, cast: &CastExpr) -> TypeId {
         // Synthesize the source expression
-        if let Some(expr) = cast.expr() {
-            self.synth_expr(&expr);
-        }
+        let source_ty = match cast.expr() {
+            Some(expr) => self.synth_expr(&expr),
+            None => return self.ctx.types.error(),
+        };
 
         // Get the target type
-        if let Some(ty) = cast.ty() {
-            self.ast_type_to_type_id(&ty)
-        } else {
-            self.ctx.types.error()
+        let target_ty = match cast.ty() {
+            Some(ty) => self.ast_type_to_type_id(&ty),
+            None => return self.ctx.types.error(),
+        };
+
+        // Validate the cast
+        let resolved_source = self.resolve_type(source_ty);
+        let resolved_target = self.resolve_type(target_ty);
+
+        if !self.is_valid_cast(resolved_source, resolved_target) {
+            let span = text_range_to_span(cast.syntax().text_range());
+            let source_str = self.type_to_string(resolved_source);
+            let target_str = self.type_to_string(resolved_target);
+            self.diagnostics.push(
+                Diagnostic::error(format!(
+                    "invalid cast from `{}` to `{}`",
+                    source_str, target_str
+                ))
+                .with_label(span, "invalid cast"),
+            );
+        }
+
+        target_ty
+    }
+
+    /// Check if a cast from source type to target type is valid.
+    fn is_valid_cast(&self, source: TypeId, target: TypeId) -> bool {
+        let source_ty = self.ctx.types.get(source);
+        let target_ty = self.ctx.types.get(target);
+
+        match (source_ty, target_ty) {
+            // Error type can be cast to anything (to avoid cascading errors)
+            (Type::Error, _) | (_, Type::Error) => true,
+
+            // Numeric types can be cast to each other
+            (Type::Primitive(s), Type::Primitive(t)) => {
+                is_numeric_type(*s) && is_numeric_type(*t)
+            }
+
+            // Type variables are allowed (inference not complete)
+            (Type::Var(_), _)
+            | (_, Type::Var(_))
+            | (Type::IntVar(_), _)
+            | (_, Type::IntVar(_))
+            | (Type::FloatVar(_), _)
+            | (_, Type::FloatVar(_)) => true,
+
+            // All other casts are invalid
+            _ => false,
+        }
+    }
+
+    /// Convert a type to a string for error messages.
+    fn type_to_string(&self, type_id: TypeId) -> String {
+        let ty = self.ctx.types.get(type_id);
+        match ty {
+            Type::Primitive(prim) => prim.as_str().to_string(),
+            Type::Var(var) => format!("?{}", var.0),
+            Type::IntVar(var) => format!("?int{}", var.0),
+            Type::FloatVar(var) => format!("?float{}", var.0),
+            Type::Ref(mutability, inner) => {
+                let inner_str = self.type_to_string(*inner);
+                match mutability {
+                    Mutability::Shared => format!("&{}", inner_str),
+                    Mutability::Mutable => format!("&mut {}", inner_str),
+                }
+            }
+            Type::Array(elem, len) => {
+                let elem_str = self.type_to_string(*elem);
+                format!("[{}; {}]", elem_str, len)
+            }
+            Type::Slice(elem) => {
+                let elem_str = self.type_to_string(*elem);
+                format!("[{}]", elem_str)
+            }
+            Type::Tuple(elems) => {
+                if elems.is_empty() {
+                    "()".to_string()
+                } else {
+                    let elem_strs: Vec<_> = elems.iter().map(|e| self.type_to_string(*e)).collect();
+                    format!("({})", elem_strs.join(", "))
+                }
+            }
+            Type::Struct(def_id, _) => {
+                let symbol = self.ctx.get_symbol(*def_id);
+                self.ctx.resolve(symbol.name).to_string()
+            }
+            Type::FnPtr { params, ret } => {
+                let param_strs: Vec<_> = params.iter().map(|p| self.type_to_string(*p)).collect();
+                let ret_str = self.type_to_string(*ret);
+                format!("fn({}) -> {}", param_strs.join(", "), ret_str)
+            }
+            Type::String => "String".to_string(),
+            Type::Error => "<error>".to_string(),
+            Type::Alias(_, _) => "<alias>".to_string(),
+            Type::Param(def_id) => {
+                let symbol = self.ctx.get_symbol(*def_id);
+                self.ctx.resolve(symbol.name).to_string()
+            }
+            Type::SelfType => "Self".to_string(),
         }
     }
 
@@ -1916,6 +2040,8 @@ impl InferEngine {
 
         // Track if the block diverges
         let mut diverges = false;
+        // Track if we've warned about unreachable code in this block
+        let mut warned_unreachable = false;
 
         // Process all children in source order (statements and bare expressions)
         // This is important because bare expressions (like `while` without semicolon)
@@ -1923,6 +2049,16 @@ impl InferEngine {
         for child in block.syntax().children() {
             // Try to cast as a statement first
             if let Some(stmt) = Stmt::cast(child.clone()) {
+                // Check for unreachable code
+                if diverges && !warned_unreachable {
+                    let span = text_range_to_span(child.text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("unreachable code")
+                            .with_label(span, "unreachable statement"),
+                    );
+                    warned_unreachable = true;
+                }
+
                 match &stmt {
                     Stmt::Expr(expr_stmt) => {
                         if let Some(expr) = expr_stmt.expr() {
@@ -1944,6 +2080,16 @@ impl InferEngine {
                 }
             } else if let Some(expr) = Expr::cast(child.clone()) {
                 // Bare expression (not wrapped in ExprStmt)
+                // Check for unreachable code
+                if diverges && !warned_unreachable {
+                    let span = text_range_to_span(child.text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("unreachable code")
+                            .with_label(span, "unreachable expression"),
+                    );
+                    warned_unreachable = true;
+                }
+
                 let ty = self.synth_expr(&expr);
                 let resolved = self.resolve_type(ty);
                 let inner = self.ctx.types.get(resolved);
@@ -1990,6 +2136,67 @@ impl InferEngine {
             let span = text_range_to_span(expr.syntax().text_range());
             self.diagnostics
                 .push(Diagnostic::error("type mismatch").with_label(span, "mismatched types"));
+        } else {
+            // After successful unification, validate integer literal ranges
+            self.validate_literal_range(expr, expected);
+        }
+    }
+
+    /// Validate that an integer literal is in range for its resolved type.
+    fn validate_literal_range(&mut self, expr: &Expr, expected: TypeId) {
+        // Extract the literal value from the expression, handling negation
+        let (value, span) = match self.extract_int_literal_value(expr) {
+            Some(v) => v,
+            None => return,
+        };
+
+        // Get the resolved type
+        let resolved = self.resolve_type(expected);
+        let ty = self.ctx.types.get(resolved).clone();
+
+        // Validate if it's a concrete integer type
+        if let Type::Primitive(kind) = ty
+            && let Err(msg) = kind.validate_int_literal_range(value)
+        {
+            self.diagnostics
+                .push(Diagnostic::error(&msg).with_label(span, "literal out of range"));
+        }
+    }
+
+    /// Extract an integer literal value from an expression, handling negation.
+    /// Returns (value, span) if the expression is an integer literal or negated integer literal.
+    fn extract_int_literal_value(&self, expr: &Expr) -> Option<(i128, Span)> {
+        match expr {
+            Expr::Literal(lit) => {
+                let token = lit.token()?;
+                if token.kind() != SyntaxKind::INT_LITERAL {
+                    return None;
+                }
+                let text = token.text();
+                // Skip suffixed literals - they're validated in synth_literal
+                if parse_int_suffix(text).1 {
+                    return None;
+                }
+                let value = parse_int_literal_value(text)?;
+                let span = text_range_to_span(token.text_range());
+                Some((value, span))
+            }
+            Expr::Prefix(prefix) => {
+                let op = prefix.op_token()?;
+                if op.kind() != SyntaxKind::MINUS {
+                    return None;
+                }
+                let inner = prefix.expr()?;
+                let (inner_value, _) = self.extract_int_literal_value(&inner)?;
+                // For negation, we report the span of the whole prefix expression
+                let span = text_range_to_span(expr.syntax().text_range());
+                Some((-inner_value, span))
+            }
+            Expr::Paren(paren) => {
+                let inner = paren.expr()?;
+                self.extract_int_literal_value(&inner)
+            }
+            _ => None,
         }
     }
 
@@ -2220,6 +2427,7 @@ impl InferEngine {
             match &item {
                 Item::Function(func) => self.collect_function_signature(func),
                 Item::Struct(struct_def) => self.collect_struct_info(struct_def),
+                Item::TypeAlias(type_alias) => self.collect_type_alias_info(type_alias),
                 Item::Impl(impl_block) => {
                     // Get the struct this impl is for
                     let struct_def_id = self.get_impl_struct_def_id(impl_block);
@@ -2297,9 +2505,14 @@ impl InferEngine {
                     // Clear current_self_type after processing impl block
                     self.current_self_type = None;
                 }
-                _ => {}
             }
         }
+
+        // Check for recursive types (infinite size structs)
+        self.check_recursive_types();
+
+        // Check for type alias cycles
+        self.check_type_alias_cycles();
 
         // Second pass: infer function bodies
         for item in source_file.items() {
@@ -2398,6 +2611,191 @@ impl InferEngine {
                 ret,
             },
         );
+    }
+
+    /// Check for recursive types (structs that contain themselves without indirection).
+    fn check_recursive_types(&mut self) {
+        use rustc_hash::FxHashSet;
+
+        // Build a dependency graph: struct -> structs it directly contains (not via reference)
+        let struct_ids: Vec<DefId> = self.struct_fields.keys().copied().collect();
+
+        for &struct_id in &struct_ids {
+            // Check if this struct is part of a cycle using DFS
+            let mut visited = FxHashSet::default();
+            let mut in_progress = FxHashSet::default();
+            let mut path = Vec::new();
+
+            if self.has_recursive_type(struct_id, &mut visited, &mut in_progress, &mut path) {
+                // Found a cycle - report error
+                let symbol = self.ctx.get_symbol(struct_id);
+                let name = self.ctx.resolve(symbol.name);
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "recursive type `{}` has infinite size",
+                        name
+                    ))
+                    .with_label(
+                        symbol.span.clone(),
+                        "recursive without indirection",
+                    ),
+                );
+            }
+        }
+    }
+
+    /// Check if a struct type is part of a recursive cycle.
+    /// Returns true if a cycle is detected.
+    fn has_recursive_type(
+        &self,
+        struct_id: DefId,
+        visited: &mut rustc_hash::FxHashSet<DefId>,
+        in_progress: &mut rustc_hash::FxHashSet<DefId>,
+        path: &mut Vec<DefId>,
+    ) -> bool {
+        if in_progress.contains(&struct_id) {
+            // Found a cycle
+            return true;
+        }
+        if visited.contains(&struct_id) {
+            // Already checked, no cycle
+            return false;
+        }
+
+        in_progress.insert(struct_id);
+        path.push(struct_id);
+
+        // Check all fields of this struct
+        if let Some(fields) = self.struct_fields.get(&struct_id) {
+            for (_, field_ty) in fields {
+                // Get the directly contained struct types (not through references)
+                if let Some(contained_id) = self.get_direct_struct_dependency(*field_ty)
+                    && self.has_recursive_type(contained_id, visited, in_progress, path)
+                {
+                    return true;
+                }
+            }
+        }
+
+        in_progress.remove(&struct_id);
+        path.pop();
+        visited.insert(struct_id);
+        false
+    }
+
+    /// Get the struct DefId if this type directly contains a struct (not through a reference).
+    /// Returns None if the type is a reference, primitive, or other non-struct type.
+    fn get_direct_struct_dependency(&self, type_id: TypeId) -> Option<DefId> {
+        let ty = self.ctx.types.get(type_id);
+        match ty {
+            Type::Struct(def_id, _) => Some(*def_id),
+            Type::Ref(_, _) => None, // References break the cycle
+            Type::Array(elem, _) => self.get_direct_struct_dependency(*elem),
+            Type::Tuple(elems) => {
+                // Check if any tuple element contains a struct directly
+                for elem in elems {
+                    if let Some(id) = self.get_direct_struct_dependency(*elem) {
+                        return Some(id);
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Collect type alias information.
+    fn collect_type_alias_info(&mut self, type_alias: &crate::ast::TypeAlias) {
+        let name = match type_alias.name() {
+            Some(n) => n,
+            None => return,
+        };
+
+        let token = match name.ident_token() {
+            Some(t) => t,
+            None => return,
+        };
+
+        let span = text_range_to_span(token.text_range());
+        let def_id = match self.resolutions.get(&span) {
+            Some(id) => *id,
+            None => return,
+        };
+
+        // Get the target type
+        if let Some(ty) = type_alias.ty() {
+            let target_ty = self.ast_type_to_type_id(&ty);
+            self.type_alias_targets.insert(def_id, target_ty);
+        }
+    }
+
+    /// Check for cyclic type alias definitions.
+    fn check_type_alias_cycles(&mut self) {
+        use rustc_hash::FxHashSet;
+
+        let alias_ids: Vec<DefId> = self.type_alias_targets.keys().copied().collect();
+
+        for &alias_id in &alias_ids {
+            let mut visited = FxHashSet::default();
+            let mut in_progress = FxHashSet::default();
+
+            if self.has_alias_cycle(alias_id, &mut visited, &mut in_progress) {
+                let symbol = self.ctx.get_symbol(alias_id);
+                let name = self.ctx.resolve(symbol.name);
+                self.diagnostics.push(
+                    Diagnostic::error(format!("cyclic type alias definition for `{}`", name))
+                        .with_label(symbol.span.clone(), "cyclic reference"),
+                );
+            }
+        }
+    }
+
+    /// Check if a type alias is part of a cycle.
+    fn has_alias_cycle(
+        &self,
+        alias_id: DefId,
+        visited: &mut rustc_hash::FxHashSet<DefId>,
+        in_progress: &mut rustc_hash::FxHashSet<DefId>,
+    ) -> bool {
+        if in_progress.contains(&alias_id) {
+            return true;
+        }
+        if visited.contains(&alias_id) {
+            return false;
+        }
+
+        in_progress.insert(alias_id);
+
+        // Get the target type for this alias
+        if let Some(&target_ty) = self.type_alias_targets.get(&alias_id) {
+            // Check if the target references another alias
+            if let Some(referenced_alias) = self.get_referenced_alias(target_ty)
+                && self.has_alias_cycle(referenced_alias, visited, in_progress)
+            {
+                return true;
+            }
+        }
+
+        in_progress.remove(&alias_id);
+        visited.insert(alias_id);
+        false
+    }
+
+    /// Get the alias DefId if this type directly references a type alias.
+    fn get_referenced_alias(&self, type_id: TypeId) -> Option<DefId> {
+        let ty = self.ctx.types.get(type_id);
+        match ty {
+            // mk_struct is used for both structs and type aliases
+            // Check if the DefId is actually a type alias
+            Type::Struct(def_id, _) => {
+                if self.type_alias_targets.contains_key(def_id) {
+                    Some(*def_id)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 
     fn collect_struct_info(&mut self, struct_def: &crate::ast::StructDef) {
@@ -2732,4 +3130,48 @@ fn is_float_type(prim: PrimitiveKind) -> bool {
 
 fn is_numeric_type(prim: PrimitiveKind) -> bool {
     is_integer_type(prim) || is_float_type(prim)
+}
+
+/// Parse an integer literal suffix to determine the type.
+/// Returns (Some(kind), true) if there's a suffix, (None, false) otherwise.
+fn parse_int_suffix(text: &str) -> (Option<PrimitiveKind>, bool) {
+    // Check suffixes in order of length (longest first to avoid i12 matching i1)
+    let suffixes = [
+        ("i128", PrimitiveKind::I128),
+        ("u128", PrimitiveKind::U128),
+        ("isize", PrimitiveKind::Isize),
+        ("usize", PrimitiveKind::Usize),
+        ("i64", PrimitiveKind::I64),
+        ("u64", PrimitiveKind::U64),
+        ("i32", PrimitiveKind::I32),
+        ("u32", PrimitiveKind::U32),
+        ("i16", PrimitiveKind::I16),
+        ("u16", PrimitiveKind::U16),
+        ("i8", PrimitiveKind::I8),
+        ("u8", PrimitiveKind::U8),
+    ];
+
+    for (suffix, kind) in suffixes {
+        if text.ends_with(suffix) {
+            return (Some(kind), true);
+        }
+    }
+    (None, false)
+}
+
+/// Parse the numeric value of an integer literal (stripping any suffix).
+fn parse_int_literal_value(text: &str) -> Option<i128> {
+    // Strip the type suffix
+    let num_text = text.trim_end_matches(|c: char| c.is_alphabetic());
+    // Handle hex, octal, binary prefixes
+    if num_text.starts_with("0x") || num_text.starts_with("0X") {
+        i128::from_str_radix(&num_text[2..].replace('_', ""), 16).ok()
+    } else if num_text.starts_with("0o") || num_text.starts_with("0O") {
+        i128::from_str_radix(&num_text[2..].replace('_', ""), 8).ok()
+    } else if num_text.starts_with("0b") || num_text.starts_with("0B") {
+        i128::from_str_radix(&num_text[2..].replace('_', ""), 2).ok()
+    } else {
+        // Decimal - remove underscores
+        num_text.replace('_', "").parse().ok()
+    }
 }
