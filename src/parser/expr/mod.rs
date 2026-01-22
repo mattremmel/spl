@@ -94,12 +94,27 @@ fn lhs(
 
 // === Binding power tables ===
 
+// Binding power constants for Pratt parser.
+// Higher values bind tighter. Right-assoc: l < r, Left-assoc: l > r
+
+const BP_ASSIGN: (u8, u8) = (2, 1); // right-associative
+const BP_LOGICAL_OR: (u8, u8) = (3, 4);
+const BP_LOGICAL_AND: (u8, u8) = (5, 6);
+const BP_EQUALITY: (u8, u8) = (7, 8);
+const BP_COMPARISON: (u8, u8) = (9, 10);
+const BP_RANGE: (u8, u8) = (11, 12);
+const BP_ADDITIVE: (u8, u8) = (13, 14);
+const BP_MULTIPLICATIVE: (u8, u8) = (15, 16);
+const BP_CAST: (u8, u8) = (17, 18);
+const BP_PREFIX: u8 = 19;
+const BP_POSTFIX: u8 = 21;
+
 /// Prefix operator binding power ((), right).
 fn prefix_bp(op: SyntaxKind) -> Option<((), u8)> {
     match op {
-        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR => Some(((), 19)), // Unary: prec 10
-        SyntaxKind::AMP => Some(((), 19)),                                         // Reference
-        SyntaxKind::DOT_DOT => Some(((), 12)), // Range prefix: same r_bp as infix range
+        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR => Some(((), BP_PREFIX)),
+        SyntaxKind::AMP => Some(((), BP_PREFIX)),
+        SyntaxKind::DOT_DOT => Some(((), BP_RANGE.1)), // Range prefix: same r_bp as infix range
         _ => None,
     }
 }
@@ -107,37 +122,37 @@ fn prefix_bp(op: SyntaxKind) -> Option<((), u8)> {
 /// Infix operator binding power (left, right).
 fn infix_bp(op: SyntaxKind) -> Option<(u8, u8)> {
     match op {
-        // Assignment (prec 1, right assoc): left < right
+        // Assignment (right-associative)
         SyntaxKind::EQ
         | SyntaxKind::PLUS_EQ
         | SyntaxKind::MINUS_EQ
         | SyntaxKind::STAR_EQ
         | SyntaxKind::SLASH_EQ
-        | SyntaxKind::PERCENT_EQ => Some((2, 1)),
+        | SyntaxKind::PERCENT_EQ => Some(BP_ASSIGN),
 
-        // Logical OR (prec 2, left assoc)
-        SyntaxKind::OR_OR => Some((3, 4)),
+        // Logical OR (left-associative)
+        SyntaxKind::OR_OR => Some(BP_LOGICAL_OR),
 
-        // Logical AND (prec 3, left assoc)
-        SyntaxKind::AND_AND => Some((5, 6)),
+        // Logical AND (left-associative)
+        SyntaxKind::AND_AND => Some(BP_LOGICAL_AND),
 
-        // Equality (prec 4, left assoc)
-        SyntaxKind::EQ_EQ | SyntaxKind::NE => Some((7, 8)),
+        // Equality (left-associative)
+        SyntaxKind::EQ_EQ | SyntaxKind::NE => Some(BP_EQUALITY),
 
-        // Comparison (prec 5, left assoc)
-        SyntaxKind::LT | SyntaxKind::GT | SyntaxKind::LE | SyntaxKind::GE => Some((9, 10)),
+        // Comparison (left-associative)
+        SyntaxKind::LT | SyntaxKind::GT | SyntaxKind::LE | SyntaxKind::GE => Some(BP_COMPARISON),
 
-        // Range (prec 6, left assoc)
-        SyntaxKind::DOT_DOT => Some((11, 12)),
+        // Range (left-associative)
+        SyntaxKind::DOT_DOT => Some(BP_RANGE),
 
-        // Additive (prec 7, left assoc)
-        SyntaxKind::PLUS | SyntaxKind::MINUS => Some((13, 14)),
+        // Additive (left-associative)
+        SyntaxKind::PLUS | SyntaxKind::MINUS => Some(BP_ADDITIVE),
 
-        // Multiplicative (prec 8, left assoc)
-        SyntaxKind::STAR | SyntaxKind::SLASH | SyntaxKind::PERCENT => Some((15, 16)),
+        // Multiplicative (left-associative)
+        SyntaxKind::STAR | SyntaxKind::SLASH | SyntaxKind::PERCENT => Some(BP_MULTIPLICATIVE),
 
-        // Cast (prec 9, left assoc)
-        SyntaxKind::AS_KW => Some((17, 18)),
+        // Cast (left-associative)
+        SyntaxKind::AS_KW => Some(BP_CAST),
 
         _ => None,
     }
@@ -146,12 +161,12 @@ fn infix_bp(op: SyntaxKind) -> Option<(u8, u8)> {
 /// Postfix operator binding power (left, ()).
 fn postfix_bp(op: SyntaxKind) -> Option<(u8, ())> {
     match op {
-        // Postfix (prec 11, left assoc)
+        // Postfix (highest precedence)
         SyntaxKind::L_PAREN     // call
         | SyntaxKind::L_BRACKET // index/slice
         | SyntaxKind::DOT       // field/method
         | SyntaxKind::COLON_COLON // path
-        => Some((21, ())),
+        => Some((BP_POSTFIX, ())),
         _ => None,
     }
 }
