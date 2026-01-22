@@ -350,6 +350,16 @@ impl InferEngine {
                     type_id
                 }
             }
+            // Resolve type aliases stored as Struct or Alias
+            Type::Struct(def_id, _) | Type::Alias(def_id, _)
+                if self.type_alias_targets.contains_key(def_id) =>
+            {
+                if let Some(&target) = self.type_alias_targets.get(def_id) {
+                    self.resolve_type(target)
+                } else {
+                    type_id
+                }
+            }
             _ => type_id,
         };
 
@@ -1086,10 +1096,28 @@ impl InferEngine {
             None => return self.ctx.types.error(),
         };
 
+        // Resolve type alias to actual struct if needed
+        let struct_def_id = if let Some(&target_ty) = self.type_alias_targets.get(&def_id) {
+            let resolved = self.resolve_type(target_ty);
+            match self.ctx.types.get(resolved) {
+                Type::Struct(actual_def_id, _) => *actual_def_id,
+                _ => {
+                    // Alias doesn't resolve to struct - emit error
+                    self.diagnostics.push(
+                        Diagnostic::error("type alias does not refer to a struct")
+                            .with_label(span, "expected struct type"),
+                    );
+                    return self.ctx.types.error();
+                }
+            }
+        } else {
+            def_id
+        };
+
         // Get struct type params and create substitution map
         let type_params = self
             .struct_type_params
-            .get(&def_id)
+            .get(&struct_def_id)
             .cloned()
             .unwrap_or_default();
         let mut subst: FxHashMap<DefId, TypeId> = FxHashMap::default();
@@ -1101,7 +1129,11 @@ impl InferEngine {
         }
 
         // Get struct field info and substitute type params
-        let fields_info = self.struct_fields.get(&def_id).cloned().unwrap_or_default();
+        let fields_info = self
+            .struct_fields
+            .get(&struct_def_id)
+            .cloned()
+            .unwrap_or_default();
         let instantiated_fields: Vec<(String, TypeId)> = fields_info
             .iter()
             .map(|(name, ty)| (name.clone(), self.substitute_type_params(*ty, &subst)))
@@ -1112,7 +1144,7 @@ impl InferEngine {
         let has_update_base = if let Some(update_base) = struct_expr.update_base() {
             if let Some(base_expr) = update_base.expr() {
                 let base_ty = self.synth_expr(&base_expr);
-                let expected_struct_ty = self.ctx.types.mk_struct(def_id, type_args.clone());
+                let expected_struct_ty = self.ctx.types.mk_struct(struct_def_id, type_args.clone());
                 if !self.unify(base_ty, expected_struct_ty) {
                     let span = text_range_to_span(base_expr.syntax().text_range());
                     self.diagnostics.push(
@@ -1173,7 +1205,7 @@ impl InferEngine {
             "postcondition: struct expr must have all fields or update base (or emit diagnostic)"
         );
 
-        let result = self.ctx.types.mk_struct(def_id, type_args);
+        let result = self.ctx.types.mk_struct(struct_def_id, type_args);
 
         debug_assert!(
             matches!(self.ctx.types.get(result), Type::Struct(_, _)),

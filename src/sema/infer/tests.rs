@@ -2176,7 +2176,6 @@ fn error_alias_three_way() {
 }
 
 #[test]
-#[ignore = "type alias resolution to target type not implemented yet"]
 fn alias_chain_ok() {
     check(
         "type A = i32; type B = A; fn main() { let x: B = 1; }",
@@ -2185,7 +2184,6 @@ fn alias_chain_ok() {
 }
 
 #[test]
-#[ignore = "type alias resolution to target type not implemented yet"]
 fn alias_to_struct_ok() {
     check(
         "struct S { x: i32 } type Alias = S; fn main() { let a = Alias { x: 42 }; }",
