@@ -4,7 +4,7 @@
 //! that can be assigned to places.
 
 use crate::sema::symbol::DefId;
-use crate::sema::types::TypeId;
+use crate::sema::types::{Mutability, TypeId};
 
 use super::types::{Local, Place};
 
@@ -139,7 +139,7 @@ pub enum Rvalue {
     /// Create a reference to a place.
     Ref(BorrowKind, Place),
     /// Get the address of a place (raw pointer).
-    AddressOf(bool, Place), // bool = mutability
+    AddressOf(Mutability, Place),
     /// Binary operation.
     BinaryOp(BinOp, Operand, Operand),
     /// Unary operation.
@@ -170,6 +170,16 @@ impl Rvalue {
     /// Create a mutable reference.
     pub fn ref_mut(place: Place) -> Self {
         Rvalue::Ref(BorrowKind::Mut, place)
+    }
+
+    /// Create a shared raw pointer.
+    pub fn address_of_shared(place: Place) -> Self {
+        Rvalue::AddressOf(Mutability::Shared, place)
+    }
+
+    /// Create a mutable raw pointer.
+    pub fn address_of_mut(place: Place) -> Self {
+        Rvalue::AddressOf(Mutability::Mutable, place)
     }
 }
 
@@ -453,12 +463,14 @@ mod tests {
 
     #[test]
     fn rvalue_address_of() {
+        use crate::sema::types::Mutability;
+
         let place = Place::from_local(Local(1));
-        let rv = Rvalue::AddressOf(true, place.clone());
+        let rv = Rvalue::AddressOf(Mutability::Mutable, place.clone());
 
         match rv {
-            Rvalue::AddressOf(mutable, p) => {
-                assert!(mutable);
+            Rvalue::AddressOf(mutability, p) => {
+                assert_eq!(mutability, Mutability::Mutable);
                 assert_eq!(p, place);
             }
             _ => panic!("expected AddressOf"),
@@ -666,15 +678,43 @@ mod tests {
 
     #[test]
     fn rvalue_address_of_immutable() {
+        use crate::sema::types::Mutability;
+
         let place = Place::from_local(Local(1));
-        let rv = Rvalue::AddressOf(false, place.clone());
+        let rv = Rvalue::AddressOf(Mutability::Shared, place.clone());
 
         match rv {
-            Rvalue::AddressOf(mutable, p) => {
-                assert!(!mutable);
+            Rvalue::AddressOf(mutability, p) => {
+                assert_eq!(mutability, Mutability::Shared);
                 assert_eq!(p, place);
             }
             _ => panic!("expected AddressOf"),
+        }
+    }
+
+    #[test]
+    fn rvalue_helper_address_of_shared() {
+        use crate::sema::types::Mutability;
+
+        let place = Place::from_local(Local(3));
+        let rv = Rvalue::address_of_shared(place.clone());
+
+        match rv {
+            Rvalue::AddressOf(Mutability::Shared, p) => assert_eq!(p, place),
+            _ => panic!("expected AddressOf(Shared, _)"),
+        }
+    }
+
+    #[test]
+    fn rvalue_helper_address_of_mut() {
+        use crate::sema::types::Mutability;
+
+        let place = Place::from_local(Local(3));
+        let rv = Rvalue::address_of_mut(place.clone());
+
+        match rv {
+            Rvalue::AddressOf(Mutability::Mutable, p) => assert_eq!(p, place),
+            _ => panic!("expected AddressOf(Mutable, _)"),
         }
     }
 }
