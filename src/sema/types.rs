@@ -340,7 +340,7 @@ impl TypeInterner {
         );
         let var = TypeVar(self.next_type_var);
         self.next_type_var += 1;
-        self.intern(Type::Var(var))
+        self.intern(Type::Infer(var, InferKind::General))
     }
 
     /// Create a fresh integer type variable (defaults to i32 if unconstrained).
@@ -351,7 +351,7 @@ impl TypeInterner {
         );
         let var = TypeVar(self.next_type_var);
         self.next_type_var += 1;
-        self.intern(Type::IntVar(var))
+        self.intern(Type::Infer(var, InferKind::Int))
     }
 
     /// Create a fresh float type variable (defaults to f64 if unconstrained).
@@ -362,7 +362,7 @@ impl TypeInterner {
         );
         let var = TypeVar(self.next_type_var);
         self.next_type_var += 1;
-        self.intern(Type::FloatVar(var))
+        self.intern(Type::Infer(var, InferKind::Float))
     }
 
     // ===== Type Construction Helpers =====
@@ -549,12 +549,12 @@ mod tests {
 
         // Check the underlying types
         match interner.get(var1) {
-            Type::Var(TypeVar(0)) => {}
-            other => panic!("expected Var(0), got {other:?}"),
+            Type::Infer(TypeVar(0), InferKind::General) => {}
+            other => panic!("expected Infer(0, General), got {other:?}"),
         }
         match interner.get(var2) {
-            Type::Var(TypeVar(1)) => {}
-            other => panic!("expected Var(1), got {other:?}"),
+            Type::Infer(TypeVar(1), InferKind::General) => {}
+            other => panic!("expected Infer(1, General), got {other:?}"),
         }
     }
 
@@ -565,8 +565,8 @@ mod tests {
         let var = interner.fresh_int_var();
 
         match interner.get(var) {
-            Type::IntVar(_) => {}
-            other => panic!("expected IntVar, got {other:?}"),
+            Type::Infer(_, InferKind::Int) => {}
+            other => panic!("expected Infer(_, Int), got {other:?}"),
         }
     }
 
@@ -577,8 +577,8 @@ mod tests {
         let var = interner.fresh_float_var();
 
         match interner.get(var) {
-            Type::FloatVar(_) => {}
-            other => panic!("expected FloatVar, got {other:?}"),
+            Type::Infer(_, InferKind::Float) => {}
+            other => panic!("expected Infer(_, Float), got {other:?}"),
         }
     }
 
@@ -885,20 +885,20 @@ mod tests {
 
         // Extract the TypeVar IDs
         let id1 = match interner.get(v1) {
-            Type::Var(TypeVar(id)) => *id,
-            _ => panic!("expected Var"),
+            Type::Infer(TypeVar(id), InferKind::General) => *id,
+            _ => panic!("expected Infer(_, General)"),
         };
         let id2 = match interner.get(v2) {
-            Type::IntVar(TypeVar(id)) => *id,
-            _ => panic!("expected IntVar"),
+            Type::Infer(TypeVar(id), InferKind::Int) => *id,
+            _ => panic!("expected Infer(_, Int)"),
         };
         let id3 = match interner.get(v3) {
-            Type::FloatVar(TypeVar(id)) => *id,
-            _ => panic!("expected FloatVar"),
+            Type::Infer(TypeVar(id), InferKind::Float) => *id,
+            _ => panic!("expected Infer(_, Float)"),
         };
         let id4 = match interner.get(v4) {
-            Type::Var(TypeVar(id)) => *id,
-            _ => panic!("expected Var"),
+            Type::Infer(TypeVar(id), InferKind::General) => *id,
+            _ => panic!("expected Infer(_, General)"),
         };
 
         assert_eq!(id1, 0);

@@ -287,7 +287,7 @@ impl InferEngine {
     /// Extract the TypeVar from a type if it's a variable type.
     fn extract_type_var(&self, id: TypeId) -> Option<TypeVar> {
         match self.ctx.types.get(id) {
-            Type::Var(v) | Type::IntVar(v) | Type::FloatVar(v) => Some(*v),
+            Type::Var(v) | Type::IntVar(v) | Type::FloatVar(v) | Type::Infer(v, _) => Some(*v),
             _ => None,
         }
     }
@@ -336,7 +336,7 @@ impl InferEngine {
     #[cfg(debug_assertions)]
     fn is_resolved_or_unbound(&self, type_id: TypeId) -> bool {
         match self.ctx.types.get(type_id) {
-            Type::Var(v) | Type::IntVar(v) | Type::FloatVar(v) => {
+            Type::Var(v) | Type::IntVar(v) | Type::FloatVar(v) | Type::Infer(v, _) => {
                 !self.substitution.contains_key(v)
             }
             _ => true, // Concrete type
@@ -354,7 +354,7 @@ impl InferEngine {
 
         let ty = self.ctx.types.get(type_id);
         let result = match ty {
-            Type::Var(var) | Type::IntVar(var) | Type::FloatVar(var) => {
+            Type::Var(var) | Type::IntVar(var) | Type::FloatVar(var) | Type::Infer(var, _) => {
                 if let Some(&subst) = self.substitution.get(var) {
                     self.resolve_type(subst)
                 } else {
@@ -411,41 +411,59 @@ impl InferEngine {
             (Type::Primitive(PrimitiveKind::Never), _)
             | (_, Type::Primitive(PrimitiveKind::Never)) => true,
 
-            // Type variable binds to anything
-            (Type::Var(var), _) => {
+            // General type variable binds to anything
+            (Type::Var(var), _) | (Type::Infer(var, InferKind::General), _) => {
                 self.substitution.insert(*var, b);
                 true
             }
-            (_, Type::Var(var)) => {
+            (_, Type::Var(var)) | (_, Type::Infer(var, InferKind::General)) => {
                 self.substitution.insert(*var, a);
                 true
             }
 
             // Int variable binds to any integer type or another int variable
-            (Type::IntVar(var), Type::Primitive(prim)) if is_integer_type(*prim) => {
+            (Type::IntVar(var), Type::Primitive(prim))
+            | (Type::Infer(var, InferKind::Int), Type::Primitive(prim))
+                if is_integer_type(*prim) =>
+            {
                 self.substitution.insert(*var, b);
                 true
             }
-            (Type::Primitive(prim), Type::IntVar(var)) if is_integer_type(*prim) => {
+            (Type::Primitive(prim), Type::IntVar(var))
+            | (Type::Primitive(prim), Type::Infer(var, InferKind::Int))
+                if is_integer_type(*prim) =>
+            {
                 self.substitution.insert(*var, a);
                 true
             }
-            (Type::IntVar(var1), Type::IntVar(_var2)) => {
+            (Type::IntVar(var1), Type::IntVar(_))
+            | (Type::IntVar(var1), Type::Infer(_, InferKind::Int))
+            | (Type::Infer(var1, InferKind::Int), Type::IntVar(_))
+            | (Type::Infer(var1, InferKind::Int), Type::Infer(_, InferKind::Int)) => {
                 // Bind one to the other
                 self.substitution.insert(*var1, b);
                 true
             }
 
             // Float variable binds to any float type or another float variable
-            (Type::FloatVar(var), Type::Primitive(prim)) if is_float_type(*prim) => {
+            (Type::FloatVar(var), Type::Primitive(prim))
+            | (Type::Infer(var, InferKind::Float), Type::Primitive(prim))
+                if is_float_type(*prim) =>
+            {
                 self.substitution.insert(*var, b);
                 true
             }
-            (Type::Primitive(prim), Type::FloatVar(var)) if is_float_type(*prim) => {
+            (Type::Primitive(prim), Type::FloatVar(var))
+            | (Type::Primitive(prim), Type::Infer(var, InferKind::Float))
+                if is_float_type(*prim) =>
+            {
                 self.substitution.insert(*var, a);
                 true
             }
-            (Type::FloatVar(var1), Type::FloatVar(_var2)) => {
+            (Type::FloatVar(var1), Type::FloatVar(_))
+            | (Type::FloatVar(var1), Type::Infer(_, InferKind::Float))
+            | (Type::Infer(var1, InferKind::Float), Type::FloatVar(_))
+            | (Type::Infer(var1, InferKind::Float), Type::Infer(_, InferKind::Float)) => {
                 self.substitution.insert(*var1, b);
                 true
             }
@@ -1254,7 +1272,10 @@ impl InferEngine {
                 let lhs_resolved = self.resolve_type(lhs_ty);
                 let lhs_type = self.ctx.types.get(lhs_resolved).clone();
                 let is_lhs_numeric = match &lhs_type {
-                    Type::IntVar(_) | Type::FloatVar(_) => true,
+                    Type::IntVar(_)
+                    | Type::FloatVar(_)
+                    | Type::Infer(_, InferKind::Int)
+                    | Type::Infer(_, InferKind::Float) => true,
                     Type::Primitive(p) => is_numeric_type(*p),
                     _ => false,
                 };
@@ -1376,7 +1397,10 @@ impl InferEngine {
                 let resolved = self.resolve_type(inner_ty);
                 let ty = self.ctx.types.get(resolved).clone();
                 match &ty {
-                    Type::IntVar(_) | Type::FloatVar(_) => inner_ty,
+                    Type::IntVar(_)
+                    | Type::FloatVar(_)
+                    | Type::Infer(_, InferKind::Int)
+                    | Type::Infer(_, InferKind::Float) => inner_ty,
                     Type::Primitive(p) if is_numeric_type(*p) => inner_ty,
                     _ => {
                         let span = text_range_to_span(inner.syntax().text_range());
@@ -2136,7 +2160,9 @@ impl InferEngine {
             | (Type::IntVar(_), _)
             | (_, Type::IntVar(_))
             | (Type::FloatVar(_), _)
-            | (_, Type::FloatVar(_)) => true,
+            | (_, Type::FloatVar(_))
+            | (Type::Infer(_, _), _)
+            | (_, Type::Infer(_, _)) => true,
 
             // All other casts are invalid
             _ => false,
@@ -3192,17 +3218,17 @@ impl InferEngine {
     fn collect_defaults(&self, type_id: TypeId, defaults: &mut Vec<(TypeVar, TypeId)>) {
         let ty = self.ctx.types.get(type_id).clone();
         match ty {
-            Type::IntVar(var) => {
+            Type::IntVar(var) | Type::Infer(var, InferKind::Int) => {
                 if !self.substitution.contains_key(&var) {
                     defaults.push((var, self.ctx.types.i32()));
                 }
             }
-            Type::FloatVar(var) => {
+            Type::FloatVar(var) | Type::Infer(var, InferKind::Float) => {
                 if !self.substitution.contains_key(&var) {
                     defaults.push((var, self.ctx.types.f64()));
                 }
             }
-            Type::Var(_var) => {
+            Type::Var(_) | Type::Infer(_, InferKind::General) => {
                 // General type variables don't have defaults - this is an error
                 // For now, we'll leave them as-is
             }
@@ -3234,7 +3260,7 @@ impl InferEngine {
         let ty = self.ctx.types.get(resolved).clone();
 
         match ty {
-            Type::IntVar(var) => {
+            Type::IntVar(var) | Type::Infer(var, InferKind::Int) => {
                 if let Some(&subst) = self.substitution.get(&var) {
                     self.fully_resolve_type(subst)
                 } else {
@@ -3242,7 +3268,7 @@ impl InferEngine {
                     self.ctx.types.i32()
                 }
             }
-            Type::FloatVar(var) => {
+            Type::FloatVar(var) | Type::Infer(var, InferKind::Float) => {
                 if let Some(&subst) = self.substitution.get(&var) {
                     self.fully_resolve_type(subst)
                 } else {
@@ -3250,7 +3276,7 @@ impl InferEngine {
                     self.ctx.types.f64()
                 }
             }
-            Type::Var(var) => {
+            Type::Var(var) | Type::Infer(var, InferKind::General) => {
                 if let Some(&subst) = self.substitution.get(&var) {
                     self.fully_resolve_type(subst)
                 } else {
