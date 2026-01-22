@@ -22,6 +22,7 @@
 //! - **BasicBlock(0) is entry**: Entry block is always index 0
 
 pub mod body;
+pub mod lower;
 pub mod operand;
 pub mod statement;
 pub mod terminator;
@@ -29,6 +30,9 @@ pub mod types;
 
 // Re-export main types for convenience
 pub use body::{BasicBlockData, Body, LocalDecl};
+pub use lower::{
+    MirBuilder, MirLoweringContext, literal_to_operand, lower_hir_to_mir, lower_literal,
+};
 pub use operand::{AggregateKind, BinOp, BorrowKind, CastKind, Constant, Operand, Rvalue, UnOp};
 pub use statement::{Statement, StatementKind};
 pub use terminator::{BasicBlock, SwitchTargets, Terminator, TerminatorKind};
