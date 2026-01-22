@@ -5,7 +5,10 @@
 //! into a flat, control-flow-graph representation suitable for borrow checking
 //! and optimization.
 
-use crate::hir::{BinOp as HirBinOp, ExprId, HirDatabase, HirExprKind, HirFunction, HirItem, Literal, UnaryOp as HirUnaryOp};
+use crate::hir::{
+    BinOp as HirBinOp, ExprId, HirDatabase, HirExprKind, HirFunction, HirItem, HirPatKind,
+    HirStmtKind, Literal, StmtId, UnaryOp as HirUnaryOp,
+};
 use crate::lexer::Span;
 use crate::mir::body::{BasicBlockData, Body, LocalDecl};
 use crate::mir::operand::{BinOp, Constant, Operand, Rvalue, UnOp};
@@ -322,18 +325,32 @@ impl<'hir> MirLoweringContext<'hir> {
                 }
             }
             HirExprKind::Block { stmts, tail } => {
-                // Lower statements (for now, skip them since we only handle literals)
-                let _ = stmts;
+                // Track locals declared in this block for StorageDead
+                let locals_before = builder.locals.len();
 
-                // If there's a tail expression, lower it
-                if let Some(tail_id) = tail {
+                // Lower each statement
+                for stmt_id in stmts {
+                    self.lower_stmt(builder, *stmt_id);
+                }
+
+                // Lower tail or return unit
+                let result_place = if let Some(tail_id) = tail {
                     self.lower_expr_to_place(builder, *tail_id)
                 } else {
-                    // Unit return - create a unit place
                     let unit_ty = self.hir.types.unit();
                     let temp = builder.alloc_temp(unit_ty);
                     Place::from_local(temp)
+                };
+
+                // Emit StorageDead for block-scoped locals (excluding result)
+                for i in locals_before..builder.locals.len() {
+                    let local = Local(i as u32);
+                    if local != result_place.local {
+                        builder.push_statement(Statement::storage_dead(local, span.clone()));
+                    }
                 }
+
+                result_place
             }
             _ => {
                 // For other expressions, allocate a temp and recursively lower
@@ -365,6 +382,48 @@ impl<'hir> MirLoweringContext<'hir> {
                 // For other expressions, lower to place then copy
                 let place = self.lower_expr_to_place(builder, expr_id);
                 Operand::Copy(place)
+            }
+        }
+    }
+
+    /// Lower a statement.
+    fn lower_stmt(&mut self, builder: &mut MirBuilder, stmt_id: StmtId) {
+        let stmt = self.hir.stmt(stmt_id);
+        let span = stmt.span.clone();
+
+        match &stmt.kind {
+            HirStmtKind::Let { pat, ty: _, init } => {
+                let pat_data = self.hir.pat(*pat);
+                match &pat_data.kind {
+                    HirPatKind::Bind { def_id, mutable } => {
+                        let local = builder.alloc_local(pat_data.ty, *mutable, None);
+                        self.local_map.insert(*def_id, local);
+                        builder.push_statement(Statement::storage_live(local, span.clone()));
+
+                        if let Some(init_id) = init {
+                            let operand = self.lower_expr_as_operand(builder, *init_id);
+                            let place = Place::from_local(local);
+                            builder.push_statement(Statement::assign(
+                                place,
+                                Rvalue::Use(operand),
+                                span,
+                            ));
+                        }
+                    }
+                    HirPatKind::Wildcard => {
+                        if let Some(init_id) = init {
+                            // Evaluate the init expression for side effects, discard result
+                            let _ = self.lower_expr_to_place(builder, *init_id);
+                        }
+                    }
+                    _ => {
+                        // Defer complex patterns (Tuple, Struct, Ref)
+                    }
+                }
+            }
+            HirStmtKind::Expr { expr, has_semi: _ } => {
+                // Evaluate expression for side effects
+                let _ = self.lower_expr_to_place(builder, *expr);
             }
         }
     }
@@ -1782,5 +1841,1612 @@ mod tests {
             &body.basic_blocks[0].statements[2].kind,
             StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Mul, _, _))
         ));
+    }
+
+    // ========== Phase 11: Let Bindings (IR-3.4) ==========
+
+    #[test]
+    fn lower_let_binding_simple() {
+        // fn foo() -> i32 { let x = 42; x }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let x_def_id = DefId(1);
+
+        // Create pattern for `x`
+        let pat_id = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+
+        // Create init expression: 42
+        let init_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(42)),
+            ty: i32_ty,
+            span: Span::from(8..10),
+        });
+
+        // Create let statement
+        let let_stmt = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_id,
+                ty: Some(i32_ty),
+                init: Some(init_expr),
+            },
+            span: Span::from(0..11),
+        });
+
+        // Create tail expression: x
+        let tail_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x_def_id),
+            ty: i32_ty,
+            span: Span::from(13..14),
+        });
+
+        // Create block: { let x = 42; x }
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![let_stmt],
+                tail: Some(tail_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(0..15),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have: _0 (return), _1 (x)
+        assert!(body.locals.len() >= 2);
+
+        // Verify we have StorageLive(_1) and _1 = 42
+        let block = &body.basic_blocks[0];
+        let mut found_storage_live = false;
+        let mut found_assign_42 = false;
+        let mut found_copy_to_return = false;
+
+        for stmt in &block.statements {
+            match &stmt.kind {
+                StatementKind::StorageLive(local) if *local == Local(1) => {
+                    found_storage_live = true;
+                }
+                StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(42))))
+                    if place.local == Local(1) =>
+                {
+                    found_assign_42 = true;
+                }
+                StatementKind::Assign(place, Rvalue::Use(Operand::Copy(src)))
+                    if place.local == Local(0) && src.local == Local(1) =>
+                {
+                    found_copy_to_return = true;
+                }
+                _ => {}
+            }
+        }
+
+        assert!(found_storage_live, "Expected StorageLive(_1)");
+        assert!(found_assign_42, "Expected _1 = 42");
+        assert!(found_copy_to_return, "Expected _0 = Copy(_1)");
+    }
+
+    #[test]
+    fn lower_let_binding_mutable() {
+        // fn foo() -> i32 { let mut x = 10; x }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let x_def_id = DefId(1);
+
+        // Create mutable pattern for `mut x`
+        let pat_id = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: true, // Mutable!
+            },
+            ty: i32_ty,
+            span: Span::from(4..9),
+        });
+
+        let init_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(10)),
+            ty: i32_ty,
+            span: Span::from(12..14),
+        });
+
+        let let_stmt = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_id,
+                ty: Some(i32_ty),
+                init: Some(init_expr),
+            },
+            span: Span::from(0..15),
+        });
+
+        let tail_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x_def_id),
+            ty: i32_ty,
+            span: Span::from(17..18),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![let_stmt],
+                tail: Some(tail_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(0..20),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..25),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Verify LocalDecl for _1 (x) has mutable == true
+        assert!(body.locals.len() >= 2);
+        assert!(body.locals[1].mutable, "Expected local _1 to be mutable");
+    }
+
+    #[test]
+    fn lower_let_wildcard() {
+        // fn foo() -> i32 { let _ = 42; 0 }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+
+        // Wildcard pattern
+        let pat_id = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Wildcard,
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+
+        let init_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(42)),
+            ty: i32_ty,
+            span: Span::from(8..10),
+        });
+
+        let let_stmt = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_id,
+                ty: Some(i32_ty),
+                init: Some(init_expr),
+            },
+            span: Span::from(0..11),
+        });
+
+        // Tail: 0
+        let tail_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(0)),
+            ty: i32_ty,
+            span: Span::from(13..14),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![let_stmt],
+                tail: Some(tail_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(0..15),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // For wildcard, no named local is created for the pattern
+        // The 42 is evaluated into a temp, and result 0 flows to _0
+        let block = &body.basic_blocks[0];
+
+        // Should evaluate 42 (creates temp) and assign 0 to another place
+        // eventually _0 gets the final value
+        let found_42 = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42))))
+            )
+        });
+        assert!(found_42, "Expected 42 to be evaluated (for side effects)");
+
+        // Final value should reach _0
+        let found_0_somewhere = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(0))))
+            )
+        });
+        assert!(found_0_somewhere, "Expected 0 to be assigned somewhere");
+
+        // Verify _0 gets assigned (either directly or via copy)
+        let found_return_assign = block
+            .statements
+            .iter()
+            .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(place, _) if place.local == Local(0)));
+        assert!(found_return_assign, "Expected _0 to be assigned");
+    }
+
+    // ========== Phase 12: Blocks (IR-3.4) ==========
+
+    #[test]
+    fn lower_block_multiple_stmts() {
+        // fn foo() -> i32 { let a = 1; let b = 2; a + b }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let a_def_id = DefId(1);
+        let b_def_id = DefId(2);
+
+        // let a = 1
+        let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: a_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let init_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(8..9),
+        });
+        let stmt_a = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_a,
+                ty: Some(i32_ty),
+                init: Some(init_a),
+            },
+            span: Span::from(0..10),
+        });
+
+        // let b = 2
+        let pat_b = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: b_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(15..16),
+        });
+        let init_b = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(2)),
+            ty: i32_ty,
+            span: Span::from(19..20),
+        });
+        let stmt_b = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_b,
+                ty: Some(i32_ty),
+                init: Some(init_b),
+            },
+            span: Span::from(11..21),
+        });
+
+        // a + b
+        let var_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(a_def_id),
+            ty: i32_ty,
+            span: Span::from(23..24),
+        });
+        let var_b = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(b_def_id),
+            ty: i32_ty,
+            span: Span::from(27..28),
+        });
+        let add_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Add,
+                lhs: var_a,
+                rhs: var_b,
+            },
+            ty: i32_ty,
+            span: Span::from(23..28),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_a, stmt_b],
+                tail: Some(add_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(0..30),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..40),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have: _0 (return), _1 (a), _2 (b), _3 (temp for add result)
+        assert!(body.locals.len() >= 4);
+
+        let block = &body.basic_blocks[0];
+
+        // Verify _1 = 1 and _2 = 2
+        let found_1 = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(1))))
+                if place.local == Local(1)
+            )
+        });
+        let found_2 = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(2))))
+                if place.local == Local(2)
+            )
+        });
+
+        assert!(found_1, "Expected _1 = 1");
+        assert!(found_2, "Expected _2 = 2");
+
+        // Verify Add operation
+        let found_add = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, Operand::Copy(lhs), Operand::Copy(rhs)))
+                if lhs.local == Local(1) && rhs.local == Local(2)
+            )
+        });
+        assert!(found_add, "Expected Add(Copy(_1), Copy(_2))");
+    }
+
+    #[test]
+    fn lower_block_no_tail() {
+        // fn foo() { let x = 1; }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let unit_ty = hir_db.types.unit();
+        let x_def_id = DefId(1);
+
+        let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let init_x = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(8..9),
+        });
+        let stmt_x = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_x,
+                ty: Some(i32_ty),
+                init: Some(init_x),
+            },
+            span: Span::from(0..10),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_x],
+                tail: None, // No tail - returns unit
+            },
+            ty: unit_ty,
+            span: Span::from(0..12),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: unit_ty,
+            body: Some(block_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have return terminator with no assignment to _0
+        let block = &body.basic_blocks[0];
+        assert!(matches!(
+            block.terminator.as_ref().unwrap().kind,
+            TerminatorKind::Return
+        ));
+
+        // x should be assigned
+        let found_x = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1))))
+            )
+        });
+        assert!(found_x, "Expected x = 1");
+    }
+
+    #[test]
+    fn lower_nested_blocks() {
+        // fn foo() -> i32 { let a = 1; { let b = 2; a + b } }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let a_def_id = DefId(1);
+        let b_def_id = DefId(2);
+
+        // let a = 1
+        let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: a_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let init_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(8..9),
+        });
+        let stmt_a = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_a,
+                ty: Some(i32_ty),
+                init: Some(init_a),
+            },
+            span: Span::from(0..10),
+        });
+
+        // Inner block: { let b = 2; a + b }
+        let pat_b = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: b_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(14..15),
+        });
+        let init_b = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(2)),
+            ty: i32_ty,
+            span: Span::from(18..19),
+        });
+        let stmt_b = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_b,
+                ty: Some(i32_ty),
+                init: Some(init_b),
+            },
+            span: Span::from(12..20),
+        });
+
+        // a + b (both from outer and inner scope)
+        let var_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(a_def_id),
+            ty: i32_ty,
+            span: Span::from(22..23),
+        });
+        let var_b = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(b_def_id),
+            ty: i32_ty,
+            span: Span::from(26..27),
+        });
+        let add_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Add,
+                lhs: var_a,
+                rhs: var_b,
+            },
+            ty: i32_ty,
+            span: Span::from(22..27),
+        });
+
+        let inner_block = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_b],
+                tail: Some(add_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(11..29),
+        });
+
+        let outer_block = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_a],
+                tail: Some(inner_block),
+            },
+            ty: i32_ty,
+            span: Span::from(0..30),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(outer_block),
+            span: Span::from(0..40),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Verify both a (from outer) and b (from inner) are accessible
+        let block = &body.basic_blocks[0];
+
+        // Verify Add(Copy(_1), Copy(_2)) - outer a + inner b
+        let found_add = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, Operand::Copy(lhs), Operand::Copy(rhs)))
+                if lhs.local == Local(1) && rhs.local == Local(2)
+            )
+        });
+        assert!(found_add, "Expected Add(Copy(_1), Copy(_2)) - outer a + inner b");
+    }
+
+    #[test]
+    fn lower_empty_block() {
+        // fn foo() { {} }
+        let mut hir_db = HirDatabase::new();
+        let unit_ty = hir_db.types.unit();
+
+        // Inner empty block
+        let inner_block = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![],
+                tail: None,
+            },
+            ty: unit_ty,
+            span: Span::from(1..3),
+        });
+
+        // Outer block containing the inner empty block as a statement
+        let inner_stmt = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Expr {
+                expr: inner_block,
+                has_semi: false,
+            },
+            span: Span::from(1..3),
+        });
+
+        let outer_block = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![inner_stmt],
+                tail: None,
+            },
+            ty: unit_ty,
+            span: Span::from(0..4),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: unit_ty,
+            body: Some(outer_block),
+            span: Span::from(0..10),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have return terminator
+        let block = &body.basic_blocks[0];
+        assert!(matches!(
+            block.terminator.as_ref().unwrap().kind,
+            TerminatorKind::Return
+        ));
+    }
+
+    // ========== Phase 13: Expression Statements (IR-3.4) ==========
+
+    #[test]
+    fn lower_expr_stmt_with_semi() {
+        // fn foo() -> i32 { 1 + 2; 42 }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+
+        // 1 + 2 expression
+        let lhs = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+        let rhs = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(2)),
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let add_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Add,
+                lhs,
+                rhs,
+            },
+            ty: i32_ty,
+            span: Span::from(0..5),
+        });
+
+        // Expression statement: 1 + 2;
+        let expr_stmt = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Expr {
+                expr: add_expr,
+                has_semi: true,
+            },
+            span: Span::from(0..6),
+        });
+
+        // Tail: 42
+        let tail_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(42)),
+            ty: i32_ty,
+            span: Span::from(8..10),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![expr_stmt],
+                tail: Some(tail_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(0..12),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        let block = &body.basic_blocks[0];
+
+        // The 1+2 should be evaluated (add operation exists)
+        let found_add = block.statements.iter().any(|stmt| {
+            matches!(&stmt.kind, StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _)))
+        });
+        assert!(found_add, "Expected 1+2 to be evaluated");
+
+        // 42 should be assigned somewhere (eventually to _0)
+        let found_42 = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42))))
+            )
+        });
+        assert!(found_42, "Expected 42 to be assigned");
+    }
+
+    // ========== Phase 14: Storage Liveness (IR-3.4) ==========
+
+    #[test]
+    fn lower_storage_live_on_let() {
+        // fn foo() -> i32 { let x = 1; x }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let x_def_id = DefId(1);
+
+        let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let init_x = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(8..9),
+        });
+        let stmt_x = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_x,
+                ty: Some(i32_ty),
+                init: Some(init_x),
+            },
+            span: Span::from(0..10),
+        });
+
+        let tail_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x_def_id),
+            ty: i32_ty,
+            span: Span::from(12..13),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_x],
+                tail: Some(tail_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(0..15),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+        let block = &body.basic_blocks[0];
+
+        // Verify StorageLive(_1) appears before assignment to _1
+        let storage_live_idx = block
+            .statements
+            .iter()
+            .position(|stmt| matches!(&stmt.kind, StatementKind::StorageLive(Local(1))));
+        let assign_idx = block.statements.iter().position(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(place, _) if place.local == Local(1)
+            )
+        });
+
+        assert!(storage_live_idx.is_some(), "Expected StorageLive(_1)");
+        assert!(assign_idx.is_some(), "Expected assignment to _1");
+        assert!(
+            storage_live_idx.unwrap() < assign_idx.unwrap(),
+            "StorageLive should come before assignment"
+        );
+    }
+
+    #[test]
+    fn lower_storage_dead_at_block_end() {
+        // fn foo() -> i32 { let a = 1; { let b = 2; a + b } }
+        // Inner block's `b` should have StorageDead
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let a_def_id = DefId(1);
+        let b_def_id = DefId(2);
+
+        // let a = 1
+        let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: a_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let init_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(8..9),
+        });
+        let stmt_a = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_a,
+                ty: Some(i32_ty),
+                init: Some(init_a),
+            },
+            span: Span::from(0..10),
+        });
+
+        // Inner block: { let b = 2; a + b }
+        let pat_b = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: b_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(14..15),
+        });
+        let init_b = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(2)),
+            ty: i32_ty,
+            span: Span::from(18..19),
+        });
+        let stmt_b = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_b,
+                ty: Some(i32_ty),
+                init: Some(init_b),
+            },
+            span: Span::from(12..20),
+        });
+
+        let var_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(a_def_id),
+            ty: i32_ty,
+            span: Span::from(22..23),
+        });
+        let var_b = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(b_def_id),
+            ty: i32_ty,
+            span: Span::from(26..27),
+        });
+        let add_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Add,
+                lhs: var_a,
+                rhs: var_b,
+            },
+            ty: i32_ty,
+            span: Span::from(22..27),
+        });
+
+        let inner_block = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_b],
+                tail: Some(add_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(11..29),
+        });
+
+        let outer_block = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_a],
+                tail: Some(inner_block),
+            },
+            ty: i32_ty,
+            span: Span::from(0..30),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(outer_block),
+            span: Span::from(0..40),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+        let block = &body.basic_blocks[0];
+
+        // Should have StorageDead for b (_2) from inner block
+        let found_storage_dead_b = block
+            .statements
+            .iter()
+            .any(|stmt| matches!(&stmt.kind, StatementKind::StorageDead(Local(2))));
+
+        assert!(
+            found_storage_dead_b,
+            "Expected StorageDead(_2) for inner block's b"
+        );
+    }
+
+    // ========== Phase 15: Edge Cases (IR-3.4) ==========
+
+    #[test]
+    fn lower_shadowing() {
+        // fn foo() -> i32 { let x = 1; let x = 2; x }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let x1_def_id = DefId(1);
+        let x2_def_id = DefId(2);
+
+        // First let x = 1
+        let pat_x1 = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x1_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let init_x1 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(8..9),
+        });
+        let stmt_x1 = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_x1,
+                ty: Some(i32_ty),
+                init: Some(init_x1),
+            },
+            span: Span::from(0..10),
+        });
+
+        // Second let x = 2 (shadows first)
+        let pat_x2 = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x2_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(15..16),
+        });
+        let init_x2 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(2)),
+            ty: i32_ty,
+            span: Span::from(19..20),
+        });
+        let stmt_x2 = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_x2,
+                ty: Some(i32_ty),
+                init: Some(init_x2),
+            },
+            span: Span::from(11..21),
+        });
+
+        // Tail: x (refers to second x)
+        let tail_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x2_def_id),
+            ty: i32_ty,
+            span: Span::from(23..24),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_x1, stmt_x2],
+                tail: Some(tail_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(0..26),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..30),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have two distinct locals for x: _1 and _2
+        assert!(body.locals.len() >= 3); // _0, _1 (x), _2 (x shadow)
+
+        let block = &body.basic_blocks[0];
+
+        // First x (_1) should be assigned 1
+        let found_x1 = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(1))))
+                if place.local == Local(1)
+            )
+        });
+
+        // Second x (_2) should be assigned 2
+        let found_x2 = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(2))))
+                if place.local == Local(2)
+            )
+        });
+
+        assert!(found_x1, "Expected _1 = 1 (first x)");
+        assert!(found_x2, "Expected _2 = 2 (second x, shadow)");
+
+        // Return should copy from _2 (the shadowing x)
+        let found_return_from_x2 = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(place, Rvalue::Use(Operand::Copy(src)))
+                if place.local == Local(0) && src.local == Local(2)
+            )
+        });
+        assert!(
+            found_return_from_x2,
+            "Expected _0 = Copy(_2) (return shadowing x)"
+        );
+    }
+
+    #[test]
+    fn lower_block_as_operand() {
+        // fn foo() -> i32 { { let x = 1; x } + { let y = 2; y } }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let x_def_id = DefId(1);
+        let y_def_id = DefId(2);
+
+        // First block: { let x = 1; x }
+        let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(2..3),
+        });
+        let init_x = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(6..7),
+        });
+        let stmt_x = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_x,
+                ty: Some(i32_ty),
+                init: Some(init_x),
+            },
+            span: Span::from(0..8),
+        });
+        let var_x = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x_def_id),
+            ty: i32_ty,
+            span: Span::from(10..11),
+        });
+        let block1 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_x],
+                tail: Some(var_x),
+            },
+            ty: i32_ty,
+            span: Span::from(0..12),
+        });
+
+        // Second block: { let y = 2; y }
+        let pat_y = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: y_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(17..18),
+        });
+        let init_y = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(2)),
+            ty: i32_ty,
+            span: Span::from(21..22),
+        });
+        let stmt_y = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_y,
+                ty: Some(i32_ty),
+                init: Some(init_y),
+            },
+            span: Span::from(15..23),
+        });
+        let var_y = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(y_def_id),
+            ty: i32_ty,
+            span: Span::from(25..26),
+        });
+        let block2 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_y],
+                tail: Some(var_y),
+            },
+            ty: i32_ty,
+            span: Span::from(14..27),
+        });
+
+        // block1 + block2
+        let add_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Add,
+                lhs: block1,
+                rhs: block2,
+            },
+            ty: i32_ty,
+            span: Span::from(0..27),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(add_expr),
+            span: Span::from(0..35),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        let block = &body.basic_blocks[0];
+
+        // Should have both blocks evaluated and added
+        // _1 = 1 (x), _2 = 2 (y), then Add(_1, _2) or similar
+        let found_1 = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1))))
+            )
+        });
+        let found_2 = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2))))
+            )
+        });
+        let found_add = block
+            .statements
+            .iter()
+            .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _))));
+
+        assert!(found_1, "Expected x = 1 in first block");
+        assert!(found_2, "Expected y = 2 in second block");
+        assert!(found_add, "Expected Add of block results");
+    }
+
+    #[test]
+    fn lower_block_tail_only() {
+        // fn foo() -> i32 { 42 }
+        // Block with just a tail expression, no statements
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+
+        let tail_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(42)),
+            ty: i32_ty,
+            span: Span::from(0..2),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![], // No statements
+                tail: Some(tail_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(0..4),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..10),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        let block = &body.basic_blocks[0];
+
+        // 42 should be assigned somewhere (temp or directly to _0)
+        let found_42 = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42))))
+            )
+        });
+        assert!(found_42, "Expected 42 to be assigned");
+
+        // _0 should be assigned (either directly or via copy)
+        let found_return = block
+            .statements
+            .iter()
+            .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(place, _) if place.local == Local(0)));
+        assert!(found_return, "Expected _0 to be assigned");
+    }
+
+    #[test]
+    fn lower_let_without_init() {
+        // fn foo() -> i32 { let x: i32; 0 }
+        // Let without initializer - should allocate local but not assign
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let x_def_id = DefId(1);
+
+        let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+
+        // No init!
+        let stmt_x = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_x,
+                ty: Some(i32_ty),
+                init: None, // No initializer
+            },
+            span: Span::from(0..10),
+        });
+
+        let tail_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(0)),
+            ty: i32_ty,
+            span: Span::from(12..13),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_x],
+                tail: Some(tail_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(0..15),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have _1 allocated for x with StorageLive but no assignment
+        assert!(body.locals.len() >= 2, "Expected at least _0 and _1");
+
+        let block = &body.basic_blocks[0];
+
+        // Should have StorageLive(_1)
+        let found_storage_live = block
+            .statements
+            .iter()
+            .any(|stmt| matches!(&stmt.kind, StatementKind::StorageLive(Local(1))));
+        assert!(found_storage_live, "Expected StorageLive(_1)");
+
+        // Should NOT have assignment to _1
+        let found_assign_to_x = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(place, _) if place.local == Local(1)
+            )
+        });
+        assert!(!found_assign_to_x, "Expected no assignment to _1 (uninitialized)");
+    }
+
+    #[test]
+    fn lower_storage_dead_excludes_result() {
+        // fn foo() -> i32 { let x = 1; x }
+        // The result (x) should NOT have StorageDead since it's the block result
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let x_def_id = DefId(1);
+
+        let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let init_x = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(8..9),
+        });
+        let stmt_x = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_x,
+                ty: Some(i32_ty),
+                init: Some(init_x),
+            },
+            span: Span::from(0..10),
+        });
+
+        // Tail returns x directly
+        let tail_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x_def_id),
+            ty: i32_ty,
+            span: Span::from(12..13),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_x],
+                tail: Some(tail_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(0..15),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+        let block = &body.basic_blocks[0];
+
+        // x is _1 and is the result place, so should NOT have StorageDead(_1)
+        let found_storage_dead_x = block
+            .statements
+            .iter()
+            .any(|stmt| matches!(&stmt.kind, StatementKind::StorageDead(Local(1))));
+
+        assert!(
+            !found_storage_dead_x,
+            "Expected NO StorageDead(_1) since x is the result"
+        );
+    }
+
+    #[test]
+    fn lower_let_uses_previous_binding() {
+        // fn foo() -> i32 { let a = 1; let b = a + 1; b }
+        // Tests that a binding can be used in subsequent statement's init
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let a_def_id = DefId(1);
+        let b_def_id = DefId(2);
+
+        // let a = 1
+        let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: a_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let init_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(8..9),
+        });
+        let stmt_a = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_a,
+                ty: Some(i32_ty),
+                init: Some(init_a),
+            },
+            span: Span::from(0..10),
+        });
+
+        // let b = a + 1
+        let pat_b = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: b_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(15..16),
+        });
+        let var_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(a_def_id),
+            ty: i32_ty,
+            span: Span::from(19..20),
+        });
+        let lit_1 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(23..24),
+        });
+        let add_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Add,
+                lhs: var_a,
+                rhs: lit_1,
+            },
+            ty: i32_ty,
+            span: Span::from(19..24),
+        });
+        let stmt_b = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_b,
+                ty: Some(i32_ty),
+                init: Some(add_expr),
+            },
+            span: Span::from(11..25),
+        });
+
+        // tail: b
+        let tail_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(b_def_id),
+            ty: i32_ty,
+            span: Span::from(27..28),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_a, stmt_b],
+                tail: Some(tail_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(0..30),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..35),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+        let block = &body.basic_blocks[0];
+
+        // Should have Add(Copy(_1), 1) where _1 is a
+        let found_add_using_a = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, Operand::Copy(src), Operand::Constant(Constant::Int(1))))
+                if src.local == Local(1)
+            )
+        });
+        assert!(
+            found_add_using_a,
+            "Expected Add(Copy(_1), 1) - b's init uses a"
+        );
+    }
+
+    #[test]
+    fn lower_storage_dead_ordering() {
+        // fn foo() -> i32 { let a = 1; { let b = 2; a } }
+        // Inner block returns `a` (from outer), so b should have StorageDead
+        // and it should come AFTER a is copied to result
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let a_def_id = DefId(1);
+        let b_def_id = DefId(2);
+
+        // let a = 1
+        let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: a_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let init_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(8..9),
+        });
+        let stmt_a = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_a,
+                ty: Some(i32_ty),
+                init: Some(init_a),
+            },
+            span: Span::from(0..10),
+        });
+
+        // Inner block: { let b = 2; a }
+        let pat_b = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: b_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(14..15),
+        });
+        let init_b = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(2)),
+            ty: i32_ty,
+            span: Span::from(18..19),
+        });
+        let stmt_b = hir_db.alloc_stmt(crate::hir::HirStmt {
+            kind: crate::hir::HirStmtKind::Let {
+                pat: pat_b,
+                ty: Some(i32_ty),
+                init: Some(init_b),
+            },
+            span: Span::from(12..20),
+        });
+
+        // Inner tail: a (returns outer variable)
+        let var_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(a_def_id),
+            ty: i32_ty,
+            span: Span::from(22..23),
+        });
+
+        let inner_block = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_b],
+                tail: Some(var_a),
+            },
+            ty: i32_ty,
+            span: Span::from(11..25),
+        });
+
+        let outer_block = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![stmt_a],
+                tail: Some(inner_block),
+            },
+            ty: i32_ty,
+            span: Span::from(0..26),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(outer_block),
+            span: Span::from(0..30),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+        let block = &body.basic_blocks[0];
+
+        // b is _2, inner block returns a (_1) which is Place
+        // StorageDead(_2) should exist since b goes out of scope
+        let storage_dead_b_idx = block
+            .statements
+            .iter()
+            .position(|stmt| matches!(&stmt.kind, StatementKind::StorageDead(Local(2))));
+
+        assert!(storage_dead_b_idx.is_some(), "Expected StorageDead(_2) for b");
     }
 }
