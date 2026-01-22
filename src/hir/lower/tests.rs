@@ -113,11 +113,15 @@ fn passthrough_variable() {
 }
 
 #[test]
-fn passthrough_non_prefix() {
+fn lower_plain_int_literal() {
+    // Plain literals are now lowered for constant folding
     let expr = parse_expr("42");
     let (lowered, was_lowered) = try_lower_expr(&expr);
-    assert!(!was_lowered);
-    assert!(matches!(lowered, LoweredExpr::Passthrough));
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, 42),
+        _ => panic!("Expected IntLiteral"),
+    }
 }
 
 #[test]
@@ -158,6 +162,486 @@ fn lower_hex_literal() {
             assert_eq!(value, -128); // 0x80 = 128
             assert_eq!(suffix, Some(PrimitiveKind::I8));
         }
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+// ========================================================================
+// Constant folding tests - Phase 2: Boolean Negation
+// ========================================================================
+
+#[test]
+fn fold_not_true() {
+    let expr = parse_expr("!true");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(!value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_not_false() {
+    let expr = parse_expr("!false");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_double_not_true() {
+    let expr = parse_expr("!!true");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_not_parenthesized() {
+    let expr = parse_expr("!(false)");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_not_variable_passthrough() {
+    // Negation of a variable should pass through (not foldable)
+    let expr = parse_expr("!x");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(!was_lowered);
+    assert!(matches!(lowered, LoweredExpr::Passthrough));
+}
+
+// ========================================================================
+// Constant folding tests - Phase 3: Integer Arithmetic
+// ========================================================================
+
+#[test]
+fn fold_int_add() {
+    let expr = parse_expr("1 + 2");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, 3),
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+#[test]
+fn fold_int_sub() {
+    let expr = parse_expr("5 - 3");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, 2),
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+#[test]
+fn fold_int_mul() {
+    let expr = parse_expr("3 * 4");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, 12),
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+#[test]
+fn fold_int_div() {
+    let expr = parse_expr("10 / 3");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, 3),
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+#[test]
+fn fold_int_rem() {
+    let expr = parse_expr("10 % 3");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, 1),
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+#[test]
+fn fold_int_add_with_suffix() {
+    let expr = parse_expr("1i8 + 2i8");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, suffix, .. } => {
+            assert_eq!(value, 3);
+            assert_eq!(suffix, Some(PrimitiveKind::I8));
+        }
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+#[test]
+fn fold_div_by_zero_passthrough() {
+    let expr = parse_expr("10 / 0");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(!was_lowered);
+    assert!(matches!(lowered, LoweredExpr::Passthrough));
+}
+
+#[test]
+fn fold_int_add_variable_passthrough() {
+    let expr = parse_expr("1 + x");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(!was_lowered);
+    assert!(matches!(lowered, LoweredExpr::Passthrough));
+}
+
+// ========================================================================
+// Constant folding tests - Phase 4: Float Arithmetic
+// ========================================================================
+
+#[test]
+fn fold_float_add() {
+    let expr = parse_expr("1.0 + 2.5");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::FloatLiteral { value, .. } => {
+            assert!((value - 3.5).abs() < f64::EPSILON);
+        }
+        _ => panic!("Expected FloatLiteral"),
+    }
+}
+
+#[test]
+fn fold_float_sub() {
+    let expr = parse_expr("5.0 - 2.0");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::FloatLiteral { value, .. } => {
+            assert!((value - 3.0).abs() < f64::EPSILON);
+        }
+        _ => panic!("Expected FloatLiteral"),
+    }
+}
+
+#[test]
+fn fold_float_mul() {
+    let expr = parse_expr("2.0 * 3.0");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::FloatLiteral { value, .. } => {
+            assert!((value - 6.0).abs() < f64::EPSILON);
+        }
+        _ => panic!("Expected FloatLiteral"),
+    }
+}
+
+#[test]
+fn fold_float_div() {
+    let expr = parse_expr("10.0 / 4.0");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::FloatLiteral { value, .. } => {
+            assert!((value - 2.5).abs() < f64::EPSILON);
+        }
+        _ => panic!("Expected FloatLiteral"),
+    }
+}
+
+#[test]
+fn fold_float_div_by_zero() {
+    let expr = parse_expr("1.0 / 0.0");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::FloatLiteral { value, .. } => {
+            assert!(value.is_infinite());
+        }
+        _ => panic!("Expected FloatLiteral"),
+    }
+}
+
+#[test]
+fn fold_float_with_suffix() {
+    let expr = parse_expr("1.0f32 + 2.0f32");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::FloatLiteral { value, suffix, .. } => {
+            assert!((value - 3.0).abs() < f64::EPSILON);
+            assert_eq!(suffix, Some(PrimitiveKind::F32));
+        }
+        _ => panic!("Expected FloatLiteral"),
+    }
+}
+
+// ========================================================================
+// Constant folding tests - Phase 5: Comparison Operators
+// ========================================================================
+
+#[test]
+fn fold_int_eq() {
+    let expr = parse_expr("3 == 3");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_int_ne() {
+    let expr = parse_expr("3 != 4");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_int_lt() {
+    let expr = parse_expr("2 < 5");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_int_gt() {
+    let expr = parse_expr("5 > 2");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_int_le() {
+    let expr = parse_expr("3 <= 3");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_int_ge() {
+    let expr = parse_expr("5 >= 3");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_float_lt() {
+    let expr = parse_expr("1.5 < 2.0");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_bool_eq() {
+    let expr = parse_expr("true == true");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_bool_ne() {
+    let expr = parse_expr("true != false");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+// ========================================================================
+// Constant folding tests - Phase 6: Logical Operators
+// ========================================================================
+
+#[test]
+fn fold_and_true_true() {
+    let expr = parse_expr("true && true");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_and_true_false() {
+    let expr = parse_expr("true && false");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(!value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_and_false_true() {
+    let expr = parse_expr("false && true");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(!value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_or_true_false() {
+    let expr = parse_expr("true || false");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_or_false_false() {
+    let expr = parse_expr("false || false");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(!value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_and_false_variable_passthrough() {
+    let expr = parse_expr("false && x");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(!was_lowered);
+    assert!(matches!(lowered, LoweredExpr::Passthrough));
+}
+
+// ========================================================================
+// Constant folding tests - Phase 7: Nested/Complex Expressions
+// ========================================================================
+
+#[test]
+fn fold_nested_arithmetic() {
+    let expr = parse_expr("(1 + 2) * 3");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, 9),
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+#[test]
+fn fold_chained_add() {
+    let expr = parse_expr("1 + 2 + 3");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, 6),
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+#[test]
+fn fold_nested_comparison() {
+    let expr = parse_expr("(1 + 2) < 5");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_nested_logical() {
+    let expr = parse_expr("!(!true)");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_complex_logical() {
+    let expr = parse_expr("(1 < 2) && (3 > 1)");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_mixed_precedence() {
+    let expr = parse_expr("2 + 3 * 4");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, 14),
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+#[test]
+fn fold_negated_arithmetic() {
+    let expr = parse_expr("-(1 + 2)");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, -3),
         _ => panic!("Expected IntLiteral"),
     }
 }
@@ -293,7 +777,8 @@ fn lower_local_reference() {
 
 #[test]
 fn lower_binary_add() {
-    let db = lower("fn main() { let x = 1 + 2; }");
+    // Use a variable to prevent folding
+    let db = lower("fn main() { let y = 1; let x = y + 2; }");
 
     for (_, expr) in db.exprs.iter() {
         if let HirExprKind::Binary { op, .. } = &expr.kind {
@@ -306,7 +791,8 @@ fn lower_binary_add() {
 
 #[test]
 fn lower_binary_comparison() {
-    let db = lower("fn main() { let x = 1 < 2; }");
+    // Use a variable to prevent folding
+    let db = lower("fn main() { let y = 1; let x = y < 2; }");
 
     for (_, expr) in db.exprs.iter() {
         if let HirExprKind::Binary { op, .. } = &expr.kind {
@@ -319,7 +805,8 @@ fn lower_binary_comparison() {
 
 #[test]
 fn lower_binary_logical_and() {
-    let db = lower("fn main() { let x = true && false; }");
+    // Use a variable to prevent folding
+    let db = lower("fn main() { let y = true; let x = y && false; }");
 
     for (_, expr) in db.exprs.iter() {
         if let HirExprKind::Binary { op, .. } = &expr.kind {
@@ -515,9 +1002,8 @@ fn lower_struct_expr() {
 
 #[test]
 fn lower_field_access() {
-    let db = lower(
-        "struct Point { x: i32, y: i32 } fn main() { let p = Point { x: 1, y: 2 }; p.x; }",
-    );
+    let db =
+        lower("struct Point { x: i32, y: i32 } fn main() { let p = Point { x: 1, y: 2 }; p.x; }");
 
     for (_, expr) in db.exprs.iter() {
         if let HirExprKind::Field { field, .. } = &expr.kind {
@@ -569,8 +1055,7 @@ fn lower_function_call() {
 
 #[test]
 fn lower_method_call() {
-    let db =
-        lower("struct S {} impl S { fn foo(&self) {} } fn main() { let s = S {}; s.foo(); }");
+    let db = lower("struct S {} impl S { fn foo(&self) {} } fn main() { let s = S {}; s.foo(); }");
 
     for (_, expr) in db.exprs.iter() {
         if let HirExprKind::MethodCall { method, .. } = &expr.kind {
@@ -873,7 +1358,8 @@ fn lower_while_desugaring_structure() {
 
 #[test]
 fn lower_binary_or() {
-    let db = lower("fn main() { let x = true || false; }");
+    // Use a variable to prevent folding
+    let db = lower("fn main() { let y = true; let x = y || false; }");
 
     for (_, expr) in db.exprs.iter() {
         if let HirExprKind::Binary { op, .. } = &expr.kind

@@ -7,15 +7,17 @@ use crate::ast::{
 };
 use crate::ast::{Block, LetStmt, LiteralExpr, Stmt};
 use crate::diagnostic::Diagnostic;
-use crate::hir::{lower::try_lower_expr, LoweredExpr};
-use crate::sema::types::{InferKind, Mutability, PrimitiveKind, Type, TypeId};
+use crate::hir::{LoweredExpr, lower::try_lower_expr};
 use crate::sema::SymbolKind;
+use crate::sema::types::{InferKind, Mutability, PrimitiveKind, Type, TypeId};
 use crate::syntax::SyntaxKind;
 use rowan::ast::AstNode;
 use rustc_hash::FxHashMap;
 
 use super::engine::{InferEngine, LoopKind};
-use super::helpers::{is_numeric_type, parse_int_literal_value, parse_int_suffix, text_range_to_span};
+use super::helpers::{
+    is_numeric_type, parse_int_literal_value, parse_int_suffix, text_range_to_span,
+};
 
 impl InferEngine {
     // =========================================================================
@@ -214,6 +216,7 @@ impl InferEngine {
                     suffix,
                     span: _,
                 } => self.synth_lowered_float(suffix),
+                LoweredExpr::BoolLiteral { .. } => self.ctx.types.bool(),
                 LoweredExpr::Passthrough => unreachable!(),
             };
             self.expr_types.insert(span, type_id);

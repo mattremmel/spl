@@ -68,7 +68,9 @@ use crate::sema::infer::InferResult;
 use crate::sema::symbol::DefId;
 use crate::sema::types::TypeId;
 use crate::syntax::SyntaxKind;
-use folding::{parse_char_literal, parse_float_literal_value, parse_int_literal_value, parse_string_literal};
+use folding::{
+    parse_char_literal, parse_float_literal_value, parse_int_literal_value, parse_string_literal,
+};
 use rowan::ast::AstNode;
 use rustc_hash::FxHashMap;
 
@@ -800,6 +802,41 @@ impl LoweringContext {
     }
 
     fn lower_binary_expr(&mut self, bin: &BinExpr, span: Span, ty: TypeId) -> ExprId {
+        // First, try to fold as a constant expression
+        let full_expr = Expr::Binary(bin.clone());
+        let (lowered, was_lowered) = try_lower_expr(&full_expr);
+
+        if was_lowered {
+            match lowered {
+                LoweredExpr::IntLiteral { value, .. } => {
+                    let expr = HirExpr {
+                        kind: HirExprKind::Literal(Literal::Int(value)),
+                        ty,
+                        span,
+                    };
+                    return self.db.alloc_expr(expr);
+                }
+                LoweredExpr::FloatLiteral { value, .. } => {
+                    let expr = HirExpr {
+                        kind: HirExprKind::Literal(Literal::Float(value)),
+                        ty,
+                        span,
+                    };
+                    return self.db.alloc_expr(expr);
+                }
+                LoweredExpr::BoolLiteral { value, .. } => {
+                    let expr = HirExpr {
+                        kind: HirExprKind::Literal(Literal::Bool(value)),
+                        ty,
+                        span,
+                    };
+                    return self.db.alloc_expr(expr);
+                }
+                LoweredExpr::Passthrough => {}
+            }
+        }
+
+        // Not foldable, lower normally
         let lhs = bin
             .lhs()
             .map(|e| self.lower_expr(&e))
@@ -844,7 +881,7 @@ impl LoweringContext {
     }
 
     fn lower_prefix_expr(&mut self, prefix: &PrefixExpr, span: Span, ty: TypeId) -> ExprId {
-        // First, try to lower as a negated literal
+        // First, try to lower as a foldable expression (negated literal or boolean NOT)
         let full_expr = Expr::Prefix(prefix.clone());
         let (lowered, was_lowered) = try_lower_expr(&full_expr);
 
@@ -861,6 +898,14 @@ impl LoweringContext {
                 LoweredExpr::FloatLiteral { value, .. } => {
                     let expr = HirExpr {
                         kind: HirExprKind::Literal(Literal::Float(value)),
+                        ty,
+                        span,
+                    };
+                    return self.db.alloc_expr(expr);
+                }
+                LoweredExpr::BoolLiteral { value, .. } => {
+                    let expr = HirExpr {
+                        kind: HirExprKind::Literal(Literal::Bool(value)),
                         ty,
                         span,
                     };

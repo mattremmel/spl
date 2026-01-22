@@ -25,7 +25,11 @@ use rustc_hash::FxHashMap;
 
 /// A lowered expression for literals that need folding.
 ///
-/// This is used to handle negated integer literals like `-128i8` and `-(128i8)`.
+/// This is used to handle constant folding at compile time, including:
+/// - Negated integer literals like `-128i8` and `-(128i8)`
+/// - Boolean operations like `!true`
+/// - Arithmetic on literals like `1 + 2`
+///
 /// Most expressions pass through unchanged (Passthrough variant).
 #[derive(Debug, Clone)]
 pub enum LoweredExpr {
@@ -41,6 +45,8 @@ pub enum LoweredExpr {
         suffix: Option<PrimitiveKind>,
         span: Span,
     },
+    /// A boolean literal value.
+    BoolLiteral { value: bool, span: Span },
     /// Not foldable - use AST directly.
     Passthrough,
 }
