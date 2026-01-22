@@ -524,4 +524,155 @@ mod tests {
             _ => panic!("expected Zeroed"),
         }
     }
+
+    // Additional coverage tests
+
+    #[test]
+    fn all_binop_variants_exist() {
+        // Verify all BinOp variants are distinct and usable
+        let ops = [
+            BinOp::Add,
+            BinOp::Sub,
+            BinOp::Mul,
+            BinOp::Div,
+            BinOp::Rem,
+            BinOp::BitAnd,
+            BinOp::BitOr,
+            BinOp::BitXor,
+            BinOp::Shl,
+            BinOp::Shr,
+            BinOp::Eq,
+            BinOp::Ne,
+            BinOp::Lt,
+            BinOp::Le,
+            BinOp::Gt,
+            BinOp::Ge,
+        ];
+
+        // All should be distinct
+        for (i, op1) in ops.iter().enumerate() {
+            for (j, op2) in ops.iter().enumerate() {
+                if i == j {
+                    assert_eq!(op1, op2);
+                } else {
+                    assert_ne!(op1, op2);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn all_castind_variants_exist() {
+        let casts = [
+            CastKind::IntToInt,
+            CastKind::IntToFloat,
+            CastKind::FloatToInt,
+            CastKind::FloatToFloat,
+            CastKind::PtrToPtr,
+            CastKind::Unsize,
+        ];
+
+        for (i, c1) in casts.iter().enumerate() {
+            for (j, c2) in casts.iter().enumerate() {
+                if i == j {
+                    assert_eq!(c1, c2);
+                } else {
+                    assert_ne!(c1, c2);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rvalue_unary_op_not() {
+        let operand = Operand::const_bool(true);
+        let rv = Rvalue::UnaryOp(UnOp::Not, operand.clone());
+
+        match rv {
+            Rvalue::UnaryOp(UnOp::Not, op) => assert_eq!(op, operand),
+            _ => panic!("expected UnaryOp::Not"),
+        }
+    }
+
+    #[test]
+    fn operand_copy_with_projection() {
+        use crate::mir::types::{FieldIdx, PlaceElem};
+
+        let place = Place::from_local(Local(1)).project(PlaceElem::Field(FieldIdx(0)));
+        let op = Operand::Copy(place.clone());
+
+        match op {
+            Operand::Copy(p) => {
+                assert_eq!(p.local, Local(1));
+                assert!(!p.is_local());
+            }
+            _ => panic!("expected Copy"),
+        }
+    }
+
+    #[test]
+    fn operand_move_with_projection() {
+        let place = Place::deref(Local(1));
+        let op = Operand::Move(place.clone());
+
+        match op {
+            Operand::Move(p) => {
+                assert_eq!(p.projection.len(), 1);
+            }
+            _ => panic!("expected Move"),
+        }
+    }
+
+    #[test]
+    fn rvalue_aggregate_array() {
+        let ops = vec![
+            Operand::const_int(1),
+            Operand::const_int(2),
+            Operand::const_int(3),
+        ];
+        let rv = Rvalue::Aggregate(AggregateKind::Array, ops);
+
+        match rv {
+            Rvalue::Aggregate(AggregateKind::Array, operands) => {
+                assert_eq!(operands.len(), 3);
+            }
+            _ => panic!("expected Aggregate(Array, _)"),
+        }
+    }
+
+    #[test]
+    fn rvalue_all_binop_variants() {
+        let lhs = Operand::const_int(10);
+        let rhs = Operand::const_int(3);
+
+        // Test a few more binary ops
+        let sub = Rvalue::BinaryOp(BinOp::Sub, lhs.clone(), rhs.clone());
+        let mul = Rvalue::BinaryOp(BinOp::Mul, lhs.clone(), rhs.clone());
+        let div = Rvalue::BinaryOp(BinOp::Div, lhs.clone(), rhs.clone());
+        let rem = Rvalue::BinaryOp(BinOp::Rem, lhs.clone(), rhs.clone());
+        let lt = Rvalue::BinaryOp(BinOp::Lt, lhs.clone(), rhs.clone());
+        let shl = Rvalue::BinaryOp(BinOp::Shl, lhs.clone(), rhs.clone());
+
+        // Just verify they construct correctly
+        assert!(matches!(sub, Rvalue::BinaryOp(BinOp::Sub, _, _)));
+        assert!(matches!(mul, Rvalue::BinaryOp(BinOp::Mul, _, _)));
+        assert!(matches!(div, Rvalue::BinaryOp(BinOp::Div, _, _)));
+        assert!(matches!(rem, Rvalue::BinaryOp(BinOp::Rem, _, _)));
+        assert!(matches!(lt, Rvalue::BinaryOp(BinOp::Lt, _, _)));
+        assert!(matches!(shl, Rvalue::BinaryOp(BinOp::Shl, _, _)));
+    }
+
+    #[test]
+    fn rvalue_address_of_immutable() {
+        let place = Place::from_local(Local(1));
+        let rv = Rvalue::AddressOf(false, place.clone());
+
+        match rv {
+            Rvalue::AddressOf(mutable, p) => {
+                assert!(!mutable);
+                assert_eq!(p, place);
+            }
+            _ => panic!("expected AddressOf"),
+        }
+    }
 }

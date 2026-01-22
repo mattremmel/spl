@@ -259,4 +259,99 @@ mod tests {
 
         assert_eq!(place.projection[0], PlaceElem::Downcast(2));
     }
+
+    // Additional coverage tests
+
+    #[test]
+    fn local_hash() {
+        use std::collections::HashMap;
+
+        let mut map = HashMap::new();
+        map.insert(Local(1), "one");
+        map.insert(Local(2), "two");
+
+        assert_eq!(map.get(&Local(1)), Some(&"one"));
+        assert_eq!(map.get(&Local(2)), Some(&"two"));
+        assert_eq!(map.get(&Local(3)), None);
+    }
+
+    #[test]
+    fn field_idx_hash() {
+        use std::collections::HashSet;
+
+        let mut set = HashSet::new();
+        set.insert(FieldIdx(0));
+        set.insert(FieldIdx(1));
+        set.insert(FieldIdx(0)); // duplicate
+
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn place_hash() {
+        use std::collections::HashSet;
+
+        let mut set = HashSet::new();
+        set.insert(Place::from_local(Local(1)));
+        set.insert(Place::from_local(Local(2)));
+        set.insert(Place::from_local(Local(1))); // duplicate
+
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn place_with_same_projections_equal() {
+        let place1 = Place::from_local(Local(1))
+            .project(PlaceElem::Deref)
+            .project(PlaceElem::Field(FieldIdx(2)));
+        let place2 = Place::from_local(Local(1))
+            .project(PlaceElem::Deref)
+            .project(PlaceElem::Field(FieldIdx(2)));
+
+        assert_eq!(place1, place2);
+    }
+
+    #[test]
+    fn place_different_projections_not_equal() {
+        let place1 = Place::from_local(Local(1)).project(PlaceElem::Deref);
+        let place2 = Place::from_local(Local(1)).project(PlaceElem::Field(FieldIdx(0)));
+
+        assert_ne!(place1, place2);
+    }
+
+    #[test]
+    fn place_elem_index_with_different_locals() {
+        let elem1 = PlaceElem::Index(Local(1));
+        let elem2 = PlaceElem::Index(Local(2));
+
+        assert_ne!(elem1, elem2);
+    }
+
+    #[test]
+    fn place_elem_constant_index_variants() {
+        let from_start = PlaceElem::ConstantIndex {
+            offset: 5,
+            from_end: false,
+        };
+        let from_end = PlaceElem::ConstantIndex {
+            offset: 5,
+            from_end: true,
+        };
+
+        assert_ne!(from_start, from_end);
+    }
+
+    #[test]
+    fn place_deep_projections() {
+        // (*(*local).field[index]).subfield
+        let place = Place::from_local(Local(1))
+            .project(PlaceElem::Deref)
+            .project(PlaceElem::Field(FieldIdx(0)))
+            .project(PlaceElem::Index(Local(2)))
+            .project(PlaceElem::Deref)
+            .project(PlaceElem::Field(FieldIdx(1)));
+
+        assert_eq!(place.projection.len(), 5);
+        assert!(!place.is_local());
+    }
 }

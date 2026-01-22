@@ -518,4 +518,176 @@ mod tests {
         assert!(body.validate().is_ok());
         assert_eq!(body.num_blocks(), 4);
     }
+
+    // Additional coverage tests
+
+    #[test]
+    fn body_with_loop() {
+        // Build a simple loop: while (cond) { body }
+        // bb0: goto bb1
+        // bb1: switchInt(cond) -> [0: bb3, otherwise: bb2]
+        // bb2: <body>; goto bb1  (back edge!)
+        // bb3: return
+        let mut body = Body::new(TypeId(0));
+
+        let entry = body.alloc_block();
+        let loop_header = body.alloc_block();
+        let loop_body = body.alloc_block();
+        let exit = body.alloc_block();
+
+        // bb0 -> bb1
+        body.block_mut(entry)
+            .set_terminator(Terminator::goto(loop_header, 0..0));
+
+        // bb1: conditional branch
+        body.block_mut(loop_header).set_terminator(Terminator::new(
+            TerminatorKind::SwitchInt {
+                discr: Operand::const_bool(true),
+                targets: crate::mir::terminator::SwitchTargets::new_bool(loop_body, exit),
+            },
+            0..0,
+        ));
+
+        // bb2: loop body, back edge to header
+        body.block_mut(loop_body)
+            .set_terminator(Terminator::goto(loop_header, 0..0));
+
+        // bb3: exit
+        body.block_mut(exit)
+            .set_terminator(Terminator::return_(0..0));
+
+        // Should validate - loops are valid CFGs
+        assert!(body.validate().is_ok());
+        assert_eq!(body.num_blocks(), 4);
+    }
+
+    #[test]
+    fn body_self_loop() {
+        // A block that loops to itself: bb0: goto bb0
+        let mut body = Body::new(TypeId(0));
+        let bb = body.alloc_block();
+
+        body.block_mut(bb)
+            .set_terminator(Terminator::goto(bb, 0..0));
+
+        // Self-loops are valid
+        assert!(body.validate().is_ok());
+    }
+
+    #[test]
+    fn body_multiple_statements_in_block() {
+        let mut body = Body::new(TypeId(0));
+        let bb = body.alloc_block();
+        let temp = body.alloc_local(LocalDecl::new(TypeId(1), true));
+
+        // Add multiple statements
+        body.block_mut(bb)
+            .push_statement(Statement::storage_live(temp, 0..0));
+        body.block_mut(bb).push_statement(Statement::assign(
+            Place::from_local(temp),
+            Rvalue::Use(Operand::const_int(42)),
+            0..0,
+        ));
+        body.block_mut(bb).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::copy_local(temp)),
+            0..0,
+        ));
+        body.block_mut(bb)
+            .push_statement(Statement::storage_dead(temp, 0..0));
+        body.block_mut(bb).set_terminator(Terminator::return_(0..0));
+
+        assert_eq!(body.block(bb).statements.len(), 4);
+        assert!(body.validate().is_ok());
+    }
+
+    #[test]
+    fn body_entry_block_is_zero() {
+        let mut body = Body::new(TypeId(0));
+
+        // Allocate several blocks
+        let bb0 = body.alloc_block();
+        let bb1 = body.alloc_block();
+        let bb2 = body.alloc_block();
+
+        // First allocated block should be entry (index 0)
+        assert_eq!(bb0, BasicBlock::ENTRY);
+        assert_eq!(bb0.index(), 0);
+        assert_eq!(bb1.index(), 1);
+        assert_eq!(bb2.index(), 2);
+    }
+
+    #[test]
+    fn body_return_place_is_mutable() {
+        let body = Body::new(TypeId(0));
+
+        // Return place should be mutable (we assign to it)
+        assert!(body.local_decl(Local::RETURN_PLACE).mutable);
+    }
+
+    #[test]
+    fn statement_same_kind_different_span() {
+        let stmt1 = Statement::nop(0..5);
+        let stmt2 = Statement::nop(10..15);
+
+        // Same kind but different spans are not equal
+        assert_ne!(stmt1, stmt2);
+    }
+
+    #[test]
+    fn body_with_unreachable_block() {
+        // A function with an unreachable block (valid but unusual)
+        let mut body = Body::new(TypeId(0));
+
+        let entry = body.alloc_block();
+        let unreachable = body.alloc_block();
+
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+        body.block_mut(unreachable)
+            .set_terminator(Terminator::unreachable(0..0));
+
+        // Should still validate - unreachable blocks are allowed
+        assert!(body.validate().is_ok());
+    }
+
+    #[test]
+    fn local_decl_equality() {
+        let decl1 = LocalDecl::new(TypeId(1), true);
+        let decl2 = LocalDecl::new(TypeId(1), true);
+        let decl3 = LocalDecl::new(TypeId(1), false);
+        let decl4 = LocalDecl::new(TypeId(2), true);
+
+        assert_eq!(decl1, decl2);
+        assert_ne!(decl1, decl3); // different mutability
+        assert_ne!(decl1, decl4); // different type
+    }
+
+    #[test]
+    fn body_validate_multiple_errors() {
+        // First error found is returned
+        let mut body = Body::new(TypeId(0));
+
+        let _bb0 = body.alloc_block();
+        let bb1 = body.alloc_block();
+
+        // bb0 has no terminator
+        // bb1 points to invalid block
+        body.block_mut(bb1)
+            .set_terminator(Terminator::goto(BasicBlock(999), 0..0));
+
+        let result = body.validate();
+        assert!(result.is_err());
+        // Should report bb0 has no terminator (first check)
+        assert!(result.unwrap_err().contains("BasicBlock 0"));
+    }
+
+    #[test]
+    fn body_with_args_zero_args() {
+        let body = Body::with_args(TypeId(0), &[]);
+
+        assert_eq!(body.arg_count, 0);
+        assert_eq!(body.num_locals(), 1); // just return place
+        assert_eq!(body.args().count(), 0);
+    }
 }

@@ -541,4 +541,100 @@ mod tests {
         let term = Terminator::new(TerminatorKind::Resume, 0..0);
         assert!(term.successors().is_empty());
     }
+
+    // Additional coverage tests
+
+    #[test]
+    fn switch_targets_bool_nonzero_values() {
+        let true_block = BasicBlock(1);
+        let false_block = BasicBlock(2);
+        let targets = SwitchTargets::new_bool(true_block, false_block);
+
+        // 0 -> false_block
+        assert_eq!(targets.target_for(0), Some(false_block));
+        // 1 should go to otherwise (true_block)
+        assert_eq!(targets.target_for(1), None);
+        // Any non-zero goes to otherwise
+        assert_eq!(targets.target_for(42), None);
+        assert_eq!(targets.target_for(u128::MAX), None);
+        // otherwise is true_block
+        assert_eq!(targets.otherwise(), true_block);
+    }
+
+    #[test]
+    fn switch_targets_empty() {
+        // All values go to otherwise
+        let otherwise = BasicBlock(5);
+        let targets = SwitchTargets::new(vec![], otherwise);
+
+        assert_eq!(targets.target_for(0), None);
+        assert_eq!(targets.target_for(1), None);
+        assert_eq!(targets.otherwise(), otherwise);
+
+        let all: Vec<_> = targets.all_targets().collect();
+        assert_eq!(all, vec![otherwise]);
+    }
+
+    #[test]
+    fn switch_targets_duplicate_otherwise() {
+        // Same block in both targets and otherwise
+        let shared = BasicBlock(1);
+        let targets = SwitchTargets::new(vec![(0, shared)], shared);
+
+        // Note: all_targets will return duplicates in this case
+        let all: Vec<_> = targets.all_targets().collect();
+        assert_eq!(all.len(), 2); // Contains shared twice
+        assert_eq!(all[0], shared);
+        assert_eq!(all[1], shared);
+    }
+
+    #[test]
+    fn terminator_assert_expected_false() {
+        let cond = Operand::const_bool(false);
+        let target = BasicBlock(1);
+
+        let term = Terminator::new(
+            TerminatorKind::Assert {
+                cond: cond.clone(),
+                expected: false,
+                target,
+            },
+            0..10,
+        );
+
+        match term.kind {
+            TerminatorKind::Assert {
+                expected,
+                target: t,
+                ..
+            } => {
+                assert!(!expected);
+                assert_eq!(t, target);
+            }
+            _ => panic!("expected Assert"),
+        }
+    }
+
+    #[test]
+    fn basic_block_hash() {
+        use std::collections::HashSet;
+
+        let mut set = HashSet::new();
+        set.insert(BasicBlock(1));
+        set.insert(BasicBlock(2));
+        set.insert(BasicBlock(1)); // duplicate
+
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&BasicBlock(1)));
+        assert!(set.contains(&BasicBlock(2)));
+    }
+
+    #[test]
+    fn switch_targets_single_value() {
+        let targets = SwitchTargets::new(vec![(42, BasicBlock(1))], BasicBlock(0));
+
+        assert_eq!(targets.target_for(42), Some(BasicBlock(1)));
+        assert_eq!(targets.target_for(0), None);
+        assert_eq!(targets.otherwise(), BasicBlock(0));
+    }
 }
