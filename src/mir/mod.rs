@@ -28,6 +28,7 @@ pub mod pretty;
 pub mod statement;
 pub mod terminator;
 pub mod types;
+pub mod validate;
 
 // Re-export main types for convenience
 pub use body::{BasicBlockData, Body, LocalDecl};
@@ -40,3 +41,4 @@ pub use pretty::{MirPrinter, pretty_print};
 pub use statement::{Statement, StatementKind};
 pub use terminator::{BasicBlock, SwitchTargets, Terminator, TerminatorKind};
 pub use types::{FieldIdx, Local, Place, PlaceElem};
+pub use validate::{ValidationContext, validate_mir};
