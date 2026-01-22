@@ -3,6 +3,18 @@
 //! This module defines the internal type representation used by type inference
 //! and type checking. Unlike AST types which contain source spans and represent
 //! syntax, these semantic types are resolved and interned for efficient comparison.
+//!
+//! # Contract Checking Philosophy
+//!
+//! The `TypeInterner` uses `debug_assert!()` for bounds checking on `TypeId` lookups.
+//! This is intentional: `TypeId` values are always created by the interner itself
+//! via `intern()`, `fresh_type_var()`, etc. If an invalid `TypeId` is passed to
+//! `get()`, it indicates a bug in the compiler (using a stale ID, mixing IDs from
+//! different interners, etc.), not a user error.
+//!
+//! In release builds, these assertions are disabled and invalid IDs would cause
+//! a panic from out-of-bounds indexing. The `debug_assert!()` provides better
+//! diagnostics during development without runtime cost in production.
 
 use std::collections::HashMap;
 

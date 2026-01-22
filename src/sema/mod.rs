@@ -1,6 +1,37 @@
 //! Semantic analysis phase for SPL.
 //!
 //! This module provides the symbol table infrastructure for name resolution and type checking.
+//!
+//! # Contract Checking Philosophy
+//!
+//! This module uses `debug_assert!()` for **internal invariants** (programmer bugs)
+//! and `Diagnostic` for **user errors** (invalid source code).
+//!
+//! ## When to use `debug_assert!()`
+//!
+//! Use `debug_assert!()` for conditions that should never be false unless there's
+//! a bug in the compiler itself:
+//!
+//! - **ID validity**: `ScopeId`, `DefId`, and `TypeId` are created by the compiler,
+//!   not from user input. If they're invalid, it's a compiler bug.
+//! - **Scope balance**: `exit_scope()` being called at root is a compiler bug.
+//! - **Internal data structure invariants**: Parent chain integrity, etc.
+//!
+//! These assertions are disabled in release builds for performance, but the
+//! protected operations would result in undefined behavior or panics anyway
+//! (out-of-bounds indexing), so the assertions serve as documentation and
+//! help catch bugs early in debug builds.
+//!
+//! ## When to use `Diagnostic`
+//!
+//! Use `Diagnostic` for conditions caused by user code:
+//!
+//! - **Out-of-bounds tuple/array access**: `tuple.5` on a 3-element tuple
+//! - **Type mismatches**: `let x: i32 = "hello"`
+//! - **Undefined symbols**: Using a variable before declaration
+//! - **Duplicate definitions**: Defining the same name twice in a scope
+//!
+//! These produce error messages that help users fix their code.
 
 #[cfg(test)]
 mod contract_tests;
