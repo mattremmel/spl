@@ -143,6 +143,17 @@ pub enum Mutability {
     Mutable,
 }
 
+/// Classification of inference variables for constrained unification.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum InferKind {
+    /// General type variable - unifies with anything.
+    General,
+    /// Integer type variable - unifies only with integers, defaults to i32.
+    Int,
+    /// Float type variable - unifies only with floats, defaults to f64.
+    Float,
+}
+
 /// A semantic type representation.
 ///
 /// This enum represents all possible types in the SPL type system after
@@ -161,6 +172,10 @@ pub enum Type {
 
     /// A float inference variable (defaults to f64 if unconstrained).
     FloatVar(TypeVar),
+
+    /// A unified inference variable with kind classification.
+    /// This replaces Var, IntVar, and FloatVar with a single variant.
+    Infer(TypeVar, InferKind),
 
     /// A reference type `&T` or `&mut T`.
     Ref(Mutability, TypeId),

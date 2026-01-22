@@ -2652,3 +2652,51 @@ fn no_warn_code_after_loop_with_break() {
     // Code after loop with break is reachable
     check("fn main() { loop { break; } let x: i32 = 1; }", "i32");
 }
+
+// -----------------------------------------------------------------------------
+// 7. Type Variable Contract Tests
+// -----------------------------------------------------------------------------
+// These tests document the behavior of type inference variables:
+// - IntVar: unifies only with integer types, defaults to i32
+// - FloatVar: unifies only with float types, defaults to f64
+// - Var: general type variable, unifies with anything
+
+#[test]
+fn int_var_unifies_with_integers_not_floats() {
+    // Integer literals create IntVar that unifies with integer types
+    check("fn main() { let x: i64 = 42; }", "i64");
+    check("fn main() { let x: u8 = 1; }", "u8");
+    // But cannot unify with floats
+    check_err("fn main() { let x: f64 = 42; }", &["type mismatch"]);
+}
+
+#[test]
+fn float_var_unifies_with_floats_not_integers() {
+    // Float literals create FloatVar that unifies with float types
+    check("fn main() { let x: f32 = 3.14; }", "f32");
+    check("fn main() { let x: f64 = 2.718; }", "f64");
+    // But cannot unify with integers
+    check_err("fn main() { let x: i32 = 3.14; }", &["type mismatch"]);
+}
+
+#[test]
+fn general_var_unifies_with_anything() {
+    // Generic type parameters create general Var that can unify with anything
+    check("struct Box<T> { value: T } fn main() { let b = Box { value: 42 }; }", "Box");
+    check("struct Box<T> { value: T } fn main() { let b = Box { value: true }; }", "Box");
+    check("struct Box<T> { value: T } fn main() { let b = Box { value: 3.14 }; }", "Box");
+}
+
+#[test]
+fn int_var_defaults_to_i32() {
+    // Unconstrained integer literals default to i32
+    check("fn main() { let x = 42; }", "i32");
+    check("fn f() -> i32 { 100 } fn main() { let x = f(); }", "i32");
+}
+
+#[test]
+fn float_var_defaults_to_f64() {
+    // Unconstrained float literals default to f64
+    check("fn main() { let x = 3.14; }", "f64");
+    check("fn f() -> f64 { 2.718 } fn main() { let x = f(); }", "f64");
+}

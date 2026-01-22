@@ -16,7 +16,7 @@ use crate::hir::{LoweredExpr, lower::try_lower_expr};
 use crate::lexer::Span;
 use crate::sema::resolver::ResolveResult;
 use crate::sema::symbol::DefId;
-use crate::sema::types::{Mutability, PrimitiveKind, Type, TypeId, TypeVar};
+use crate::sema::types::{InferKind, Mutability, PrimitiveKind, Type, TypeId, TypeVar};
 use crate::sema::{SemanticContext, SymbolKind};
 use crate::syntax::SyntaxKind;
 use rowan::ast::AstNode;
@@ -83,6 +83,11 @@ impl InferResult {
             Type::Var(var) => format!("?{}", var.0),
             Type::IntVar(var) => format!("?int{}", var.0),
             Type::FloatVar(var) => format!("?float{}", var.0),
+            Type::Infer(var, kind) => match kind {
+                InferKind::General => format!("?{}", var.0),
+                InferKind::Int => format!("?int{}", var.0),
+                InferKind::Float => format!("?float{}", var.0),
+            },
             Type::Ref(mutability, inner) => {
                 let inner_str = self.type_to_string(*inner);
                 match mutability {
@@ -2146,6 +2151,11 @@ impl InferEngine {
             Type::Var(var) => format!("?{}", var.0),
             Type::IntVar(var) => format!("?int{}", var.0),
             Type::FloatVar(var) => format!("?float{}", var.0),
+            Type::Infer(var, kind) => match kind {
+                InferKind::General => format!("?{}", var.0),
+                InferKind::Int => format!("?int{}", var.0),
+                InferKind::Float => format!("?float{}", var.0),
+            },
             Type::Ref(mutability, inner) => {
                 let inner_str = self.type_to_string(*inner);
                 match mutability {
