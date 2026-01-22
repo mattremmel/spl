@@ -210,9 +210,24 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn collect_impl_block(&mut self, impl_block: &ImplBlock) {
-        // Impl blocks don't define a name themselves, but we collect methods
-        // Note: We need to enter impl scope to define methods, but method resolution
-        // is complex (needs type info). For now, we'll just collect methods as functions.
+        // Create a synthetic name for the impl block using its span
+        let span = impl_block.syntax().text_range();
+        let synthetic_name = self.ctx.intern(&format!("impl@{}", u32::from(span.start())));
+        let impl_span = Self::text_range_to_span(span);
+
+        // Define the impl block with its own DefId
+        if let Ok(def_id) = self.ctx.define(
+            synthetic_name,
+            SymbolKind::Impl,
+            Visibility::Private,
+            impl_span.clone(),
+            false,
+        ) {
+            // Store span → DefId mapping
+            self.resolutions.insert(impl_span, def_id);
+        }
+
+        // Enter impl scope and collect methods
         self.ctx.enter_scope(ScopeKind::Impl);
 
         for item in impl_block.items() {
@@ -968,6 +983,19 @@ mod tests {
         }
     }
 
+    /// Helper to resolve source and return the result for inspection.
+    fn resolve_source(source: &str) -> (FxHashMap<Span, DefId>, SemanticContext, Vec<Diagnostic>) {
+        let parse = parse(source);
+        assert!(
+            parse.errors().is_empty(),
+            "parse errors: {:?}",
+            parse.errors()
+        );
+        let source_file = SourceFile::cast(parse.syntax()).expect("expected SourceFile");
+        let result = resolve(&source_file);
+        (result.resolutions, result.ctx, result.diagnostics)
+    }
+
     #[test]
     fn resolve_local_variable() {
         check_ok("fn main() { let x = 1; x; }");
@@ -1143,6 +1171,25 @@ mod tests {
     #[test]
     fn resolve_generic_impl_block() {
         check_ok("struct Foo<T> { v: T } impl<T> Foo<T> { fn get(&self) -> T {} }");
+    }
+
+    #[test]
+    fn test_impl_block_gets_def_id() {
+        let source = r#"
+            struct Foo {}
+            impl Foo {
+                fn bar() {}
+            }
+        "#;
+        let (_, ctx, diags) = resolve_source(source);
+        assert!(diags.is_empty(), "Should have no errors: {:?}", diags);
+
+        // Find the impl block's DefId
+        let impl_symbols: Vec<_> = ctx
+            .symbols()
+            .filter(|s| s.kind == SymbolKind::Impl)
+            .collect();
+        assert_eq!(impl_symbols.len(), 1, "Should have one impl block");
     }
 
     // ===== Loop, break, continue =====

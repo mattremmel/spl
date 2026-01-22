@@ -15,6 +15,7 @@ pub enum SymbolKind {
     Function,
     Struct,
     TypeAlias,
+    Impl,
     Local,
     Parameter,
     Field,

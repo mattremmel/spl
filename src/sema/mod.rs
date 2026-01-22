@@ -205,6 +205,11 @@ impl SemanticContext {
         &self.symbols[def_id.0 as usize]
     }
 
+    /// Iterate over all symbols in the symbol table.
+    pub fn symbols(&self) -> impl Iterator<Item = &Symbol> {
+        self.symbols.iter()
+    }
+
     // ===== Contract Helpers =====
 
     /// Returns true if currently at the root scope (scope 0).
@@ -458,6 +463,16 @@ mod tests {
     }
 
     #[test]
+    fn test_symbol_kind_impl() {
+        let mut ctx = SemanticContext::new();
+        let name = ctx.intern("_impl");
+        let def_id = ctx
+            .define(name, SymbolKind::Impl, Visibility::Private, 0..1, false)
+            .unwrap();
+        assert_eq!(ctx.get_symbol(def_id).kind, SymbolKind::Impl);
+    }
+
+    #[test]
     fn test_all_symbol_kinds() {
         let mut ctx = SemanticContext::new();
 
@@ -465,6 +480,7 @@ mod tests {
             SymbolKind::Function,
             SymbolKind::Struct,
             SymbolKind::TypeAlias,
+            SymbolKind::Impl,
             SymbolKind::Local,
             SymbolKind::Parameter,
             SymbolKind::Field,
