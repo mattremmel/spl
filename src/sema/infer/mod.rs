@@ -351,9 +351,7 @@ impl InferEngine {
                 }
             }
             // Resolve type aliases stored as Struct or Alias
-            Type::Struct(def_id, _) | Type::Alias(def_id, _)
-                if self.type_alias_targets.contains_key(def_id) =>
-            {
+            Type::Struct(def_id, _) | Type::Alias(def_id, _) => {
                 if let Some(&target) = self.type_alias_targets.get(def_id) {
                     self.resolve_type(target)
                 } else {
@@ -2881,6 +2879,7 @@ impl InferEngine {
         use rustc_hash::FxHashSet;
 
         let alias_ids: Vec<DefId> = self.type_alias_targets.keys().copied().collect();
+        let mut cyclic_aliases = Vec::new();
 
         for &alias_id in &alias_ids {
             let mut visited = FxHashSet::default();
@@ -2893,7 +2892,14 @@ impl InferEngine {
                     Diagnostic::error(format!("cyclic type alias definition for `{}`", name))
                         .with_label(symbol.span.clone(), "cyclic reference"),
                 );
+                cyclic_aliases.push(alias_id);
             }
+        }
+
+        // Replace cyclic alias targets with Error to prevent infinite recursion in resolve_type
+        let error_ty = self.ctx.types.error();
+        for alias_id in cyclic_aliases {
+            self.type_alias_targets.insert(alias_id, error_ty);
         }
     }
 
