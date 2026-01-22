@@ -74,12 +74,14 @@ impl SwitchTargets {
         self.targets.iter().copied()
     }
 
-    /// Get all successor blocks (targets + otherwise).
+    /// Returns an iterator over all unique target blocks.
     pub fn all_targets(&self) -> impl Iterator<Item = BasicBlock> + '_ {
+        let mut seen = std::collections::HashSet::new();
         self.targets
             .iter()
             .map(|(_, bb)| *bb)
             .chain(std::iter::once(self.otherwise))
+            .filter(move |bb| seen.insert(*bb))
     }
 }
 
@@ -581,11 +583,23 @@ mod tests {
         let shared = BasicBlock(1);
         let targets = SwitchTargets::new(vec![(0, shared)], shared);
 
-        // Note: all_targets will return duplicates in this case
+        // all_targets should deduplicate
         let all: Vec<_> = targets.all_targets().collect();
-        assert_eq!(all.len(), 2); // Contains shared twice
+        assert_eq!(all.len(), 1); // Only one unique block
         assert_eq!(all[0], shared);
-        assert_eq!(all[1], shared);
+    }
+
+    #[test]
+    fn switch_targets_deduplicates_multiple() {
+        let block_a = BasicBlock(1);
+        let block_b = BasicBlock(2);
+        // block_a appears twice in targets, plus as otherwise
+        let targets = SwitchTargets::new(vec![(0, block_a), (1, block_b), (2, block_a)], block_a);
+
+        let all: Vec<_> = targets.all_targets().collect();
+        assert_eq!(all.len(), 2);
+        assert!(all.contains(&block_a));
+        assert!(all.contains(&block_b));
     }
 
     #[test]
