@@ -647,6 +647,121 @@ fn fold_negated_arithmetic() {
 }
 
 // ========================================================================
+// Constant folding tests - Edge Cases
+// ========================================================================
+
+#[test]
+fn fold_rem_by_zero_passthrough() {
+    let expr = parse_expr("10 % 0");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(!was_lowered);
+    assert!(matches!(lowered, LoweredExpr::Passthrough));
+}
+
+#[test]
+fn fold_negative_int_comparison() {
+    let expr = parse_expr("-5 < -3");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value), // -5 < -3 is true
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_negative_subtraction() {
+    let expr = parse_expr("-5 - -3");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, -2), // -5 - (-3) = -2
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+#[test]
+fn fold_deeply_nested_parens() {
+    let expr = parse_expr("((((1 + 2))))");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, 3),
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+#[test]
+fn fold_comparison_chain() {
+    // (1 == 1) == true
+    let expr = parse_expr("(1 == 1) == true");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(value),
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_not_of_comparison() {
+    let expr = parse_expr("!(1 < 2)");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(!value), // !(true) = false
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_float_negative_division() {
+    let expr = parse_expr("-10.0 / 2.0");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::FloatLiteral { value, .. } => {
+            assert!((value - (-5.0)).abs() < f64::EPSILON);
+        }
+        _ => panic!("Expected FloatLiteral"),
+    }
+}
+
+#[test]
+fn fold_complex_arithmetic() {
+    // ((2 + 3) * 4) - 10 / 2 = 20 - 5 = 15
+    let expr = parse_expr("((2 + 3) * 4) - 10 / 2");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, 15),
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+#[test]
+fn fold_overflow_passthrough() {
+    // i128::MAX + 1 would overflow
+    let expr = parse_expr("170141183460469231731687303715884105727i128 + 1i128");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    // Should passthrough because checked_add returns None on overflow
+    assert!(!was_lowered);
+    assert!(matches!(lowered, LoweredExpr::Passthrough));
+}
+
+#[test]
+fn fold_large_multiplication_no_overflow() {
+    // Large but doesn't overflow
+    let expr = parse_expr("1000000 * 1000000");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::IntLiteral { value, .. } => assert_eq!(value, 1_000_000_000_000),
+        _ => panic!("Expected IntLiteral"),
+    }
+}
+
+// ========================================================================
 // New HIR lowering tests - Phase 2: Literals
 // ========================================================================
 
