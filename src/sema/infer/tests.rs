@@ -2178,10 +2178,7 @@ fn error_alias_three_way() {
 #[test]
 fn error_alias_cyclic_usage() {
     // Verify using a cyclic alias doesn't cause infinite recursion
-    check_err(
-        "type A = A; fn main() { let x: A = 0; }",
-        &["cyclic"],
-    );
+    check_err("type A = A; fn main() { let x: A = 0; }", &["cyclic"]);
 }
 
 #[test]
