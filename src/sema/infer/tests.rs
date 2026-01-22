@@ -2682,9 +2682,18 @@ fn float_var_unifies_with_floats_not_integers() {
 #[test]
 fn general_var_unifies_with_anything() {
     // Generic type parameters create general Var that can unify with anything
-    check("struct Box<T> { value: T } fn main() { let b = Box { value: 42 }; }", "Box");
-    check("struct Box<T> { value: T } fn main() { let b = Box { value: true }; }", "Box");
-    check("struct Box<T> { value: T } fn main() { let b = Box { value: 3.14 }; }", "Box");
+    check(
+        "struct Box<T> { value: T } fn main() { let b = Box { value: 42 }; }",
+        "Box",
+    );
+    check(
+        "struct Box<T> { value: T } fn main() { let b = Box { value: true }; }",
+        "Box",
+    );
+    check(
+        "struct Box<T> { value: T } fn main() { let b = Box { value: 3.14 }; }",
+        "Box",
+    );
 }
 
 #[test]

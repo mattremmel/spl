@@ -164,17 +164,10 @@ pub enum Type {
     /// A primitive built-in type.
     Primitive(PrimitiveKind),
 
-    /// A general type inference variable.
-    Var(TypeVar),
-
-    /// An integer inference variable (defaults to i32 if unconstrained).
-    IntVar(TypeVar),
-
-    /// A float inference variable (defaults to f64 if unconstrained).
-    FloatVar(TypeVar),
-
-    /// A unified inference variable with kind classification.
-    /// This replaces Var, IntVar, and FloatVar with a single variant.
+    /// A type inference variable with kind classification.
+    /// - General: unifies with any type
+    /// - Int: unifies only with integer types, defaults to i32
+    /// - Float: unifies only with float types, defaults to f64
     Infer(TypeVar, InferKind),
 
     /// A reference type `&T` or `&mut T`.
@@ -1346,13 +1339,13 @@ mod tests {
     }
 
     #[test]
-    fn test_type_var_vs_int_var_vs_float_var_different() {
+    fn test_infer_kinds_are_different() {
         let mut interner = TypeInterner::new();
 
-        // Even with same underlying TypeVar id, different variant = different type
-        let ty1 = interner.intern(Type::Var(TypeVar(100)));
-        let ty2 = interner.intern(Type::IntVar(TypeVar(100)));
-        let ty3 = interner.intern(Type::FloatVar(TypeVar(100)));
+        // Even with same underlying TypeVar id, different InferKind = different type
+        let ty1 = interner.intern(Type::Infer(TypeVar(100), InferKind::General));
+        let ty2 = interner.intern(Type::Infer(TypeVar(100), InferKind::Int));
+        let ty3 = interner.intern(Type::Infer(TypeVar(100), InferKind::Float));
 
         assert_ne!(ty1, ty2);
         assert_ne!(ty2, ty3);
