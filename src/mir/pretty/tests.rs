@@ -117,6 +117,15 @@ mod constants {
             "const fn_5"
         );
     }
+
+    #[test]
+    fn const_zeroed() {
+        let printer = MirPrinter::new();
+        assert_eq!(
+            printer.print_constant(&Constant::Zeroed(TypeId(3))),
+            "const zeroed(ty3)"
+        );
+    }
 }
 
 // === Phase 3: Operands ===
