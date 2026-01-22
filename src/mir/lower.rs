@@ -861,6 +861,22 @@ impl<'hir> MirLoweringContext<'hir> {
                 ));
                 place
             }
+            HirExprKind::ArrayRepeat { value, count } => {
+                // Lower the value to repeat
+                let operand = self.lower_expr_as_operand(builder, *value);
+
+                // Allocate temp for result array
+                let temp = builder.alloc_temp(ty);
+                let place = Place::from_local(temp);
+
+                // Emit repeat rvalue
+                builder.push_statement(Statement::assign(
+                    place.clone(),
+                    Rvalue::Repeat(operand, *count),
+                    span,
+                ));
+                place
+            }
             _ => {
                 // For other expressions, allocate a temp and recursively lower
                 let temp = builder.alloc_temp(ty);
@@ -6860,6 +6876,189 @@ mod tests {
             found_tuple,
             "Tuple should produce Rvalue::Aggregate(Tuple, _)"
         );
+    }
+
+    #[test]
+    fn test_lower_array_repeat() {
+        // [0; 5] - array repeat expression
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let array_ty = hir_db.types.mk_array(i32_ty, 5);
+
+        // Create the repeated value
+        let value = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(0)),
+            ty: i32_ty,
+            span: Span::from(1..2),
+        });
+
+        // Create ArrayRepeat expression
+        let repeat_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::ArrayRepeat { value, count: 5 },
+            ty: array_ty,
+            span: Span::from(0..6),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "test_repeat".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: array_ty,
+            body: Some(repeat_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Verify: should produce Rvalue::Repeat with count 5
+        let found_repeat = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                matches!(
+                    &stmt.kind,
+                    StatementKind::Assign(_, Rvalue::Repeat(_, 5))
+                )
+            })
+        });
+        assert!(
+            found_repeat,
+            "ArrayRepeat should produce Rvalue::Repeat(_, count)"
+        );
+    }
+
+    #[test]
+    fn test_lower_array_repeat_zero_count() {
+        // [42; 0] - empty array
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let array_ty = hir_db.types.mk_array(i32_ty, 0);
+
+        let value = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(42)),
+            ty: i32_ty,
+            span: Span::from(1..3),
+        });
+
+        let repeat_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::ArrayRepeat { value, count: 0 },
+            ty: array_ty,
+            span: Span::from(0..6),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "test_empty".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: array_ty,
+            body: Some(repeat_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Verify Rvalue::Repeat(_, 0) is produced
+        let found_repeat = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                matches!(
+                    &stmt.kind,
+                    StatementKind::Assign(_, Rvalue::Repeat(_, 0))
+                )
+            })
+        });
+        assert!(found_repeat, "ArrayRepeat with count 0 should produce Rvalue::Repeat(_, 0)");
+    }
+
+    #[test]
+    fn test_lower_array_repeat_complex_value() {
+        // [x + 1; 3] where x is a variable
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let array_ty = hir_db.types.mk_array(i32_ty, 3);
+        let x_def_id = DefId(1);
+
+        // Create parameter x
+        let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+        let param_x = crate::hir::HirParam {
+            pat: pat_x,
+            ty: i32_ty,
+            span: Span::from(0..5),
+        };
+
+        // Create x + 1 expression
+        let x_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x_def_id),
+            ty: i32_ty,
+            span: Span::from(10..11),
+        });
+        let one = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(14..15),
+        });
+        let add_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Add,
+                lhs: x_var,
+                rhs: one,
+            },
+            ty: i32_ty,
+            span: Span::from(10..15),
+        });
+
+        // Create [x + 1; 3]
+        let repeat_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::ArrayRepeat {
+                value: add_expr,
+                count: 3,
+            },
+            ty: array_ty,
+            span: Span::from(9..19),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "test_complex".to_string(),
+            type_params: vec![],
+            params: vec![param_x],
+            ret_type: array_ty,
+            body: Some(repeat_expr),
+            span: Span::from(0..25),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Verify the value expression is lowered before repeat
+        // We should see a BinaryOp for x + 1 and then Repeat
+        let has_binop = body.basic_blocks.iter().any(|block| {
+            block
+                .statements
+                .iter()
+                .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(_, Rvalue::BinaryOp(_, _, _))))
+        });
+        let has_repeat = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                matches!(
+                    &stmt.kind,
+                    StatementKind::Assign(_, Rvalue::Repeat(_, 3))
+                )
+            })
+        });
+        assert!(has_binop, "Complex value should produce BinaryOp");
+        assert!(has_repeat, "ArrayRepeat should produce Rvalue::Repeat(_, 3)");
     }
 
     #[test]

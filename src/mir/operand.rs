@@ -152,6 +152,8 @@ pub enum Rvalue {
     Aggregate(AggregateKind, Vec<Operand>),
     /// Discriminant read (for enums).
     Discriminant(Place),
+    /// Repeat a value to create an array: `[value; count]`.
+    Repeat(Operand, u64),
 }
 
 impl Rvalue {
