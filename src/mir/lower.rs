@@ -11,11 +11,14 @@ use crate::hir::{
 };
 use crate::lexer::Span;
 use crate::mir::body::{BasicBlockData, Body, LocalDecl};
-use crate::mir::operand::{AggregateKind, BinOp, BorrowKind, CastKind, Constant, Operand, Rvalue, UnOp};
+use crate::mir::operand::{
+    AggregateKind, BinOp, BorrowKind, CastKind, Constant, Operand, Rvalue, UnOp,
+};
 use crate::mir::statement::Statement;
 use crate::mir::terminator::{BasicBlock, SwitchTargets, Terminator, TerminatorKind};
 use crate::mir::types::{FieldIdx, Local, Place, PlaceElem};
 use crate::sema::symbol::DefId;
+use crate::sema::types::Type;
 use crate::sema::types::TypeId;
 
 use rustc_hash::FxHashMap;
@@ -326,6 +329,26 @@ impl<'hir> MirLoweringContext<'hir> {
         builder
     }
 
+    /// Resolve a field name to its index within a struct.
+    fn resolve_field_index(&self, struct_def_id: DefId, field_name: &str) -> u32 {
+        for item in &self.hir.items {
+            if let HirItem::Struct(s) = item
+                && s.def_id == struct_def_id
+            {
+                for (idx, field) in s.fields.iter().enumerate() {
+                    if field.name == field_name {
+                        return idx as u32;
+                    }
+                }
+                panic!("Field '{}' not found in struct '{}'", field_name, s.name);
+            }
+        }
+        panic!(
+            "Struct with DefId {:?} not found for field '{}'",
+            struct_def_id, field_name
+        );
+    }
+
     /// Lower an expression to a place (allocates a temp if needed).
     pub fn lower_expr_to_place(&mut self, builder: &mut MirBuilder, expr_id: ExprId) -> Place {
         let expr = self.hir.expr(expr_id);
@@ -463,8 +486,67 @@ impl<'hir> MirLoweringContext<'hir> {
                     builder.push_statement(stmt);
                     place
                 } else {
-                    // Assignment ops - handled elsewhere
-                    let temp = builder.alloc_temp(ty);
+                    // Assignment operators (=, +=, -=, etc.)
+                    // Lower LHS to a place (target) and RHS to an operand (value)
+                    let target_place = self.lower_expr_to_place(builder, *lhs);
+                    let rhs_operand = self.lower_expr_as_operand(builder, *rhs);
+
+                    match *op {
+                        HirBinOp::Assign => {
+                            // Simple assignment: target = value
+                            builder.push_statement(Statement::assign(
+                                target_place.clone(),
+                                Rvalue::Use(rhs_operand),
+                                span,
+                            ));
+                        }
+                        HirBinOp::AddAssign => {
+                            // Compound assignment: target = target + value
+                            let lhs_operand = Operand::Copy(target_place.clone());
+                            builder.push_statement(Statement::assign(
+                                target_place.clone(),
+                                Rvalue::BinaryOp(BinOp::Add, lhs_operand, rhs_operand),
+                                span,
+                            ));
+                        }
+                        HirBinOp::SubAssign => {
+                            let lhs_operand = Operand::Copy(target_place.clone());
+                            builder.push_statement(Statement::assign(
+                                target_place.clone(),
+                                Rvalue::BinaryOp(BinOp::Sub, lhs_operand, rhs_operand),
+                                span,
+                            ));
+                        }
+                        HirBinOp::MulAssign => {
+                            let lhs_operand = Operand::Copy(target_place.clone());
+                            builder.push_statement(Statement::assign(
+                                target_place.clone(),
+                                Rvalue::BinaryOp(BinOp::Mul, lhs_operand, rhs_operand),
+                                span,
+                            ));
+                        }
+                        HirBinOp::DivAssign => {
+                            let lhs_operand = Operand::Copy(target_place.clone());
+                            builder.push_statement(Statement::assign(
+                                target_place.clone(),
+                                Rvalue::BinaryOp(BinOp::Div, lhs_operand, rhs_operand),
+                                span,
+                            ));
+                        }
+                        HirBinOp::RemAssign => {
+                            let lhs_operand = Operand::Copy(target_place.clone());
+                            builder.push_statement(Statement::assign(
+                                target_place.clone(),
+                                Rvalue::BinaryOp(BinOp::Rem, lhs_operand, rhs_operand),
+                                span,
+                            ));
+                        }
+                        _ => unreachable!("Non-assignment op should have been handled above"),
+                    }
+
+                    // Assignment expressions return unit
+                    let unit_ty = self.hir.types.unit();
+                    let temp = builder.alloc_temp(unit_ty);
                     Place::from_local(temp)
                 }
             }
@@ -487,9 +569,16 @@ impl<'hir> MirLoweringContext<'hir> {
                     builder.push_statement(stmt);
                     place
                 } else {
-                    // Deref - handled elsewhere (produces a place projection)
-                    let temp = builder.alloc_temp(ty);
-                    Place::from_local(temp)
+                    // Deref - produces a place projection
+                    let operand_place = self.lower_expr_to_place(builder, *operand);
+                    Place {
+                        local: operand_place.local,
+                        projection: {
+                            let mut proj = operand_place.projection;
+                            proj.push(PlaceElem::Deref);
+                            proj
+                        },
+                    }
                 }
             }
             HirExprKind::Block { stmts, tail } => {
@@ -816,11 +905,18 @@ impl<'hir> MirLoweringContext<'hir> {
             }
             HirExprKind::Field { base, field } => {
                 // Lower base to a place, then add a field projection
-                // We need to resolve field name to index - for now assume field order matches
-                // In a full implementation, we'd look up the struct definition
                 let base_place = self.lower_expr_to_place(builder, *base);
-                // Use field name hash as a temporary field index (would need proper resolution)
-                let field_idx = field.chars().fold(0u32, |acc, c| acc.wrapping_add(c as u32)) % 100;
+                let base_ty = self.hir.expr(*base).ty;
+
+                // Get struct DefId from base type and resolve field index
+                let field_idx = match self.hir.types.get(base_ty) {
+                    Type::Struct(def_id, _) => self.resolve_field_index(*def_id, field),
+                    _ => panic!(
+                        "Field access on non-struct type: {:?}",
+                        self.hir.types.get(base_ty)
+                    ),
+                };
+
                 Place {
                     local: base_place.local,
                     projection: {
@@ -1018,9 +1114,11 @@ pub fn lower_hir_to_mir(hir: &HirDatabase) -> Vec<Body> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hir::{HirField, HirStruct};
     use crate::mir::operand::{AggregateKind, BorrowKind, CastKind};
     use crate::mir::statement::StatementKind;
     use crate::mir::terminator::Terminator;
+    use crate::sema::types::{Mutability, PrimitiveKind};
 
     // ========== Phase 1: MirBuilder Core Structure ==========
 
@@ -2635,10 +2733,9 @@ mod tests {
         assert!(found_0_somewhere, "Expected 0 to be assigned somewhere");
 
         // Verify _0 gets assigned (either directly or via copy)
-        let found_return_assign = block
-            .statements
-            .iter()
-            .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(place, _) if place.local == Local(0)));
+        let found_return_assign = block.statements.iter().any(
+            |stmt| matches!(&stmt.kind, StatementKind::Assign(place, _) if place.local == Local(0)),
+        );
         assert!(found_return_assign, "Expected _0 to be assigned");
     }
 
@@ -2965,7 +3062,10 @@ mod tests {
                 if lhs.local == Local(1) && rhs.local == Local(2)
             )
         });
-        assert!(found_add, "Expected Add(Copy(_1), Copy(_2)) - outer a + inner b");
+        assert!(
+            found_add,
+            "Expected Add(Copy(_1), Copy(_2)) - outer a + inner b"
+        );
     }
 
     #[test]
@@ -3096,7 +3196,10 @@ mod tests {
 
         // The 1+2 should be evaluated (add operation exists)
         let found_add = block.statements.iter().any(|stmt| {
-            matches!(&stmt.kind, StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _)))
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _))
+            )
         });
         assert!(found_add, "Expected 1+2 to be evaluated");
 
@@ -3558,10 +3661,12 @@ mod tests {
                 StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2))))
             )
         });
-        let found_add = block
-            .statements
-            .iter()
-            .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _))));
+        let found_add = block.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _))
+            )
+        });
 
         assert!(found_1, "Expected x = 1 in first block");
         assert!(found_2, "Expected y = 2 in second block");
@@ -3616,10 +3721,9 @@ mod tests {
         assert!(found_42, "Expected 42 to be assigned");
 
         // _0 should be assigned (either directly or via copy)
-        let found_return = block
-            .statements
-            .iter()
-            .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(place, _) if place.local == Local(0)));
+        let found_return = block.statements.iter().any(
+            |stmt| matches!(&stmt.kind, StatementKind::Assign(place, _) if place.local == Local(0)),
+        );
         assert!(found_return, "Expected _0 to be assigned");
     }
 
@@ -3698,7 +3802,10 @@ mod tests {
                 StatementKind::Assign(place, _) if place.local == Local(1)
             )
         });
-        assert!(!found_assign_to_x, "Expected no assignment to _1 (uninitialized)");
+        assert!(
+            !found_assign_to_x,
+            "Expected no assignment to _1 (uninitialized)"
+        );
     }
 
     #[test]
@@ -3991,7 +4098,10 @@ mod tests {
             .iter()
             .position(|stmt| matches!(&stmt.kind, StatementKind::StorageDead(Local(2))));
 
-        assert!(storage_dead_b_idx.is_some(), "Expected StorageDead(_2) for b");
+        assert!(
+            storage_dead_b_idx.is_some(),
+            "Expected StorageDead(_2) for b"
+        );
     }
 
     // ========== Phase 14: Return (IR-3.3) ==========
@@ -4727,8 +4837,10 @@ mod tests {
         let mut found_add_count = 0;
         for block in &body.basic_blocks {
             for stmt in &block.statements {
-                if matches!(&stmt.kind, StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _)))
-                {
+                if matches!(
+                    &stmt.kind,
+                    StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _))
+                ) {
                     found_add_count += 1;
                 }
             }
@@ -6643,7 +6755,9 @@ mod tests {
         // Ref expressions are not yet implemented - should allocate placeholder temp
         let mut hir_db = HirDatabase::new();
         let i32_ty = hir_db.types.i32();
-        let ref_ty = hir_db.types.mk_ref(crate::sema::types::Mutability::Shared, i32_ty);
+        let ref_ty = hir_db
+            .types
+            .mk_ref(crate::sema::types::Mutability::Shared, i32_ty);
         let x_def_id = DefId(1);
 
         let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
@@ -6915,12 +7029,10 @@ mod tests {
 
         // Verify: should produce Rvalue::Repeat with count 5
         let found_repeat = body.basic_blocks.iter().any(|block| {
-            block.statements.iter().any(|stmt| {
-                matches!(
-                    &stmt.kind,
-                    StatementKind::Assign(_, Rvalue::Repeat(_, 5))
-                )
-            })
+            block
+                .statements
+                .iter()
+                .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(_, Rvalue::Repeat(_, 5))))
         });
         assert!(
             found_repeat,
@@ -6963,14 +7075,15 @@ mod tests {
 
         // Verify Rvalue::Repeat(_, 0) is produced
         let found_repeat = body.basic_blocks.iter().any(|block| {
-            block.statements.iter().any(|stmt| {
-                matches!(
-                    &stmt.kind,
-                    StatementKind::Assign(_, Rvalue::Repeat(_, 0))
-                )
-            })
+            block
+                .statements
+                .iter()
+                .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(_, Rvalue::Repeat(_, 0))))
         });
-        assert!(found_repeat, "ArrayRepeat with count 0 should produce Rvalue::Repeat(_, 0)");
+        assert!(
+            found_repeat,
+            "ArrayRepeat with count 0 should produce Rvalue::Repeat(_, 0)"
+        );
     }
 
     #[test]
@@ -7044,28 +7157,51 @@ mod tests {
         // Verify the value expression is lowered before repeat
         // We should see a BinaryOp for x + 1 and then Repeat
         let has_binop = body.basic_blocks.iter().any(|block| {
-            block
-                .statements
-                .iter()
-                .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(_, Rvalue::BinaryOp(_, _, _))))
-        });
-        let has_repeat = body.basic_blocks.iter().any(|block| {
             block.statements.iter().any(|stmt| {
                 matches!(
                     &stmt.kind,
-                    StatementKind::Assign(_, Rvalue::Repeat(_, 3))
+                    StatementKind::Assign(_, Rvalue::BinaryOp(_, _, _))
                 )
             })
         });
+        let has_repeat = body.basic_blocks.iter().any(|block| {
+            block
+                .statements
+                .iter()
+                .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(_, Rvalue::Repeat(_, 3))))
+        });
         assert!(has_binop, "Complex value should produce BinaryOp");
-        assert!(has_repeat, "ArrayRepeat should produce Rvalue::Repeat(_, 3)");
+        assert!(
+            has_repeat,
+            "ArrayRepeat should produce Rvalue::Repeat(_, 3)"
+        );
     }
 
     #[test]
     fn test_lower_field_placeholder() {
-        // obj.field expressions are not yet implemented
+        // struct Point { x: i32 }
+        // fn foo(p: Point) -> i32 { p.x }
         let mut hir_db = HirDatabase::new();
         let i32_ty = hir_db.types.i32();
+        let span = Span::from(0..10);
+
+        // Create struct type
+        let struct_def_id = DefId(100);
+        let struct_ty = hir_db.types.intern(Type::Struct(struct_def_id, vec![]));
+        let hir_struct = HirStruct {
+            def_id: struct_def_id,
+            name: "Point".to_string(),
+            type_params: vec![],
+            fields: vec![HirField {
+                def_id: DefId(101),
+                name: "x".to_string(),
+                ty: i32_ty,
+                span: span.clone(),
+            }],
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Struct(hir_struct));
+
         let obj_def_id = DefId(1);
 
         let pat_obj = hir_db.alloc_pat(crate::hir::HirPat {
@@ -7073,19 +7209,19 @@ mod tests {
                 def_id: obj_def_id,
                 mutable: false,
             },
-            ty: i32_ty, // Simplified
-            span: Span::from(0..3),
+            ty: struct_ty,
+            span: span.clone(),
         });
         let param_obj = crate::hir::HirParam {
             pat: pat_obj,
-            ty: i32_ty,
-            span: Span::from(0..8),
+            ty: struct_ty,
+            span: span.clone(),
         };
 
         let base = hir_db.alloc_expr(crate::hir::HirExpr {
             kind: HirExprKind::Var(obj_def_id),
-            ty: i32_ty,
-            span: Span::from(15..18),
+            ty: struct_ty,
+            span: span.clone(),
         });
         let field_expr = hir_db.alloc_expr(crate::hir::HirExpr {
             kind: HirExprKind::Field {
@@ -7093,7 +7229,7 @@ mod tests {
                 field: "x".to_string(),
             },
             ty: i32_ty,
-            span: Span::from(15..20),
+            span: span.clone(),
         });
 
         let func = HirFunction {
@@ -7103,7 +7239,7 @@ mod tests {
             params: vec![param_obj],
             ret_type: i32_ty,
             body: Some(field_expr),
-            span: Span::from(0..25),
+            span: span.clone(),
         };
         hir_db.items.push(HirItem::Function(func));
 
@@ -7124,9 +7260,10 @@ mod tests {
                         .any(|e| matches!(e, PlaceElem::Field(_)));
                     // Check operands in rvalue
                     let in_rvalue = match rvalue {
-                        Rvalue::Use(Operand::Copy(p)) | Rvalue::Use(Operand::Move(p)) => {
-                            p.projection.iter().any(|e| matches!(e, PlaceElem::Field(_)))
-                        }
+                        Rvalue::Use(Operand::Copy(p)) | Rvalue::Use(Operand::Move(p)) => p
+                            .projection
+                            .iter()
+                            .any(|e| matches!(e, PlaceElem::Field(_))),
                         _ => false,
                     };
                     in_target || in_rvalue
@@ -7274,9 +7411,10 @@ mod tests {
                         .iter()
                         .any(|e| matches!(e, PlaceElem::Index(_)));
                     let in_rvalue = match rvalue {
-                        Rvalue::Use(Operand::Copy(p)) | Rvalue::Use(Operand::Move(p)) => {
-                            p.projection.iter().any(|e| matches!(e, PlaceElem::Index(_)))
-                        }
+                        Rvalue::Use(Operand::Copy(p)) | Rvalue::Use(Operand::Move(p)) => p
+                            .projection
+                            .iter()
+                            .any(|e| matches!(e, PlaceElem::Index(_))),
                         _ => false,
                     };
                     in_target || in_rvalue
@@ -8074,5 +8212,1360 @@ mod tests {
             )
         });
         assert!(has_switch, "Expected SwitchInt for if condition");
+    }
+
+    // ========== Phase 25: Place Expressions and Casts (IR-3.7) ==========
+
+    #[test]
+    fn test_lower_field_access_first_field() {
+        // struct Point { x: i32, y: i32 }
+        // fn foo(p: Point) -> i32 { p.x }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let span = Span::from(0..10);
+
+        // Create struct def
+        let struct_def_id = DefId(100);
+        let struct_ty = hir_db.types.intern(Type::Struct(struct_def_id, vec![]));
+        let hir_struct = HirStruct {
+            def_id: struct_def_id,
+            name: "Point".to_string(),
+            type_params: vec![],
+            fields: vec![
+                HirField {
+                    def_id: DefId(101),
+                    name: "x".to_string(),
+                    ty: i32_ty,
+                    span: span.clone(),
+                },
+                HirField {
+                    def_id: DefId(102),
+                    name: "y".to_string(),
+                    ty: i32_ty,
+                    span: span.clone(),
+                },
+            ],
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Struct(hir_struct));
+
+        // Create parameter p: Point
+        let p_def_id = DefId(1);
+        let pat_p = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: p_def_id,
+                mutable: false,
+            },
+            ty: struct_ty,
+            span: span.clone(),
+        });
+        let param_p = crate::hir::HirParam {
+            pat: pat_p,
+            ty: struct_ty,
+            span: span.clone(),
+        };
+
+        // p.x
+        let base = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(p_def_id),
+            ty: struct_ty,
+            span: span.clone(),
+        });
+        let field_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Field {
+                base,
+                field: "x".to_string(),
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_p],
+            ret_type: i32_ty,
+            body: Some(field_expr),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Field access for first field should produce Field(FieldIdx(0))
+        let has_field_0 = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(p) | Operand::Move(p))) =
+                    &stmt.kind
+                {
+                    p.projection
+                        .iter()
+                        .any(|e| matches!(e, PlaceElem::Field(FieldIdx(0))))
+                } else {
+                    false
+                }
+            })
+        });
+        assert!(
+            has_field_0,
+            "First field (x) should produce Field(FieldIdx(0))"
+        );
+    }
+
+    #[test]
+    fn test_lower_field_access_second_field() {
+        // struct Point { x: i32, y: i32 }
+        // fn foo(p: Point) -> i32 { p.y }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let span = Span::from(0..10);
+
+        // Create struct def
+        let struct_def_id = DefId(100);
+        let struct_ty = hir_db.types.intern(Type::Struct(struct_def_id, vec![]));
+        let hir_struct = HirStruct {
+            def_id: struct_def_id,
+            name: "Point".to_string(),
+            type_params: vec![],
+            fields: vec![
+                HirField {
+                    def_id: DefId(101),
+                    name: "x".to_string(),
+                    ty: i32_ty,
+                    span: span.clone(),
+                },
+                HirField {
+                    def_id: DefId(102),
+                    name: "y".to_string(),
+                    ty: i32_ty,
+                    span: span.clone(),
+                },
+            ],
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Struct(hir_struct));
+
+        // Create parameter p: Point
+        let p_def_id = DefId(1);
+        let pat_p = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: p_def_id,
+                mutable: false,
+            },
+            ty: struct_ty,
+            span: span.clone(),
+        });
+        let param_p = crate::hir::HirParam {
+            pat: pat_p,
+            ty: struct_ty,
+            span: span.clone(),
+        };
+
+        // p.y
+        let base = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(p_def_id),
+            ty: struct_ty,
+            span: span.clone(),
+        });
+        let field_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Field {
+                base,
+                field: "y".to_string(),
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_p],
+            ret_type: i32_ty,
+            body: Some(field_expr),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Field access for second field should produce Field(FieldIdx(1))
+        let has_field_1 = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(p) | Operand::Move(p))) =
+                    &stmt.kind
+                {
+                    p.projection
+                        .iter()
+                        .any(|e| matches!(e, PlaceElem::Field(FieldIdx(1))))
+                } else {
+                    false
+                }
+            })
+        });
+        assert!(
+            has_field_1,
+            "Second field (y) should produce Field(FieldIdx(1))"
+        );
+    }
+
+    #[test]
+    fn test_lower_nested_field_access() {
+        // struct Inner { val: i32 }
+        // struct Outer { inner: Inner }
+        // fn foo(o: Outer) -> i32 { o.inner.val }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let span = Span::from(0..10);
+
+        // Create Inner struct
+        let inner_def_id = DefId(100);
+        let inner_ty = hir_db.types.intern(Type::Struct(inner_def_id, vec![]));
+        let inner_struct = HirStruct {
+            def_id: inner_def_id,
+            name: "Inner".to_string(),
+            type_params: vec![],
+            fields: vec![HirField {
+                def_id: DefId(101),
+                name: "val".to_string(),
+                ty: i32_ty,
+                span: span.clone(),
+            }],
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Struct(inner_struct));
+
+        // Create Outer struct
+        let outer_def_id = DefId(200);
+        let outer_ty = hir_db.types.intern(Type::Struct(outer_def_id, vec![]));
+        let outer_struct = HirStruct {
+            def_id: outer_def_id,
+            name: "Outer".to_string(),
+            type_params: vec![],
+            fields: vec![HirField {
+                def_id: DefId(201),
+                name: "inner".to_string(),
+                ty: inner_ty,
+                span: span.clone(),
+            }],
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Struct(outer_struct));
+
+        // Create parameter o: Outer
+        let o_def_id = DefId(1);
+        let pat_o = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: o_def_id,
+                mutable: false,
+            },
+            ty: outer_ty,
+            span: span.clone(),
+        });
+        let param_o = crate::hir::HirParam {
+            pat: pat_o,
+            ty: outer_ty,
+            span: span.clone(),
+        };
+
+        // o.inner
+        let base_o = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(o_def_id),
+            ty: outer_ty,
+            span: span.clone(),
+        });
+        let inner_field = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Field {
+                base: base_o,
+                field: "inner".to_string(),
+            },
+            ty: inner_ty,
+            span: span.clone(),
+        });
+        // o.inner.val
+        let val_field = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Field {
+                base: inner_field,
+                field: "val".to_string(),
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_o],
+            ret_type: i32_ty,
+            body: Some(val_field),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have a place with [Field(0), Field(0)] projection
+        let has_nested_fields = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(p) | Operand::Move(p))) =
+                    &stmt.kind
+                {
+                    let field_count = p
+                        .projection
+                        .iter()
+                        .filter(|e| matches!(e, PlaceElem::Field(_)))
+                        .count();
+                    field_count >= 2
+                } else {
+                    false
+                }
+            })
+        });
+        assert!(
+            has_nested_fields,
+            "Nested field access should produce multiple Field projections"
+        );
+    }
+
+    #[test]
+    fn test_lower_deref_basic() {
+        // fn foo(r: &i32) -> i32 { *r }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let ref_i32_ty = hir_db.types.mk_ref(Mutability::Shared, i32_ty);
+        let span = Span::from(0..10);
+
+        // Create parameter r: &i32
+        let r_def_id = DefId(1);
+        let pat_r = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: r_def_id,
+                mutable: false,
+            },
+            ty: ref_i32_ty,
+            span: span.clone(),
+        });
+        let param_r = crate::hir::HirParam {
+            pat: pat_r,
+            ty: ref_i32_ty,
+            span: span.clone(),
+        };
+
+        // *r
+        let r_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(r_def_id),
+            ty: ref_i32_ty,
+            span: span.clone(),
+        });
+        let deref_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Unary {
+                op: crate::hir::UnaryOp::Deref,
+                operand: r_var,
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_r],
+            ret_type: i32_ty,
+            body: Some(deref_expr),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Deref should produce PlaceElem::Deref
+        let has_deref = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(p) | Operand::Move(p))) =
+                    &stmt.kind
+                {
+                    p.projection.iter().any(|e| matches!(e, PlaceElem::Deref))
+                } else {
+                    false
+                }
+            })
+        });
+        assert!(
+            has_deref,
+            "Deref expression should produce PlaceElem::Deref"
+        );
+    }
+
+    #[test]
+    fn test_lower_deref_as_lvalue() {
+        // fn foo(r: &mut i32) { *r = 42; }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let unit_ty = hir_db.types.unit();
+        let ref_mut_i32_ty = hir_db.types.mk_ref(Mutability::Mutable, i32_ty);
+        let span = Span::from(0..10);
+
+        // Create parameter r: &mut i32
+        let r_def_id = DefId(1);
+        let pat_r = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: r_def_id,
+                mutable: false,
+            },
+            ty: ref_mut_i32_ty,
+            span: span.clone(),
+        });
+        let param_r = crate::hir::HirParam {
+            pat: pat_r,
+            ty: ref_mut_i32_ty,
+            span: span.clone(),
+        };
+
+        // *r = 42
+        let r_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(r_def_id),
+            ty: ref_mut_i32_ty,
+            span: span.clone(),
+        });
+        let deref_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Unary {
+                op: crate::hir::UnaryOp::Deref,
+                operand: r_var,
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+        let lit_42 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(42)),
+            ty: i32_ty,
+            span: span.clone(),
+        });
+        let assign_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Assign,
+                lhs: deref_expr,
+                rhs: lit_42,
+            },
+            ty: unit_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_r],
+            ret_type: unit_ty,
+            body: Some(assign_expr),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Assignment target should have Deref projection
+        let has_deref_in_target = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                if let StatementKind::Assign(place, _) = &stmt.kind {
+                    place
+                        .projection
+                        .iter()
+                        .any(|e| matches!(e, PlaceElem::Deref))
+                } else {
+                    false
+                }
+            })
+        });
+        assert!(
+            has_deref_in_target,
+            "Assignment to *r should have Deref in target place"
+        );
+    }
+
+    #[test]
+    fn test_lower_deref_then_field() {
+        // struct Point { x: i32 }
+        // fn foo(r: &Point) -> i32 { (*r).x }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let span = Span::from(0..10);
+
+        // Create Point struct
+        let struct_def_id = DefId(100);
+        let struct_ty = hir_db.types.intern(Type::Struct(struct_def_id, vec![]));
+        let ref_struct_ty = hir_db.types.mk_ref(Mutability::Shared, struct_ty);
+        let hir_struct = HirStruct {
+            def_id: struct_def_id,
+            name: "Point".to_string(),
+            type_params: vec![],
+            fields: vec![HirField {
+                def_id: DefId(101),
+                name: "x".to_string(),
+                ty: i32_ty,
+                span: span.clone(),
+            }],
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Struct(hir_struct));
+
+        // Create parameter r: &Point
+        let r_def_id = DefId(1);
+        let pat_r = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: r_def_id,
+                mutable: false,
+            },
+            ty: ref_struct_ty,
+            span: span.clone(),
+        });
+        let param_r = crate::hir::HirParam {
+            pat: pat_r,
+            ty: ref_struct_ty,
+            span: span.clone(),
+        };
+
+        // (*r).x
+        let r_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(r_def_id),
+            ty: ref_struct_ty,
+            span: span.clone(),
+        });
+        let deref_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Unary {
+                op: crate::hir::UnaryOp::Deref,
+                operand: r_var,
+            },
+            ty: struct_ty,
+            span: span.clone(),
+        });
+        let field_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Field {
+                base: deref_expr,
+                field: "x".to_string(),
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_r],
+            ret_type: i32_ty,
+            body: Some(field_expr),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have [Deref, Field(0)] projection
+        let has_deref_then_field = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(p) | Operand::Move(p))) =
+                    &stmt.kind
+                {
+                    let has_deref = p.projection.iter().any(|e| matches!(e, PlaceElem::Deref));
+                    let has_field = p
+                        .projection
+                        .iter()
+                        .any(|e| matches!(e, PlaceElem::Field(_)));
+                    has_deref && has_field
+                } else {
+                    false
+                }
+            })
+        });
+        assert!(
+            has_deref_then_field,
+            "(*r).x should produce [Deref, Field] projection"
+        );
+    }
+
+    #[test]
+    fn test_lower_double_deref() {
+        // fn foo(r: &&i32) -> i32 { **r }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let ref_i32_ty = hir_db.types.mk_ref(Mutability::Shared, i32_ty);
+        let ref_ref_i32_ty = hir_db.types.mk_ref(Mutability::Shared, ref_i32_ty);
+        let span = Span::from(0..10);
+
+        // Create parameter r: &&i32
+        let r_def_id = DefId(1);
+        let pat_r = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: r_def_id,
+                mutable: false,
+            },
+            ty: ref_ref_i32_ty,
+            span: span.clone(),
+        });
+        let param_r = crate::hir::HirParam {
+            pat: pat_r,
+            ty: ref_ref_i32_ty,
+            span: span.clone(),
+        };
+
+        // **r
+        let r_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(r_def_id),
+            ty: ref_ref_i32_ty,
+            span: span.clone(),
+        });
+        let deref1 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Unary {
+                op: crate::hir::UnaryOp::Deref,
+                operand: r_var,
+            },
+            ty: ref_i32_ty,
+            span: span.clone(),
+        });
+        let deref2 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Unary {
+                op: crate::hir::UnaryOp::Deref,
+                operand: deref1,
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_r],
+            ret_type: i32_ty,
+            body: Some(deref2),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have [Deref, Deref] projection
+        let has_double_deref = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(p) | Operand::Move(p))) =
+                    &stmt.kind
+                {
+                    let deref_count = p
+                        .projection
+                        .iter()
+                        .filter(|e| matches!(e, PlaceElem::Deref))
+                        .count();
+                    deref_count >= 2
+                } else {
+                    false
+                }
+            })
+        });
+        assert!(
+            has_double_deref,
+            "**r should produce [Deref, Deref] projection"
+        );
+    }
+
+    #[test]
+    fn test_lower_cast_int_to_int() {
+        // fn foo(x: i32) -> i64 { x as i64 }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let i64_ty = hir_db.types.i64();
+        let span = Span::from(0..10);
+
+        // Create parameter x: i32
+        let x_def_id = DefId(1);
+        let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+        let param_x = crate::hir::HirParam {
+            pat: pat_x,
+            ty: i32_ty,
+            span: span.clone(),
+        };
+
+        // x as i64
+        let x_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x_def_id),
+            ty: i32_ty,
+            span: span.clone(),
+        });
+        let cast_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Cast {
+                expr: x_var,
+                target_ty: i64_ty,
+            },
+            ty: i64_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_x],
+            ret_type: i64_ty,
+            body: Some(cast_expr),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Cast should produce CastKind::IntToInt
+        let has_int_to_int = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                matches!(
+                    &stmt.kind,
+                    StatementKind::Assign(_, Rvalue::Cast(CastKind::IntToInt, _, _))
+                )
+            })
+        });
+        assert!(
+            has_int_to_int,
+            "i32 as i64 should produce CastKind::IntToInt"
+        );
+    }
+
+    #[test]
+    fn test_lower_cast_int_to_float() {
+        // fn foo(x: i32) -> f64 { x as f64 }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let f64_ty = hir_db.types.f64();
+        let span = Span::from(0..10);
+
+        // Create parameter x: i32
+        let x_def_id = DefId(1);
+        let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+        let param_x = crate::hir::HirParam {
+            pat: pat_x,
+            ty: i32_ty,
+            span: span.clone(),
+        };
+
+        // x as f64
+        let x_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x_def_id),
+            ty: i32_ty,
+            span: span.clone(),
+        });
+        let cast_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Cast {
+                expr: x_var,
+                target_ty: f64_ty,
+            },
+            ty: f64_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_x],
+            ret_type: f64_ty,
+            body: Some(cast_expr),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Cast should produce CastKind::IntToFloat
+        let has_int_to_float = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                matches!(
+                    &stmt.kind,
+                    StatementKind::Assign(_, Rvalue::Cast(CastKind::IntToFloat, _, _))
+                )
+            })
+        });
+        assert!(
+            has_int_to_float,
+            "i32 as f64 should produce CastKind::IntToFloat"
+        );
+    }
+
+    #[test]
+    fn test_lower_cast_float_to_int() {
+        // fn foo(x: f64) -> i32 { x as i32 }
+        let mut hir_db = HirDatabase::new();
+        let f64_ty = hir_db.types.f64();
+        let i32_ty = hir_db.types.i32();
+        let span = Span::from(0..10);
+
+        // Create parameter x: f64
+        let x_def_id = DefId(1);
+        let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: f64_ty,
+            span: span.clone(),
+        });
+        let param_x = crate::hir::HirParam {
+            pat: pat_x,
+            ty: f64_ty,
+            span: span.clone(),
+        };
+
+        // x as i32
+        let x_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x_def_id),
+            ty: f64_ty,
+            span: span.clone(),
+        });
+        let cast_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Cast {
+                expr: x_var,
+                target_ty: i32_ty,
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_x],
+            ret_type: i32_ty,
+            body: Some(cast_expr),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Cast should produce CastKind::FloatToInt
+        let has_float_to_int = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                matches!(
+                    &stmt.kind,
+                    StatementKind::Assign(_, Rvalue::Cast(CastKind::FloatToInt, _, _))
+                )
+            })
+        });
+        assert!(
+            has_float_to_int,
+            "f64 as i32 should produce CastKind::FloatToInt"
+        );
+    }
+
+    #[test]
+    fn test_lower_index_with_variable() {
+        // fn foo(arr: [i32; 5], i: usize) -> i32 { arr[i] }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let usize_ty = hir_db.types.primitive(PrimitiveKind::Usize);
+        let arr_ty = hir_db.types.mk_array(i32_ty, 5);
+        let span = Span::from(0..10);
+
+        // Create parameter arr: [i32; 5]
+        let arr_def_id = DefId(1);
+        let pat_arr = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: arr_def_id,
+                mutable: false,
+            },
+            ty: arr_ty,
+            span: span.clone(),
+        });
+        let param_arr = crate::hir::HirParam {
+            pat: pat_arr,
+            ty: arr_ty,
+            span: span.clone(),
+        };
+
+        // Create parameter i: usize
+        let i_def_id = DefId(2);
+        let pat_i = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: i_def_id,
+                mutable: false,
+            },
+            ty: usize_ty,
+            span: span.clone(),
+        });
+        let param_i = crate::hir::HirParam {
+            pat: pat_i,
+            ty: usize_ty,
+            span: span.clone(),
+        };
+
+        // arr[i]
+        let arr_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(arr_def_id),
+            ty: arr_ty,
+            span: span.clone(),
+        });
+        let i_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(i_def_id),
+            ty: usize_ty,
+            span: span.clone(),
+        });
+        let index_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Index {
+                base: arr_var,
+                index: i_var,
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_arr, param_i],
+            ret_type: i32_ty,
+            body: Some(index_expr),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Index should produce PlaceElem::Index(local)
+        let has_index = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(p) | Operand::Move(p))) =
+                    &stmt.kind
+                {
+                    p.projection
+                        .iter()
+                        .any(|e| matches!(e, PlaceElem::Index(_)))
+                } else {
+                    false
+                }
+            })
+        });
+        assert!(has_index, "arr[i] should produce PlaceElem::Index");
+    }
+
+    #[test]
+    fn test_lower_nested_index() {
+        // fn foo(arr: [[i32; 3]; 3], i: usize, j: usize) -> i32 { arr[i][j] }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let usize_ty = hir_db.types.primitive(PrimitiveKind::Usize);
+        let inner_arr_ty = hir_db.types.mk_array(i32_ty, 3);
+        let outer_arr_ty = hir_db.types.mk_array(inner_arr_ty, 3);
+        let span = Span::from(0..10);
+
+        // Create parameter arr: [[i32; 3]; 3]
+        let arr_def_id = DefId(1);
+        let pat_arr = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: arr_def_id,
+                mutable: false,
+            },
+            ty: outer_arr_ty,
+            span: span.clone(),
+        });
+        let param_arr = crate::hir::HirParam {
+            pat: pat_arr,
+            ty: outer_arr_ty,
+            span: span.clone(),
+        };
+
+        // Create parameter i: usize
+        let i_def_id = DefId(2);
+        let pat_i = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: i_def_id,
+                mutable: false,
+            },
+            ty: usize_ty,
+            span: span.clone(),
+        });
+        let param_i = crate::hir::HirParam {
+            pat: pat_i,
+            ty: usize_ty,
+            span: span.clone(),
+        };
+
+        // Create parameter j: usize
+        let j_def_id = DefId(3);
+        let pat_j = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: j_def_id,
+                mutable: false,
+            },
+            ty: usize_ty,
+            span: span.clone(),
+        });
+        let param_j = crate::hir::HirParam {
+            pat: pat_j,
+            ty: usize_ty,
+            span: span.clone(),
+        };
+
+        // arr[i][j]
+        let arr_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(arr_def_id),
+            ty: outer_arr_ty,
+            span: span.clone(),
+        });
+        let i_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(i_def_id),
+            ty: usize_ty,
+            span: span.clone(),
+        });
+        let j_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(j_def_id),
+            ty: usize_ty,
+            span: span.clone(),
+        });
+        let first_index = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Index {
+                base: arr_var,
+                index: i_var,
+            },
+            ty: inner_arr_ty,
+            span: span.clone(),
+        });
+        let second_index = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Index {
+                base: first_index,
+                index: j_var,
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_arr, param_i, param_j],
+            ret_type: i32_ty,
+            body: Some(second_index),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have [Index(i), Index(j)] projection
+        let has_nested_index = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(p) | Operand::Move(p))) =
+                    &stmt.kind
+                {
+                    let index_count = p
+                        .projection
+                        .iter()
+                        .filter(|e| matches!(e, PlaceElem::Index(_)))
+                        .count();
+                    index_count >= 2
+                } else {
+                    false
+                }
+            })
+        });
+        assert!(
+            has_nested_index,
+            "arr[i][j] should produce [Index, Index] projection"
+        );
+    }
+
+    #[test]
+    fn test_lower_deref_index_field_chain() {
+        // struct Item { value: i32 }
+        // fn foo(arr: &[Item; 3], i: usize) -> i32 { (*arr)[i].value }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let usize_ty = hir_db.types.primitive(PrimitiveKind::Usize);
+        let span = Span::from(0..10);
+
+        // Create Item struct
+        let item_def_id = DefId(100);
+        let item_ty = hir_db.types.intern(Type::Struct(item_def_id, vec![]));
+        let item_struct = HirStruct {
+            def_id: item_def_id,
+            name: "Item".to_string(),
+            type_params: vec![],
+            fields: vec![HirField {
+                def_id: DefId(101),
+                name: "value".to_string(),
+                ty: i32_ty,
+                span: span.clone(),
+            }],
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Struct(item_struct));
+
+        // [Item; 3] and &[Item; 3]
+        let arr_ty = hir_db.types.mk_array(item_ty, 3);
+        let ref_arr_ty = hir_db.types.mk_ref(Mutability::Shared, arr_ty);
+
+        // Create parameter arr: &[Item; 3]
+        let arr_def_id = DefId(1);
+        let pat_arr = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: arr_def_id,
+                mutable: false,
+            },
+            ty: ref_arr_ty,
+            span: span.clone(),
+        });
+        let param_arr = crate::hir::HirParam {
+            pat: pat_arr,
+            ty: ref_arr_ty,
+            span: span.clone(),
+        };
+
+        // Create parameter i: usize
+        let i_def_id = DefId(2);
+        let pat_i = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: i_def_id,
+                mutable: false,
+            },
+            ty: usize_ty,
+            span: span.clone(),
+        });
+        let param_i = crate::hir::HirParam {
+            pat: pat_i,
+            ty: usize_ty,
+            span: span.clone(),
+        };
+
+        // (*arr)[i].value
+        let arr_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(arr_def_id),
+            ty: ref_arr_ty,
+            span: span.clone(),
+        });
+        let deref_arr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Unary {
+                op: crate::hir::UnaryOp::Deref,
+                operand: arr_var,
+            },
+            ty: arr_ty,
+            span: span.clone(),
+        });
+        let i_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(i_def_id),
+            ty: usize_ty,
+            span: span.clone(),
+        });
+        let index_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Index {
+                base: deref_arr,
+                index: i_var,
+            },
+            ty: item_ty,
+            span: span.clone(),
+        });
+        let field_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Field {
+                base: index_expr,
+                field: "value".to_string(),
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_arr, param_i],
+            ret_type: i32_ty,
+            body: Some(field_expr),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have [Deref, Index(i), Field(0)] projection
+        let has_chain = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(p) | Operand::Move(p))) =
+                    &stmt.kind
+                {
+                    let has_deref = p.projection.iter().any(|e| matches!(e, PlaceElem::Deref));
+                    let has_index = p
+                        .projection
+                        .iter()
+                        .any(|e| matches!(e, PlaceElem::Index(_)));
+                    let has_field = p
+                        .projection
+                        .iter()
+                        .any(|e| matches!(e, PlaceElem::Field(_)));
+                    has_deref && has_index && has_field
+                } else {
+                    false
+                }
+            })
+        });
+        assert!(
+            has_chain,
+            "(*arr)[i].value should produce [Deref, Index, Field] projection"
+        );
+    }
+
+    #[test]
+    fn test_lower_field_then_index() {
+        // struct Container { items: [i32; 5] }
+        // fn foo(c: Container, i: usize) -> i32 { c.items[i] }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let usize_ty = hir_db.types.primitive(PrimitiveKind::Usize);
+        let span = Span::from(0..10);
+
+        // [i32; 5]
+        let arr_ty = hir_db.types.mk_array(i32_ty, 5);
+
+        // Create Container struct
+        let container_def_id = DefId(100);
+        let container_ty = hir_db.types.intern(Type::Struct(container_def_id, vec![]));
+        let container_struct = HirStruct {
+            def_id: container_def_id,
+            name: "Container".to_string(),
+            type_params: vec![],
+            fields: vec![HirField {
+                def_id: DefId(101),
+                name: "items".to_string(),
+                ty: arr_ty,
+                span: span.clone(),
+            }],
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Struct(container_struct));
+
+        // Create parameter c: Container
+        let c_def_id = DefId(1);
+        let pat_c = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: c_def_id,
+                mutable: false,
+            },
+            ty: container_ty,
+            span: span.clone(),
+        });
+        let param_c = crate::hir::HirParam {
+            pat: pat_c,
+            ty: container_ty,
+            span: span.clone(),
+        };
+
+        // Create parameter i: usize
+        let i_def_id = DefId(2);
+        let pat_i = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: i_def_id,
+                mutable: false,
+            },
+            ty: usize_ty,
+            span: span.clone(),
+        });
+        let param_i = crate::hir::HirParam {
+            pat: pat_i,
+            ty: usize_ty,
+            span: span.clone(),
+        };
+
+        // c.items[i]
+        let c_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(c_def_id),
+            ty: container_ty,
+            span: span.clone(),
+        });
+        let items_field = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Field {
+                base: c_var,
+                field: "items".to_string(),
+            },
+            ty: arr_ty,
+            span: span.clone(),
+        });
+        let i_var = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(i_def_id),
+            ty: usize_ty,
+            span: span.clone(),
+        });
+        let index_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Index {
+                base: items_field,
+                index: i_var,
+            },
+            ty: i32_ty,
+            span: span.clone(),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_c, param_i],
+            ret_type: i32_ty,
+            body: Some(index_expr),
+            span: span.clone(),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have [Field(0), Index(i)] projection
+        let has_field_then_index = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|stmt| {
+                if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(p) | Operand::Move(p))) =
+                    &stmt.kind
+                {
+                    let has_field = p
+                        .projection
+                        .iter()
+                        .any(|e| matches!(e, PlaceElem::Field(_)));
+                    let has_index = p
+                        .projection
+                        .iter()
+                        .any(|e| matches!(e, PlaceElem::Index(_)));
+                    has_field && has_index
+                } else {
+                    false
+                }
+            })
+        });
+        assert!(
+            has_field_then_index,
+            "c.items[i] should produce [Field, Index] projection"
+        );
     }
 }
