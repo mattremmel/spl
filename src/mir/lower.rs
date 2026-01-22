@@ -529,6 +529,71 @@ impl<'hir> MirLoweringContext<'hir> {
                 let temp = builder.alloc_temp(unit_ty);
                 Place::from_local(temp)
             }
+            HirExprKind::Call { callee, args } => {
+                // Lower callee - check if it's a direct function ref or expression
+                let func_operand = self.lower_callee_operand(builder, *callee);
+
+                // Lower arguments
+                let arg_operands: Vec<Operand> = args
+                    .iter()
+                    .map(|arg| self.lower_expr_as_operand(builder, *arg))
+                    .collect();
+
+                // Allocate result temp and continuation block
+                let result_temp = builder.alloc_temp(ty);
+                let destination = Place::from_local(result_temp);
+                let cont_bb = builder.alloc_block();
+
+                // Set Call terminator
+                builder.set_terminator(
+                    TerminatorKind::Call {
+                        func: func_operand,
+                        args: arg_operands,
+                        destination: destination.clone(),
+                        target: Some(cont_bb),
+                    },
+                    span,
+                );
+
+                builder.switch_to_block(cont_bb);
+                destination
+            }
+            HirExprKind::MethodCall {
+                receiver,
+                method: _,
+                args,
+            } => {
+                // Look up resolved method DefId
+                let method_def_id = self
+                    .hir
+                    .method_resolutions
+                    .get(&expr_id)
+                    .copied()
+                    .unwrap_or(DefId(0)); // Fallback for unresolved
+
+                // Receiver becomes first argument
+                let receiver_operand = self.lower_expr_as_operand(builder, *receiver);
+                let mut arg_operands = vec![receiver_operand];
+                arg_operands.extend(args.iter().map(|a| self.lower_expr_as_operand(builder, *a)));
+
+                let func_operand = Operand::Constant(Constant::FnDef(method_def_id));
+                let result_temp = builder.alloc_temp(ty);
+                let destination = Place::from_local(result_temp);
+                let cont_bb = builder.alloc_block();
+
+                builder.set_terminator(
+                    TerminatorKind::Call {
+                        func: func_operand,
+                        args: arg_operands,
+                        destination: destination.clone(),
+                        target: Some(cont_bb),
+                    },
+                    span,
+                );
+
+                builder.switch_to_block(cont_bb);
+                destination
+            }
             _ => {
                 // For other expressions, allocate a temp and recursively lower
                 let temp = builder.alloc_temp(ty);
@@ -561,6 +626,23 @@ impl<'hir> MirLoweringContext<'hir> {
                 Operand::Copy(place)
             }
         }
+    }
+
+    /// Lower a callee expression to an operand.
+    ///
+    /// For direct function references (HirExprKind::Var pointing to a function),
+    /// this produces a FnDef constant. For function pointers in variables or
+    /// complex expressions, this produces a Copy/Move operand.
+    fn lower_callee_operand(&mut self, builder: &mut MirBuilder, callee_id: ExprId) -> Operand {
+        let callee = self.hir.expr(callee_id);
+        if let HirExprKind::Var(def_id) = &callee.kind
+            && !self.local_map.contains_key(def_id)
+        {
+            // Direct function reference (not a local variable)
+            return Operand::Constant(Constant::FnDef(*def_id));
+        }
+        // Function pointer in variable or complex expression
+        self.lower_expr_as_operand(builder, callee_id)
     }
 
     /// Lower a statement.
@@ -5237,5 +5319,542 @@ mod tests {
             )
         });
         assert!(has_switch, "Expected SwitchInt for if condition");
+    }
+
+    // ========== Phase 20: Function Calls (IR-3.5) ==========
+
+    #[test]
+    fn test_lower_call_no_args() {
+        // fn bar() -> i32 { 42 }
+        // fn foo() -> i32 { bar() }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let bar_def_id = DefId(1);
+
+        // First create bar function
+        let bar_body = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(42)),
+            ty: i32_ty,
+            span: Span::from(0..2),
+        });
+        let bar_func = HirFunction {
+            def_id: bar_def_id,
+            name: "bar".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(bar_body),
+            span: Span::from(0..10),
+        };
+        hir_db.items.push(HirItem::Function(bar_func));
+
+        // Call expression: bar()
+        let callee_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(bar_def_id),
+            ty: i32_ty, // Function type simplified to return type
+            span: Span::from(20..23),
+        });
+        let call_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Call {
+                callee: callee_expr,
+                args: vec![],
+            },
+            ty: i32_ty,
+            span: Span::from(20..25),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![],
+                tail: Some(call_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(15..30),
+        });
+
+        let foo_func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(15..35),
+        };
+        hir_db.items.push(HirItem::Function(foo_func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        // Second body is foo
+        let body = &bodies[1];
+
+        // Should have Call terminator
+        let has_call = body.basic_blocks.iter().any(|block| {
+            matches!(
+                block.terminator.as_ref().map(|t| &t.kind),
+                Some(TerminatorKind::Call { .. })
+            )
+        });
+        assert!(has_call, "Expected Call terminator");
+
+        // Verify the call has correct function operand
+        for block in &body.basic_blocks {
+            if let Some(term) = &block.terminator
+                && let TerminatorKind::Call { func, args, .. } = &term.kind
+            {
+                assert!(
+                    matches!(func, Operand::Constant(Constant::FnDef(def_id)) if *def_id == bar_def_id),
+                    "Expected call to bar"
+                );
+                assert!(args.is_empty(), "Expected no arguments");
+            }
+        }
+    }
+
+    #[test]
+    fn test_lower_call_with_args() {
+        // fn add(a: i32, b: i32) -> i32 { a + b }
+        // fn foo() -> i32 { add(1, 2) }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let add_def_id = DefId(1);
+        let a_def_id = DefId(2);
+        let b_def_id = DefId(3);
+
+        // Create add function with params
+        let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: a_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+        let pat_b = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: b_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(5..6),
+        });
+
+        let param_a = crate::hir::HirParam {
+            pat: pat_a,
+            ty: i32_ty,
+            span: Span::from(0..5),
+        };
+        let param_b = crate::hir::HirParam {
+            pat: pat_b,
+            ty: i32_ty,
+            span: Span::from(5..10),
+        };
+
+        let var_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(a_def_id),
+            ty: i32_ty,
+            span: Span::from(15..16),
+        });
+        let var_b = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(b_def_id),
+            ty: i32_ty,
+            span: Span::from(19..20),
+        });
+        let add_body = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Add,
+                lhs: var_a,
+                rhs: var_b,
+            },
+            ty: i32_ty,
+            span: Span::from(15..20),
+        });
+
+        let add_func = HirFunction {
+            def_id: add_def_id,
+            name: "add".to_string(),
+            type_params: vec![],
+            params: vec![param_a, param_b],
+            ret_type: i32_ty,
+            body: Some(add_body),
+            span: Span::from(0..25),
+        };
+        hir_db.items.push(HirItem::Function(add_func));
+
+        // Call expression: add(1, 2)
+        let callee_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(add_def_id),
+            ty: i32_ty,
+            span: Span::from(30..33),
+        });
+        let arg1 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(34..35),
+        });
+        let arg2 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(2)),
+            ty: i32_ty,
+            span: Span::from(37..38),
+        });
+        let call_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Call {
+                callee: callee_expr,
+                args: vec![arg1, arg2],
+            },
+            ty: i32_ty,
+            span: Span::from(30..39),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![],
+                tail: Some(call_expr),
+            },
+            ty: i32_ty,
+            span: Span::from(28..42),
+        });
+
+        let foo_func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(28..45),
+        };
+        hir_db.items.push(HirItem::Function(foo_func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[1]; // foo is second
+
+        // Should have Call terminator with 2 arguments
+        let mut found_call_with_args = false;
+        for block in &body.basic_blocks {
+            if let Some(term) = &block.terminator
+                && let TerminatorKind::Call { func, args, .. } = &term.kind
+                && matches!(func, Operand::Constant(Constant::FnDef(def_id)) if *def_id == add_def_id)
+            {
+                assert_eq!(args.len(), 2, "Expected 2 arguments");
+                // Check args are constants 1 and 2
+                assert!(matches!(&args[0], Operand::Constant(Constant::Int(1))));
+                assert!(matches!(&args[1], Operand::Constant(Constant::Int(2))));
+                found_call_with_args = true;
+            }
+        }
+        assert!(found_call_with_args, "Expected call with 2 args");
+    }
+
+    #[test]
+    fn test_lower_call_nested() {
+        // fn bar() -> i32 { 1 }
+        // fn baz(x: i32) -> i32 { x }
+        // fn foo() -> i32 { baz(bar()) }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let bar_def_id = DefId(1);
+        let baz_def_id = DefId(2);
+        let x_def_id = DefId(3);
+
+        // bar function
+        let bar_body = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+        let bar_func = HirFunction {
+            def_id: bar_def_id,
+            name: "bar".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(bar_body),
+            span: Span::from(0..5),
+        };
+        hir_db.items.push(HirItem::Function(bar_func));
+
+        // baz function
+        let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(10..11),
+        });
+        let param_x = crate::hir::HirParam {
+            pat: pat_x,
+            ty: i32_ty,
+            span: Span::from(10..15),
+        };
+        let baz_body = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x_def_id),
+            ty: i32_ty,
+            span: Span::from(20..21),
+        });
+        let baz_func = HirFunction {
+            def_id: baz_def_id,
+            name: "baz".to_string(),
+            type_params: vec![],
+            params: vec![param_x],
+            ret_type: i32_ty,
+            body: Some(baz_body),
+            span: Span::from(10..25),
+        };
+        hir_db.items.push(HirItem::Function(baz_func));
+
+        // foo function with nested call: baz(bar())
+        let inner_callee = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(bar_def_id),
+            ty: i32_ty,
+            span: Span::from(35..38),
+        });
+        let inner_call = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Call {
+                callee: inner_callee,
+                args: vec![],
+            },
+            ty: i32_ty,
+            span: Span::from(35..40),
+        });
+        let outer_callee = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(baz_def_id),
+            ty: i32_ty,
+            span: Span::from(30..33),
+        });
+        let outer_call = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Call {
+                callee: outer_callee,
+                args: vec![inner_call],
+            },
+            ty: i32_ty,
+            span: Span::from(30..41),
+        });
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![],
+                tail: Some(outer_call),
+            },
+            ty: i32_ty,
+            span: Span::from(28..44),
+        });
+
+        let foo_func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(28..50),
+        };
+        hir_db.items.push(HirItem::Function(foo_func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[2]; // foo is third
+
+        // Should have at least 2 Call terminators (or blocks for continuation)
+        let call_count = body
+            .basic_blocks
+            .iter()
+            .filter(|block| {
+                matches!(
+                    block.terminator.as_ref().map(|t| &t.kind),
+                    Some(TerminatorKind::Call { .. })
+                )
+            })
+            .count();
+        assert!(call_count >= 2, "Expected at least 2 Call terminators");
+    }
+
+    #[test]
+    fn test_lower_method_call() {
+        // Test method call lowering - simplified test with just the structure
+        // Since method resolution requires full type checking, we test the MIR structure
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let method_def_id = DefId(5);
+
+        // Create a receiver expression (simplified as a variable)
+        let receiver_def_id = DefId(1);
+        let receiver = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(receiver_def_id),
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+
+        // Method call: receiver.method()
+        let method_call = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::MethodCall {
+                receiver,
+                method: "method".to_string(),
+                args: vec![],
+            },
+            ty: i32_ty,
+            span: Span::from(0..10),
+        });
+
+        // Store the method resolution manually
+        hir_db.method_resolutions.insert(method_call, method_def_id);
+
+        // Create parameter for receiver
+        let pat_recv = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: receiver_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(7..11),
+        });
+        let param_recv = crate::hir::HirParam {
+            pat: pat_recv,
+            ty: i32_ty,
+            span: Span::from(7..17),
+        };
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![],
+                tail: Some(method_call),
+            },
+            ty: i32_ty,
+            span: Span::from(20..35),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_recv],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..40),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have Call terminator
+        let has_call = body.basic_blocks.iter().any(|block| {
+            matches!(
+                block.terminator.as_ref().map(|t| &t.kind),
+                Some(TerminatorKind::Call { .. })
+            )
+        });
+        assert!(has_call, "Expected Call terminator for method call");
+
+        // Verify the call has the method as func and receiver as first arg
+        for block in &body.basic_blocks {
+            if let Some(term) = &block.terminator
+                && let TerminatorKind::Call { func, args, .. } = &term.kind
+            {
+                // Should call method_def_id
+                assert!(
+                    matches!(func, Operand::Constant(Constant::FnDef(def_id)) if *def_id == method_def_id),
+                    "Expected call to resolved method"
+                );
+                // Should have receiver as first argument
+                assert!(!args.is_empty(), "Expected receiver as first argument");
+            }
+        }
+    }
+
+    #[test]
+    fn test_lower_method_call_with_args() {
+        // Test method call with additional arguments
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let method_def_id = DefId(5);
+
+        // Create a receiver expression
+        let receiver_def_id = DefId(1);
+        let receiver = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(receiver_def_id),
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+
+        // Create arguments
+        let arg1 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(10)),
+            ty: i32_ty,
+            span: Span::from(10..12),
+        });
+        let arg2 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(20)),
+            ty: i32_ty,
+            span: Span::from(14..16),
+        });
+
+        // Method call: receiver.method(10, 20)
+        let method_call = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::MethodCall {
+                receiver,
+                method: "method".to_string(),
+                args: vec![arg1, arg2],
+            },
+            ty: i32_ty,
+            span: Span::from(0..17),
+        });
+
+        // Store the method resolution manually
+        hir_db.method_resolutions.insert(method_call, method_def_id);
+
+        // Create parameter for receiver
+        let pat_recv = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: receiver_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(7..11),
+        });
+        let param_recv = crate::hir::HirParam {
+            pat: pat_recv,
+            ty: i32_ty,
+            span: Span::from(7..17),
+        };
+
+        let block_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![],
+                tail: Some(method_call),
+            },
+            ty: i32_ty,
+            span: Span::from(20..40),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "foo".to_string(),
+            type_params: vec![],
+            params: vec![param_recv],
+            ret_type: i32_ty,
+            body: Some(block_expr),
+            span: Span::from(0..45),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have Call terminator with 3 args (receiver + 2 explicit)
+        let mut found_call_with_args = false;
+        for block in &body.basic_blocks {
+            if let Some(term) = &block.terminator
+                && let TerminatorKind::Call { func, args, .. } = &term.kind
+                && matches!(func, Operand::Constant(Constant::FnDef(def_id)) if *def_id == method_def_id)
+            {
+                // 1 (receiver) + 2 (explicit args) = 3 total
+                assert_eq!(args.len(), 3, "Expected 3 arguments (receiver + 2)");
+                // Check that args[1] is 10 and args[2] is 20
+                assert!(matches!(&args[1], Operand::Constant(Constant::Int(10))));
+                assert!(matches!(&args[2], Operand::Constant(Constant::Int(20))));
+                found_call_with_args = true;
+            }
+        }
+        assert!(found_call_with_args, "Expected method call with args");
     }
 }

@@ -51,6 +51,8 @@ struct LoweringContext {
     binding_types: FxHashMap<DefId, TypeId>,
     /// Map from spans to resolved DefIds.
     resolutions: FxHashMap<Span, DefId>,
+    /// Map from method call spans to their resolved method DefIds.
+    method_resolutions: FxHashMap<Span, DefId>,
 }
 
 impl LoweringContext {
@@ -64,6 +66,7 @@ impl LoweringContext {
             expr_types: infer_result.expr_types,
             binding_types: infer_result.binding_types,
             resolutions: FxHashMap::default(), // Will be populated during lowering
+            method_resolutions: infer_result.method_resolutions,
         }
     }
 
@@ -927,9 +930,16 @@ impl LoweringContext {
                 args,
             },
             ty,
-            span,
+            span: span.clone(),
         };
-        self.db.alloc_expr(expr)
+        let expr_id = self.db.alloc_expr(expr);
+
+        // Store the resolved method DefId for MIR lowering
+        if let Some(&method_def_id) = self.method_resolutions.get(&span) {
+            self.db.method_resolutions.insert(expr_id, method_def_id);
+        }
+
+        expr_id
     }
 
     fn lower_call_expr(&mut self, call: &CallExpr, span: Span, ty: TypeId) -> ExprId {

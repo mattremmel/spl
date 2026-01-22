@@ -33,6 +33,8 @@ pub struct InferResult {
     pub expr_types: FxHashMap<Span, TypeId>,
     /// Map from local bindings (DefId) to their inferred types.
     pub binding_types: FxHashMap<DefId, TypeId>,
+    /// Map from method call expression spans to their resolved method DefIds.
+    pub method_resolutions: FxHashMap<Span, DefId>,
     /// Diagnostics produced during inference.
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -181,6 +183,8 @@ struct InferEngine {
     current_self_type: Option<TypeId>,
     /// The kind of the innermost loop (for break/continue validation).
     current_loop_kind: Option<LoopKind>,
+    /// Map from method call expression spans to their resolved method DefIds.
+    method_resolutions: FxHashMap<Span, DefId>,
 }
 
 /// The kind of receiver for a method.
@@ -233,6 +237,7 @@ impl InferEngine {
             current_loop_has_break: false,
             current_self_type: None,
             current_loop_kind: None,
+            method_resolutions: FxHashMap::default(),
         }
     }
 
@@ -241,6 +246,7 @@ impl InferEngine {
             ctx: self.ctx,
             expr_types: self.expr_types,
             binding_types: self.binding_types,
+            method_resolutions: self.method_resolutions,
             diagnostics: self.diagnostics,
         }
     }
@@ -1587,19 +1593,23 @@ impl InferEngine {
                 .unwrap_or_default();
 
             // Search for method with matching name
-            let mut found_sig: Option<FnSignature> = None;
+            let mut found_method: Option<(FnSignature, DefId)> = None;
             for method_def_id in method_def_ids {
                 let symbol = self.ctx.get_symbol(method_def_id);
                 let fn_name = self.ctx.resolve(symbol.name);
                 if fn_name == method_name
                     && let Some(sig) = self.fn_signatures.get(&method_def_id).cloned()
                 {
-                    found_sig = Some(sig);
+                    found_method = Some((sig, method_def_id));
                     break;
                 }
             }
 
-            if let Some(sig) = found_sig {
+            if let Some((sig, resolved_method_def_id)) = found_method {
+                // Store the resolved method DefId for MIR lowering
+                let method_span = text_range_to_span(method.syntax().text_range());
+                self.method_resolutions
+                    .insert(method_span, resolved_method_def_id);
                 // Map impl type params to receiver type args by position.
                 // sig.type_params structure: [impl_params..., method_params...]
                 // where impl_params.len() == struct_type_params.len()

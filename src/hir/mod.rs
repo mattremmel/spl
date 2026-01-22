@@ -62,6 +62,8 @@ pub struct HirDatabase {
     pub binding_types: FxHashMap<DefId, TypeId>,
     /// Map from expression IDs to their source spans (for diagnostics).
     pub expr_spans: FxHashMap<ExprId, Span>,
+    /// Map from method call expression IDs to their resolved method DefIds.
+    pub method_resolutions: FxHashMap<ExprId, DefId>,
 }
 
 impl Default for HirDatabase {
@@ -81,6 +83,7 @@ impl HirDatabase {
             types: TypeInterner::new(),
             binding_types: FxHashMap::default(),
             expr_spans: FxHashMap::default(),
+            method_resolutions: FxHashMap::default(),
         }
     }
 
