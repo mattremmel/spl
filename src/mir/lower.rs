@@ -5,10 +5,10 @@
 //! into a flat, control-flow-graph representation suitable for borrow checking
 //! and optimization.
 
-use crate::hir::{ExprId, HirDatabase, HirExprKind, HirFunction, HirItem, Literal};
+use crate::hir::{BinOp as HirBinOp, ExprId, HirDatabase, HirExprKind, HirFunction, HirItem, Literal, UnaryOp as HirUnaryOp};
 use crate::lexer::Span;
 use crate::mir::body::{BasicBlockData, Body, LocalDecl};
-use crate::mir::operand::{Constant, Operand, Rvalue};
+use crate::mir::operand::{BinOp, Constant, Operand, Rvalue, UnOp};
 use crate::mir::statement::Statement;
 use crate::mir::terminator::{BasicBlock, Terminator, TerminatorKind};
 use crate::mir::types::{Local, Place};
@@ -139,6 +139,51 @@ pub fn literal_to_operand(lit: &Literal) -> Operand {
     Operand::Constant(lower_literal(lit))
 }
 
+/// Convert an HIR binary operator to a MIR binary operator.
+///
+/// Returns `None` for operators that require special handling:
+/// - `And`/`Or`: Short-circuit evaluation (control flow)
+/// - `Assign`/`*Assign`: Assignment statements
+pub fn hir_binop_to_mir(op: HirBinOp) -> Option<BinOp> {
+    match op {
+        // Arithmetic
+        HirBinOp::Add => Some(BinOp::Add),
+        HirBinOp::Sub => Some(BinOp::Sub),
+        HirBinOp::Mul => Some(BinOp::Mul),
+        HirBinOp::Div => Some(BinOp::Div),
+        HirBinOp::Rem => Some(BinOp::Rem),
+        // Comparison
+        HirBinOp::Eq => Some(BinOp::Eq),
+        HirBinOp::Ne => Some(BinOp::Ne),
+        HirBinOp::Lt => Some(BinOp::Lt),
+        HirBinOp::Le => Some(BinOp::Le),
+        HirBinOp::Gt => Some(BinOp::Gt),
+        HirBinOp::Ge => Some(BinOp::Ge),
+        // Short-circuit: handled by control flow lowering
+        HirBinOp::And | HirBinOp::Or => None,
+        // Assignment: handled by statement lowering
+        HirBinOp::Assign
+        | HirBinOp::AddAssign
+        | HirBinOp::SubAssign
+        | HirBinOp::MulAssign
+        | HirBinOp::DivAssign
+        | HirBinOp::RemAssign => None,
+    }
+}
+
+/// Convert an HIR unary operator to a MIR unary operator.
+///
+/// Returns `None` for operators that require special handling:
+/// - `Deref`: Produces a place, not an rvalue
+pub fn hir_unop_to_mir(op: HirUnaryOp) -> Option<UnOp> {
+    match op {
+        HirUnaryOp::Not => Some(UnOp::Not),
+        HirUnaryOp::Neg => Some(UnOp::Neg),
+        // Deref produces a place (projection), not an rvalue
+        HirUnaryOp::Deref => None,
+    }
+}
+
 /// Context for lowering HIR to MIR.
 ///
 /// This maintains state during the lowering process, including:
@@ -215,6 +260,67 @@ impl<'hir> MirLoweringContext<'hir> {
                 builder.push_statement(stmt);
                 place
             }
+            HirExprKind::Var(def_id) => {
+                // Look up the local for this variable
+                if let Some(&local) = self.local_map.get(def_id) {
+                    Place::from_local(local)
+                } else {
+                    // Variable not found - allocate a temp as fallback
+                    // This shouldn't happen with well-formed HIR
+                    let temp = builder.alloc_temp(ty);
+                    Place::from_local(temp)
+                }
+            }
+            HirExprKind::Binary { op, lhs, rhs } => {
+                // Check if this is a simple binary op (not short-circuit or assignment)
+                if let Some(mir_op) = hir_binop_to_mir(*op) {
+                    // Lower operands
+                    let lhs_operand = self.lower_expr_as_operand(builder, *lhs);
+                    let rhs_operand = self.lower_expr_as_operand(builder, *rhs);
+
+                    // Allocate temp for result
+                    let temp = builder.alloc_temp(ty);
+                    let place = Place::from_local(temp);
+
+                    // Emit binary operation
+                    let stmt = Statement::assign(
+                        place.clone(),
+                        Rvalue::BinaryOp(mir_op, lhs_operand, rhs_operand),
+                        span,
+                    );
+                    builder.push_statement(stmt);
+                    place
+                } else {
+                    // Short-circuit or assignment ops - handled elsewhere
+                    // For now, allocate a temp as placeholder
+                    let temp = builder.alloc_temp(ty);
+                    Place::from_local(temp)
+                }
+            }
+            HirExprKind::Unary { op, operand } => {
+                // Check if this is a simple unary op (not deref)
+                if let Some(mir_op) = hir_unop_to_mir(*op) {
+                    // Lower operand
+                    let operand_val = self.lower_expr_as_operand(builder, *operand);
+
+                    // Allocate temp for result
+                    let temp = builder.alloc_temp(ty);
+                    let place = Place::from_local(temp);
+
+                    // Emit unary operation
+                    let stmt = Statement::assign(
+                        place.clone(),
+                        Rvalue::UnaryOp(mir_op, operand_val),
+                        span,
+                    );
+                    builder.push_statement(stmt);
+                    place
+                } else {
+                    // Deref - handled elsewhere (produces a place projection)
+                    let temp = builder.alloc_temp(ty);
+                    Place::from_local(temp)
+                }
+            }
             HirExprKind::Block { stmts, tail } => {
                 // Lower statements (for now, skip them since we only handle literals)
                 let _ = stmts;
@@ -245,6 +351,15 @@ impl<'hir> MirLoweringContext<'hir> {
             HirExprKind::Literal(lit) => {
                 // Literals can be operands directly
                 literal_to_operand(lit)
+            }
+            HirExprKind::Var(def_id) => {
+                // Variables can be operands directly (copy from their place)
+                if let Some(&local) = self.local_map.get(def_id) {
+                    Operand::Copy(Place::from_local(local))
+                } else {
+                    // Variable not found - return a zero constant as fallback
+                    Operand::Constant(Constant::Int(0))
+                }
             }
             _ => {
                 // For other expressions, lower to place then copy
@@ -786,5 +901,886 @@ mod tests {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(-42)))) => {}
             _ => panic!("Expected negative int constant"),
         }
+    }
+
+    // ========== Phase 7: Operator Mapping (IR-3.2) ==========
+
+    #[test]
+    fn test_hir_binop_add_to_mir() {
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Add), Some(BinOp::Add));
+    }
+
+    #[test]
+    fn test_hir_binop_sub_to_mir() {
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Sub), Some(BinOp::Sub));
+    }
+
+    #[test]
+    fn test_hir_binop_mul_to_mir() {
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Mul), Some(BinOp::Mul));
+    }
+
+    #[test]
+    fn test_hir_binop_div_to_mir() {
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Div), Some(BinOp::Div));
+    }
+
+    #[test]
+    fn test_hir_binop_rem_to_mir() {
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Rem), Some(BinOp::Rem));
+    }
+
+    #[test]
+    fn test_hir_binop_eq_to_mir() {
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Eq), Some(BinOp::Eq));
+    }
+
+    #[test]
+    fn test_hir_binop_ne_to_mir() {
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Ne), Some(BinOp::Ne));
+    }
+
+    #[test]
+    fn test_hir_binop_lt_to_mir() {
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Lt), Some(BinOp::Lt));
+    }
+
+    #[test]
+    fn test_hir_binop_le_to_mir() {
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Le), Some(BinOp::Le));
+    }
+
+    #[test]
+    fn test_hir_binop_gt_to_mir() {
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Gt), Some(BinOp::Gt));
+    }
+
+    #[test]
+    fn test_hir_binop_ge_to_mir() {
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Ge), Some(BinOp::Ge));
+    }
+
+    #[test]
+    fn test_hir_binop_and_returns_none() {
+        // Short-circuit ops are handled separately
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::And), None);
+    }
+
+    #[test]
+    fn test_hir_binop_or_returns_none() {
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Or), None);
+    }
+
+    #[test]
+    fn test_hir_binop_assign_returns_none() {
+        // Assignment ops are handled separately
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::Assign), None);
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::AddAssign), None);
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::SubAssign), None);
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::MulAssign), None);
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::DivAssign), None);
+        assert_eq!(hir_binop_to_mir(crate::hir::BinOp::RemAssign), None);
+    }
+
+    #[test]
+    fn test_hir_unop_not_to_mir() {
+        assert_eq!(hir_unop_to_mir(crate::hir::UnaryOp::Not), Some(UnOp::Not));
+    }
+
+    #[test]
+    fn test_hir_unop_neg_to_mir() {
+        assert_eq!(hir_unop_to_mir(crate::hir::UnaryOp::Neg), Some(UnOp::Neg));
+    }
+
+    #[test]
+    fn test_hir_unop_deref_returns_none() {
+        // Deref produces a place, not an rvalue
+        assert_eq!(hir_unop_to_mir(crate::hir::UnaryOp::Deref), None);
+    }
+
+    // ========== Phase 8: Variable Lowering (IR-3.2) ==========
+
+    #[test]
+    fn test_lower_var_reference() {
+        // fn identity(x: i32) -> i32 { x }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let param_def_id = DefId(1);
+
+        // Create parameter pattern
+        let pat_id = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: param_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+
+        let param = crate::hir::HirParam {
+            pat: pat_id,
+            ty: i32_ty,
+            span: Span::from(0..5),
+        };
+
+        // Body: var reference to x
+        let body_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(param_def_id),
+            ty: i32_ty,
+            span: Span::from(10..11),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "identity".to_string(),
+            type_params: vec![],
+            params: vec![param],
+            ret_type: i32_ty,
+            body: Some(body_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have: return place + 1 param = 2 locals
+        assert_eq!(body.locals.len(), 2);
+        assert_eq!(body.arg_count, 1);
+
+        // Should produce: _0 = Copy(_1)
+        let block = &body.basic_blocks[0];
+        assert_eq!(block.statements.len(), 1);
+
+        match &block.statements[0].kind {
+            StatementKind::Assign(place, Rvalue::Use(Operand::Copy(src))) => {
+                assert_eq!(place.local, Local(0)); // Return place
+                assert_eq!(src.local, Local(1)); // Parameter
+            }
+            _ => panic!("Expected _0 = Copy(_1)"),
+        }
+    }
+
+    #[test]
+    fn test_lower_var_as_operand() {
+        // Test that variables become operands directly without extra temps
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let param_def_id = DefId(1);
+
+        // Create var expression
+        let var_expr_id = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(param_def_id),
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+
+        let mut ctx = MirLoweringContext::new(&hir_db);
+        // Manually set up the local map
+        ctx.local_map.insert(param_def_id, Local(1));
+
+        let mut builder = MirBuilder::new(i32_ty);
+        builder.alloc_local(i32_ty, false, None); // _1 for param
+
+        let operand = ctx.lower_expr_as_operand(&mut builder, var_expr_id);
+
+        // Should be Copy(_1) directly
+        match operand {
+            Operand::Copy(place) => {
+                assert_eq!(place.local, Local(1));
+                assert!(place.is_local());
+            }
+            _ => panic!("Expected Copy operand"),
+        }
+
+        // Should not allocate any new temps
+        assert_eq!(builder.locals.len(), 2); // _0 (return) + _1 (param)
+    }
+
+    // ========== Phase 9: Binary Expression Lowering (IR-3.2) ==========
+
+    #[test]
+    fn test_lower_binary_add_literals() {
+        // fn add() -> i32 { 1 + 2 }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+
+        let lhs = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+        let rhs = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(2)),
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let add_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Add,
+                lhs,
+                rhs,
+            },
+            ty: i32_ty,
+            span: Span::from(0..5),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "add".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(add_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        let block = &body.basic_blocks[0];
+        // Should have:
+        // 1. _1 = Add(1, 2)
+        // 2. _0 = Copy(_1)
+        assert_eq!(block.statements.len(), 2);
+
+        // First statement: temp = Add(1, 2)
+        match &block.statements[0].kind {
+            StatementKind::Assign(
+                place,
+                Rvalue::BinaryOp(
+                    BinOp::Add,
+                    Operand::Constant(Constant::Int(1)),
+                    Operand::Constant(Constant::Int(2)),
+                ),
+            ) => {
+                assert_eq!(place.local, Local(1)); // First temp
+            }
+            other => panic!("Expected Add rvalue, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_lower_binary_sub() {
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+
+        let lhs = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(10)),
+            ty: i32_ty,
+            span: Span::from(0..2),
+        });
+        let rhs = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(3)),
+            ty: i32_ty,
+            span: Span::from(5..6),
+        });
+        let sub_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Sub,
+                lhs,
+                rhs,
+            },
+            ty: i32_ty,
+            span: Span::from(0..6),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "sub".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(sub_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        match &body.basic_blocks[0].statements[0].kind {
+            StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Sub, _, _)) => {}
+            _ => panic!("Expected Sub binary op"),
+        }
+    }
+
+    #[test]
+    fn test_lower_binary_mul() {
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+
+        let lhs = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(3)),
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+        let rhs = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(4)),
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let mul_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Mul,
+                lhs,
+                rhs,
+            },
+            ty: i32_ty,
+            span: Span::from(0..5),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "mul".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(mul_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        match &body.basic_blocks[0].statements[0].kind {
+            StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Mul, _, _)) => {}
+            _ => panic!("Expected Mul binary op"),
+        }
+    }
+
+    #[test]
+    fn test_lower_binary_comparison_lt() {
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let bool_ty = hir_db.types.bool();
+
+        let lhs = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+        let rhs = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(2)),
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let lt_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Lt,
+                lhs,
+                rhs,
+            },
+            ty: bool_ty,
+            span: Span::from(0..5),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "less_than".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: bool_ty,
+            body: Some(lt_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        match &body.basic_blocks[0].statements[0].kind {
+            StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Lt, _, _)) => {}
+            _ => panic!("Expected Lt comparison"),
+        }
+    }
+
+    #[test]
+    fn test_lower_binary_with_vars() {
+        // fn add(a: i32, b: i32) -> i32 { a + b }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let a_def_id = DefId(1);
+        let b_def_id = DefId(2);
+
+        // Create parameter patterns
+        let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: a_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+        let pat_b = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: b_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(5..6),
+        });
+
+        let param_a = crate::hir::HirParam {
+            pat: pat_a,
+            ty: i32_ty,
+            span: Span::from(0..5),
+        };
+        let param_b = crate::hir::HirParam {
+            pat: pat_b,
+            ty: i32_ty,
+            span: Span::from(5..10),
+        };
+
+        // Body: a + b
+        let var_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(a_def_id),
+            ty: i32_ty,
+            span: Span::from(15..16),
+        });
+        let var_b = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(b_def_id),
+            ty: i32_ty,
+            span: Span::from(19..20),
+        });
+        let add_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Add,
+                lhs: var_a,
+                rhs: var_b,
+            },
+            ty: i32_ty,
+            span: Span::from(15..20),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "add".to_string(),
+            type_params: vec![],
+            params: vec![param_a, param_b],
+            ret_type: i32_ty,
+            body: Some(add_expr),
+            span: Span::from(0..30),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should have: return place + 2 params + 1 temp = 4 locals
+        assert_eq!(body.locals.len(), 4);
+        assert_eq!(body.arg_count, 2);
+
+        // First statement should be: _3 = Add(Copy(_1), Copy(_2))
+        match &body.basic_blocks[0].statements[0].kind {
+            StatementKind::Assign(
+                place,
+                Rvalue::BinaryOp(BinOp::Add, Operand::Copy(lhs), Operand::Copy(rhs)),
+            ) => {
+                assert_eq!(place.local, Local(3)); // Temp
+                assert_eq!(lhs.local, Local(1)); // a
+                assert_eq!(rhs.local, Local(2)); // b
+            }
+            other => panic!("Expected Add(Copy(_1), Copy(_2)), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_lower_nested_binary() {
+        // fn nested() -> i32 { (1 + 2) * 3 }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+
+        let lit_1 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+        let lit_2 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(2)),
+            ty: i32_ty,
+            span: Span::from(4..5),
+        });
+        let add_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Add,
+                lhs: lit_1,
+                rhs: lit_2,
+            },
+            ty: i32_ty,
+            span: Span::from(0..5),
+        });
+
+        let lit_3 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(3)),
+            ty: i32_ty,
+            span: Span::from(9..10),
+        });
+        let mul_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Mul,
+                lhs: add_expr,
+                rhs: lit_3,
+            },
+            ty: i32_ty,
+            span: Span::from(0..10),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "nested".to_string(),
+            type_params: vec![],
+            params: vec![],
+            ret_type: i32_ty,
+            body: Some(mul_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should produce:
+        // _1 = Add(1, 2)
+        // _2 = Mul(Copy(_1), 3)
+        // _0 = Copy(_2)
+        assert_eq!(body.basic_blocks[0].statements.len(), 3);
+
+        // First: _1 = Add(1, 2)
+        match &body.basic_blocks[0].statements[0].kind {
+            StatementKind::Assign(place, Rvalue::BinaryOp(BinOp::Add, _, _)) => {
+                assert_eq!(place.local, Local(1));
+            }
+            _ => panic!("Expected Add"),
+        }
+
+        // Second: _2 = Mul(Copy(_1), 3)
+        match &body.basic_blocks[0].statements[1].kind {
+            StatementKind::Assign(place, Rvalue::BinaryOp(BinOp::Mul, lhs, rhs)) => {
+                assert_eq!(place.local, Local(2));
+                assert!(matches!(lhs, Operand::Copy(p) if p.local == Local(1)));
+                assert!(matches!(rhs, Operand::Constant(Constant::Int(3))));
+            }
+            _ => panic!("Expected Mul"),
+        }
+    }
+
+    // ========== Phase 10: Unary Expression Lowering (IR-3.2) ==========
+
+    #[test]
+    fn test_lower_unary_neg() {
+        // fn neg(x: i32) -> i32 { -x }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let x_def_id = DefId(1);
+
+        let pat = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+
+        let param = crate::hir::HirParam {
+            pat,
+            ty: i32_ty,
+            span: Span::from(0..5),
+        };
+
+        let var_x = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x_def_id),
+            ty: i32_ty,
+            span: Span::from(10..11),
+        });
+        let neg_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Unary {
+                op: crate::hir::UnaryOp::Neg,
+                operand: var_x,
+            },
+            ty: i32_ty,
+            span: Span::from(9..11),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "neg".to_string(),
+            type_params: vec![],
+            params: vec![param],
+            ret_type: i32_ty,
+            body: Some(neg_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should produce: _2 = Neg(Copy(_1))
+        match &body.basic_blocks[0].statements[0].kind {
+            StatementKind::Assign(place, Rvalue::UnaryOp(UnOp::Neg, Operand::Copy(src))) => {
+                assert_eq!(place.local, Local(2)); // Temp
+                assert_eq!(src.local, Local(1)); // x
+            }
+            other => panic!("Expected Neg(Copy(_1)), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_lower_unary_not() {
+        // fn flip(b: bool) -> bool { !b }
+        let mut hir_db = HirDatabase::new();
+        let bool_ty = hir_db.types.bool();
+        let b_def_id = DefId(1);
+
+        let pat = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: b_def_id,
+                mutable: false,
+            },
+            ty: bool_ty,
+            span: Span::from(0..1),
+        });
+
+        let param = crate::hir::HirParam {
+            pat,
+            ty: bool_ty,
+            span: Span::from(0..5),
+        };
+
+        let var_b = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(b_def_id),
+            ty: bool_ty,
+            span: Span::from(10..11),
+        });
+        let not_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Unary {
+                op: crate::hir::UnaryOp::Not,
+                operand: var_b,
+            },
+            ty: bool_ty,
+            span: Span::from(9..11),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "flip".to_string(),
+            type_params: vec![],
+            params: vec![param],
+            ret_type: bool_ty,
+            body: Some(not_expr),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        match &body.basic_blocks[0].statements[0].kind {
+            StatementKind::Assign(_, Rvalue::UnaryOp(UnOp::Not, Operand::Copy(_))) => {}
+            other => panic!("Expected Not(Copy(_)), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_lower_nested_unary() {
+        // fn double_neg(x: i32) -> i32 { --x } (which is -(-x))
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let x_def_id = DefId(1);
+
+        let pat = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: x_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+
+        let param = crate::hir::HirParam {
+            pat,
+            ty: i32_ty,
+            span: Span::from(0..5),
+        };
+
+        let var_x = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(x_def_id),
+            ty: i32_ty,
+            span: Span::from(12..13),
+        });
+        let inner_neg = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Unary {
+                op: crate::hir::UnaryOp::Neg,
+                operand: var_x,
+            },
+            ty: i32_ty,
+            span: Span::from(11..13),
+        });
+        let outer_neg = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Unary {
+                op: crate::hir::UnaryOp::Neg,
+                operand: inner_neg,
+            },
+            ty: i32_ty,
+            span: Span::from(10..13),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "double_neg".to_string(),
+            type_params: vec![],
+            params: vec![param],
+            ret_type: i32_ty,
+            body: Some(outer_neg),
+            span: Span::from(0..20),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should produce:
+        // _2 = Neg(Copy(_1))  -- inner -x
+        // _3 = Neg(Copy(_2))  -- outer -(-x)
+        // _0 = Copy(_3)       -- return
+        assert_eq!(body.basic_blocks[0].statements.len(), 3);
+
+        // First: _2 = Neg(Copy(_1))
+        match &body.basic_blocks[0].statements[0].kind {
+            StatementKind::Assign(place, Rvalue::UnaryOp(UnOp::Neg, Operand::Copy(src))) => {
+                assert_eq!(place.local, Local(2));
+                assert_eq!(src.local, Local(1));
+            }
+            _ => panic!("Expected inner Neg"),
+        }
+
+        // Second: _3 = Neg(Copy(_2))
+        match &body.basic_blocks[0].statements[1].kind {
+            StatementKind::Assign(place, Rvalue::UnaryOp(UnOp::Neg, Operand::Copy(src))) => {
+                assert_eq!(place.local, Local(3));
+                assert_eq!(src.local, Local(2));
+            }
+            _ => panic!("Expected outer Neg"),
+        }
+    }
+
+    #[test]
+    fn test_lower_complex_expression() {
+        // fn complex(a: i32, b: i32) -> i32 { -(a + b) * 2 }
+        let mut hir_db = HirDatabase::new();
+        let i32_ty = hir_db.types.i32();
+        let a_def_id = DefId(1);
+        let b_def_id = DefId(2);
+
+        // Params
+        let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: a_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(0..1),
+        });
+        let pat_b = hir_db.alloc_pat(crate::hir::HirPat {
+            kind: crate::hir::HirPatKind::Bind {
+                def_id: b_def_id,
+                mutable: false,
+            },
+            ty: i32_ty,
+            span: Span::from(5..6),
+        });
+
+        let param_a = crate::hir::HirParam {
+            pat: pat_a,
+            ty: i32_ty,
+            span: Span::from(0..5),
+        };
+        let param_b = crate::hir::HirParam {
+            pat: pat_b,
+            ty: i32_ty,
+            span: Span::from(5..10),
+        };
+
+        // Body: -(a + b) * 2
+        let var_a = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(a_def_id),
+            ty: i32_ty,
+            span: Span::from(15..16),
+        });
+        let var_b = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Var(b_def_id),
+            ty: i32_ty,
+            span: Span::from(19..20),
+        });
+        let add_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Add,
+                lhs: var_a,
+                rhs: var_b,
+            },
+            ty: i32_ty,
+            span: Span::from(15..20),
+        });
+        let neg_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Unary {
+                op: crate::hir::UnaryOp::Neg,
+                operand: add_expr,
+            },
+            ty: i32_ty,
+            span: Span::from(14..20),
+        });
+        let lit_2 = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(2)),
+            ty: i32_ty,
+            span: Span::from(24..25),
+        });
+        let mul_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+            kind: HirExprKind::Binary {
+                op: crate::hir::BinOp::Mul,
+                lhs: neg_expr,
+                rhs: lit_2,
+            },
+            ty: i32_ty,
+            span: Span::from(14..25),
+        });
+
+        let func = HirFunction {
+            def_id: DefId(0),
+            name: "complex".to_string(),
+            type_params: vec![],
+            params: vec![param_a, param_b],
+            ret_type: i32_ty,
+            body: Some(mul_expr),
+            span: Span::from(0..30),
+        };
+        hir_db.items.push(HirItem::Function(func));
+
+        let bodies = lower_hir_to_mir(&hir_db);
+        let body = &bodies[0];
+
+        // Should produce:
+        // _3 = Add(Copy(_1), Copy(_2))  -- a + b
+        // _4 = Neg(Copy(_3))            -- -(a + b)
+        // _5 = Mul(Copy(_4), 2)         -- -(a + b) * 2
+        // _0 = Copy(_5)                 -- return
+        assert_eq!(body.basic_blocks[0].statements.len(), 4);
+
+        // Verify the operations
+        assert!(matches!(
+            &body.basic_blocks[0].statements[0].kind,
+            StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _))
+        ));
+        assert!(matches!(
+            &body.basic_blocks[0].statements[1].kind,
+            StatementKind::Assign(_, Rvalue::UnaryOp(UnOp::Neg, _))
+        ));
+        assert!(matches!(
+            &body.basic_blocks[0].statements[2].kind,
+            StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Mul, _, _))
+        ));
     }
 }

@@ -31,7 +31,8 @@ pub mod types;
 // Re-export main types for convenience
 pub use body::{BasicBlockData, Body, LocalDecl};
 pub use lower::{
-    MirBuilder, MirLoweringContext, literal_to_operand, lower_hir_to_mir, lower_literal,
+    MirBuilder, MirLoweringContext, hir_binop_to_mir, hir_unop_to_mir, literal_to_operand,
+    lower_hir_to_mir, lower_literal,
 };
 pub use operand::{AggregateKind, BinOp, BorrowKind, CastKind, Constant, Operand, Rvalue, UnOp};
 pub use statement::{Statement, StatementKind};
