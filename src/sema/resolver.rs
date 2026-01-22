@@ -1,8 +1,36 @@
 //! Name resolution for SPL.
 //!
-//! Resolves identifiers to their declarations using a two-pass approach:
-//! - Pass 1: Collect all top-level definitions (functions, structs, type aliases)
-//! - Pass 2: Walk the AST and resolve all name references
+//! Resolves identifiers to their declarations using a two-pass approach.
+//!
+//! # Why Two Passes?
+//!
+//! SPL allows forward references: a function can call another function that's
+//! defined later in the file. To support this, we must know about all top-level
+//! definitions before we try to resolve references to them.
+//!
+//! # Pass 1: Collection
+//!
+//! Walks top-level items and registers their names in the symbol table:
+//! - Functions → `SymbolKind::Function`
+//! - Structs → `SymbolKind::Struct` (plus fields as `SymbolKind::Field`)
+//! - Type aliases → `SymbolKind::TypeAlias`
+//! - Impl blocks → creates scope for methods, registers each method
+//!
+//! After pass 1, all top-level names are known but bodies are not yet analyzed.
+//!
+//! # Pass 2: Resolution
+//!
+//! Walks the full AST and resolves name references:
+//! - Enters scopes for functions, blocks, loops, etc.
+//! - Binds local variables and parameters as they're encountered
+//! - Resolves `NameRef` nodes by looking up names in the scope chain
+//! - Records resolutions in a `Span → DefId` map for later phases
+//!
+//! # Error Handling
+//!
+//! Resolution errors (undefined names, duplicate definitions) are collected
+//! as diagnostics rather than failing immediately. This allows reporting
+//! multiple errors and enables partial analysis of valid code regions.
 
 use crate::DefId;
 use crate::ast::{

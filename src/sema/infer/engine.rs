@@ -1,4 +1,39 @@
 //! The type inference engine.
+//!
+//! This module implements bidirectional type inference for SPL, combining
+//! bottom-up inference (synthesizing types from expressions) with top-down
+//! checking (propagating expected types downward).
+//!
+//! # Architecture
+//!
+//! The inference engine operates in two passes over the AST:
+//!
+//! 1. **Collection pass**: Gathers function signatures, struct definitions,
+//!    and type alias targets. This allows forward references and mutual
+//!    recursion between functions.
+//!
+//! 2. **Inference pass**: Walks the AST, creating type variables for unknowns
+//!    and unifying types as constraints are discovered.
+//!
+//! # Key Data Structures
+//!
+//! - `substitution`: Maps type variables to their resolved types (union-find)
+//! - `expr_types`: Maps expression spans to inferred types
+//! - `binding_types`: Maps DefIds (locals, params) to their types
+//! - `fn_signatures`: Pre-collected function signatures for call resolution
+//!
+//! # Bidirectional Flow
+//!
+//! Some expressions synthesize their type (literals, variables), while others
+//! check against an expected type (return values, let bindings with annotations).
+//! The engine tracks `current_return_type` and `current_loop_break_type` to
+//! propagate these expectations.
+//!
+//! # Error Recovery
+//!
+//! When type errors occur, the engine records a diagnostic and continues with
+//! an error type. This allows reporting multiple errors per compilation and
+//! enables downstream phases to handle partial results gracefully.
 
 use crate::diagnostic::Diagnostic;
 use crate::lexer::Span;
@@ -35,38 +70,76 @@ pub(super) struct FnSignature {
 }
 
 /// The type inference engine.
+///
+/// Holds all state needed for type inference, including the semantic context
+/// (symbol table, type interner), inference results, and contextual information
+/// about the current position in the AST (current function, loop, etc.).
 pub(super) struct InferEngine {
+    /// The semantic context containing symbol table and type interner.
     pub(super) ctx: SemanticContext,
+
+    /// Name resolutions from the resolver phase (span → DefId).
     pub(super) resolutions: FxHashMap<Span, DefId>,
+
+    // === Inference Results ===
+
     /// Map from expression spans to their inferred types.
+    /// Populated during the inference pass as expressions are visited.
     pub(super) expr_types: FxHashMap<Span, TypeId>,
+
     /// Map from local bindings (DefId) to their inferred types.
+    /// Includes locals, parameters, and other named bindings.
     pub(super) binding_types: FxHashMap<DefId, TypeId>,
-    /// Type substitution table for union-find.
+
+    /// Type substitution table implementing union-find for type variables.
+    /// When a type variable is unified with a type, an entry is added here.
+    /// See `unify.rs` for the unification algorithm.
     pub(super) substitution: FxHashMap<TypeVar, TypeId>,
-    /// Collected diagnostics.
+
+    /// Collected diagnostics (type errors, etc.).
     pub(super) diagnostics: Vec<Diagnostic>,
-    /// Function signatures collected in first pass.
+
+    // === Pre-collected Definitions (from collection pass) ===
+
+    /// Function signatures collected in first pass, enabling forward references.
     pub(super) fn_signatures: FxHashMap<DefId, FnSignature>,
-    /// Struct field info collected in first pass.
+
+    /// Struct field info: maps struct DefId to (field_name, field_type) pairs.
     pub(super) struct_fields: FxHashMap<DefId, Vec<(String, TypeId)>>,
-    /// Struct type parameters collected in first pass.
+
+    /// Struct type parameters: maps struct DefId to its generic param DefIds.
     pub(super) struct_type_params: FxHashMap<DefId, Vec<DefId>>,
-    /// Map from struct DefId to its methods' DefIds.
+
+    /// Methods associated with each struct (struct DefId → method DefIds).
     pub(super) struct_methods: FxHashMap<DefId, Vec<DefId>>,
-    /// Type alias targets collected in first pass (alias DefId -> target type).
+
+    /// Type alias targets collected in first pass (alias DefId → resolved type).
     pub(super) type_alias_targets: FxHashMap<DefId, TypeId>,
-    /// Current function's return type (for return statements).
+
+    // === Context Stack (tracks position in AST) ===
+
+    /// Current function's return type, for checking return statements.
+    /// None when outside a function body.
     pub(super) current_return_type: Option<TypeId>,
-    /// Current loop's break type (for break statements with values).
+
+    /// Current loop's expected break type, for `break expr` statements.
+    /// None when outside a loop or in a loop that doesn't support break values.
     pub(super) current_loop_break_type: Option<TypeId>,
-    /// Whether the current loop has a break statement (for detecting infinite loops).
+
+    /// Whether the current loop has at least one break statement.
+    /// Used to determine if a `loop {}` expression might be infinite.
     pub(super) current_loop_has_break: bool,
-    /// Current impl block's Self type (for resolving Self in type positions).
+
+    /// Current impl block's Self type, for resolving `Self` in type positions.
+    /// Set when entering an impl block, cleared when exiting.
     pub(super) current_self_type: Option<TypeId>,
-    /// The kind of the innermost loop (for break/continue validation).
+
+    /// The kind of innermost loop (loop/while/for).
+    /// Used to validate break/continue: only `loop` allows `break value`.
     pub(super) current_loop_kind: Option<LoopKind>,
-    /// Map from method call expression spans to their resolved method DefIds.
+
+    /// Method resolutions: maps method call spans to resolved method DefIds.
+    /// Separate from `resolutions` because method lookup happens during inference.
     pub(super) method_resolutions: FxHashMap<Span, DefId>,
 }
 

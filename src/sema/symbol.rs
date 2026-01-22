@@ -1,4 +1,34 @@
 //! Symbol definitions for the semantic analysis phase.
+//!
+//! A symbol represents a named entity in the program: functions, structs,
+//! variables, parameters, etc. Each symbol has a unique `DefId` that serves
+//! as its identity throughout compilation.
+//!
+//! # DefId: The Universal Identifier
+//!
+//! `DefId` is a simple index into the symbol table. Once assigned, it never
+//! changes, making it safe to store in:
+//! - Resolution maps (span → DefId)
+//! - Type information (binding_types: DefId → TypeId)
+//! - HIR nodes (variable references store DefId, not names)
+//!
+//! # Symbol Kinds
+//!
+//! The `SymbolKind` distinguishes different definition types:
+//! - **Function**: A function definition (including methods)
+//! - **Struct**: A struct type definition
+//! - **TypeAlias**: A type alias (`type Foo = Bar`)
+//! - **Impl**: An impl block (tracked for method lookup)
+//! - **Local**: A local variable (`let x = ...`)
+//! - **Parameter**: A function parameter
+//! - **Field**: A struct field
+//! - **TypeParam**: A generic type parameter (`<T>`)
+//! - **SelfParam**: The `self` parameter in methods
+//!
+//! # Mutability
+//!
+//! The `is_mutable` flag tracks whether a binding was declared with `mut`.
+//! This is used by later phases to validate mutation and borrow checking.
 
 use crate::lexer::Span;
 use lasso::Spur;

@@ -1,7 +1,39 @@
 //! HIR expression representation.
 //!
-//! This module defines the HIR expression types which are arena-allocated
-//! and have types attached after inference.
+//! HIR (High-level IR) expressions are the typed, desugared form of AST
+//! expressions. They serve as the bridge between syntactic analysis and
+//! code generation.
+//!
+//! # Arena Allocation
+//!
+//! Expressions are allocated in an arena and referenced by `ExprId` indices.
+//! This design provides:
+//! - **Efficient storage**: No per-node allocation overhead
+//! - **Cache-friendly**: Expressions stored contiguously in memory
+//! - **Simple references**: `ExprId` is a `u32`, cheap to copy and compare
+//!
+//! Child expressions are referenced by `ExprId`, creating a flat structure
+//! rather than nested `Box<HirExpr>` pointers.
+//!
+//! # Desugaring
+//!
+//! Some AST constructs are desugared during HIR lowering:
+//! - `while cond { body }` → `loop { if !cond { break; } body }`
+//! - Compound assignments may be expanded
+//!
+//! This simplifies later phases by reducing the number of expression kinds.
+//!
+//! # Type Attachment
+//!
+//! Every `HirExpr` carries its inferred `TypeId`. This means downstream
+//! phases (MIR lowering, codegen) can query types directly without
+//! re-running inference or maintaining separate type maps.
+//!
+//! # Error Recovery
+//!
+//! The `HirExprKind::Missing` variant represents expressions that couldn't
+//! be lowered (due to parse/resolution/type errors). This allows the HIR
+//! to remain well-formed even when parts of the source have errors.
 
 use crate::lexer::Span;
 use crate::sema::symbol::DefId;

@@ -1,4 +1,35 @@
 //! Type unification and resolution.
+//!
+//! Implements Robinson's unification algorithm (1965) for type inference.
+//! Given two types, unification finds the most general substitution that makes
+//! them equal, or fails if no such substitution exists.
+//!
+//! # Algorithm Overview
+//!
+//! The core `unify(a, b)` function:
+//! 1. Resolves both types through the substitution chain
+//! 2. If equal after resolution, succeeds immediately
+//! 3. If either is a type variable, binds it to the other type
+//! 4. For compound types (refs, arrays, tuples), recursively unifies components
+//!
+//! # Type Variable Kinds
+//!
+//! SPL uses constrained type variables to improve inference:
+//! - `General`: Unconstrained, can unify with any type
+//! - `Int`: Can only unify with integer types (i8..i64, u8..u64), defaults to i32
+//! - `Float`: Can only unify with float types (f32, f64), defaults to f64
+//!
+//! This allows integer literals like `42` to be polymorphic until constrained.
+//!
+//! # Occurs Check
+//!
+//! The occurs check prevents infinite types like `T = List<T>`. This implementation
+//! uses Floyd's cycle detection to verify substitution chains remain acyclic.
+//!
+//! # References
+//!
+//! - J.A. Robinson, "A Machine-Oriented Logic Based on the Resolution Principle",
+//!   JACM 12(1), 1965
 
 use crate::sema::symbol::DefId;
 use crate::sema::types::{InferKind, Mutability, PrimitiveKind, Type, TypeId, TypeVar};
@@ -25,10 +56,25 @@ impl InferEngine {
         }
     }
 
-    /// Check if following the substitution chain from `start` forms a cycle.
-    /// Uses Floyd's tortoise-and-hare algorithm.
+    /// Check if the substitution chain from `start` contains a cycle.
+    ///
+    /// Uses Floyd's cycle detection algorithm (1967), also known as the
+    /// "tortoise and hare" algorithm. Two pointers traverse the chain:
+    /// - Tortoise: advances one step per iteration
+    /// - Hare: advances two steps per iteration
+    ///
+    /// If a cycle exists, the hare will eventually lap the tortoise and they
+    /// will meet. If no cycle exists, one pointer will reach the end of the
+    /// chain (either a concrete type or an unbound variable).
+    ///
+    /// Complexity: O(n) time, O(1) space - crucial for maintaining efficiency
+    /// since this runs in debug builds after every substitution.
+    ///
+    /// # Invariants
+    /// - Both pointers only traverse existing substitution entries
+    /// - Meeting point proves cycle exists (tortoise position is within cycle)
+    /// - Termination guaranteed: either pointers meet or chain ends
     fn has_cycle(&self, start: TypeVar) -> bool {
-        // Tortoise moves one step at a time, hare moves two steps
         let mut tortoise = start;
         let mut hare = start;
 
@@ -120,6 +166,14 @@ impl InferEngine {
     // =========================================================================
 
     /// Unify two types, returning true if successful.
+    ///
+    /// Implements Robinson's unification with extensions for SPL's type system:
+    /// - Constrained type variables (Int, Float) with fallback defaults
+    /// - Error/Never types unify with anything (for error recovery)
+    /// - Reference mutability coercion: `&mut T` coerces to `&T`
+    ///
+    /// The substitution is extended in-place. On failure, partial substitutions
+    /// may remain (caller should handle this appropriately).
     pub(super) fn unify(&mut self, a: TypeId, b: TypeId) -> bool {
         debug_assert!(
             self.is_valid_type_id(a),
@@ -196,9 +250,10 @@ impl InferEngine {
             (Type::Primitive(PrimitiveKind::Unit), Type::Tuple(elems))
             | (Type::Tuple(elems), Type::Primitive(PrimitiveKind::Unit)) => elems.is_empty(),
 
-            // References must match in mutability and inner type
+            // References: mutability must match or coerce, inner types must unify.
+            // Coercion: &mut T -> &T is allowed (mutable can become shared),
+            // but &T -> &mut T is forbidden (can't gain mutability).
             (Type::Ref(m1, inner1), Type::Ref(m2, inner2)) => {
-                // Allow coercion from &mut to & (but not vice versa)
                 let mutability_ok =
                     m1 == m2 || (*m1 == Mutability::Mutable && *m2 == Mutability::Shared);
                 mutability_ok && self.unify(*inner1, *inner2)

@@ -1,4 +1,31 @@
 //! Operator parsing: prefix, infix, and postfix expressions.
+//!
+//! This module handles the operator-specific parsing logic within the Pratt
+//! parsing framework (see `mod.rs` for the core algorithm). Each operator
+//! type has distinct handling:
+//!
+//! # Prefix Operators
+//!
+//! Prefix operators (`!`, `-`, `*`, `&`, `..`) bind to the expression that follows.
+//! Special cases:
+//! - `&` may be followed by `mut` to form `&mut expr`
+//! - `..` creates a range-from expression (`..end`)
+//!
+//! # Infix Operators
+//!
+//! Binary operators with an operand on each side. The `r_bp` (right binding power)
+//! passed from `expr_bp` determines what can be parsed as the right operand.
+//! Special cases:
+//! - `as` parses a type on the right side, not an expression
+//! - `..` creates a range expression (`start..end`)
+//!
+//! # Postfix Operators
+//!
+//! Operators that follow an expression:
+//! - `(args)`: function/method call
+//! - `[index]`: array/slice indexing
+//! - `.field` or `.method()`: field access or method call
+//! - `::path`: qualified path continuation
 
 use crate::parser::{CompletedMarker, Parser};
 use crate::syntax::SyntaxKind;
@@ -6,6 +33,10 @@ use crate::syntax::SyntaxKind;
 use super::{expr, expr_bp};
 
 /// Parse a prefix expression.
+///
+/// Takes `r_bp` (right binding power) to determine how tightly this prefix
+/// operator binds to following operators. For example, `-a.b` parses as
+/// `-(a.b)` because prefix operators have lower precedence than postfix.
 pub(super) fn prefix_expr(
     p: &mut Parser<'_>,
     r_bp: u8,
@@ -14,7 +45,9 @@ pub(super) fn prefix_expr(
     let m = p.start();
     let op = p.current().unwrap();
 
-    // Handle &mut specially
+    // Handle `&` specially: it may be followed by `mut` to form `&mut expr`.
+    // We can't treat `&` and `mut` as separate tokens in the binding power
+    // table because `mut` isn't an operator - it's a keyword modifier.
     if op == SyntaxKind::AMP {
         p.bump(); // &
         p.eat(SyntaxKind::MUT_KW); // optional mut

@@ -1,6 +1,33 @@
 //! Expression parser using Pratt parsing.
 //!
-//! Implements precedence climbing for SPL expressions.
+//! Implements Vaughan Pratt's "Top Down Operator Precedence" parsing (1973)
+//! for SPL expressions. This approach elegantly handles operator precedence
+//! and associativity without grammar ambiguity.
+//!
+//! # Binding Power Theory
+//!
+//! Each operator has a left binding power (l_bp) and right binding power (r_bp).
+//! The parser collects operands until it encounters an operator with l_bp less
+//! than the current minimum, then returns to let the caller handle it.
+//!
+//! Associativity emerges from the relationship between l_bp and r_bp:
+//! - **Left-associative** (`l_bp > r_bp`): `a + b + c` parses as `(a + b) + c`
+//! - **Right-associative** (`l_bp < r_bp`): `a = b = c` parses as `a = (b = c)`
+//!
+//! # The Parsing Loop
+//!
+//! The core loop in `expr_bp` maintains this invariant:
+//! > "lhs holds the leftmost operand that binds at least as tightly as min_bp"
+//!
+//! When we see an operator:
+//! 1. If its l_bp < min_bp, stop (this operand belongs to caller)
+//! 2. Otherwise, recursively parse RHS with r_bp as the new min_bp
+//! 3. Combine into a new lhs and continue
+//!
+//! # References
+//!
+//! - V. Pratt, "Top Down Operator Precedence", POPL 1973
+//! - <https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html>
 
 mod control_flow;
 mod operators;
@@ -29,6 +56,9 @@ pub(crate) fn expr_no_struct(
 }
 
 /// Parse an expression with minimum binding power.
+///
+/// The `min_bp` parameter acts as a precedence floor: we only consume operators
+/// whose left binding power meets or exceeds this threshold.
 fn expr_bp(
     p: &mut Parser<'_>,
     min_bp: u8,
@@ -42,6 +72,8 @@ fn expr_bp(
         None => return Ok(None),
     };
 
+    // Loop invariant: lhs is the leftmost expression that binds at min_bp or tighter.
+    // We extend it rightward until we hit an operator weaker than min_bp.
     while let Some(op) = p.current() {
         // Check for postfix operators first (highest precedence)
         if let Some((l_bp, ())) = postfix_bp(op) {
@@ -93,11 +125,17 @@ fn lhs(
 }
 
 // === Binding power tables ===
+//
+// Binding power constants for the Pratt parser. Each constant is (l_bp, r_bp).
+// Higher values bind tighter (multiplicative > additive > comparison > ...).
+//
+// Associativity encoding:
+//   l_bp < r_bp  →  right-associative (e.g., assignment: a = b = c → a = (b = c))
+//   l_bp > r_bp  →  left-associative  (e.g., addition: a + b + c → (a + b) + c)
+//
+// Gaps between levels allow inserting new precedences without renumbering.
 
-// Binding power constants for Pratt parser.
-// Higher values bind tighter. Right-assoc: l < r, Left-assoc: l > r
-
-const BP_ASSIGN: (u8, u8) = (2, 1); // right-associative
+const BP_ASSIGN: (u8, u8) = (2, 1); // r_bp < l_bp: right-associative
 const BP_LOGICAL_OR: (u8, u8) = (3, 4);
 const BP_LOGICAL_AND: (u8, u8) = (5, 6);
 const BP_EQUALITY: (u8, u8) = (7, 8);
