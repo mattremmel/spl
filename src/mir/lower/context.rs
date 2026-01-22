@@ -386,10 +386,16 @@ impl<'hir> MirLoweringContext<'hir> {
                 ));
                 place
             }
-            _ => {
-                // For other expressions, allocate a temp and recursively lower
+            HirExprKind::Missing => {
+                // Missing expressions (from error recovery) produce a zeroed value
                 let temp = builder.alloc_temp(ty);
-                Place::from_local(temp)
+                let place = Place::from_local(temp);
+                builder.push_statement(Statement::assign(
+                    place.clone(),
+                    Rvalue::Use(Operand::Constant(Constant::Zeroed(ty))),
+                    span,
+                ));
+                place
             }
         }
     }
@@ -900,6 +906,7 @@ impl<'hir> MirLoweringContext<'hir> {
             HirStmtKind::Let { pat, ty: _, init } => {
                 let pat_data = self.hir.pat(*pat);
                 match &pat_data.kind {
+                    // Optimize simple binding case: avoid intermediate temp
                     HirPatKind::Bind { def_id, mutable } => {
                         let local = builder.alloc_local(pat_data.ty, *mutable, None);
                         self.local_map.insert(*def_id, local);
@@ -921,14 +928,149 @@ impl<'hir> MirLoweringContext<'hir> {
                             let _ = self.lower_expr_to_place(builder, *init_id);
                         }
                     }
-                    _ => {
-                        // Defer complex patterns (Tuple, Struct, Ref)
+                    // Complex patterns need place-based destructuring
+                    HirPatKind::Tuple { .. }
+                    | HirPatKind::Struct { .. }
+                    | HirPatKind::Ref { .. } => {
+                        if let Some(init_id) = init {
+                            // Lower the initializer to a place
+                            let init_place = self.lower_expr_to_place(builder, *init_id);
+                            // Lower the pattern, binding variables to projections of init_place
+                            self.lower_pattern(builder, *pat, init_place, span);
+                        } else {
+                            // No initializer - just allocate locals for bindings without assigning
+                            self.lower_pattern_without_init(builder, *pat, span);
+                        }
+                    }
+                    HirPatKind::Literal(_) | HirPatKind::Missing => {
+                        // Literal patterns are for matching, Missing is error recovery
+                        if let Some(init_id) = init {
+                            let _ = self.lower_expr_to_place(builder, *init_id);
+                        }
                     }
                 }
             }
             HirStmtKind::Expr { expr, has_semi: _ } => {
                 // Evaluate expression for side effects
                 let _ = self.lower_expr_to_place(builder, *expr);
+            }
+        }
+    }
+
+    /// Lower a pattern, binding its variables to parts of the given place.
+    ///
+    /// This recursively destructures the pattern, creating field/deref projections
+    /// as needed to extract values from the source place.
+    fn lower_pattern(
+        &mut self,
+        builder: &mut MirBuilder,
+        pat_id: crate::hir::PatId,
+        source: Place,
+        span: Span,
+    ) {
+        let pat = self.hir.pat(pat_id);
+        match &pat.kind {
+            HirPatKind::Bind { def_id, mutable } => {
+                // Allocate a local for this binding
+                let local = builder.alloc_local(pat.ty, *mutable, None);
+                self.local_map.insert(*def_id, local);
+                builder.push_statement(Statement::storage_live(local, span.clone()));
+
+                // Copy from source place to the new local
+                let dest = Place::from_local(local);
+                builder.push_statement(Statement::assign(
+                    dest,
+                    Rvalue::Use(Operand::Copy(source)),
+                    span,
+                ));
+            }
+            HirPatKind::Wildcard => {
+                // Wildcard doesn't bind anything - just evaluate source for side effects
+                // (source is already evaluated)
+            }
+            HirPatKind::Tuple { elements } => {
+                // For each element pattern, project the field and recursively lower
+                for (idx, elem_pat_id) in elements.iter().enumerate() {
+                    let field_place = Place {
+                        local: source.local,
+                        projection: {
+                            let mut proj = source.projection.clone();
+                            proj.push(PlaceElem::Field(FieldIdx(idx as u32)));
+                            proj
+                        },
+                    };
+                    self.lower_pattern(builder, *elem_pat_id, field_place, span.clone());
+                }
+            }
+            HirPatKind::Struct {
+                def_id,
+                fields,
+                rest: _,
+            } => {
+                // For each field pattern, look up the field index and project
+                for (field_name, field_pat_id) in fields {
+                    let field_idx = self.resolve_field_index(*def_id, field_name);
+                    let field_place = Place {
+                        local: source.local,
+                        projection: {
+                            let mut proj = source.projection.clone();
+                            proj.push(PlaceElem::Field(FieldIdx(field_idx)));
+                            proj
+                        },
+                    };
+                    self.lower_pattern(builder, *field_pat_id, field_place, span.clone());
+                }
+            }
+            HirPatKind::Ref { mutable: _, inner } => {
+                // Deref the source to get the inner value
+                let deref_place = Place {
+                    local: source.local,
+                    projection: {
+                        let mut proj = source.projection.clone();
+                        proj.push(PlaceElem::Deref);
+                        proj
+                    },
+                };
+                self.lower_pattern(builder, *inner, deref_place, span);
+            }
+            HirPatKind::Literal(_) => {
+                // Literal patterns are for matching, not binding - nothing to do
+            }
+            HirPatKind::Missing => {
+                // Missing pattern - nothing to bind
+            }
+        }
+    }
+
+    /// Lower a pattern without an initializer (just allocate locals).
+    fn lower_pattern_without_init(
+        &mut self,
+        builder: &mut MirBuilder,
+        pat_id: crate::hir::PatId,
+        span: Span,
+    ) {
+        let pat = self.hir.pat(pat_id);
+        match &pat.kind {
+            HirPatKind::Bind { def_id, mutable } => {
+                let local = builder.alloc_local(pat.ty, *mutable, None);
+                self.local_map.insert(*def_id, local);
+                builder.push_statement(Statement::storage_live(local, span));
+            }
+            HirPatKind::Tuple { elements } => {
+                for elem_pat_id in elements {
+                    self.lower_pattern_without_init(builder, *elem_pat_id, span.clone());
+                }
+            }
+            HirPatKind::Struct { fields, .. } => {
+                for (_, field_pat_id) in fields {
+                    self.lower_pattern_without_init(builder, *field_pat_id, span.clone());
+                }
+            }
+            HirPatKind::Ref { inner, .. } => {
+                self.lower_pattern_without_init(builder, *inner, span);
+            }
+            HirPatKind::Wildcard | HirPatKind::Literal(_) | HirPatKind::Missing => {
+                // Nothing to allocate
             }
         }
     }

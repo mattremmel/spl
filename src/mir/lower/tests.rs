@@ -1,16 +1,41 @@
 //! Tests for MIR lowering.
 
 use super::*;
+use crate::ast::SourceFile;
+use crate::hir::lower::lower_to_hir;
 use crate::hir::{HirDatabase, HirExprKind, HirField, HirFunction, HirItem, HirStruct, Literal};
 use crate::lexer::Span;
+use crate::mir::body::Body;
 use crate::mir::operand::{
     AggregateKind, BinOp, BorrowKind, CastKind, Constant, Operand, Rvalue, UnOp,
 };
 use crate::mir::statement::{Statement, StatementKind};
 use crate::mir::terminator::{BasicBlock, Terminator, TerminatorKind};
 use crate::mir::types::{FieldIdx, Local, PlaceElem};
+use crate::parser::parse;
+use crate::sema::infer::infer;
+use crate::sema::resolver::resolve;
 use crate::sema::symbol::DefId;
 use crate::sema::types::{Mutability, PrimitiveKind, Type, TypeId};
+use rowan::ast::AstNode;
+
+/// Lower source code directly to MIR bodies.
+///
+/// This is the end-to-end test helper that compiles source code through
+/// the entire frontend pipeline (parse → resolve → infer → HIR → MIR).
+fn lower_source(source: &str) -> Vec<Body> {
+    let parsed = parse(source);
+    assert!(
+        parsed.errors().is_empty(),
+        "Parse errors: {:?}",
+        parsed.errors()
+    );
+    let source_file = SourceFile::cast(parsed.syntax()).unwrap();
+    let resolve_result = resolve(&source_file);
+    let infer_result = infer(&source_file, resolve_result);
+    let hir = lower_to_hir(&source_file, infer_result);
+    lower_hir_to_mir(&hir)
+}
 
 // ========== Phase 1: MirBuilder Core Structure ==========
 
@@ -8458,5 +8483,241 @@ fn test_lower_field_then_index() {
     assert!(
         has_field_then_index,
         "c.items[i] should produce [Field, Index] projection"
+    );
+}
+
+// ========== Phase: End-to-End Tests ==========
+
+#[test]
+fn test_e2e_simple_function() {
+    // fn main() -> i32 { 42 }
+    let bodies = lower_source("fn main() -> i32 { 42 }");
+
+    assert_eq!(bodies.len(), 1);
+    let body = &bodies[0];
+
+    // Should have return place + temp for literal
+    assert!(!body.locals.is_empty());
+
+    // Last block should have Return terminator
+    let last_block = body.basic_blocks.last().unwrap();
+    assert!(matches!(
+        last_block.terminator.as_ref().unwrap().kind,
+        TerminatorKind::Return
+    ));
+}
+
+#[test]
+fn test_e2e_arithmetic() {
+    // Use variables to prevent constant folding
+    // fn add(a: i32, b: i32) -> i32 { a + b }
+    let bodies = lower_source("fn add(a: i32, b: i32) -> i32 { a + b }");
+
+    assert_eq!(bodies.len(), 1);
+    let body = &bodies[0];
+
+    // Should have BinaryOp somewhere in the statements
+    let has_binop = body.basic_blocks.iter().any(|bb| {
+        bb.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _))
+            )
+        })
+    });
+    assert!(has_binop, "Should have Add binary operation");
+}
+
+#[test]
+fn test_e2e_control_flow() {
+    // fn test() -> i32 { if true { 1 } else { 2 } }
+    let bodies = lower_source("fn test() -> i32 { if true { 1 } else { 2 } }");
+
+    assert_eq!(bodies.len(), 1);
+    let body = &bodies[0];
+
+    // Should have multiple basic blocks for control flow
+    assert!(
+        body.basic_blocks.len() >= 3,
+        "if-else should create at least 3 blocks"
+    );
+
+    // Should have SwitchInt for the condition
+    let has_switch = body.basic_blocks.iter().any(|bb| {
+        matches!(
+            bb.terminator.as_ref().map(|t| &t.kind),
+            Some(TerminatorKind::SwitchInt { .. })
+        )
+    });
+    assert!(has_switch, "Should have SwitchInt for condition");
+}
+
+// ========== Phase: Tuple Pattern Destructuring ==========
+
+#[test]
+fn test_lower_let_tuple_pattern() {
+    // fn main() -> i32 { let (a, b) = (1, 2); a }
+    let bodies = lower_source("fn main() -> i32 { let (a, b) = (1, 2); a }");
+
+    assert_eq!(bodies.len(), 1);
+    let body = &bodies[0];
+
+    // Should have Field projections to extract tuple elements
+    let has_field_projection = body.basic_blocks.iter().any(|bb| {
+        bb.statements.iter().any(|stmt| {
+            if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(place))) = &stmt.kind {
+                place
+                    .projection
+                    .iter()
+                    .any(|e| matches!(e, PlaceElem::Field(_)))
+            } else {
+                false
+            }
+        })
+    });
+    assert!(
+        has_field_projection,
+        "Tuple destructuring should use Field projection"
+    );
+}
+
+#[test]
+fn test_lower_let_tuple_pattern_nested() {
+    // fn main() -> i32 { let ((a, b), c) = ((1, 2), 3); a }
+    let bodies = lower_source("fn main() -> i32 { let ((a, b), c) = ((1, 2), 3); a }");
+
+    assert_eq!(bodies.len(), 1);
+    // Should compile without panic - nested tuple patterns
+}
+
+// ========== Phase: Struct Pattern Destructuring ==========
+
+#[test]
+fn test_lower_let_struct_pattern() {
+    let source = r#"
+        struct Point { x: i32, y: i32 }
+        fn main() -> i32 { let Point { x, y } = Point { x: 1, y: 2 }; x }
+    "#;
+    let bodies = lower_source(source);
+
+    // Two items: struct and function
+    assert_eq!(bodies.len(), 1); // Only function generates a body
+
+    let body = &bodies[0];
+
+    // Should have Field projections for struct field access
+    let has_field_projection = body.basic_blocks.iter().any(|bb| {
+        bb.statements.iter().any(|stmt| {
+            if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(place))) = &stmt.kind {
+                place
+                    .projection
+                    .iter()
+                    .any(|e| matches!(e, PlaceElem::Field(_)))
+            } else {
+                false
+            }
+        })
+    });
+    assert!(
+        has_field_projection,
+        "Struct destructuring should use Field projection"
+    );
+}
+
+#[test]
+fn test_lower_let_struct_pattern_with_rest() {
+    let source = r#"
+        struct Point { x: i32, y: i32, z: i32 }
+        fn main() -> i32 { let Point { x, .. } = Point { x: 1, y: 2, z: 3 }; x }
+    "#;
+    let bodies = lower_source(source);
+
+    assert_eq!(bodies.len(), 1);
+    // Should compile without panic - struct pattern with rest
+}
+
+// ========== Phase: Ref Pattern Destructuring ==========
+
+#[test]
+fn test_lower_let_ref_pattern() {
+    // fn main() -> i32 { let x = &42; let &y = x; y }
+    let bodies = lower_source("fn main() -> i32 { let x = &42; let &y = x; y }");
+
+    assert_eq!(bodies.len(), 1);
+    let body = &bodies[0];
+
+    // Should have Deref projection to extract value from reference
+    let has_deref = body.basic_blocks.iter().any(|bb| {
+        bb.statements.iter().any(|stmt| {
+            if let StatementKind::Assign(_, Rvalue::Use(Operand::Copy(place))) = &stmt.kind {
+                place
+                    .projection
+                    .iter()
+                    .any(|e| matches!(e, PlaceElem::Deref))
+            } else {
+                false
+            }
+        })
+    });
+    assert!(
+        has_deref,
+        "Ref pattern destructuring should use Deref projection"
+    );
+}
+
+#[test]
+fn test_lower_let_ref_pattern_nested() {
+    // fn main() -> i32 { let x = &(1, 2); let &(a, b) = x; a }
+    let bodies = lower_source("fn main() -> i32 { let x = &(1, 2); let &(a, b) = x; a }");
+
+    assert_eq!(bodies.len(), 1);
+    // Should compile without panic - nested patterns under ref
+}
+
+// ========== Phase: Missing Expression Handling ==========
+
+#[test]
+fn test_lower_missing_expr_produces_zeroed() {
+    // Manually construct HIR with Missing expression since valid source won't produce this
+    let mut hir_db = HirDatabase::new();
+    let i32_ty = hir_db.types.i32();
+
+    // Create a Missing expression
+    let missing_expr = hir_db.alloc_expr(crate::hir::HirExpr {
+        kind: HirExprKind::Missing,
+        ty: i32_ty,
+        span: Span::from(0..1),
+    });
+
+    // Create a function with the missing expression as body
+    let func = HirFunction {
+        name: "test".to_string(),
+        def_id: DefId(1),
+        type_params: vec![],
+        params: vec![],
+        ret_type: i32_ty,
+        body: Some(missing_expr),
+        span: Span::from(0..20),
+    };
+    hir_db.items.push(HirItem::Function(func));
+
+    // Lower to MIR
+    let bodies = lower_hir_to_mir(&hir_db);
+
+    assert_eq!(bodies.len(), 1);
+    let body = &bodies[0];
+
+    // Should have a Zeroed constant somewhere in the statements
+    let has_zeroed = body.basic_blocks.iter().any(|bb| {
+        bb.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Zeroed(_))))
+            )
+        })
+    });
+    assert!(
+        has_zeroed,
+        "Missing expression should produce Zeroed constant"
     );
 }
