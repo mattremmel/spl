@@ -761,6 +761,39 @@ fn fold_large_multiplication_no_overflow() {
     }
 }
 
+#[test]
+fn fold_triple_negation() {
+    let expr = parse_expr("!!!true");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(!value), // !!!true = false
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_eq_false_result() {
+    let expr = parse_expr("3 == 4");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(!value), // 3 == 4 is false
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
+#[test]
+fn fold_lt_false_result() {
+    let expr = parse_expr("5 < 3");
+    let (lowered, was_lowered) = try_lower_expr(&expr);
+    assert!(was_lowered);
+    match lowered {
+        LoweredExpr::BoolLiteral { value, .. } => assert!(!value), // 5 < 3 is false
+        _ => panic!("Expected BoolLiteral"),
+    }
+}
+
 // ========================================================================
 // New HIR lowering tests - Phase 2: Literals
 // ========================================================================
