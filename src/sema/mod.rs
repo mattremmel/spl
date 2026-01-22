@@ -32,6 +32,61 @@
 //! - **Duplicate definitions**: Defining the same name twice in a scope
 //!
 //! These produce error messages that help users fix their code.
+//!
+//! # Diagnostic Strategy
+//!
+//! Semantic analysis produces [`Diagnostic`](crate::Diagnostic) errors through an
+//! imperative collection pattern, where diagnostics are accumulated as analysis
+//! proceeds.
+//!
+//! ## Flow Through Analysis Phases
+//!
+//! Diagnostics flow through the resolution and inference phases:
+//!
+//! 1. **Resolution Phase** ([`ResolveResult`]): Name resolution collects diagnostics
+//!    for undefined symbols, duplicate definitions, and visibility violations.
+//!    These are stored in `ResolveResult::diagnostics`.
+//!
+//! 2. **Inference Phase** ([`InferResult`]): Type inference inherits resolution
+//!    diagnostics and adds type errors (mismatches, missing annotations, etc.).
+//!    The combined diagnostics are available in `InferResult::diagnostics`.
+//!
+//! ## Imperative Collection Pattern
+//!
+//! Rather than using a `Result` type that short-circuits on the first error,
+//! semantic analysis uses imperative collection:
+//!
+//! ```text
+//! // Pseudocode for the pattern:
+//! fn analyze() -> AnalysisResult {
+//!     let mut diagnostics = Vec::new();
+//!
+//!     // Continue analysis even after errors
+//!     if let Err(e) = check_something() {
+//!         diagnostics.push(e.into_diagnostic());
+//!         // Don't return early - keep analyzing
+//!     }
+//!
+//!     // More analysis...
+//!
+//!     AnalysisResult { diagnostics, ... }
+//! }
+//! ```
+//!
+//! This pattern enables:
+//! - **Multiple errors**: Users see all errors in one compilation, not just the first
+//! - **Continued analysis**: Type inference can proceed on valid portions of code
+//! - **Error recovery**: Later phases receive partial results and can handle gaps
+//!
+//! ## Builder Pattern for Diagnostics
+//!
+//! Rich diagnostics are constructed using the [`Diagnostic`](crate::Diagnostic)
+//! builder pattern, which supports:
+//! - Primary span and message
+//! - Secondary labels with additional context
+//! - Severity levels (error, warning, note)
+//!
+//! See the [`diagnostic`](crate::diagnostic) module for the full API.
 
 #[cfg(test)]
 mod contract_tests;

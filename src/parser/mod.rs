@@ -1,6 +1,55 @@
 //! Parser for SPL source code.
 //!
 //! Produces a lossless concrete syntax tree using rowan.
+//!
+//! # Error Handling
+//!
+//! The parser uses an event-based architecture with error recovery to produce
+//! partial results even when the input contains syntax errors.
+//!
+//! ## ParseError Type
+//!
+//! Errors are represented as [`ParseError`], which contains:
+//! - A human-readable message describing what went wrong
+//! - The source range where the error occurred
+//!
+//! Errors are collected as events during parsing and extracted when building
+//! the final syntax tree. This allows the parser to report multiple errors
+//! in a single pass.
+//!
+//! ## Recovery Sets and Synchronization
+//!
+//! When the parser encounters an unexpected token, it uses **recovery sets**
+//! to find a synchronization point where parsing can resume:
+//!
+//! - `ITEM_RECOVERY_SET`: Tokens that start top-level items (`fn`, `struct`, etc.)
+//! - `STMT_RECOVERY_SET`: Tokens that start statements or end blocks
+//! - `EXPR_RECOVERY_SET`: Tokens that typically end expressions
+//!
+//! The recovery process:
+//! 1. Emit an error event describing the problem
+//! 2. Skip tokens until reaching a recovery set member or EOF
+//! 3. Wrap skipped tokens in an `ERROR` syntax node
+//! 4. Resume normal parsing
+//!
+//! This approach ensures the parser produces a complete (if imperfect) syntax
+//! tree, enabling IDE features like syntax highlighting and code navigation
+//! even in the presence of errors.
+//!
+//! ## Why Not Diagnostic?
+//!
+//! The parser uses its own [`ParseError`] type rather than the crate's
+//! [`Diagnostic`](crate::Diagnostic) type for several reasons:
+//!
+//! - **Self-contained**: The parser module has no dependencies on semantic
+//!   analysis infrastructure, making it reusable and easier to test.
+//! - **Simplicity**: Parse errors are structural (wrong token) rather than
+//!   semantic (wrong type), so they don't need rich labels or suggestions.
+//! - **Performance**: Parse errors are lightweight and don't require the
+//!   allocation overhead of `Diagnostic`'s label vectors.
+//!
+//! The compiler driver can convert [`ParseError`] to [`Diagnostic`](crate::Diagnostic)
+//! when rendering errors to users.
 
 #[macro_use]
 mod macros;

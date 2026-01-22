@@ -5,6 +5,46 @@
 //! - Desugaring (while → loop)
 //! - Type attachment from inference results
 //! - Name resolution to DefIds
+//!
+//! # Error Handling: Fallback Values
+//!
+//! HIR lowering uses a **fallback strategy** for error recovery. When lowering
+//! encounters missing or malformed AST nodes (typically from earlier parse or
+//! resolution errors), it produces placeholder values rather than failing:
+//!
+//! - [`HirExprKind::Missing`]: Placeholder for expressions that couldn't be lowered
+//! - Error type ([`TypeId`] for the error type): Used when type information is
+//!   unavailable or invalid
+//! - `DefId(0)`: Default definition ID when resolution data is missing
+//!
+//! ## No Diagnostics Emitted
+//!
+//! HIR lowering **does not emit any diagnostics**. All user-facing errors should
+//! have been reported during earlier phases:
+//!
+//! - **Parse errors**: Reported by the parser
+//! - **Resolution errors**: Reported during name resolution
+//! - **Type errors**: Reported during type inference
+//!
+//! By the time lowering runs, any malformed nodes are the result of earlier
+//! errors that have already been reported to the user.
+//!
+//! ## Graceful Degradation
+//!
+//! This fallback approach enables graceful degradation:
+//!
+//! 1. **Partial compilation**: Valid portions of code can be lowered and
+//!    potentially analyzed further, even when other parts have errors.
+//!
+//! 2. **IDE support**: Language servers can provide features (completion,
+//!    hover info) on valid code regions while other regions have errors.
+//!
+//! 3. **Stable downstream phases**: MIR lowering and other consumers receive
+//!    well-formed HIR (with `Missing` placeholders) rather than dealing with
+//!    `Option` or `Result` types throughout.
+//!
+//! The tradeoff is that `Missing` nodes and error types must be handled
+//! appropriately by downstream phases.
 
 mod folding;
 #[cfg(test)]
