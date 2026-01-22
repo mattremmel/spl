@@ -240,7 +240,9 @@ impl<'ctx> Resolver<'ctx> {
     fn collect_impl_block(&mut self, impl_block: &ImplBlock) {
         // Create a synthetic name for the impl block using its span
         let span = impl_block.syntax().text_range();
-        let synthetic_name = self.ctx.intern(&format!("impl@{}", u32::from(span.start())));
+        let synthetic_name = self
+            .ctx
+            .intern(&format!("impl@{}", u32::from(span.start())));
         let impl_span = Self::text_range_to_span(span);
 
         // Define the impl block with its own DefId

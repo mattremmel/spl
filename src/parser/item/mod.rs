@@ -431,6 +431,5 @@ pub(crate) fn source_file(p: &mut Parser<'_>) -> CompletedMarker {
     m.complete(p, SyntaxKind::SourceFile)
 }
 
-
 #[cfg(test)]
 mod tests;

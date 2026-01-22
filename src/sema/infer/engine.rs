@@ -37,10 +37,10 @@
 
 use crate::diagnostic::Diagnostic;
 use crate::lexer::Span;
+use crate::sema::SemanticContext;
 use crate::sema::resolver::ResolveResult;
 use crate::sema::symbol::DefId;
 use crate::sema::types::{TypeId, TypeVar};
-use crate::sema::SemanticContext;
 use rustc_hash::FxHashMap;
 
 use super::{InferResult, SelfParam};
@@ -82,7 +82,6 @@ pub(super) struct InferEngine {
     pub(super) resolutions: FxHashMap<Span, DefId>,
 
     // === Inference Results ===
-
     /// Map from expression spans to their inferred types.
     /// Populated during the inference pass as expressions are visited.
     pub(super) expr_types: FxHashMap<Span, TypeId>,
@@ -100,7 +99,6 @@ pub(super) struct InferEngine {
     pub(super) diagnostics: Vec<Diagnostic>,
 
     // === Pre-collected Definitions (from collection pass) ===
-
     /// Function signatures collected in first pass, enabling forward references.
     pub(super) fn_signatures: FxHashMap<DefId, FnSignature>,
 
@@ -117,7 +115,6 @@ pub(super) struct InferEngine {
     pub(super) type_alias_targets: FxHashMap<DefId, TypeId>,
 
     // === Context Stack (tracks position in AST) ===
-
     /// Current function's return type, for checking return statements.
     /// None when outside a function body.
     pub(super) current_return_type: Option<TypeId>,

@@ -17,11 +17,11 @@ mod tests;
 use crate::ast::SourceFile;
 use crate::diagnostic::Diagnostic;
 use crate::lexer::Span;
+use crate::sema::SemanticContext;
+use crate::sema::SymbolKind;
 use crate::sema::resolver::ResolveResult;
 use crate::sema::symbol::DefId;
 use crate::sema::types::{InferKind, Mutability, Type, TypeId};
-use crate::sema::SymbolKind;
-use crate::sema::SemanticContext;
 use rustc_hash::FxHashMap;
 
 use engine::InferEngine;

@@ -1,7 +1,9 @@
 //! MIR lowering context for HIR to MIR conversion.
 
 use super::builder::MirBuilder;
-use super::helpers::{determine_cast_kind, hir_binop_to_mir, hir_unop_to_mir, literal_to_operand, lower_literal};
+use super::helpers::{
+    determine_cast_kind, hir_binop_to_mir, hir_unop_to_mir, literal_to_operand, lower_literal,
+};
 use crate::hir::{
     BinOp as HirBinOp, ExprId, HirDatabase, HirExprKind, HirFunction, HirItem, HirPatKind,
     HirStmtKind, StmtId,
@@ -230,15 +232,11 @@ impl<'hir> MirLoweringContext<'hir> {
                 then_branch,
                 else_branch,
             } => self.lower_if_expr(builder, *condition, *then_branch, *else_branch, ty, span),
-            HirExprKind::Loop { body } => {
-                self.lower_loop_expr(builder, *body, ty, span)
-            }
+            HirExprKind::Loop { body } => self.lower_loop_expr(builder, *body, ty, span),
             HirExprKind::Break { value } => {
                 self.lower_break_expr(builder, value.as_ref().copied(), span)
             }
-            HirExprKind::Continue => {
-                self.lower_continue_expr(builder, span)
-            }
+            HirExprKind::Continue => self.lower_continue_expr(builder, span),
             HirExprKind::Call { callee, args } => {
                 self.lower_call_expr(builder, *callee, args, ty, span)
             }
@@ -246,9 +244,7 @@ impl<'hir> MirLoweringContext<'hir> {
                 receiver,
                 method: _,
                 args,
-            } => {
-                self.lower_method_call_expr(builder, expr_id, *receiver, args, ty, span)
-            }
+            } => self.lower_method_call_expr(builder, expr_id, *receiver, args, ty, span),
             HirExprKind::Array { elements } => {
                 // Lower each element to an operand
                 let operands: Vec<Operand> = elements

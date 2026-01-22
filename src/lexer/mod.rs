@@ -517,6 +517,5 @@ fn check_unterminated(source: &str) -> Option<LexError> {
     None
 }
 
-
 #[cfg(test)]
 mod tests;
