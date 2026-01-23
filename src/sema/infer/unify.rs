@@ -604,3 +604,178 @@ impl InferEngine {
         }
     }
 }
+
+// =============================================================================
+// Tests for Floyd's Cycle Detection Algorithm
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::SourceFile;
+    use crate::parser::parse;
+    use crate::sema::resolver::resolve;
+    use rowan::ast::AstNode;
+
+    /// Helper to create a minimal InferEngine for testing has_cycle.
+    fn create_test_engine() -> InferEngine {
+        // Parse minimal source to get a valid ResolveResult
+        let source = "fn main() {}";
+        let parse_result = parse(source);
+        let source_file = SourceFile::cast(parse_result.syntax()).unwrap();
+        let resolve_result = resolve(&source_file);
+        InferEngine::new(resolve_result)
+    }
+
+    // =========================================================================
+    // Floyd's Cycle Detection Tests
+    // =========================================================================
+    //
+    // These tests verify the documented properties of the has_cycle function:
+    // - O(n) time, O(1) space (tortoise-and-hare pattern)
+    // - Terminates at concrete types or unbound variables
+    // - Correctly identifies cycles of any length
+
+    #[test]
+    fn has_cycle_empty_substitution_returns_false() {
+        // An empty substitution has no chains to follow
+        let engine = create_test_engine();
+        let var = TypeVar(999); // Any unbound variable
+        assert!(!engine.has_cycle(var));
+    }
+
+    #[test]
+    fn has_cycle_single_step_to_concrete_returns_false() {
+        // Chain: v0 -> i32 (concrete type)
+        // The algorithm should terminate when it reaches a concrete type.
+        let mut engine = create_test_engine();
+        let v0 = engine.fresh_type_var();
+        let var = engine.extract_type_var(v0).unwrap();
+
+        // Bind v0 to i32 (a concrete type)
+        engine.substitution.insert(var, engine.ctx.types.i32());
+
+        assert!(!engine.has_cycle(var));
+    }
+
+    #[test]
+    fn has_cycle_chain_to_concrete_returns_false() {
+        // Chain: v0 -> v1 -> v2 -> i32 (concrete)
+        // Tests O(n) traversal of acyclic chain.
+        let mut engine = create_test_engine();
+
+        // Create 3 type variables
+        let v0_id = engine.fresh_type_var();
+        let v1_id = engine.fresh_type_var();
+        let v2_id = engine.fresh_type_var();
+
+        let v0 = engine.extract_type_var(v0_id).unwrap();
+        let v1 = engine.extract_type_var(v1_id).unwrap();
+        let v2 = engine.extract_type_var(v2_id).unwrap();
+
+        // Chain: v0 -> v1 -> v2 -> i32
+        engine.substitution.insert(v0, v1_id);
+        engine.substitution.insert(v1, v2_id);
+        engine.substitution.insert(v2, engine.ctx.types.i32());
+
+        assert!(!engine.has_cycle(v0));
+    }
+
+    #[test]
+    fn has_cycle_self_loop_returns_true() {
+        // Cycle: v0 -> v0 (1-node cycle)
+        // Tests detection of simplest possible cycle.
+        let mut engine = create_test_engine();
+        let v0_id = engine.fresh_type_var();
+        let v0 = engine.extract_type_var(v0_id).unwrap();
+
+        // Create self-loop: v0 -> v0
+        engine.substitution.insert(v0, v0_id);
+
+        assert!(engine.has_cycle(v0));
+    }
+
+    #[test]
+    fn has_cycle_two_node_cycle_returns_true() {
+        // Cycle: v0 -> v1 -> v0 (2-node cycle)
+        let mut engine = create_test_engine();
+
+        let v0_id = engine.fresh_type_var();
+        let v1_id = engine.fresh_type_var();
+
+        let v0 = engine.extract_type_var(v0_id).unwrap();
+        let v1 = engine.extract_type_var(v1_id).unwrap();
+
+        // Chain: v0 -> v1 -> v0
+        engine.substitution.insert(v0, v1_id);
+        engine.substitution.insert(v1, v0_id);
+
+        assert!(engine.has_cycle(v0));
+    }
+
+    #[test]
+    fn has_cycle_long_tail_with_cycle_returns_true() {
+        // Chain with tail leading into cycle: v0 -> v1 -> v2 -> v3 -> v2
+        // (Entry from outside the cycle)
+        let mut engine = create_test_engine();
+
+        let v0_id = engine.fresh_type_var();
+        let v1_id = engine.fresh_type_var();
+        let v2_id = engine.fresh_type_var();
+        let v3_id = engine.fresh_type_var();
+
+        let v0 = engine.extract_type_var(v0_id).unwrap();
+        let v1 = engine.extract_type_var(v1_id).unwrap();
+        let v2 = engine.extract_type_var(v2_id).unwrap();
+        let v3 = engine.extract_type_var(v3_id).unwrap();
+
+        // Chain: v0 -> v1 -> v2 -> v3 -> v2 (cycle at v2-v3)
+        engine.substitution.insert(v0, v1_id);
+        engine.substitution.insert(v1, v2_id);
+        engine.substitution.insert(v2, v3_id);
+        engine.substitution.insert(v3, v2_id);
+
+        assert!(engine.has_cycle(v0));
+    }
+
+    #[test]
+    fn has_cycle_odd_length_cycle_returns_true() {
+        // Cycle: v0 -> v1 -> v2 -> v0 (3-node cycle, odd length)
+        // Verifies algorithm works for odd cycle lengths.
+        let mut engine = create_test_engine();
+
+        let v0_id = engine.fresh_type_var();
+        let v1_id = engine.fresh_type_var();
+        let v2_id = engine.fresh_type_var();
+
+        let v0 = engine.extract_type_var(v0_id).unwrap();
+        let v1 = engine.extract_type_var(v1_id).unwrap();
+        let v2 = engine.extract_type_var(v2_id).unwrap();
+
+        // Chain: v0 -> v1 -> v2 -> v0
+        engine.substitution.insert(v0, v1_id);
+        engine.substitution.insert(v1, v2_id);
+        engine.substitution.insert(v2, v0_id);
+
+        assert!(engine.has_cycle(v0));
+    }
+
+    #[test]
+    fn has_cycle_unbound_variable_returns_false() {
+        // An unbound variable (not in substitution) has no cycle.
+        let mut engine = create_test_engine();
+
+        // Create some variables but don't bind the one we check
+        let v0_id = engine.fresh_type_var();
+        let v1_id = engine.fresh_type_var();
+        let _v2_id = engine.fresh_type_var(); // unbound
+
+        let v0 = engine.extract_type_var(v0_id).unwrap();
+        let v2 = engine.extract_type_var(_v2_id).unwrap();
+
+        // Bind v0 -> v1, but v2 is unbound
+        engine.substitution.insert(v0, v1_id);
+
+        assert!(!engine.has_cycle(v2));
+    }
+}

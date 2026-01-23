@@ -2709,3 +2709,195 @@ fn float_var_defaults_to_f64() {
     check("fn main() { let x = 3.14; }", "f64");
     check("fn f() -> f64 { 2.718 } fn main() { let x = f(); }", "f64");
 }
+
+// =============================================================================
+// 8.0 Unification Constraint Edge Cases (TDD Tests for spl-dkm)
+// =============================================================================
+//
+// These tests document edge case behaviors of the type unification algorithm:
+// - Int/Float constrained variables only unify with compatible types
+// - &mut T coerces to &T but not vice versa
+// - Never type unifies with anything
+
+// -----------------------------------------------------------------------------
+// 8.1 Int Var Constraint Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn int_var_constrained_by_multiple_same_type() {
+    // Same int var used multiple times with the same integer type should succeed
+    check(
+        "fn f(x: i64, y: i64) {} fn main() { let a = 1; f(a, a); }",
+        "i64",
+    );
+}
+
+#[test]
+fn int_var_constrained_by_multiple_contexts() {
+    // Int var constrained by parameter and return type (both i64) should work
+    check(
+        "fn f(x: i64) -> i64 { x } fn main() { let a = 1; let b = f(a); }",
+        "i64",
+    );
+}
+
+#[test]
+fn int_var_in_binary_op_with_typed_operand() {
+    // Int var should unify through binary operation with typed operand
+    check("fn main() { let x: i64 = 1; let y = 2 + x; }", "i64");
+}
+
+#[test]
+fn error_int_var_cannot_unify_with_float_direct() {
+    // Integer literal cannot be assigned to float type directly
+    check_err("fn main() { let x: f64 = 42; }", &["type mismatch"]);
+}
+
+#[test]
+fn error_int_var_cannot_unify_with_float_via_function() {
+    // Integer literal cannot satisfy float parameter
+    check_err(
+        "fn f(x: f64) {} fn main() { let a = 42; f(a); }",
+        &["type mismatch"],
+    );
+}
+
+// -----------------------------------------------------------------------------
+// 8.2 Float Var Constraint Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn float_var_constrained_by_multiple_same_type() {
+    // Same float var used multiple times with the same float type should succeed
+    check(
+        "fn f(x: f32, y: f32) {} fn main() { let a = 1.0; f(a, a); }",
+        "f32",
+    );
+}
+
+#[test]
+fn error_float_var_cannot_unify_with_int_direct() {
+    // Float literal cannot be assigned to integer type directly
+    check_err("fn main() { let x: i32 = 3.14; }", &["type mismatch"]);
+}
+
+#[test]
+fn error_float_var_cannot_unify_with_int_via_function() {
+    // Float literal cannot satisfy integer parameter
+    check_err(
+        "fn f(x: i32) {} fn main() { let a = 3.14; f(a); }",
+        &["type mismatch"],
+    );
+}
+
+// -----------------------------------------------------------------------------
+// 8.3 Reference Coercion Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn ref_coercion_mut_to_shared_explicit() {
+    // &mut T explicitly coerces to &T when passed to function expecting &T
+    check(
+        "fn f(x: &i32) {} fn main() { let mut a = 42; f(&mut a); }",
+        "i32",
+    );
+}
+
+#[test]
+fn ref_coercion_in_method_receiver() {
+    // &mut self should work where &self is expected (for read-only methods)
+    check(
+        "struct S { x: i32 } impl S { fn get(&self) -> i32 { self.x } } fn main() { let mut s = S { x: 1 }; let y = (&mut s).get(); }",
+        "i32",
+    );
+}
+
+#[test]
+fn error_ref_coercion_shared_to_mut() {
+    // &T cannot coerce to &mut T (cannot gain mutability)
+    check_err(
+        "fn f(x: &mut i32) {} fn main() { let a = 42; f(&a); }",
+        &["type mismatch"],
+    );
+}
+
+#[test]
+fn error_ref_coercion_shared_to_mut_in_assignment() {
+    // Assignment through shared reference should fail
+    check_err(
+        "fn main() { let a = 42; let r: &i32 = &a; *r = 1; }",
+        &["cannot assign"],
+    );
+}
+
+// -----------------------------------------------------------------------------
+// 8.4 Never Type Unification Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn never_in_if_then_propagates_else_type() {
+    // When then-branch has never type, the else type should be usable.
+    // Note: The current implementation assigns the if-expression type as `!`
+    // when the then-branch diverges, but the else type is still available
+    // for type-annotated contexts.
+    check(
+        "fn main() { let x: i32 = if true { return } else { 42 }; }",
+        "i32",
+    );
+}
+
+#[test]
+fn never_in_if_else_propagates_then_type() {
+    // When else-branch has never type, result type comes from then
+    check(
+        "fn main() { let x = if true { 42 } else { return }; }",
+        "i32",
+    );
+}
+
+#[test]
+fn both_branches_never() {
+    // When both branches have never type, result is never
+    // Note: The binding `x` will have type `!` (never)
+    check(
+        "fn main() { let x: i32 = if true { return } else { return }; }",
+        "i32",
+    );
+}
+
+#[test]
+fn never_from_loop_without_break() {
+    // A loop without break diverges (never returns)
+    check("fn main() { let x: i32 = loop {}; }", "i32");
+}
+
+#[test]
+fn never_in_early_return_pattern() {
+    // Return in one branch, value in another - function return type propagates
+    check(
+        "fn f(b: bool) -> i32 { if b { return 1; } 42 } fn main() { let x = f(true); }",
+        "i32",
+    );
+}
+
+// -----------------------------------------------------------------------------
+// 8.5 Type Variable Chain Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn type_var_chain_through_multiple_lets() {
+    // Type should propagate through a chain of let bindings
+    check(
+        "fn main() { let a = 1; let b = a; let c = b; let d: i64 = c; }",
+        "i64",
+    );
+}
+
+#[test]
+fn type_var_bidirectional_through_function() {
+    // Type should flow both ways: argument constrains param, return constrains usage
+    check(
+        "fn identity<T>(x: T) -> T { x } fn main() { let a: i64 = identity(1); }",
+        "i64",
+    );
+}

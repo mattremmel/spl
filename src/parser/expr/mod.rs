@@ -150,7 +150,9 @@ const BP_POSTFIX: u8 = 21;
 /// Prefix operator binding power ((), right).
 fn prefix_bp(op: SyntaxKind) -> Option<((), u8)> {
     match op {
-        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR => Some(((), BP_PREFIX)),
+        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::PLUS | SyntaxKind::STAR => {
+            Some(((), BP_PREFIX))
+        }
         SyntaxKind::AMP => Some(((), BP_PREFIX)),
         SyntaxKind::DOT_DOT => Some(((), BP_RANGE.1)), // Range prefix: same r_bp as infix range
         _ => None,
@@ -693,6 +695,253 @@ mod tests {
                     BANG@1..2 "!"
                     LiteralExpr@2..6
                       TRUE_KW@2..6 "true"
+            "#]],
+        );
+    }
+
+    // =========================================================================
+    // Edge Case Tests: EOF and Delimiter Handling
+    // =========================================================================
+    //
+    // These tests verify the documented Pratt parsing behaviors for:
+    // - Graceful error recovery at EOF
+    // - Handling of unexpected delimiters
+    // - Precedence boundary conditions
+
+    #[test]
+    fn expr_eof_after_binary_operator() {
+        // "1 +" at EOF - should parse partial expression
+        check_expr(
+            "1 +",
+            &expect![[r#"
+                BinExpr@0..3
+                  LiteralExpr@0..1
+                    INT_LITERAL@0..1 "1"
+                  WHITESPACE@1..2 " "
+                  PLUS@2..3 "+"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn expr_eof_after_prefix_operator() {
+        // "-" alone at EOF - should produce prefix expression without operand
+        check_expr(
+            "-",
+            &expect![[r#"
+                PrefixExpr@0..1
+                  MINUS@0..1 "-"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn expr_double_operator_prefix_after_infix() {
+        // "1 + + 2" - second + is unary plus (prefix), parses as: 1 + (+2)
+        check_expr(
+            "1 + + 2",
+            &expect![[r#"
+                BinExpr@0..7
+                  LiteralExpr@0..1
+                    INT_LITERAL@0..1 "1"
+                  WHITESPACE@1..2 " "
+                  PLUS@2..3 "+"
+                  PrefixExpr@3..7
+                    WHITESPACE@3..4 " "
+                    PLUS@4..5 "+"
+                    LiteralExpr@5..7
+                      WHITESPACE@5..6 " "
+                      INT_LITERAL@6..7 "2"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn expr_double_minus_as_subtract_negate() {
+        // "1 - - 2" parses as 1 - (-2)
+        check_expr(
+            "1 - - 2",
+            &expect![[r#"
+                BinExpr@0..7
+                  LiteralExpr@0..1
+                    INT_LITERAL@0..1 "1"
+                  WHITESPACE@1..2 " "
+                  MINUS@2..3 "-"
+                  PrefixExpr@3..7
+                    WHITESPACE@3..4 " "
+                    MINUS@4..5 "-"
+                    LiteralExpr@5..7
+                      WHITESPACE@5..6 " "
+                      INT_LITERAL@6..7 "2"
+            "#]],
+        );
+    }
+
+    // =========================================================================
+    // Precedence Boundary Tests
+    // =========================================================================
+
+    #[test]
+    fn precedence_assign_vs_or() {
+        // "a = b || c" parses as "a = (b || c)" since || binds tighter than =
+        check_expr(
+            "a = b || c",
+            &expect![[r#"
+                BinExpr@0..10
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  WHITESPACE@1..2 " "
+                  EQ@2..3 "="
+                  BinExpr@3..10
+                    PathExpr@3..5
+                      Path@3..5
+                        PathSegment@3..5
+                          NameRef@3..5
+                            WHITESPACE@3..4 " "
+                            IDENT@4..5 "b"
+                    WHITESPACE@5..6 " "
+                    OR_OR@6..8 "||"
+                    PathExpr@8..10
+                      Path@8..10
+                        PathSegment@8..10
+                          NameRef@8..10
+                            WHITESPACE@8..9 " "
+                            IDENT@9..10 "c"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn precedence_cast_vs_arithmetic() {
+        // "a as i32 + b" parses as "(a as i32) + b" since cast binds tighter
+        check_expr(
+            "a as i32 + b",
+            &expect![[r#"
+                BinExpr@0..12
+                  CastExpr@0..8
+                    PathExpr@0..1
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "a"
+                    WHITESPACE@1..2 " "
+                    AS_KW@2..4 "as"
+                    PathType@4..8
+                      Path@4..8
+                        PathSegment@4..8
+                          NameRef@4..8
+                            WHITESPACE@4..5 " "
+                            IDENT@5..8 "i32"
+                  WHITESPACE@8..9 " "
+                  PLUS@9..10 "+"
+                  PathExpr@10..12
+                    Path@10..12
+                      PathSegment@10..12
+                        NameRef@10..12
+                          WHITESPACE@10..11 " "
+                          IDENT@11..12 "b"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn postfix_vs_prefix_precedence() {
+        // "-foo()" parses as "-(foo())" since postfix call binds tighter than prefix minus
+        check_expr(
+            "-foo()",
+            &expect![[r#"
+                PrefixExpr@0..6
+                  MINUS@0..1 "-"
+                  CallExpr@1..6
+                    PathExpr@1..4
+                      Path@1..4
+                        PathSegment@1..4
+                          NameRef@1..4
+                            IDENT@1..4 "foo"
+                    ArgList@4..6
+                      L_PAREN@4..5 "("
+                      R_PAREN@5..6 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn compound_assign_right_assoc() {
+        // "a += b += c" parses as "a += (b += c)" since assignment is right-associative
+        check_expr(
+            "a += b += c",
+            &expect![[r#"
+                BinExpr@0..11
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  WHITESPACE@1..2 " "
+                  PLUS_EQ@2..4 "+="
+                  BinExpr@4..11
+                    PathExpr@4..6
+                      Path@4..6
+                        PathSegment@4..6
+                          NameRef@4..6
+                            WHITESPACE@4..5 " "
+                            IDENT@5..6 "b"
+                    WHITESPACE@6..7 " "
+                    PLUS_EQ@7..9 "+="
+                    PathExpr@9..11
+                      Path@9..11
+                        PathSegment@9..11
+                          NameRef@9..11
+                            WHITESPACE@9..10 " "
+                            IDENT@10..11 "c"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn negation_with_method_call() {
+        // "-foo.bar()" parses as "-(foo.bar())" - postfix chains bind tighter than prefix
+        check_expr(
+            "-foo.bar()",
+            &expect![[r#"
+                PrefixExpr@0..10
+                  MINUS@0..1 "-"
+                  MethodCallExpr@1..10
+                    PathExpr@1..4
+                      Path@1..4
+                        PathSegment@1..4
+                          NameRef@1..4
+                            IDENT@1..4 "foo"
+                    DOT@4..5 "."
+                    IDENT@5..8 "bar"
+                    ArgList@8..10
+                      L_PAREN@8..9 "("
+                      R_PAREN@9..10 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn range_operator_precedence() {
+        // "0..10 + 1" parses as "0..(10 + 1)" since arithmetic binds tighter than range
+        check_expr(
+            "0..10 + 1",
+            &expect![[r#"
+                RangeExpr@0..9
+                  LiteralExpr@0..1
+                    INT_LITERAL@0..1 "0"
+                  DOT_DOT@1..3 ".."
+                  BinExpr@3..9
+                    LiteralExpr@3..5
+                      INT_LITERAL@3..5 "10"
+                    WHITESPACE@5..6 " "
+                    PLUS@6..7 "+"
+                    LiteralExpr@7..9
+                      WHITESPACE@7..8 " "
+                      INT_LITERAL@8..9 "1"
             "#]],
         );
     }

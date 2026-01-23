@@ -6,7 +6,7 @@
 //!
 //! # Prefix Operators
 //!
-//! Prefix operators (`!`, `-`, `*`, `&`, `..`) bind to the expression that follows.
+//! Prefix operators (`!`, `-`, `+`, `*`, `&`, `..`) bind to the expression that follows.
 //! Special cases:
 //! - `&` may be followed by `mut` to form `&mut expr`
 //! - `..` creates a range-from expression (`..end`)
@@ -67,7 +67,9 @@ pub(super) fn prefix_expr(
     let _ = expr_bp(p, r_bp, allow_struct)?;
 
     let kind = match op {
-        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR => SyntaxKind::PrefixExpr,
+        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::PLUS | SyntaxKind::STAR => {
+            SyntaxKind::PrefixExpr
+        }
         _ => unreachable!("unexpected prefix operator: {:?}", op),
     };
 
