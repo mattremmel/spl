@@ -23,14 +23,20 @@
 //!
 //! - `__str_concat`: Concatenate two strings
 //! - `__str_slice`: Extract substring (returns a copy)
-//! - `__str_to_upper`: Convert to uppercase (ASCII only)
-//! - `__str_to_lower`: Convert to lowercase (ASCII only)
 //!
 //! # Memory Ownership
 //!
 //! Allocation operations use malloc-based allocation via `__alloc`.
 //! Caller owns the returned string and must call `__free(result.ptr)` when done.
 //! Returns (null, 0) for empty or invalid inputs.
+//!
+//! # Future Stdlib Candidates
+//!
+//! The following operations can be implemented in SPL once basic string
+//! operations are available, and should be part of the standard library:
+//!
+//! - `to_upper`: Convert to uppercase (ASCII) - loop over chars with arithmetic
+//! - `to_lower`: Convert to lowercase (ASCII) - loop over chars with arithmetic
 
 use cranelift_codegen::ir::types;
 
@@ -147,28 +153,6 @@ pub fn register(runtime: &mut Runtime) {
         make_signature(
             call_conv,
             &[types::I64, types::I64, types::I64, types::I64],
-            &[types::I64, types::I64],
-        ),
-    );
-
-    // __str_to_upper: (ptr, len) -> (ptr, len)
-    runtime.register(
-        "__str_to_upper",
-        __str_to_upper as *const u8,
-        make_signature(
-            call_conv,
-            &[types::I64, types::I64],
-            &[types::I64, types::I64],
-        ),
-    );
-
-    // __str_to_lower: (ptr, len) -> (ptr, len)
-    runtime.register(
-        "__str_to_lower",
-        __str_to_lower as *const u8,
-        make_signature(
-            call_conv,
-            &[types::I64, types::I64],
             &[types::I64, types::I64],
         ),
     );
@@ -478,80 +462,6 @@ pub extern "C" fn __str_slice(ptr: *const u8, len: i64, start: i64, end: i64) ->
         ptr: buf,
         len: slice_len,
     }
-}
-
-/// Convert string to uppercase.
-///
-/// Converts ASCII lowercase letters (a-z) to uppercase (A-Z).
-/// Non-ASCII bytes are copied unchanged.
-///
-/// # Ownership
-///
-/// Caller owns the returned string and must call `__free(result.ptr)` when done.
-/// Returns (null, 0) if the input is empty or null.
-pub extern "C" fn __str_to_upper(ptr: *const u8, len: i64) -> StringResult {
-    use super::memory::__alloc;
-
-    if ptr.is_null() || len <= 0 {
-        return StringResult {
-            ptr: std::ptr::null(),
-            len: 0,
-        };
-    }
-
-    let buf = __alloc(len);
-    if buf.is_null() {
-        return StringResult {
-            ptr: std::ptr::null(),
-            len: 0,
-        };
-    }
-
-    unsafe {
-        for i in 0..len as usize {
-            let c = *ptr.add(i);
-            *buf.add(i) = if c.is_ascii_lowercase() { c - 32 } else { c };
-        }
-    }
-
-    StringResult { ptr: buf, len }
-}
-
-/// Convert string to lowercase.
-///
-/// Converts ASCII uppercase letters (A-Z) to lowercase (a-z).
-/// Non-ASCII bytes are copied unchanged.
-///
-/// # Ownership
-///
-/// Caller owns the returned string and must call `__free(result.ptr)` when done.
-/// Returns (null, 0) if the input is empty or null.
-pub extern "C" fn __str_to_lower(ptr: *const u8, len: i64) -> StringResult {
-    use super::memory::__alloc;
-
-    if ptr.is_null() || len <= 0 {
-        return StringResult {
-            ptr: std::ptr::null(),
-            len: 0,
-        };
-    }
-
-    let buf = __alloc(len);
-    if buf.is_null() {
-        return StringResult {
-            ptr: std::ptr::null(),
-            len: 0,
-        };
-    }
-
-    unsafe {
-        for i in 0..len as usize {
-            let c = *ptr.add(i);
-            *buf.add(i) = if c.is_ascii_uppercase() { c + 32 } else { c };
-        }
-    }
-
-    StringResult { ptr: buf, len }
 }
 
 #[cfg(test)]
@@ -906,72 +816,6 @@ mod tests {
         assert_eq!(result.len, 0);
     }
 
-    #[test]
-    fn str_to_upper_basic() {
-        let s = "Hello, World!";
-        let result = __str_to_upper(s.as_ptr(), s.len() as i64);
-        let upper = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(upper, b"HELLO, WORLD!");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn str_to_upper_empty() {
-        let result = __str_to_upper(std::ptr::null(), 0);
-        assert!(result.ptr.is_null());
-    }
-
-    #[test]
-    fn str_to_upper_already_upper() {
-        let s = "ABC123";
-        let result = __str_to_upper(s.as_ptr(), s.len() as i64);
-        let upper = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(upper, b"ABC123");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn str_to_upper_all_lowercase() {
-        let s = "abcdefghijklmnopqrstuvwxyz";
-        let result = __str_to_upper(s.as_ptr(), s.len() as i64);
-        let upper = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(upper, b"ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn str_to_lower_basic() {
-        let s = "Hello, World!";
-        let result = __str_to_lower(s.as_ptr(), s.len() as i64);
-        let lower = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(lower, b"hello, world!");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn str_to_lower_empty() {
-        let result = __str_to_lower(std::ptr::null(), 0);
-        assert!(result.ptr.is_null());
-    }
-
-    #[test]
-    fn str_to_lower_already_lower() {
-        let s = "abc123";
-        let result = __str_to_lower(s.as_ptr(), s.len() as i64);
-        let lower = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(lower, b"abc123");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn str_to_lower_all_uppercase() {
-        let s = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        let result = __str_to_lower(s.as_ptr(), s.len() as i64);
-        let lower = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(lower, b"abcdefghijklmnopqrstuvwxyz");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
     // ==================== Registration tests ====================
 
     #[test]
@@ -989,11 +833,9 @@ mod tests {
         assert!(runtime.contains("__str_ends_with"));
         assert!(runtime.contains("__str_char_at"));
 
-        // Allocation operations (stubs)
+        // Allocation operations
         assert!(runtime.contains("__str_concat"));
         assert!(runtime.contains("__str_slice"));
-        assert!(runtime.contains("__str_to_upper"));
-        assert!(runtime.contains("__str_to_lower"));
     }
 
     // ==================== Signature tests ====================
