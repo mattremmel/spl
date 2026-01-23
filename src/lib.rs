@@ -72,6 +72,7 @@ pub mod mir;
 pub mod parser;
 pub mod sema;
 pub mod syntax;
+pub mod testing;
 
 pub use diagnostic::{Diagnostic, DiagnosticRenderer, Label, RenderConfig, Severity};
 pub use lexer::{Lexer, Span, SpannedToken, Token};
