@@ -8,10 +8,9 @@
 //! This is more efficient and allows embedded nulls, but requires passing both
 //! values through the ABI.
 //!
-//! # Current Status
+//! # Query Operations (no allocation)
 //!
-//! Implemented:
-//! - `__str_len`: Returns the length parameter (trivial)
+//! - `__str_len`: Returns the length parameter
 //! - `__str_eq`: Compare two strings for equality
 //! - `__str_cmp`: Compare two strings lexicographically
 //! - `__str_find`: Find substring in string
@@ -20,42 +19,18 @@
 //! - `__str_ends_with`: Check if string ends with suffix
 //! - `__str_char_at`: Get character at index
 //!
-//! Stubs (need memory allocation):
+//! # Allocation Operations
+//!
 //! - `__str_concat`: Concatenate two strings
-//! - `__str_slice`: Extract substring
-//! - `__str_to_upper`: Convert to uppercase
-//! - `__str_to_lower`: Convert to lowercase
+//! - `__str_slice`: Extract substring (returns a copy)
+//! - `__str_to_upper`: Convert to uppercase (ASCII only)
+//! - `__str_to_lower`: Convert to lowercase (ASCII only)
 //!
-//! # Memory Allocation for String Operations
+//! # Memory Ownership
 //!
-//! Operations that create new strings need to allocate memory. Options:
-//!
-//! ## malloc-based
-//! ```c
-//! StringResult __str_concat(const char* a, int64_t a_len,
-//!                           const char* b, int64_t b_len) {
-//!     char* buf = malloc(a_len + b_len);
-//!     memcpy(buf, a, a_len);
-//!     memcpy(buf + a_len, b, b_len);
-//!     return (StringResult){buf, a_len + b_len};
-//! }
-//! ```
-//!
-//! ## Arena-based (preferred for expression temporaries)
-//! ```text
-//! fn __str_concat(a: String, b: String) -> String {
-//!     let buf = arena_alloc(a.len + b.len);
-//!     memcpy(buf, a.ptr, a.len);
-//!     memcpy(buf + a.len, b.ptr, b.len);
-//!     String { ptr: buf, len: a.len + b.len }
-//! }
-//! ```
-//!
-//! # Self-Hosting
-//!
-//! String operations are fundamental to a compiler (source code, error messages,
-//! symbol names). A working `__str_concat` and related functions are prerequisites
-//! for self-hosting.
+//! Allocation operations use malloc-based allocation via `__alloc`.
+//! Caller owns the returned string and must call `__free(result.ptr)` when done.
+//! Returns (null, 0) for empty or invalid inputs.
 
 use cranelift_codegen::ir::types;
 
@@ -410,59 +385,173 @@ pub extern "C" fn __str_char_at(ptr: *const u8, len: i64, index: i64) -> i32 {
 
 // ==================== Allocation operations (stubs) ====================
 
-/// Concatenate two strings (stub).
+/// Concatenate two strings.
 ///
-/// Returns (null, 0) as this is not yet implemented.
-/// When implemented, will allocate a new buffer for the result.
+/// Allocates a new buffer containing the concatenation of both strings.
+///
+/// # Ownership
+///
+/// Caller owns the returned string and must call `__free(result.ptr)` when done.
+/// Returns (null, 0) if both strings are empty.
 pub extern "C" fn __str_concat(
-    _ptr1: *const u8,
-    _len1: i64,
-    _ptr2: *const u8,
-    _len2: i64,
+    ptr1: *const u8,
+    len1: i64,
+    ptr2: *const u8,
+    len2: i64,
 ) -> StringResult {
-    // Stub: return null pointer and zero length
+    use super::memory::{__alloc, __memcpy};
+
+    let len1 = len1.max(0);
+    let len2 = len2.max(0);
+    let total = len1 + len2;
+
+    if total == 0 {
+        return StringResult {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
+    }
+
+    let buf = __alloc(total);
+    if buf.is_null() {
+        return StringResult {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
+    }
+
+    unsafe {
+        if len1 > 0 && !ptr1.is_null() {
+            __memcpy(buf, ptr1 as *mut u8, len1);
+        }
+        if len2 > 0 && !ptr2.is_null() {
+            __memcpy(buf.add(len1 as usize), ptr2 as *mut u8, len2);
+        }
+    }
+
     StringResult {
-        ptr: std::ptr::null(),
-        len: 0,
+        ptr: buf,
+        len: total,
     }
 }
 
-/// Extract a substring (stub).
+/// Extract a substring.
 ///
-/// Returns (null, 0) as this is not yet implemented.
-/// When implemented, will return (ptr + start, end - start) for a view,
-/// or allocate a new buffer for a copy.
-pub extern "C" fn __str_slice(
-    _ptr: *const u8,
-    _len: i64,
-    _start: i64,
-    _end: i64,
-) -> StringResult {
-    // Stub: return null pointer and zero length
+/// Returns a copy of the substring from `start` (inclusive) to `end` (exclusive).
+/// Indices are clamped to valid bounds.
+///
+/// # Ownership
+///
+/// Caller owns the returned string and must call `__free(result.ptr)` when done.
+/// Returns (null, 0) if the slice is empty or invalid.
+pub extern "C" fn __str_slice(ptr: *const u8, len: i64, start: i64, end: i64) -> StringResult {
+    use super::memory::{__alloc, __memcpy};
+
+    if ptr.is_null() || len <= 0 {
+        return StringResult {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
+    }
+
+    let start = start.max(0).min(len) as usize;
+    let end = end.max(0).min(len) as usize;
+
+    if end <= start {
+        return StringResult {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
+    }
+
+    let slice_len = (end - start) as i64;
+    let buf = __alloc(slice_len);
+    if buf.is_null() {
+        return StringResult {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
+    }
+
+    unsafe { __memcpy(buf, ptr.add(start) as *mut u8, slice_len) };
     StringResult {
-        ptr: std::ptr::null(),
-        len: 0,
+        ptr: buf,
+        len: slice_len,
     }
 }
 
-/// Convert string to uppercase (stub).
+/// Convert string to uppercase.
 ///
-/// Returns (null, 0) as this is not yet implemented.
-pub extern "C" fn __str_to_upper(_ptr: *const u8, _len: i64) -> StringResult {
-    StringResult {
-        ptr: std::ptr::null(),
-        len: 0,
+/// Converts ASCII lowercase letters (a-z) to uppercase (A-Z).
+/// Non-ASCII bytes are copied unchanged.
+///
+/// # Ownership
+///
+/// Caller owns the returned string and must call `__free(result.ptr)` when done.
+/// Returns (null, 0) if the input is empty or null.
+pub extern "C" fn __str_to_upper(ptr: *const u8, len: i64) -> StringResult {
+    use super::memory::__alloc;
+
+    if ptr.is_null() || len <= 0 {
+        return StringResult {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
     }
+
+    let buf = __alloc(len);
+    if buf.is_null() {
+        return StringResult {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
+    }
+
+    unsafe {
+        for i in 0..len as usize {
+            let c = *ptr.add(i);
+            *buf.add(i) = if c.is_ascii_lowercase() { c - 32 } else { c };
+        }
+    }
+
+    StringResult { ptr: buf, len }
 }
 
-/// Convert string to lowercase (stub).
+/// Convert string to lowercase.
 ///
-/// Returns (null, 0) as this is not yet implemented.
-pub extern "C" fn __str_to_lower(_ptr: *const u8, _len: i64) -> StringResult {
-    StringResult {
-        ptr: std::ptr::null(),
-        len: 0,
+/// Converts ASCII uppercase letters (A-Z) to lowercase (a-z).
+/// Non-ASCII bytes are copied unchanged.
+///
+/// # Ownership
+///
+/// Caller owns the returned string and must call `__free(result.ptr)` when done.
+/// Returns (null, 0) if the input is empty or null.
+pub extern "C" fn __str_to_lower(ptr: *const u8, len: i64) -> StringResult {
+    use super::memory::__alloc;
+
+    if ptr.is_null() || len <= 0 {
+        return StringResult {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
     }
+
+    let buf = __alloc(len);
+    if buf.is_null() {
+        return StringResult {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
+    }
+
+    unsafe {
+        for i in 0..len as usize {
+            let c = *ptr.add(i);
+            *buf.add(i) = if c.is_ascii_uppercase() { c + 32 } else { c };
+        }
+    }
+
+    StringResult { ptr: buf, len }
 }
 
 #[cfg(test)]
@@ -708,39 +797,179 @@ mod tests {
     }
 
     #[test]
-    fn str_concat_returns_null() {
-        let s1 = "Hello";
-        let s2 = "World";
+    fn str_concat_basic() {
+        let s1 = "Hello, ";
+        let s2 = "World!";
         let result = __str_concat(
             s1.as_ptr(),
             s1.len() as i64,
             s2.as_ptr(),
             s2.len() as i64,
         );
+
+        assert!(!result.ptr.is_null());
+        assert_eq!(result.len, 13);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"Hello, World!");
+
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn str_concat_empty_first() {
+        let s2 = "World";
+        let result = __str_concat(std::ptr::null(), 0, s2.as_ptr(), s2.len() as i64);
+        assert_eq!(result.len, 5);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"World");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn str_concat_empty_second() {
+        let s1 = "Hello";
+        let result = __str_concat(s1.as_ptr(), s1.len() as i64, std::ptr::null(), 0);
+        assert_eq!(result.len, 5);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"Hello");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn str_concat_both_empty() {
+        let result = __str_concat(std::ptr::null(), 0, std::ptr::null(), 0);
         assert!(result.ptr.is_null());
         assert_eq!(result.len, 0);
     }
 
     #[test]
-    fn str_slice_returns_null() {
+    fn str_slice_middle() {
+        let s = "Hello, World!";
+        let result = __str_slice(s.as_ptr(), s.len() as i64, 7, 12);
+        let slice = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(slice, b"World");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn str_slice_full() {
         let s = "Hello";
-        let result = __str_slice(s.as_ptr(), s.len() as i64, 1, 4);
+        let result = __str_slice(s.as_ptr(), s.len() as i64, 0, 5);
+        assert_eq!(result.len, 5);
+        let slice = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(slice, b"Hello");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn str_slice_empty() {
+        let s = "Hello";
+        let result = __str_slice(s.as_ptr(), s.len() as i64, 2, 2);
         assert!(result.ptr.is_null());
         assert_eq!(result.len, 0);
     }
 
     #[test]
-    fn str_to_upper_returns_null() {
-        let s = "hello";
+    fn str_slice_out_of_bounds() {
+        let s = "Hello";
+        // End is clamped to actual length
+        let result = __str_slice(s.as_ptr(), s.len() as i64, 0, 100);
+        assert_eq!(result.len, 5);
+        let slice = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(slice, b"Hello");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn str_slice_negative_start() {
+        let s = "Hello";
+        // Negative start is clamped to 0
+        let result = __str_slice(s.as_ptr(), s.len() as i64, -5, 3);
+        assert_eq!(result.len, 3);
+        let slice = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(slice, b"Hel");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn str_slice_start_after_end() {
+        let s = "Hello";
+        let result = __str_slice(s.as_ptr(), s.len() as i64, 4, 2);
+        assert!(result.ptr.is_null());
+        assert_eq!(result.len, 0);
+    }
+
+    #[test]
+    fn str_slice_null_ptr() {
+        let result = __str_slice(std::ptr::null(), 10, 0, 5);
+        assert!(result.ptr.is_null());
+        assert_eq!(result.len, 0);
+    }
+
+    #[test]
+    fn str_to_upper_basic() {
+        let s = "Hello, World!";
         let result = __str_to_upper(s.as_ptr(), s.len() as i64);
+        let upper = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(upper, b"HELLO, WORLD!");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn str_to_upper_empty() {
+        let result = __str_to_upper(std::ptr::null(), 0);
         assert!(result.ptr.is_null());
     }
 
     #[test]
-    fn str_to_lower_returns_null() {
-        let s = "HELLO";
+    fn str_to_upper_already_upper() {
+        let s = "ABC123";
+        let result = __str_to_upper(s.as_ptr(), s.len() as i64);
+        let upper = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(upper, b"ABC123");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn str_to_upper_all_lowercase() {
+        let s = "abcdefghijklmnopqrstuvwxyz";
+        let result = __str_to_upper(s.as_ptr(), s.len() as i64);
+        let upper = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(upper, b"ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn str_to_lower_basic() {
+        let s = "Hello, World!";
         let result = __str_to_lower(s.as_ptr(), s.len() as i64);
+        let lower = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(lower, b"hello, world!");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn str_to_lower_empty() {
+        let result = __str_to_lower(std::ptr::null(), 0);
         assert!(result.ptr.is_null());
+    }
+
+    #[test]
+    fn str_to_lower_already_lower() {
+        let s = "abc123";
+        let result = __str_to_lower(s.as_ptr(), s.len() as i64);
+        let lower = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(lower, b"abc123");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn str_to_lower_all_uppercase() {
+        let s = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let result = __str_to_lower(s.as_ptr(), s.len() as i64);
+        let lower = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(lower, b"abcdefghijklmnopqrstuvwxyz");
+        super::super::memory::__free(result.ptr as *mut u8);
     }
 
     // ==================== Registration tests ====================
@@ -845,8 +1074,15 @@ mod tests {
     }
 
     #[test]
-    fn str_concat_with_nulls() {
+    fn str_concat_with_nulls_edge_case() {
+        // Both null with zero length returns null
         let result = __str_concat(std::ptr::null(), 0, std::ptr::null(), 0);
+        assert!(result.ptr.is_null());
+        assert_eq!(result.len, 0);
+
+        // Negative lengths are treated as zero
+        let s = "Hello";
+        let result = __str_concat(s.as_ptr(), -5, std::ptr::null(), 0);
         assert!(result.ptr.is_null());
         assert_eq!(result.len, 0);
     }

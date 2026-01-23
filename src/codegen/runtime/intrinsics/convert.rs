@@ -1,9 +1,8 @@
 //! Conversion intrinsic functions.
 //!
-//! Functions for converting between types. Numeric conversions are implemented;
-//! string conversions are stubs that need memory allocation.
+//! Functions for converting between types.
 //!
-//! # Implemented Conversions
+//! # Numeric Conversions
 //!
 //! - `__int_to_float`: Convert integer to float
 //! - `__float_to_int`: Convert float to integer (truncates toward zero)
@@ -11,56 +10,24 @@
 //! - `__int_to_char`: Convert code point to character
 //! - `__bool_to_int`: Convert boolean to 0/1
 //!
-//! # Stub Conversions (need allocation)
+//! # String Parsing
 //!
-//! - `__int_to_string`: Format integer as string
+//! - `__str_to_int`: Parse string as integer
+//! - `__str_to_float`: Parse string as float
+//!
+//! # String Formatting
+//!
+//! - `__int_to_string`: Format integer as decimal string
 //! - `__float_to_string`: Format float as string
 //! - `__bool_to_string`: Format boolean as "true"/"false"
 //!
-//! # Why Stubs for String Conversions?
+//! # Memory Ownership
 //!
-//! These functions need to allocate memory for their string results, which
-//! requires deciding on a memory management strategy:
+//! String formatting functions use malloc-based allocation via `__alloc`.
 //!
-//! - **Arena allocator**: Fast, but requires manual lifetime management
-//! - **Reference counting**: Automatic, but has overhead
-//! - **Garbage collection**: Automatic, but complex to implement
-//! - **Caller-provided buffer**: No allocation, but less convenient
-//!
-//! # Implementation Options
-//!
-//! ## With heap allocation (malloc)
-//! ```c
-//! StringResult __int_to_string(int64_t x) {
-//!     char* buf = malloc(21);  // max i64 digits + sign + null
-//!     int len = snprintf(buf, 21, "%lld", x);
-//!     return (StringResult){buf, len};
-//! }
-//! // Caller must free the returned pointer
-//! ```
-//!
-//! ## With arena allocator
-//! ```text
-//! fn __int_to_string(x: Int) -> String {
-//!     let buf = arena_alloc(21);
-//!     let len = format_int(x, buf);
-//!     String { ptr: buf, len }
-//! }
-//! // Arena is reset at end of expression/statement
-//! ```
-//!
-//! ## With caller-provided buffer
-//! ```text
-//! fn __int_to_string(x: Int, buf: *mut u8, capacity: Int) -> Int {
-//!     // Returns length written, or -1 if buffer too small
-//! }
-//! ```
-//!
-//! # Self-Hosting
-//!
-//! The implementation chosen here will affect the entire language's string
-//! handling. For self-hosting, a simple arena or malloc-based approach is
-//! recommended initially, with potential optimization later.
+//! - `__int_to_string` and `__float_to_string`: Caller owns the returned
+//!   string and must call `__free(result.ptr)` when done.
+//! - `__bool_to_string`: Returns pointer to static memory - do NOT free.
 
 use cranelift_codegen::ir::types;
 
@@ -243,36 +210,78 @@ pub extern "C" fn __str_to_float(ptr: *const u8, len: i64) -> f64 {
 
 // ==================== String formatting (stubs) ====================
 
-/// Convert an integer to a string (stub).
+/// Convert an integer to a string.
 ///
-/// Returns (null, 0) as this is not yet implemented.
-pub extern "C" fn __int_to_string(_value: i64) -> StringResult {
-    // Stub: return null pointer and zero length
-    StringResult {
-        ptr: std::ptr::null(),
-        len: 0,
+/// Allocates a new string containing the decimal representation of the value.
+///
+/// # Ownership
+///
+/// Caller owns the returned string and must call `__free(result.ptr)` when done.
+pub extern "C" fn __int_to_string(value: i64) -> StringResult {
+    use super::memory::{__alloc, __memcpy};
+
+    let s = value.to_string();
+    let len = s.len() as i64;
+    let ptr = __alloc(len);
+
+    if ptr.is_null() {
+        return StringResult {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
     }
+
+    __memcpy(ptr, s.as_ptr() as *mut u8, len);
+    StringResult { ptr, len }
 }
 
-/// Convert a float to a string (stub).
+/// Convert a float to a string.
 ///
-/// Returns (null, 0) as this is not yet implemented.
-pub extern "C" fn __float_to_string(_value: f64) -> StringResult {
-    // Stub: return null pointer and zero length
-    StringResult {
-        ptr: std::ptr::null(),
-        len: 0,
+/// Allocates a new string containing the decimal representation of the value.
+/// Special values: returns "NaN" for NaN, "inf" or "-inf" for infinities.
+///
+/// # Ownership
+///
+/// Caller owns the returned string and must call `__free(result.ptr)` when done.
+pub extern "C" fn __float_to_string(value: f64) -> StringResult {
+    use super::memory::{__alloc, __memcpy};
+
+    let s = value.to_string();
+    let len = s.len() as i64;
+    let ptr = __alloc(len);
+
+    if ptr.is_null() {
+        return StringResult {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
     }
+
+    __memcpy(ptr, s.as_ptr() as *mut u8, len);
+    StringResult { ptr, len }
 }
 
-/// Convert a boolean to a string (stub).
+/// Convert a boolean to a string.
 ///
-/// Returns (null, 0) as this is not yet implemented.
-/// When implemented, will return "true" or "false".
-pub extern "C" fn __bool_to_string(_value: i8) -> StringResult {
-    StringResult {
-        ptr: std::ptr::null(),
-        len: 0,
+/// Returns "true" for non-zero values, "false" for zero.
+///
+/// # Ownership
+///
+/// Returns a pointer to static memory. Do NOT free the returned pointer.
+pub extern "C" fn __bool_to_string(value: i8) -> StringResult {
+    static TRUE_STR: &[u8] = b"true";
+    static FALSE_STR: &[u8] = b"false";
+
+    if value != 0 {
+        StringResult {
+            ptr: TRUE_STR.as_ptr(),
+            len: 4,
+        }
+    } else {
+        StringResult {
+            ptr: FALSE_STR.as_ptr(),
+            len: 5,
+        }
     }
 }
 
@@ -418,24 +427,125 @@ mod tests {
     // ==================== String formatting stub tests ====================
 
     #[test]
-    fn int_to_string_returns_null() {
+    fn int_to_string_positive() {
         let result = __int_to_string(42);
-        assert!(result.ptr.is_null());
-        assert_eq!(result.len, 0);
+        assert!(!result.ptr.is_null());
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"42");
+        super::super::memory::__free(result.ptr as *mut u8);
     }
 
     #[test]
-    fn float_to_string_returns_null() {
-        let result = __float_to_string(2.5);
-        assert!(result.ptr.is_null());
-        assert_eq!(result.len, 0);
+    fn int_to_string_negative() {
+        let result = __int_to_string(-123);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"-123");
+        super::super::memory::__free(result.ptr as *mut u8);
     }
 
     #[test]
-    fn bool_to_string_returns_null() {
+    fn int_to_string_zero() {
+        let result = __int_to_string(0);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"0");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn int_to_string_min() {
+        let result = __int_to_string(i64::MIN);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(std::str::from_utf8(s).unwrap(), i64::MIN.to_string());
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn int_to_string_max() {
+        let result = __int_to_string(i64::MAX);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(std::str::from_utf8(s).unwrap(), i64::MAX.to_string());
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn float_to_string_positive() {
+        let result = __float_to_string(3.25);
+        assert!(!result.ptr.is_null());
+        let s = unsafe {
+            std::str::from_utf8_unchecked(std::slice::from_raw_parts(
+                result.ptr,
+                result.len as usize,
+            ))
+        };
+        assert!(s.starts_with("3.25"));
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn float_to_string_integer() {
+        let result = __float_to_string(42.0);
+        assert!(!result.ptr.is_null());
+        // Rust formats as "42" not "42.0"
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"42");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn float_to_string_nan() {
+        let result = __float_to_string(f64::NAN);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"NaN");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn float_to_string_infinity() {
+        let result = __float_to_string(f64::INFINITY);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"inf");
+        super::super::memory::__free(result.ptr as *mut u8);
+
+        let result = __float_to_string(f64::NEG_INFINITY);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"-inf");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn float_to_string_negative() {
+        let result = __float_to_string(-2.5);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"-2.5");
+        super::super::memory::__free(result.ptr as *mut u8);
+    }
+
+    #[test]
+    fn bool_to_string_true() {
         let result = __bool_to_string(1);
-        assert!(result.ptr.is_null());
-        assert_eq!(result.len, 0);
+        assert!(!result.ptr.is_null());
+        assert_eq!(result.len, 4);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"true");
+        // Note: Do NOT free - static string
+    }
+
+    #[test]
+    fn bool_to_string_false() {
+        let result = __bool_to_string(0);
+        assert!(!result.ptr.is_null());
+        assert_eq!(result.len, 5);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"false");
+    }
+
+    #[test]
+    fn bool_to_string_nonzero_is_true() {
+        // Any non-zero value should be treated as true
+        let result = __bool_to_string(42);
+        assert_eq!(result.len, 4);
+        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
+        assert_eq!(s, b"true");
     }
 
     // ==================== Registration tests ====================
