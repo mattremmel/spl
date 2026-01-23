@@ -277,9 +277,35 @@ impl<'a> FunctionLowerer<'a> {
             Constant::String(_) => Err(CodegenError::Internal(
                 "string constants not yet supported".to_string(),
             )),
-            Constant::FnDef(_) => Err(CodegenError::Internal(
-                "function references not yet supported".to_string(),
-            )),
+            Constant::FnDef(def_id) => {
+                // Look up the function in the registry
+                let registry = self.func_registry.ok_or_else(|| {
+                    CodegenError::Internal(
+                        "function registry required for FnDef constants".to_string(),
+                    )
+                })?;
+
+                let func_info = registry.get(*def_id).ok_or_else(|| {
+                    CodegenError::Internal(format!(
+                        "function {:?} not found in registry",
+                        def_id
+                    ))
+                })?;
+
+                // Get the module to import the function reference
+                let module = self.module.as_mut().ok_or_else(|| {
+                    CodegenError::Internal("module required for FnDef constants".to_string())
+                })?;
+
+                // Import the function into the current function being built
+                let func_ref = module.declare_func_in_func(func_info.func_id, self.builder.func);
+
+                // Get the function's address as a pointer value
+                let ptr_type = self.type_mapper.pointer_type();
+                let addr = self.builder.ins().func_addr(ptr_type, func_ref);
+
+                Ok(Some(addr))
+            }
             Constant::Zeroed(ty) => {
                 if let Some(clif_ty) = self.type_mapper.map_type(*ty, self.types) {
                     // Scalar type: emit zero constant

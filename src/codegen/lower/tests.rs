@@ -2620,25 +2620,52 @@ fn lower_string_constant() {
 }
 
 #[test]
-#[ignore = "function references not yet supported"]
 fn lower_fn_def_constant() {
-    let mut runner = JitTestRunner::new();
-    let i32_ty = runner.types_mut().i32();
+    // fn target() -> i32 { 42 }
+    // fn get_fn_ptr() -> usize { target }  // FnDef as value
+    let mut types = TypeInterner::new();
+    let i32_ty = types.i32();
+    let usize_ty = types.primitive(PrimitiveKind::Usize);
 
-    let mut body = Body::new(i32_ty);
-    let entry = body.alloc_block();
-
-    // Use a function definition constant (should error)
-    body.block_mut(entry).push_statement(Statement::assign(
-        Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::FnDef(DefId(1)))),
-        0..0,
-    ));
-
-    body.block_mut(entry)
+    // fn target() -> i32 { 42 }
+    let mut target_body = Body::new(i32_ty);
+    let target_entry = target_body.alloc_block();
+    target_body
+        .block_mut(target_entry)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(42)),
+            0..0,
+        ));
+    target_body
+        .block_mut(target_entry)
         .set_terminator(Terminator::return_(0..0));
 
-    let _ptr = runner.compile(&body, "fn_def_constant");
+    // fn get_fn_ptr() -> usize { target }
+    let mut getter_body = Body::new(usize_ty);
+    let getter_entry = getter_body.alloc_block();
+    getter_body
+        .block_mut(getter_entry)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::FnDef(DefId(1)))),
+            0..0,
+        ));
+    getter_body
+        .block_mut(getter_entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let functions = [
+        FunctionDef::new(DefId(1), "target", &target_body),
+        FunctionDef::new(DefId(2), "get_fn_ptr", &getter_body),
+    ];
+    let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+    let target_ptr = module.get_function_ptr(DefId(1)).unwrap();
+    let getter_ptr = module.get_function_ptr(DefId(2)).unwrap();
+    let get_fn_ptr: fn() -> usize = unsafe { mem::transmute(getter_ptr) };
+
+    assert_eq!(get_fn_ptr(), target_ptr as usize);
 }
 
 #[test]
