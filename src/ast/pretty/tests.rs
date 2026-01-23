@@ -26,10 +26,9 @@ mod items {
     }
 
     #[test]
-    #[ignore = "old syntax: uses '->' for return type"]
-    fn function_with_params_arrow() {
+    fn function_with_params_colon() {
         check(
-            "fn add(x: i32, y: i32) -> i32 { x + y }",
+            "fn add(x: i32, y: i32): i32 { x + y }",
             &expect![[r#"
                 SourceFile
                   FunctionDef "add"
@@ -78,15 +77,12 @@ mod items {
     }
 
     #[test]
-    #[ignore = "old syntax: uses '<T>' generics and '->' for return type"]
-    fn function_generic_angle_arrow() {
+    fn function_generic_where() {
         check(
-            "fn id<T>(x: T) -> T { x }",
+            "fn id(x: T): T where T { x }",
             &expect![[r#"
                 SourceFile
                   FunctionDef "id"
-                    GenericParams
-                      GenericParam "T"
                     ParamList
                       Param "x"
                         Path "T"
@@ -113,10 +109,9 @@ mod items {
     }
 
     #[test]
-    #[ignore = "old syntax: uses '{}' instead of '()'"]
-    fn struct_empty_braces_old_syntax() {
+    fn struct_empty_parens() {
         check(
-            "struct Empty {}",
+            "struct Empty()",
             &expect![[r#"
                 SourceFile
                   StructDef "Empty"
@@ -138,10 +133,9 @@ mod items {
     }
 
     #[test]
-    #[ignore = "old syntax: uses '{}' instead of '()'"]
-    fn struct_with_fields_brace() {
+    fn struct_with_fields_parens() {
         check(
-            "struct Point { x: i32, y: i32 }",
+            "struct Point(x: i32, y: i32)",
             &expect![[r#"
                 SourceFile
                   StructDef "Point"
@@ -172,15 +166,12 @@ mod items {
     }
 
     #[test]
-    #[ignore = "old syntax: uses '<T>' and '{}' instead of 'where T' and '()'"]
-    fn struct_generic_angle_brace() {
+    fn struct_generic_where() {
         check(
-            "struct Box<T> { value: T }",
+            "struct Box(value: T) where T",
             &expect![[r#"
                 SourceFile
                   StructDef "Box"
-                    GenericParams
-                      GenericParam "T"
                     FieldList
                       FieldDef "value"
                         Path "T"
@@ -247,17 +238,14 @@ mod items {
         );
     }
 
-    /// Generic type alias: `type Result<T> = Option<T>;`
+    /// Generic type alias: `type Result = Option<T> where T;`
     #[test]
-    #[ignore = "old syntax: uses '<T>' instead of 'where T'"]
-    fn type_alias_generic_angle() {
+    fn type_alias_generic_where() {
         check(
-            "type Result<T> = Option<T>;",
+            "type Result = Option<T> where T;",
             &expect![[r#"
                 SourceFile
                   TypeAlias "Result"
-                    GenericParams
-                      GenericParam "T"
                     Path "Option"
                       GenericArgs
                         Path "T"
@@ -1194,10 +1182,9 @@ mod types {
     use super::*;
 
     #[test]
-    #[ignore = "old syntax: uses '->' instead of ':'"]
-    fn type_path_arrow() {
+    fn type_path_colon() {
         check(
-            "fn foo() -> i32 {}",
+            "fn foo(): i32 {}",
             &expect![[r#"
                 SourceFile
                   FunctionDef "foo"
@@ -1210,10 +1197,9 @@ mod types {
     }
 
     #[test]
-    #[ignore = "old syntax: uses '->' instead of ':'"]
-    fn type_path_generic_arrow() {
+    fn type_path_generic_colon() {
         check(
-            "fn foo() -> Vec<i32> {}",
+            "fn foo(): Vec<i32> {}",
             &expect![[r#"
                 SourceFile
                   FunctionDef "foo"
@@ -1332,10 +1318,9 @@ mod types {
     }
 
     #[test]
-    #[ignore = "old syntax: uses '->' instead of ':'"]
-    fn type_never_arrow() {
+    fn type_never_colon() {
         check(
-            "fn foo() -> ! {}",
+            "fn foo(): ! {}",
             &expect![[r#"
                 SourceFile
                   FunctionDef "foo"
@@ -1502,18 +1487,17 @@ mod integration {
     use super::*;
 
     #[test]
-    #[ignore = "old syntax: uses '{}' for struct and '->' for return type"]
-    fn complete_program_old_syntax() {
+    fn complete_program() {
         check(
             r#"
-struct Point { x: i32, y: i32 }
+struct Point(x: i32, y: i32)
 
 impl Point {
-fn new(x: i32, y: i32) -> Point {
+fn new(x: i32, y: i32): Point {
     Point { x: x, y: y }
 }
 
-fn distance(&self) -> i32 {
+fn distance(&self): i32 {
     self.x + self.y
 }
 }
@@ -1609,11 +1593,10 @@ p.distance();
     }
 
     #[test]
-    #[ignore = "old syntax: uses '<T>' generics and '->' for return type"]
-    fn complex_function_old_syntax() {
+    fn complex_function() {
         check(
             r#"
-fn process<T>(items: &[T], filter: fn(T) -> bool) -> i32 {
+fn process(items: &[T], filter: fn(T) -> bool): i32 where T {
 let mut count = 0;
 for item in items {
     if filter(item) {
@@ -1626,8 +1609,6 @@ count
             &expect![[r#"
                 SourceFile
                   FunctionDef "process"
-                    GenericParams
-                      GenericParam "T"
                     ParamList
                       Param "items"
                         RefType "&"

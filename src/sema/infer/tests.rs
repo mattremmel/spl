@@ -1673,19 +1673,19 @@ fn test_assign_field_through_immutable_ref() {
 // Phase 1: Track Type Parameters in FnSignature
 
 #[test]
-#[ignore = "old syntax: uses '<T>' for generics"]
-fn generic_fn_identity_infers_from_arg_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_fn_identity_infers_from_arg() {
     check(
-        "fn identity<T>(x: T): T { x } fn main() { let a = identity(42); }",
+        "fn identity(x: T): T where T { x } fn main() { let a = identity(42); }",
         "i32",
     );
 }
 
 #[test]
-#[ignore = "old syntax: uses '<T>' for generics"]
-fn generic_fn_identity_infers_from_context_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_fn_identity_infers_from_context() {
     check(
-        "fn identity<T>(x: T): T { x } fn main() { let a: i64 = identity(42); }",
+        "fn identity(x: T): T where T { x } fn main() { let a: i64 = identity(42); }",
         "i64",
     );
 }
@@ -1693,19 +1693,19 @@ fn generic_fn_identity_infers_from_context_old() {
 // Phase 2: Instantiate Generic Functions
 
 #[test]
-#[ignore = "old syntax: uses '<T>' for generics"]
-fn generic_fn_two_params_same_type_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_fn_two_params_same_type() {
     check(
-        "fn pair<T>(a: T, b: T): T { a } fn main() { let x = pair(1, 2); }",
+        "fn pair(a: T, b: T): T where T { a } fn main() { let x = pair(1, 2); }",
         "i32",
     );
 }
 
 #[test]
-#[ignore = "old syntax: uses '<A, B>' for generics"]
-fn generic_fn_multiple_type_params_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_fn_multiple_type_params() {
     check(
-        "fn swap<A, B>(a: A, b: B): B { b } fn main() { let x = swap(1, true); }",
+        "fn swap(a: A, b: B): B where A, B { b } fn main() { let x = swap(1, true); }",
         "bool",
     );
 }
@@ -1713,19 +1713,19 @@ fn generic_fn_multiple_type_params_old() {
 // Phase 3: Generic Struct Instantiation
 
 #[test]
-#[ignore = "old syntax: uses '<T>' and '{}' for struct"]
-fn generic_struct_field_access_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_struct_field_access() {
     check(
-        "struct Wrapper<T> { value: T } fn main() { let w = Wrapper { value: 42 }; let x = w.value; }",
+        "struct Wrapper(value: T) where T fn main() { let w = Wrapper { value: 42 }; let x = w.value; }",
         "i32",
     );
 }
 
 #[test]
-#[ignore = "old syntax: uses '<A, B>' and '{}' for struct"]
-fn generic_struct_multiple_fields_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_struct_multiple_fields() {
     check(
-        "struct Pair<A, B> { first: A, second: B } fn main() { let p = Pair { first: 1, second: true }; let x = p.second; }",
+        "struct Pair(first: A, second: B) where A, B fn main() { let p = Pair { first: 1, second: true }; let x = p.second; }",
         "bool",
     );
 }
@@ -1733,10 +1733,10 @@ fn generic_struct_multiple_fields_old() {
 // Phase 4: Generic Methods
 
 #[test]
-#[ignore = "old syntax: uses '<T>' and '{}' for struct/impl"]
-fn generic_struct_method_returns_param_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_struct_method_returns_param() {
     check(
-        "struct Wrapper<T> { value: T } impl<T> Wrapper<T> { fn get(&self): T { self.value } } fn main() { let w = Wrapper { value: 42 }; let x = w.get(); }",
+        "struct Wrapper(value: T) where T impl Wrapper<T> where T { fn get(&self): T { self.value } } fn main() { let w = Wrapper { value: 42 }; let x = w.get(); }",
         "i32",
     );
 }
@@ -1744,10 +1744,10 @@ fn generic_struct_method_returns_param_old() {
 // Phase 5: Error Cases
 
 #[test]
-#[ignore = "old syntax: uses '<T>' for generics"]
-fn error_generic_type_mismatch_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn error_generic_type_mismatch() {
     check_err(
-        "fn pair<T>(a: T, b: T): T { a } fn main() { pair(1, true); }",
+        "fn pair(a: T, b: T): T where T { a } fn main() { pair(1, true); }",
         &["type mismatch"],
     );
 }
@@ -1755,19 +1755,19 @@ fn error_generic_type_mismatch_old() {
 // Phase 6: Edge Cases
 
 #[test]
-#[ignore = "old syntax: uses '<T>' for generics"]
-fn generic_nested_calls_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_nested_calls() {
     check(
-        "fn identity<T>(x: T): T { x } fn main() { let a = identity(identity(42)); }",
+        "fn identity(x: T): T where T { x } fn main() { let a = identity(identity(42)); }",
         "i32",
     );
 }
 
 #[test]
-#[ignore = "old syntax: uses '<T>' for generics"]
-fn generic_multiple_instantiations_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_multiple_instantiations() {
     check(
-        "fn identity<T>(x: T): T { x } fn main() { let a = identity(42); let b = identity(true); }",
+        "fn identity(x: T): T where T { x } fn main() { let a = identity(42); let b = identity(true); }",
         "bool",
     );
 }
@@ -1775,14 +1775,14 @@ fn generic_multiple_instantiations_old() {
 // Phase 7: Method-Specific Type Parameters
 
 #[test]
-#[ignore = "old syntax: uses '<T>' and '{}' for struct/impl"]
-fn generic_method_with_own_type_param_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_method_with_own_type_param() {
     // Method has its own type parameter U distinct from impl type param T
     check(
         r#"
-        struct Wrapper<T> { value: T }
-        impl<T> Wrapper<T> {
-            fn transform<U>(&self, other: U): U { other }
+        struct Wrapper(value: T) where T
+        impl Wrapper<T> where T {
+            fn transform(&self, other: U): U where U { other }
         }
         fn main() {
             let w = Wrapper { value: 42 };
@@ -1794,14 +1794,14 @@ fn generic_method_with_own_type_param_old() {
 }
 
 #[test]
-#[ignore = "old syntax: uses '<T>' and '{}' for struct/impl"]
-fn generic_method_uses_both_impl_and_own_type_param_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_method_uses_both_impl_and_own_type_param() {
     // Method returns T (from impl) but takes U (method-specific)
     check(
         r#"
-        struct Wrapper<T> { value: T }
-        impl<T> Wrapper<T> {
-            fn with_other<U>(&self, _other: U): T { self.value }
+        struct Wrapper(value: T) where T
+        impl Wrapper<T> where T {
+            fn with_other(&self, _other: U): T where U { self.value }
         }
         fn main() {
             let w = Wrapper { value: 42 };
@@ -1815,12 +1815,12 @@ fn generic_method_uses_both_impl_and_own_type_param_old() {
 // Phase 8: Generic Functions Returning Generic Structs
 
 #[test]
-#[ignore = "old syntax: uses '<T>' and '{}' for struct"]
-fn generic_fn_returns_generic_struct_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_fn_returns_generic_struct() {
     check(
         r#"
-        struct Wrapper<T> { value: T }
-        fn wrap<T>(x: T): Wrapper<T> { Wrapper { value: x } }
+        struct Wrapper(value: T) where T
+        fn wrap(x: T): Wrapper<T> where T { Wrapper { value: x } }
         fn main() {
             let w = wrap(42);
             let x = w.value;
@@ -1831,12 +1831,12 @@ fn generic_fn_returns_generic_struct_old() {
 }
 
 #[test]
-#[ignore = "old syntax: uses '<T>' and '{}' for struct"]
-fn generic_fn_returns_generic_struct_inferred_from_context_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn generic_fn_returns_generic_struct_inferred_from_context() {
     check(
         r#"
-        struct Wrapper<T> { value: T }
-        fn wrap<T>(x: T): Wrapper<T> { Wrapper { value: x } }
+        struct Wrapper(value: T) where T
+        fn wrap(x: T): Wrapper<T> where T { Wrapper { value: x } }
         fn main() {
             let w: Wrapper<i64> = wrap(42);
             let x = w.value;
@@ -1849,12 +1849,12 @@ fn generic_fn_returns_generic_struct_inferred_from_context_old() {
 // Phase 9: Nested Generic Types
 
 #[test]
-#[ignore = "old syntax: uses '<T>' and '{}' for struct"]
-fn nested_generic_struct_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn nested_generic_struct() {
     check(
         r#"
-        struct Inner<T> { value: T }
-        struct Outer<T> { inner: Inner<T> }
+        struct Inner(value: T) where T
+        struct Outer(inner: Inner<T>) where T
         fn main() {
             let o = Outer { inner: Inner { value: 42 } };
             let x = o.inner.value;
@@ -2695,19 +2695,19 @@ fn float_var_unifies_with_floats_not_integers() {
 }
 
 #[test]
-#[ignore = "old syntax: uses '<T>' and '{}' for struct"]
-fn general_var_unifies_with_anything_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn general_var_unifies_with_anything() {
     // Generic type parameters create general Var that can unify with anything
     check(
-        "struct Box<T> { value: T } fn main() { let b = Box { value: 42 }; }",
+        "struct Box(value: T) where T fn main() { let b = Box { value: 42 }; }",
         "Box",
     );
     check(
-        "struct Box<T> { value: T } fn main() { let b = Box { value: true }; }",
+        "struct Box(value: T) where T fn main() { let b = Box { value: true }; }",
         "Box",
     );
     check(
-        "struct Box<T> { value: T } fn main() { let b = Box { value: 3.14 }; }",
+        "struct Box(value: T) where T fn main() { let b = Box { value: 3.14 }; }",
         "Box",
     );
 }
@@ -2910,11 +2910,11 @@ fn type_var_chain_through_multiple_lets() {
 }
 
 #[test]
-#[ignore = "old syntax: uses '<T>' for generics"]
-fn type_var_bidirectional_through_function_old() {
+#[ignore = "needs semantic support for where clause generics"]
+fn type_var_bidirectional_through_function() {
     // Type should flow both ways: argument constrains param, return constrains usage
     check(
-        "fn identity<T>(x: T): T { x } fn main() { let a: i64 = identity(1); }",
+        "fn identity(x: T): T where T { x } fn main() { let a: i64 = identity(1); }",
         "i64",
     );
 }

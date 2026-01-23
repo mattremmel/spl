@@ -123,13 +123,12 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "old syntax: uses '->' instead of ':'"]
-    fn path_self_type_arrow() {
+    fn path_self_type_colon() {
         // Self as a type in type position
         check_item(
-            "fn foo() -> Self {}",
+            "fn foo(): Self {}",
             &expect![[r#"
-                FunctionDef@0..19
+                FunctionDef@0..17
                   FN_KW@0..2 "fn"
                   Name@2..6
                     WHITESPACE@2..3 " "
@@ -137,18 +136,17 @@ mod tests {
                   ParamList@6..8
                     L_PAREN@6..7 "("
                     R_PAREN@7..8 ")"
-                  WHITESPACE@8..9 " "
-                  ARROW@9..11 "->"
-                  PathType@11..16
-                    Path@11..16
-                      PathSegment@11..16
-                        NameRef@11..16
-                          WHITESPACE@11..12 " "
-                          SELF_TYPE_KW@12..16 "Self"
-                  Block@16..19
-                    WHITESPACE@16..17 " "
-                    L_BRACE@17..18 "{"
-                    R_BRACE@18..19 "}"
+                  COLON@8..9 ":"
+                  PathType@9..14
+                    Path@9..14
+                      PathSegment@9..14
+                        NameRef@9..14
+                          WHITESPACE@9..10 " "
+                          SELF_TYPE_KW@10..14 "Self"
+                  Block@14..17
+                    WHITESPACE@14..15 " "
+                    L_BRACE@15..16 "{"
+                    R_BRACE@16..17 "}"
             "#]],
         );
     }

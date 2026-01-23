@@ -23,12 +23,11 @@ fn function_minimal() {
 }
 
 #[test]
-#[ignore = "old syntax: use ':' instead of '->'"]
-fn function_with_return_type_arrow() {
+fn function_with_return_type_colon() {
     check_item(
-        "fn foo() -> i32 {}",
+        "fn foo(): i32 {}",
         &expect![[r#"
-            FunctionDef@0..18
+            FunctionDef@0..16
               FN_KW@0..2 "fn"
               Name@2..6
                 WHITESPACE@2..3 " "
@@ -36,29 +35,27 @@ fn function_with_return_type_arrow() {
               ParamList@6..8
                 L_PAREN@6..7 "("
                 R_PAREN@7..8 ")"
-              WHITESPACE@8..9 " "
-              ARROW@9..11 "->"
-              PathType@11..15
-                Path@11..15
-                  PathSegment@11..15
-                    NameRef@11..15
-                      WHITESPACE@11..12 " "
-                      IDENT@12..15 "i32"
-              Block@15..18
-                WHITESPACE@15..16 " "
-                L_BRACE@16..17 "{"
-                R_BRACE@17..18 "}"
+              COLON@8..9 ":"
+              PathType@9..13
+                Path@9..13
+                  PathSegment@9..13
+                    NameRef@9..13
+                      WHITESPACE@9..10 " "
+                      IDENT@10..13 "i32"
+              Block@13..16
+                WHITESPACE@13..14 " "
+                L_BRACE@14..15 "{"
+                R_BRACE@15..16 "}"
         "#]],
     );
 }
 
 #[test]
-#[ignore = "old syntax: use ':' instead of '->'"]
-fn function_with_params_arrow() {
+fn function_with_params_colon() {
     check_item(
-        "fn add(x: i32, y: i32) -> i32 {}",
+        "fn add(x: i32, y: i32): i32 {}",
         &expect![[r#"
-            FunctionDef@0..32
+            FunctionDef@0..30
               FN_KW@0..2 "fn"
               Name@2..6
                 WHITESPACE@2..3 " "
@@ -88,29 +85,27 @@ fn function_with_params_arrow() {
                           WHITESPACE@17..18 " "
                           IDENT@18..21 "i32"
                 R_PAREN@21..22 ")"
-              WHITESPACE@22..23 " "
-              ARROW@23..25 "->"
-              PathType@25..29
-                Path@25..29
-                  PathSegment@25..29
-                    NameRef@25..29
-                      WHITESPACE@25..26 " "
-                      IDENT@26..29 "i32"
-              Block@29..32
-                WHITESPACE@29..30 " "
-                L_BRACE@30..31 "{"
-                R_BRACE@31..32 "}"
+              COLON@22..23 ":"
+              PathType@23..27
+                Path@23..27
+                  PathSegment@23..27
+                    NameRef@23..27
+                      WHITESPACE@23..24 " "
+                      IDENT@24..27 "i32"
+              Block@27..30
+                WHITESPACE@27..28 " "
+                L_BRACE@28..29 "{"
+                R_BRACE@29..30 "}"
         "#]],
     );
 }
 
 #[test]
-#[ignore = "old syntax: use ':' instead of '->'"]
-fn function_with_body_arrow() {
+fn function_with_body_colon() {
     check_item(
-        "fn answer() -> i32 { 42 }",
+        "fn answer(): i32 { 42 }",
         &expect![[r#"
-            FunctionDef@0..25
+            FunctionDef@0..23
               FN_KW@0..2 "fn"
               Name@2..9
                 WHITESPACE@2..3 " "
@@ -118,22 +113,21 @@ fn function_with_body_arrow() {
               ParamList@9..11
                 L_PAREN@9..10 "("
                 R_PAREN@10..11 ")"
-              WHITESPACE@11..12 " "
-              ARROW@12..14 "->"
-              PathType@14..18
-                Path@14..18
-                  PathSegment@14..18
-                    NameRef@14..18
-                      WHITESPACE@14..15 " "
-                      IDENT@15..18 "i32"
-              Block@18..25
-                WHITESPACE@18..19 " "
-                L_BRACE@19..20 "{"
-                LiteralExpr@20..23
-                  WHITESPACE@20..21 " "
-                  INT_LITERAL@21..23 "42"
-                WHITESPACE@23..24 " "
-                R_BRACE@24..25 "}"
+              COLON@11..12 ":"
+              PathType@12..16
+                Path@12..16
+                  PathSegment@12..16
+                    NameRef@12..16
+                      WHITESPACE@12..13 " "
+                      IDENT@13..16 "i32"
+              Block@16..23
+                WHITESPACE@16..17 " "
+                L_BRACE@17..18 "{"
+                LiteralExpr@18..21
+                  WHITESPACE@18..19 " "
+                  INT_LITERAL@19..21 "42"
+                WHITESPACE@21..22 " "
+                R_BRACE@22..23 "}"
         "#]],
     );
 }
@@ -280,12 +274,11 @@ fn visibility_pub_in_path() {
 }
 
 #[test]
-#[ignore = "old syntax: use '()' instead of '{}'"]
-fn struct_pub_crate_brace() {
+fn struct_pub_crate_paren() {
     check_item(
-        "pub(crate) struct Foo {}",
+        "pub(crate) struct Foo()",
         &expect![[r#"
-            StructDef@0..24
+            StructDef@0..23
               Visibility@0..10
                 PUB_KW@0..3 "pub"
                 L_PAREN@3..4 "("
@@ -296,47 +289,42 @@ fn struct_pub_crate_brace() {
               Name@17..21
                 WHITESPACE@17..18 " "
                 IDENT@18..21 "Foo"
-              FieldList@21..24
-                WHITESPACE@21..22 " "
-                L_BRACE@22..23 "{"
-                R_BRACE@23..24 "}"
+              FieldList@21..23
+                L_PAREN@21..22 "("
+                R_PAREN@22..23 ")"
         "#]],
     );
 }
 
 #[test]
-#[ignore = "old syntax: use '()' instead of '{}'"]
-fn field_pub_crate_brace() {
+fn field_pub_crate_paren() {
     check_item(
-        "struct Foo { pub(crate) x: i32 }",
+        "struct Foo(pub(crate) x: i32)",
         &expect![[r#"
-            StructDef@0..32
+            StructDef@0..29
               STRUCT_KW@0..6 "struct"
               Name@6..10
                 WHITESPACE@6..7 " "
                 IDENT@7..10 "Foo"
-              FieldList@10..32
-                WHITESPACE@10..11 " "
-                L_BRACE@11..12 "{"
-                FieldDef@12..30
-                  Visibility@12..23
-                    WHITESPACE@12..13 " "
-                    PUB_KW@13..16 "pub"
-                    L_PAREN@16..17 "("
-                    CRATE_KW@17..22 "crate"
-                    R_PAREN@22..23 ")"
-                  Name@23..25
-                    WHITESPACE@23..24 " "
-                    IDENT@24..25 "x"
-                  COLON@25..26 ":"
-                  PathType@26..30
-                    Path@26..30
-                      PathSegment@26..30
-                        NameRef@26..30
-                          WHITESPACE@26..27 " "
-                          IDENT@27..30 "i32"
-                WHITESPACE@30..31 " "
-                R_BRACE@31..32 "}"
+              FieldList@10..29
+                L_PAREN@10..11 "("
+                FieldDef@11..28
+                  Visibility@11..21
+                    PUB_KW@11..14 "pub"
+                    L_PAREN@14..15 "("
+                    CRATE_KW@15..20 "crate"
+                    R_PAREN@20..21 ")"
+                  Name@21..23
+                    WHITESPACE@21..22 " "
+                    IDENT@22..23 "x"
+                  COLON@23..24 ":"
+                  PathType@24..28
+                    Path@24..28
+                      PathSegment@24..28
+                        NameRef@24..28
+                          WHITESPACE@24..25 " "
+                          IDENT@25..28 "i32"
+                R_PAREN@28..29 ")"
         "#]],
     );
 }
@@ -428,102 +416,101 @@ fn function_with_self_and_params() {
 }
 
 #[test]
-#[ignore = "old syntax: use 'where T' instead of '<T>' and ':' instead of '->'"]
-fn function_with_generics_angle() {
+fn function_with_generics_where() {
     check_item(
-        "fn identity<T>(x: T) -> T {}",
+        "fn identity(x: T): T where T {}",
         &expect![[r#"
-            FunctionDef@0..28
+            FunctionDef@0..31
               FN_KW@0..2 "fn"
               Name@2..11
                 WHITESPACE@2..3 " "
                 IDENT@3..11 "identity"
-              GenericParams@11..14
-                LT@11..12 "<"
-                GenericParam@12..13
+              ParamList@11..17
+                L_PAREN@11..12 "("
+                Param@12..16
                   Name@12..13
-                    IDENT@12..13 "T"
-                GT@13..14 ">"
-              ParamList@14..20
-                L_PAREN@14..15 "("
-                Param@15..19
-                  Name@15..16
-                    IDENT@15..16 "x"
-                  COLON@16..17 ":"
-                  PathType@17..19
-                    Path@17..19
-                      PathSegment@17..19
-                        NameRef@17..19
-                          WHITESPACE@17..18 " "
-                          IDENT@18..19 "T"
-                R_PAREN@19..20 ")"
-              WHITESPACE@20..21 " "
-              ARROW@21..23 "->"
-              PathType@23..25
-                Path@23..25
-                  PathSegment@23..25
-                    NameRef@23..25
-                      WHITESPACE@23..24 " "
-                      IDENT@24..25 "T"
-              Block@25..28
-                WHITESPACE@25..26 " "
-                L_BRACE@26..27 "{"
-                R_BRACE@27..28 "}"
+                    IDENT@12..13 "x"
+                  COLON@13..14 ":"
+                  PathType@14..16
+                    Path@14..16
+                      PathSegment@14..16
+                        NameRef@14..16
+                          WHITESPACE@14..15 " "
+                          IDENT@15..16 "T"
+                R_PAREN@16..17 ")"
+              COLON@17..18 ":"
+              PathType@18..20
+                Path@18..20
+                  PathSegment@18..20
+                    NameRef@18..20
+                      WHITESPACE@18..19 " "
+                      IDENT@19..20 "T"
+              WhereClause@20..28
+                WHITESPACE@20..21 " "
+                WHERE_KW@21..26 "where"
+                GenericParam@26..28
+                  Name@26..28
+                    WHITESPACE@26..27 " "
+                    IDENT@27..28 "T"
+              Block@28..31
+                WHITESPACE@28..29 " "
+                L_BRACE@29..30 "{"
+                R_BRACE@30..31 "}"
         "#]],
     );
 }
 
 #[test]
-#[ignore = "old syntax: use 'where T, U' instead of '<T, U>'"]
-fn function_with_multiple_generics_angle() {
+fn function_with_multiple_generics_where() {
     check_item(
-        "fn pair<T, U>(a: T, b: U) {}",
+        "fn pair(a: T, b: U) where T, U {}",
         &expect![[r#"
-            FunctionDef@0..28
+            FunctionDef@0..33
               FN_KW@0..2 "fn"
               Name@2..7
                 WHITESPACE@2..3 " "
                 IDENT@3..7 "pair"
-              GenericParams@7..13
-                LT@7..8 "<"
-                GenericParam@8..9
+              ParamList@7..19
+                L_PAREN@7..8 "("
+                Param@8..12
                   Name@8..9
-                    IDENT@8..9 "T"
-                COMMA@9..10 ","
-                GenericParam@10..12
-                  Name@10..12
-                    WHITESPACE@10..11 " "
-                    IDENT@11..12 "U"
-                GT@12..13 ">"
-              ParamList@13..25
-                L_PAREN@13..14 "("
-                Param@14..18
-                  Name@14..15
-                    IDENT@14..15 "a"
+                    IDENT@8..9 "a"
+                  COLON@9..10 ":"
+                  PathType@10..12
+                    Path@10..12
+                      PathSegment@10..12
+                        NameRef@10..12
+                          WHITESPACE@10..11 " "
+                          IDENT@11..12 "T"
+                COMMA@12..13 ","
+                Param@13..18
+                  Name@13..15
+                    WHITESPACE@13..14 " "
+                    IDENT@14..15 "b"
                   COLON@15..16 ":"
                   PathType@16..18
                     Path@16..18
                       PathSegment@16..18
                         NameRef@16..18
                           WHITESPACE@16..17 " "
-                          IDENT@17..18 "T"
-                COMMA@18..19 ","
-                Param@19..24
-                  Name@19..21
-                    WHITESPACE@19..20 " "
-                    IDENT@20..21 "b"
-                  COLON@21..22 ":"
-                  PathType@22..24
-                    Path@22..24
-                      PathSegment@22..24
-                        NameRef@22..24
-                          WHITESPACE@22..23 " "
-                          IDENT@23..24 "U"
-                R_PAREN@24..25 ")"
-              Block@25..28
-                WHITESPACE@25..26 " "
-                L_BRACE@26..27 "{"
-                R_BRACE@27..28 "}"
+                          IDENT@17..18 "U"
+                R_PAREN@18..19 ")"
+              WhereClause@19..30
+                WHITESPACE@19..20 " "
+                WHERE_KW@20..25 "where"
+                GenericParam@25..27
+                  Name@25..27
+                    WHITESPACE@25..26 " "
+                    IDENT@26..27 "T"
+                COMMA@27..28 ","
+                GenericParam@28..30
+                  Name@28..30
+                    WHITESPACE@28..29 " "
+                    IDENT@29..30 "U"
+              Block@30..33
+                WHITESPACE@30..31 " "
+                L_BRACE@31..32 "{"
+                R_BRACE@32..33 "}"
         "#]],
     );
 }
@@ -551,42 +538,99 @@ fn function_owned_self() {
     );
 }
 
-// === Struct tests (old brace syntax) ===
+// === Struct tests (paren syntax) ===
 
 #[test]
-#[ignore = "old syntax: use '()' instead of '{}'"]
-fn struct_empty_brace() {
+fn struct_empty_paren() {
     check_item(
-        "struct Point {}",
+        "struct Point()",
         &expect![[r#"
-            StructDef@0..15
+            StructDef@0..14
               STRUCT_KW@0..6 "struct"
               Name@6..12
                 WHITESPACE@6..7 " "
                 IDENT@7..12 "Point"
-              FieldList@12..15
-                WHITESPACE@12..13 " "
-                L_BRACE@13..14 "{"
-                R_BRACE@14..15 "}"
+              FieldList@12..14
+                L_PAREN@12..13 "("
+                R_PAREN@13..14 ")"
         "#]],
     );
 }
 
 #[test]
-#[ignore = "old syntax: use '()' instead of '{}'"]
-fn struct_with_fields_brace() {
+fn struct_with_fields_paren() {
     check_item(
-        "struct Point { x: i32, y: i32 }",
+        "struct Point(x: i32, y: i32)",
         &expect![[r#"
-            StructDef@0..31
+            StructDef@0..28
               STRUCT_KW@0..6 "struct"
               Name@6..12
                 WHITESPACE@6..7 " "
                 IDENT@7..12 "Point"
-              FieldList@12..31
-                WHITESPACE@12..13 " "
-                L_BRACE@13..14 "{"
-                FieldDef@14..21
+              FieldList@12..28
+                L_PAREN@12..13 "("
+                FieldDef@13..19
+                  Name@13..14
+                    IDENT@13..14 "x"
+                  COLON@14..15 ":"
+                  PathType@15..19
+                    Path@15..19
+                      PathSegment@15..19
+                        NameRef@15..19
+                          WHITESPACE@15..16 " "
+                          IDENT@16..19 "i32"
+                COMMA@19..20 ","
+                FieldDef@20..27
+                  Name@20..22
+                    WHITESPACE@20..21 " "
+                    IDENT@21..22 "y"
+                  COLON@22..23 ":"
+                  PathType@23..27
+                    Path@23..27
+                      PathSegment@23..27
+                        NameRef@23..27
+                          WHITESPACE@23..24 " "
+                          IDENT@24..27 "i32"
+                R_PAREN@27..28 ")"
+        "#]],
+    );
+}
+
+#[test]
+fn struct_pub_paren() {
+    check_item(
+        "pub struct Foo()",
+        &expect![[r#"
+            StructDef@0..16
+              Visibility@0..3
+                PUB_KW@0..3 "pub"
+              WHITESPACE@3..4 " "
+              STRUCT_KW@4..10 "struct"
+              Name@10..14
+                WHITESPACE@10..11 " "
+                IDENT@11..14 "Foo"
+              FieldList@14..16
+                L_PAREN@14..15 "("
+                R_PAREN@15..16 ")"
+        "#]],
+    );
+}
+
+#[test]
+fn struct_with_pub_field_paren() {
+    check_item(
+        "struct Foo(pub x: i32)",
+        &expect![[r#"
+            StructDef@0..22
+              STRUCT_KW@0..6 "struct"
+              Name@6..10
+                WHITESPACE@6..7 " "
+                IDENT@7..10 "Foo"
+              FieldList@10..22
+                L_PAREN@10..11 "("
+                FieldDef@11..21
+                  Visibility@11..14
+                    PUB_KW@11..14 "pub"
                   Name@14..16
                     WHITESPACE@14..15 " "
                     IDENT@15..16 "x"
@@ -597,130 +641,58 @@ fn struct_with_fields_brace() {
                         NameRef@17..21
                           WHITESPACE@17..18 " "
                           IDENT@18..21 "i32"
-                COMMA@21..22 ","
-                FieldDef@22..29
-                  Name@22..24
-                    WHITESPACE@22..23 " "
-                    IDENT@23..24 "y"
-                  COLON@24..25 ":"
-                  PathType@25..29
-                    Path@25..29
-                      PathSegment@25..29
-                        NameRef@25..29
-                          WHITESPACE@25..26 " "
-                          IDENT@26..29 "i32"
-                WHITESPACE@29..30 " "
-                R_BRACE@30..31 "}"
+                R_PAREN@21..22 ")"
         "#]],
     );
 }
 
 #[test]
-#[ignore = "old syntax: use '()' instead of '{}'"]
-fn struct_pub_brace() {
+fn struct_with_generics_where() {
     check_item(
-        "pub struct Foo {}",
+        "struct Pair(first: T, second: U) where T, U",
         &expect![[r#"
-            StructDef@0..17
-              Visibility@0..3
-                PUB_KW@0..3 "pub"
-              WHITESPACE@3..4 " "
-              STRUCT_KW@4..10 "struct"
-              Name@10..14
-                WHITESPACE@10..11 " "
-                IDENT@11..14 "Foo"
-              FieldList@14..17
-                WHITESPACE@14..15 " "
-                L_BRACE@15..16 "{"
-                R_BRACE@16..17 "}"
-        "#]],
-    );
-}
-
-#[test]
-#[ignore = "old syntax: use '()' instead of '{}'"]
-fn struct_with_pub_field_brace() {
-    check_item(
-        "struct Foo { pub x: i32 }",
-        &expect![[r#"
-            StructDef@0..25
-              STRUCT_KW@0..6 "struct"
-              Name@6..10
-                WHITESPACE@6..7 " "
-                IDENT@7..10 "Foo"
-              FieldList@10..25
-                WHITESPACE@10..11 " "
-                L_BRACE@11..12 "{"
-                FieldDef@12..23
-                  Visibility@12..16
-                    WHITESPACE@12..13 " "
-                    PUB_KW@13..16 "pub"
-                  Name@16..18
-                    WHITESPACE@16..17 " "
-                    IDENT@17..18 "x"
-                  COLON@18..19 ":"
-                  PathType@19..23
-                    Path@19..23
-                      PathSegment@19..23
-                        NameRef@19..23
-                          WHITESPACE@19..20 " "
-                          IDENT@20..23 "i32"
-                WHITESPACE@23..24 " "
-                R_BRACE@24..25 "}"
-        "#]],
-    );
-}
-
-#[test]
-#[ignore = "old syntax: use 'where T, U' instead of '<T, U>' and '()' instead of '{}'"]
-fn struct_with_generics_angle_brace() {
-    check_item(
-        "struct Pair<T, U> { first: T, second: U }",
-        &expect![[r#"
-            StructDef@0..41
+            StructDef@0..43
               STRUCT_KW@0..6 "struct"
               Name@6..11
                 WHITESPACE@6..7 " "
                 IDENT@7..11 "Pair"
-              GenericParams@11..17
-                LT@11..12 "<"
-                GenericParam@12..13
-                  Name@12..13
-                    IDENT@12..13 "T"
-                COMMA@13..14 ","
-                GenericParam@14..16
-                  Name@14..16
-                    WHITESPACE@14..15 " "
-                    IDENT@15..16 "U"
-                GT@16..17 ">"
-              FieldList@17..41
-                WHITESPACE@17..18 " "
-                L_BRACE@18..19 "{"
-                FieldDef@19..28
-                  Name@19..25
-                    WHITESPACE@19..20 " "
-                    IDENT@20..25 "first"
-                  COLON@25..26 ":"
-                  PathType@26..28
-                    Path@26..28
-                      PathSegment@26..28
-                        NameRef@26..28
-                          WHITESPACE@26..27 " "
-                          IDENT@27..28 "T"
-                COMMA@28..29 ","
-                FieldDef@29..39
-                  Name@29..36
-                    WHITESPACE@29..30 " "
-                    IDENT@30..36 "second"
-                  COLON@36..37 ":"
-                  PathType@37..39
-                    Path@37..39
-                      PathSegment@37..39
-                        NameRef@37..39
-                          WHITESPACE@37..38 " "
-                          IDENT@38..39 "U"
-                WHITESPACE@39..40 " "
-                R_BRACE@40..41 "}"
+              FieldList@11..32
+                L_PAREN@11..12 "("
+                FieldDef@12..20
+                  Name@12..17
+                    IDENT@12..17 "first"
+                  COLON@17..18 ":"
+                  PathType@18..20
+                    Path@18..20
+                      PathSegment@18..20
+                        NameRef@18..20
+                          WHITESPACE@18..19 " "
+                          IDENT@19..20 "T"
+                COMMA@20..21 ","
+                FieldDef@21..31
+                  Name@21..28
+                    WHITESPACE@21..22 " "
+                    IDENT@22..28 "second"
+                  COLON@28..29 ":"
+                  PathType@29..31
+                    Path@29..31
+                      PathSegment@29..31
+                        NameRef@29..31
+                          WHITESPACE@29..30 " "
+                          IDENT@30..31 "U"
+                R_PAREN@31..32 ")"
+              WhereClause@32..43
+                WHITESPACE@32..33 " "
+                WHERE_KW@33..38 "where"
+                GenericParam@38..40
+                  Name@38..40
+                    WHITESPACE@38..39 " "
+                    IDENT@39..40 "T"
+                COMMA@40..41 ","
+                GenericParam@41..43
+                  Name@41..43
+                    WHITESPACE@41..42 " "
+                    IDENT@42..43 "U"
         "#]],
     );
 }
@@ -812,12 +784,11 @@ fn impl_empty() {
 }
 
 #[test]
-#[ignore = "old syntax: use ':' instead of '->'"]
-fn impl_with_method_arrow() {
+fn impl_with_method_colon() {
     check_item(
-        "impl Point { fn new() -> Point {} }",
+        "impl Point { fn new(): Point {} }",
         &expect![[r#"
-            ImplBlock@0..35
+            ImplBlock@0..33
               IMPL_KW@0..4 "impl"
               PathType@4..10
                 Path@4..10
@@ -827,7 +798,7 @@ fn impl_with_method_arrow() {
                       IDENT@5..10 "Point"
               WHITESPACE@10..11 " "
               L_BRACE@11..12 "{"
-              FunctionDef@12..33
+              FunctionDef@12..31
                 WHITESPACE@12..13 " "
                 FN_KW@13..15 "fn"
                 Name@15..19
@@ -836,55 +807,54 @@ fn impl_with_method_arrow() {
                 ParamList@19..21
                   L_PAREN@19..20 "("
                   R_PAREN@20..21 ")"
-                WHITESPACE@21..22 " "
-                ARROW@22..24 "->"
-                PathType@24..30
-                  Path@24..30
-                    PathSegment@24..30
-                      NameRef@24..30
-                        WHITESPACE@24..25 " "
-                        IDENT@25..30 "Point"
-                Block@30..33
-                  WHITESPACE@30..31 " "
-                  L_BRACE@31..32 "{"
-                  R_BRACE@32..33 "}"
-              WHITESPACE@33..34 " "
-              R_BRACE@34..35 "}"
+                COLON@21..22 ":"
+                PathType@22..28
+                  Path@22..28
+                    PathSegment@22..28
+                      NameRef@22..28
+                        WHITESPACE@22..23 " "
+                        IDENT@23..28 "Point"
+                Block@28..31
+                  WHITESPACE@28..29 " "
+                  L_BRACE@29..30 "{"
+                  R_BRACE@30..31 "}"
+              WHITESPACE@31..32 " "
+              R_BRACE@32..33 "}"
         "#]],
     );
 }
 
 #[test]
-#[ignore = "old syntax: use 'where T' instead of '<T>'"]
-fn impl_with_generics_angle() {
+fn impl_with_generics_where() {
     check_item(
-        "impl<T> Vec<T> {}",
+        "impl Vec<T> where T {}",
         &expect![[r#"
-            ImplBlock@0..17
+            ImplBlock@0..22
               IMPL_KW@0..4 "impl"
-              GenericParams@4..7
-                LT@4..5 "<"
-                GenericParam@5..6
-                  Name@5..6
-                    IDENT@5..6 "T"
-                GT@6..7 ">"
-              PathType@7..14
-                Path@7..14
-                  PathSegment@7..14
-                    NameRef@7..11
-                      WHITESPACE@7..8 " "
-                      IDENT@8..11 "Vec"
-                    GenericArgs@11..14
-                      LT@11..12 "<"
-                      PathType@12..13
-                        Path@12..13
-                          PathSegment@12..13
-                            NameRef@12..13
-                              IDENT@12..13 "T"
-                      GT@13..14 ">"
-              WHITESPACE@14..15 " "
-              L_BRACE@15..16 "{"
-              R_BRACE@16..17 "}"
+              PathType@4..11
+                Path@4..11
+                  PathSegment@4..11
+                    NameRef@4..8
+                      WHITESPACE@4..5 " "
+                      IDENT@5..8 "Vec"
+                    GenericArgs@8..11
+                      LT@8..9 "<"
+                      PathType@9..10
+                        Path@9..10
+                          PathSegment@9..10
+                            NameRef@9..10
+                              IDENT@9..10 "T"
+                      GT@10..11 ">"
+              WhereClause@11..19
+                WHITESPACE@11..12 " "
+                WHERE_KW@12..17 "where"
+                GenericParam@17..19
+                  Name@17..19
+                    WHITESPACE@17..18 " "
+                    IDENT@18..19 "T"
+              WHITESPACE@19..20 " "
+              L_BRACE@20..21 "{"
+              R_BRACE@21..22 "}"
         "#]],
     );
 }
@@ -926,97 +896,91 @@ fn source_file_single_function() {
 }
 
 #[test]
-#[ignore = "old syntax: use '()' instead of '{}'"]
-fn source_file_multiple_items_brace() {
+fn source_file_multiple_items_paren() {
     use crate::parser::tests::check_source_file;
     check_source_file(
-        "struct Point { x: i32 }\nfn main() {}",
+        "struct Point(x: i32)\nfn main() {}",
         &expect![[r#"
-            SourceFile@0..36
-              StructDef@0..23
+            SourceFile@0..33
+              StructDef@0..20
                 STRUCT_KW@0..6 "struct"
                 Name@6..12
                   WHITESPACE@6..7 " "
                   IDENT@7..12 "Point"
-                FieldList@12..23
-                  WHITESPACE@12..13 " "
-                  L_BRACE@13..14 "{"
-                  FieldDef@14..21
-                    Name@14..16
-                      WHITESPACE@14..15 " "
-                      IDENT@15..16 "x"
-                    COLON@16..17 ":"
-                    PathType@17..21
-                      Path@17..21
-                        PathSegment@17..21
-                          NameRef@17..21
-                            WHITESPACE@17..18 " "
-                            IDENT@18..21 "i32"
-                  WHITESPACE@21..22 " "
-                  R_BRACE@22..23 "}"
-              FunctionDef@23..36
-                WHITESPACE@23..24 "\n"
-                FN_KW@24..26 "fn"
-                Name@26..31
-                  WHITESPACE@26..27 " "
-                  IDENT@27..31 "main"
-                ParamList@31..33
-                  L_PAREN@31..32 "("
-                  R_PAREN@32..33 ")"
-                Block@33..36
-                  WHITESPACE@33..34 " "
-                  L_BRACE@34..35 "{"
-                  R_BRACE@35..36 "}"
+                FieldList@12..20
+                  L_PAREN@12..13 "("
+                  FieldDef@13..19
+                    Name@13..14
+                      IDENT@13..14 "x"
+                    COLON@14..15 ":"
+                    PathType@15..19
+                      Path@15..19
+                        PathSegment@15..19
+                          NameRef@15..19
+                            WHITESPACE@15..16 " "
+                            IDENT@16..19 "i32"
+                  R_PAREN@19..20 ")"
+              FunctionDef@20..33
+                WHITESPACE@20..21 "\n"
+                FN_KW@21..23 "fn"
+                Name@23..28
+                  WHITESPACE@23..24 " "
+                  IDENT@24..28 "main"
+                ParamList@28..30
+                  L_PAREN@28..29 "("
+                  R_PAREN@29..30 ")"
+                Block@30..33
+                  WHITESPACE@30..31 " "
+                  L_BRACE@31..32 "{"
+                  R_BRACE@32..33 "}"
         "#]],
     );
 }
 
 #[test]
-#[ignore = "old syntax: use '()' instead of '{}'"]
-fn source_file_with_impl_brace() {
+fn source_file_with_impl_paren() {
     use crate::parser::tests::check_source_file;
     check_source_file(
-        "struct Foo {}\nimpl Foo { fn bar(&self) {} }",
+        "struct Foo()\nimpl Foo { fn bar(&self) {} }",
         &expect![[r#"
-            SourceFile@0..43
-              StructDef@0..13
+            SourceFile@0..42
+              StructDef@0..12
                 STRUCT_KW@0..6 "struct"
                 Name@6..10
                   WHITESPACE@6..7 " "
                   IDENT@7..10 "Foo"
-                FieldList@10..13
-                  WHITESPACE@10..11 " "
-                  L_BRACE@11..12 "{"
-                  R_BRACE@12..13 "}"
-              ImplBlock@13..43
-                WHITESPACE@13..14 "\n"
-                IMPL_KW@14..18 "impl"
-                PathType@18..22
-                  Path@18..22
-                    PathSegment@18..22
-                      NameRef@18..22
-                        WHITESPACE@18..19 " "
-                        IDENT@19..22 "Foo"
-                WHITESPACE@22..23 " "
-                L_BRACE@23..24 "{"
-                FunctionDef@24..41
-                  WHITESPACE@24..25 " "
-                  FN_KW@25..27 "fn"
-                  Name@27..31
-                    WHITESPACE@27..28 " "
-                    IDENT@28..31 "bar"
-                  ParamList@31..38
-                    L_PAREN@31..32 "("
-                    SelfParam@32..37
-                      AMP@32..33 "&"
-                      SELF_VALUE_KW@33..37 "self"
-                    R_PAREN@37..38 ")"
-                  Block@38..41
-                    WHITESPACE@38..39 " "
-                    L_BRACE@39..40 "{"
-                    R_BRACE@40..41 "}"
-                WHITESPACE@41..42 " "
-                R_BRACE@42..43 "}"
+                FieldList@10..12
+                  L_PAREN@10..11 "("
+                  R_PAREN@11..12 ")"
+              ImplBlock@12..42
+                WHITESPACE@12..13 "\n"
+                IMPL_KW@13..17 "impl"
+                PathType@17..21
+                  Path@17..21
+                    PathSegment@17..21
+                      NameRef@17..21
+                        WHITESPACE@17..18 " "
+                        IDENT@18..21 "Foo"
+                WHITESPACE@21..22 " "
+                L_BRACE@22..23 "{"
+                FunctionDef@23..40
+                  WHITESPACE@23..24 " "
+                  FN_KW@24..26 "fn"
+                  Name@26..30
+                    WHITESPACE@26..27 " "
+                    IDENT@27..30 "bar"
+                  ParamList@30..37
+                    L_PAREN@30..31 "("
+                    SelfParam@31..36
+                      AMP@31..32 "&"
+                      SELF_VALUE_KW@32..36 "self"
+                    R_PAREN@36..37 ")"
+                  Block@37..40
+                    WHITESPACE@37..38 " "
+                    L_BRACE@38..39 "{"
+                    R_BRACE@39..40 "}"
+                WHITESPACE@40..41 " "
+                R_BRACE@41..42 "}"
         "#]],
     );
 }
@@ -1024,80 +988,78 @@ fn source_file_with_impl_brace() {
 // === Phase 6: Item Edge Cases ===
 
 #[test]
-#[ignore = "old syntax: use 'where T, U, V' instead of '<T, U, V>' and ':' instead of '->'"]
-fn fn_many_generics_angle_arrow() {
+fn fn_many_generics_where() {
     check_item(
-        "fn foo<T, U, V>(a: T, b: U) -> V {}",
+        "fn foo(a: T, b: U): V where T, U, V {}",
         &expect![[r#"
-            FunctionDef@0..35
+            FunctionDef@0..38
               FN_KW@0..2 "fn"
               Name@2..6
                 WHITESPACE@2..3 " "
                 IDENT@3..6 "foo"
-              GenericParams@6..15
-                LT@6..7 "<"
-                GenericParam@7..8
+              ParamList@6..18
+                L_PAREN@6..7 "("
+                Param@7..11
                   Name@7..8
-                    IDENT@7..8 "T"
-                COMMA@8..9 ","
-                GenericParam@9..11
-                  Name@9..11
-                    WHITESPACE@9..10 " "
-                    IDENT@10..11 "U"
+                    IDENT@7..8 "a"
+                  COLON@8..9 ":"
+                  PathType@9..11
+                    Path@9..11
+                      PathSegment@9..11
+                        NameRef@9..11
+                          WHITESPACE@9..10 " "
+                          IDENT@10..11 "T"
                 COMMA@11..12 ","
-                GenericParam@12..14
+                Param@12..17
                   Name@12..14
                     WHITESPACE@12..13 " "
-                    IDENT@13..14 "V"
-                GT@14..15 ">"
-              ParamList@15..27
-                L_PAREN@15..16 "("
-                Param@16..20
-                  Name@16..17
-                    IDENT@16..17 "a"
-                  COLON@17..18 ":"
-                  PathType@18..20
-                    Path@18..20
-                      PathSegment@18..20
-                        NameRef@18..20
-                          WHITESPACE@18..19 " "
-                          IDENT@19..20 "T"
-                COMMA@20..21 ","
-                Param@21..26
-                  Name@21..23
-                    WHITESPACE@21..22 " "
-                    IDENT@22..23 "b"
-                  COLON@23..24 ":"
-                  PathType@24..26
-                    Path@24..26
-                      PathSegment@24..26
-                        NameRef@24..26
-                          WHITESPACE@24..25 " "
-                          IDENT@25..26 "U"
-                R_PAREN@26..27 ")"
-              WHITESPACE@27..28 " "
-              ARROW@28..30 "->"
-              PathType@30..32
-                Path@30..32
-                  PathSegment@30..32
-                    NameRef@30..32
-                      WHITESPACE@30..31 " "
-                      IDENT@31..32 "V"
-              Block@32..35
-                WHITESPACE@32..33 " "
-                L_BRACE@33..34 "{"
-                R_BRACE@34..35 "}"
+                    IDENT@13..14 "b"
+                  COLON@14..15 ":"
+                  PathType@15..17
+                    Path@15..17
+                      PathSegment@15..17
+                        NameRef@15..17
+                          WHITESPACE@15..16 " "
+                          IDENT@16..17 "U"
+                R_PAREN@17..18 ")"
+              COLON@18..19 ":"
+              PathType@19..21
+                Path@19..21
+                  PathSegment@19..21
+                    NameRef@19..21
+                      WHITESPACE@19..20 " "
+                      IDENT@20..21 "V"
+              WhereClause@21..35
+                WHITESPACE@21..22 " "
+                WHERE_KW@22..27 "where"
+                GenericParam@27..29
+                  Name@27..29
+                    WHITESPACE@27..28 " "
+                    IDENT@28..29 "T"
+                COMMA@29..30 ","
+                GenericParam@30..32
+                  Name@30..32
+                    WHITESPACE@30..31 " "
+                    IDENT@31..32 "U"
+                COMMA@32..33 ","
+                GenericParam@33..35
+                  Name@33..35
+                    WHITESPACE@33..34 " "
+                    IDENT@34..35 "V"
+              Block@35..38
+                WHITESPACE@35..36 " "
+                L_BRACE@36..37 "{"
+                R_BRACE@37..38 "}"
         "#]],
     );
 }
 
 #[test]
-#[ignore = "old syntax: use ':' instead of '->' for function return type"]
-fn fn_taking_fn_arg_arrow() {
+fn fn_taking_fn_arg_colon() {
     check_item(
-        "fn apply(f: fn(i32) -> i32, x: i32) -> i32 {}",
+        "fn apply(f: fn(i32) -> i32, x: i32): i32 {}",
         &expect![[r#"
-            FunctionDef@0..45
+            FunctionDef@0..43
               FN_KW@0..2 "fn"
               Name@2..8
                 WHITESPACE@2..3 " "
@@ -1139,149 +1101,140 @@ fn fn_taking_fn_arg_arrow() {
                           WHITESPACE@30..31 " "
                           IDENT@31..34 "i32"
                 R_PAREN@34..35 ")"
-              WHITESPACE@35..36 " "
-              ARROW@36..38 "->"
-              PathType@38..42
-                Path@38..42
-                  PathSegment@38..42
-                    NameRef@38..42
-                      WHITESPACE@38..39 " "
-                      IDENT@39..42 "i32"
-              Block@42..45
-                WHITESPACE@42..43 " "
-                L_BRACE@43..44 "{"
-                R_BRACE@44..45 "}"
+              COLON@35..36 ":"
+              PathType@36..40
+                Path@36..40
+                  PathSegment@36..40
+                    NameRef@36..40
+                      WHITESPACE@36..37 " "
+                      IDENT@37..40 "i32"
+              Block@40..43
+                WHITESPACE@40..41 " "
+                L_BRACE@41..42 "{"
+                R_BRACE@42..43 "}"
         "#]],
     );
 }
 
 #[test]
-#[ignore = "old syntax: use '()' instead of '{}'"]
-fn struct_many_fields_brace() {
+fn struct_many_fields_paren() {
     check_item(
-        "struct S { a: A, b: B, c: C, d: D }",
+        "struct S(a: A, b: B, c: C, d: D)",
         &expect![[r#"
-            StructDef@0..35
+            StructDef@0..32
               STRUCT_KW@0..6 "struct"
               Name@6..8
                 WHITESPACE@6..7 " "
                 IDENT@7..8 "S"
-              FieldList@8..35
-                WHITESPACE@8..9 " "
-                L_BRACE@9..10 "{"
-                FieldDef@10..15
-                  Name@10..12
-                    WHITESPACE@10..11 " "
-                    IDENT@11..12 "a"
-                  COLON@12..13 ":"
-                  PathType@13..15
-                    Path@13..15
-                      PathSegment@13..15
-                        NameRef@13..15
-                          WHITESPACE@13..14 " "
-                          IDENT@14..15 "A"
-                COMMA@15..16 ","
-                FieldDef@16..21
-                  Name@16..18
-                    WHITESPACE@16..17 " "
-                    IDENT@17..18 "b"
-                  COLON@18..19 ":"
-                  PathType@19..21
-                    Path@19..21
-                      PathSegment@19..21
-                        NameRef@19..21
-                          WHITESPACE@19..20 " "
-                          IDENT@20..21 "B"
-                COMMA@21..22 ","
-                FieldDef@22..27
-                  Name@22..24
-                    WHITESPACE@22..23 " "
-                    IDENT@23..24 "c"
-                  COLON@24..25 ":"
-                  PathType@25..27
-                    Path@25..27
-                      PathSegment@25..27
-                        NameRef@25..27
-                          WHITESPACE@25..26 " "
-                          IDENT@26..27 "C"
-                COMMA@27..28 ","
-                FieldDef@28..33
-                  Name@28..30
-                    WHITESPACE@28..29 " "
-                    IDENT@29..30 "d"
-                  COLON@30..31 ":"
-                  PathType@31..33
-                    Path@31..33
-                      PathSegment@31..33
-                        NameRef@31..33
-                          WHITESPACE@31..32 " "
-                          IDENT@32..33 "D"
-                WHITESPACE@33..34 " "
-                R_BRACE@34..35 "}"
-        "#]],
-    );
-}
-
-#[test]
-#[ignore = "old syntax: use '()' instead of '{}'"]
-fn struct_mixed_visibility_brace() {
-    check_item(
-        "struct S { pub a: i32, pub(crate) b: i32, c: i32 }",
-        &expect![[r#"
-            StructDef@0..50
-              STRUCT_KW@0..6 "struct"
-              Name@6..8
-                WHITESPACE@6..7 " "
-                IDENT@7..8 "S"
-              FieldList@8..50
-                WHITESPACE@8..9 " "
-                L_BRACE@9..10 "{"
-                FieldDef@10..21
-                  Visibility@10..14
-                    WHITESPACE@10..11 " "
-                    PUB_KW@11..14 "pub"
+              FieldList@8..32
+                L_PAREN@8..9 "("
+                FieldDef@9..13
+                  Name@9..10
+                    IDENT@9..10 "a"
+                  COLON@10..11 ":"
+                  PathType@11..13
+                    Path@11..13
+                      PathSegment@11..13
+                        NameRef@11..13
+                          WHITESPACE@11..12 " "
+                          IDENT@12..13 "A"
+                COMMA@13..14 ","
+                FieldDef@14..19
                   Name@14..16
                     WHITESPACE@14..15 " "
-                    IDENT@15..16 "a"
+                    IDENT@15..16 "b"
                   COLON@16..17 ":"
-                  PathType@17..21
-                    Path@17..21
-                      PathSegment@17..21
-                        NameRef@17..21
+                  PathType@17..19
+                    Path@17..19
+                      PathSegment@17..19
+                        NameRef@17..19
                           WHITESPACE@17..18 " "
-                          IDENT@18..21 "i32"
-                COMMA@21..22 ","
-                FieldDef@22..40
-                  Visibility@22..33
-                    WHITESPACE@22..23 " "
-                    PUB_KW@23..26 "pub"
-                    L_PAREN@26..27 "("
-                    CRATE_KW@27..32 "crate"
-                    R_PAREN@32..33 ")"
-                  Name@33..35
-                    WHITESPACE@33..34 " "
-                    IDENT@34..35 "b"
-                  COLON@35..36 ":"
-                  PathType@36..40
-                    Path@36..40
-                      PathSegment@36..40
-                        NameRef@36..40
-                          WHITESPACE@36..37 " "
-                          IDENT@37..40 "i32"
-                COMMA@40..41 ","
-                FieldDef@41..48
-                  Name@41..43
-                    WHITESPACE@41..42 " "
-                    IDENT@42..43 "c"
-                  COLON@43..44 ":"
-                  PathType@44..48
-                    Path@44..48
-                      PathSegment@44..48
-                        NameRef@44..48
-                          WHITESPACE@44..45 " "
-                          IDENT@45..48 "i32"
-                WHITESPACE@48..49 " "
-                R_BRACE@49..50 "}"
+                          IDENT@18..19 "B"
+                COMMA@19..20 ","
+                FieldDef@20..25
+                  Name@20..22
+                    WHITESPACE@20..21 " "
+                    IDENT@21..22 "c"
+                  COLON@22..23 ":"
+                  PathType@23..25
+                    Path@23..25
+                      PathSegment@23..25
+                        NameRef@23..25
+                          WHITESPACE@23..24 " "
+                          IDENT@24..25 "C"
+                COMMA@25..26 ","
+                FieldDef@26..31
+                  Name@26..28
+                    WHITESPACE@26..27 " "
+                    IDENT@27..28 "d"
+                  COLON@28..29 ":"
+                  PathType@29..31
+                    Path@29..31
+                      PathSegment@29..31
+                        NameRef@29..31
+                          WHITESPACE@29..30 " "
+                          IDENT@30..31 "D"
+                R_PAREN@31..32 ")"
+        "#]],
+    );
+}
+
+#[test]
+fn struct_mixed_visibility_paren() {
+    check_item(
+        "struct S(pub a: i32, pub(crate) b: i32, c: i32)",
+        &expect![[r#"
+            StructDef@0..47
+              STRUCT_KW@0..6 "struct"
+              Name@6..8
+                WHITESPACE@6..7 " "
+                IDENT@7..8 "S"
+              FieldList@8..47
+                L_PAREN@8..9 "("
+                FieldDef@9..19
+                  Visibility@9..12
+                    PUB_KW@9..12 "pub"
+                  Name@12..14
+                    WHITESPACE@12..13 " "
+                    IDENT@13..14 "a"
+                  COLON@14..15 ":"
+                  PathType@15..19
+                    Path@15..19
+                      PathSegment@15..19
+                        NameRef@15..19
+                          WHITESPACE@15..16 " "
+                          IDENT@16..19 "i32"
+                COMMA@19..20 ","
+                FieldDef@20..38
+                  Visibility@20..31
+                    WHITESPACE@20..21 " "
+                    PUB_KW@21..24 "pub"
+                    L_PAREN@24..25 "("
+                    CRATE_KW@25..30 "crate"
+                    R_PAREN@30..31 ")"
+                  Name@31..33
+                    WHITESPACE@31..32 " "
+                    IDENT@32..33 "b"
+                  COLON@33..34 ":"
+                  PathType@34..38
+                    Path@34..38
+                      PathSegment@34..38
+                        NameRef@34..38
+                          WHITESPACE@34..35 " "
+                          IDENT@35..38 "i32"
+                COMMA@38..39 ","
+                FieldDef@39..46
+                  Name@39..41
+                    WHITESPACE@39..40 " "
+                    IDENT@40..41 "c"
+                  COLON@41..42 ":"
+                  PathType@42..46
+                    Path@42..46
+                      PathSegment@42..46
+                        NameRef@42..46
+                          WHITESPACE@42..43 " "
+                          IDENT@43..46 "i32"
+                R_PAREN@46..47 ")"
         "#]],
     );
 }
@@ -1460,45 +1413,41 @@ fn impl_mixed_visibility() {
 }
 
 #[test]
-#[ignore = "old syntax: use '()' instead of '{}'"]
-fn struct_trailing_comma_brace() {
+fn struct_trailing_comma_paren() {
     check_item(
-        "struct S { a: i32, b: i32, }",
+        "struct S(a: i32, b: i32,)",
         &expect![[r#"
-            StructDef@0..28
+            StructDef@0..25
               STRUCT_KW@0..6 "struct"
               Name@6..8
                 WHITESPACE@6..7 " "
                 IDENT@7..8 "S"
-              FieldList@8..28
-                WHITESPACE@8..9 " "
-                L_BRACE@9..10 "{"
-                FieldDef@10..17
-                  Name@10..12
-                    WHITESPACE@10..11 " "
-                    IDENT@11..12 "a"
-                  COLON@12..13 ":"
-                  PathType@13..17
-                    Path@13..17
-                      PathSegment@13..17
-                        NameRef@13..17
-                          WHITESPACE@13..14 " "
-                          IDENT@14..17 "i32"
-                COMMA@17..18 ","
-                FieldDef@18..25
-                  Name@18..20
-                    WHITESPACE@18..19 " "
-                    IDENT@19..20 "b"
-                  COLON@20..21 ":"
-                  PathType@21..25
-                    Path@21..25
-                      PathSegment@21..25
-                        NameRef@21..25
-                          WHITESPACE@21..22 " "
-                          IDENT@22..25 "i32"
-                COMMA@25..26 ","
-                WHITESPACE@26..27 " "
-                R_BRACE@27..28 "}"
+              FieldList@8..25
+                L_PAREN@8..9 "("
+                FieldDef@9..15
+                  Name@9..10
+                    IDENT@9..10 "a"
+                  COLON@10..11 ":"
+                  PathType@11..15
+                    Path@11..15
+                      PathSegment@11..15
+                        NameRef@11..15
+                          WHITESPACE@11..12 " "
+                          IDENT@12..15 "i32"
+                COMMA@15..16 ","
+                FieldDef@16..23
+                  Name@16..18
+                    WHITESPACE@16..17 " "
+                    IDENT@17..18 "b"
+                  COLON@18..19 ":"
+                  PathType@19..23
+                    Path@19..23
+                      PathSegment@19..23
+                        NameRef@19..23
+                          WHITESPACE@19..20 " "
+                          IDENT@20..23 "i32"
+                COMMA@23..24 ","
+                R_PAREN@24..25 ")"
         "#]],
     );
 }
@@ -1720,34 +1669,34 @@ fn struct_tuple_with_visibility() {
 }
 
 #[test]
-#[ignore = "old syntax: use 'where T' instead of '<T>'"]
-fn struct_tuple_generic_angle() {
+fn struct_tuple_generic_where() {
     check_item(
-        "struct Wrapper<T>(T);",
+        "struct Wrapper(T) where T;",
         &expect![[r#"
-            StructDef@0..22
+            StructDef@0..27
               STRUCT_KW@0..6 "struct"
               Name@6..14
                 WHITESPACE@6..7 " "
                 IDENT@7..14 "Wrapper"
-              GenericParams@14..17
-                LT@14..15 "<"
-                GenericParam@15..16
+              FieldList@14..18
+                L_PAREN@14..15 "("
+                FieldDef@15..17
                   Name@15..16
-                    IDENT@15..16 "T"
-                GT@16..17 ">"
-              FieldList@17..21
-                L_PAREN@17..18 "("
-                FieldDef@18..20
-                  Name@18..19
-                    INT_LITERAL@18..19 "0"
-                  PathType@19..20
-                    Path@19..20
-                      PathSegment@19..20
-                        NameRef@19..20
-                          IDENT@19..20 "T"
-                R_PAREN@20..21 ")"
-              SEMI@21..22 ";"
+                    INT_LITERAL@15..16 "0"
+                  PathType@16..17
+                    Path@16..17
+                      PathSegment@16..17
+                        NameRef@16..17
+                          IDENT@16..17 "T"
+                R_PAREN@17..18 ")"
+              WhereClause@18..26
+                WHITESPACE@18..19 " "
+                WHERE_KW@19..24 "where"
+                GenericParam@24..26
+                  Name@24..26
+                    WHITESPACE@24..25 " "
+                    IDENT@25..26 "T"
+              SEMI@26..27 ";"
         "#]],
     );
 }

@@ -1137,9 +1137,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "old syntax: uses '<T>' and '->' syntax"]
+    #[ignore = "needs semantic support for where clause generics"]
     fn resolve_generic_function() {
-        check_ok("fn identity<T>(x: T) -> T { x }");
+        check_ok("fn identity(x: T): T where T { x }");
     }
 
     #[test]
@@ -1216,21 +1216,21 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "old syntax: uses '<T>' and '{}' syntax"]
+    #[ignore = "needs semantic support for where clause generics"]
     fn resolve_generic_struct() {
-        check_ok("struct Wrapper<T> { value: T }");
+        check_ok("struct Wrapper(value: T) where T");
     }
 
     #[test]
-    #[ignore = "old syntax: uses '<T>' and '{}' syntax"]
+    #[ignore = "needs semantic support for where clause generics"]
     fn resolve_generic_struct_with_multiple_params() {
-        check_ok("struct Pair<A, B> { first: A, second: B }");
+        check_ok("struct Pair(first: A, second: B) where A, B");
     }
 
     #[test]
-    #[ignore = "old syntax: uses '<T>', '{}', and '->' syntax"]
+    #[ignore = "needs semantic support for where clause generics"]
     fn resolve_generic_impl_block() {
-        check_ok("struct Foo<T> { v: T } impl<T> Foo<T> { fn get(&self) -> T {} }");
+        check_ok("struct Foo(v: T) where T impl Foo<T> where T { fn get(&self): T {} }");
     }
 
     #[test]
@@ -1409,10 +1409,10 @@ mod tests {
     // ===== Call expressions with generics =====
 
     #[test]
-    #[ignore = "old syntax: uses '<T>' and '->' syntax"]
+    #[ignore = "needs semantic support for where clause generics"]
     fn resolve_call_generic_function() {
         // Parser doesn't support turbofish yet, so test simple generic function call
-        check_ok("fn identity<T>(x: T) -> T { x } fn main() { identity(1); }");
+        check_ok("fn identity(x: T): T where T { x } fn main() { identity(1); }");
     }
 
     // ===== Type resolution =====
@@ -1459,9 +1459,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "old syntax: uses '<T>' and '{}' syntax"]
+    #[ignore = "needs semantic support for where clause generics"]
     fn resolve_nested_generic_type() {
-        check_ok("struct Box<T> { v: T } fn foo(x: Box<Box<i32>>) {}");
+        check_ok("struct Box(v: T) where T fn foo(x: Box<Box<i32>>) {}");
     }
 
     #[test]
@@ -1564,9 +1564,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "old syntax: uses '<T>' generics"]
+    #[ignore = "needs semantic support for where clause generics"]
     fn resolve_duplicate_generic_param() {
-        check_err("fn foo<T, T>() {}", &["defined multiple times"]);
+        check_err("fn foo() where T, T {}", &["defined multiple times"]);
     }
 
     #[test]

@@ -128,11 +128,10 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "old syntax: uses '<T>' for generics"]
-        fn unify_type_variables_chain_old_syntax() {
+        fn unify_type_variables_chain() {
             // Test unification of type variable chains
             let source = r#"
-                fn identity<T>(x: T): T { x }
+                fn identity(x: T): T where T { x }
 
                 fn test() {
                     let a = identity(1);
@@ -166,11 +165,10 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "old syntax: uses '<T>' and '{}' for generic struct"]
-        fn complex_type_unification_old_syntax() {
+        fn complex_type_unification() {
             // Test complex nested type unification
             let source = r#"
-                struct Wrapper<T> { value: T }
+                struct Wrapper(value: T) where T
 
                 fn test() {
                     let w: Wrapper<i32> = Wrapper { value: 42 };
@@ -621,8 +619,7 @@ mod tests {
         use rowan::ast::AstNode;
 
         #[test]
-        #[ignore = "old syntax: uses '{}' for struct and '->' for return type"]
-        fn full_pipeline_comprehensive_old_syntax() {
+        fn full_pipeline_comprehensive() {
             let source = r#"
                 struct Point(x: i32, y: i32)
                 struct Line(start: Point, end: Point)
@@ -689,8 +686,7 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "old syntax: uses '{}' for struct and '->' for return type"]
-        fn impl_methods_with_self_old_syntax() {
+        fn impl_methods_with_self() {
             let source = r#"
                 struct Counter(value: i32)
 
@@ -723,10 +719,9 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "old syntax: uses '<T>' and '->' for generics and return type"]
-        fn generic_functions_old_syntax() {
+        fn generic_functions() {
             let source = r#"
-                fn identity<T>(x: T): T {
+                fn identity(x: T): T where T {
                     x
                 }
 
