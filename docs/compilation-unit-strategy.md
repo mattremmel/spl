@@ -216,14 +216,24 @@ This aligns with:
 
 ### Design Choices
 
-#### 1. Stable ABI by Default
+**Phased Approach:** The recommendations below are architected to keep options open, not commitments to ship immediately:
 
-Functions and types have a stable calling convention/layout:
-- Modules can be pre-compiled into `.splmod` or `.a` files
-- The standard library ships pre-compiled
-- Incremental builds only recompile changed modules
+- **Phases 1-2:** Compile from source, focus on language features and correctness
+- **Phase 3+:** Add binary stdlib/library support *if* compile times become a pain point
+- **Key insight:** Witness table architecture enables stable ABI without requiring it upfront
 
-**Rationale:** This directly addresses Rust's compile time issues. From rust-design-lessons.md:
+This means we design for ABI stability (using witness tables, defining clear module boundaries) but defer the maintenance burden of actually shipping and supporting pre-compiled binaries until there's a demonstrated need.
+
+#### 1. Design for Stable ABI
+
+The architecture supports stable calling conventions and layouts:
+- Modules *can* be pre-compiled into `.splmod` or `.a` files
+- The standard library *could* ship pre-compiled
+- Incremental builds *would* only recompile changed modules
+
+**Current reality:** In early phases, we compile everything from source. The witness table design keeps the pre-compiled library option open for later.
+
+**Rationale:** This directly addresses Rust's compile time issues while deferring complexity. From rust-design-lessons.md:
 
 > "A stable ABI enables: (1) Pre-compiled system libraries (faster builds), (2) Plugin systems, (3) Dynamic loading, (4) Forward-compatible libraries."
 
@@ -296,6 +306,17 @@ network.a           # Compiled code
 - Implement monomorphization for marked functions
 - Auto-specialization heuristics within modules
 
+### Implementation Priority
+
+Binary library support (pre-compiled stdlib, `.splmod` files) is **"nice to have"** not **"must have"**:
+
+1. **Language features and correctness come first** - Phases 1-2 focus on getting the language right
+2. **Compile-from-source is the initial strategy** - Simple, debuggable, no ABI maintenance burden
+3. **The architecture enables the optimization path** - Witness tables let us add binary libraries later without redesign
+4. **Trigger for Phase 3+** - Only pursue binary libraries when/if compile times become a demonstrated pain point
+
+This prioritization avoids premature optimization of build times while ensuring we don't paint ourselves into a corner architecturally.
+
 ### What This Means in Practice
 
 ```spl
@@ -364,7 +385,7 @@ With witness tables as default:
 | Choice | Decision | Rationale |
 |--------|----------|-----------|
 | Compilation unit | Module (directory) | Matches SPL's module system |
-| ABI | Stable by default | Pre-compiled stdlib, fast incremental builds |
+| ABI | Design for stability (implement later) | Keeps option open without upfront maintenance burden |
 | Generics | Witness tables by default | Enables separate compilation |
 | Optimization | Opt-in monomorphization | Preserves performance where needed |
 
