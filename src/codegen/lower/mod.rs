@@ -11,18 +11,21 @@ mod terminator;
 mod tests;
 
 use cranelift_codegen::ir::types;
-use cranelift_codegen::ir::{AbiParam, Block, Value};
+use cranelift_codegen::ir::{
+    AbiParam, Block, InstBuilder, MemFlags, StackSlotData, StackSlotKind, Value,
+};
 use cranelift_frontend::{FunctionBuilder, Variable};
 use cranelift_jit::JITModule;
 use rustc_hash::FxHashMap;
 
 use crate::codegen::error::CodegenError;
+use crate::codegen::layout::LayoutComputer;
 use crate::codegen::registry::FunctionRegistry;
 use crate::codegen::{CodegenContext, LocalMap, LocalStorage, TypeMapper};
 use crate::mir::body::Body;
 use crate::mir::terminator::BasicBlock;
 use crate::mir::types::Local;
-use crate::sema::types::TypeInterner;
+use crate::sema::types::{TypeId, TypeInterner};
 
 /// Lowers MIR to Cranelift IR.
 pub struct FunctionLowerer<'a> {
@@ -32,6 +35,8 @@ pub struct FunctionLowerer<'a> {
     local_map: LocalMap,
     /// Maps SPL types to Cranelift types.
     type_mapper: TypeMapper,
+    /// Computes type layouts for memory operations.
+    layout: LayoutComputer<'a>,
     /// Maps MIR basic blocks to Cranelift blocks.
     block_map: FxHashMap<BasicBlock, Block>,
     /// Reference to the type interner for type lookups.
@@ -100,10 +105,12 @@ impl<'a> FunctionLowerer<'a> {
         types: &'a TypeInterner,
         body: &'a Body,
     ) -> Self {
+        let layout = LayoutComputer::new(types, type_mapper.pointer_type());
         FunctionLowerer {
             builder,
             local_map: LocalMap::new(),
             type_mapper,
+            layout,
             block_map: FxHashMap::default(),
             types,
             body,
@@ -188,11 +195,26 @@ impl<'a> FunctionLowerer<'a> {
             let decl = self.body.local_decl(local);
 
             if let Some(clif_ty) = self.type_mapper.map_type(decl.ty, self.types) {
+                // Scalar type: use a Cranelift variable (SSA)
                 let var = self.local_map.alloc_variable(local);
                 self.builder.declare_var(var, clif_ty);
-            } else {
+            } else if self.type_mapper.is_zst(decl.ty, self.types) {
                 // ZST - no storage needed
                 self.local_map.set_zst(local);
+            } else {
+                // Compound type: allocate a stack slot
+                let layout = self.layout.layout_of(decl.ty);
+                if layout.size == 0 {
+                    // Zero-size layout means ZST
+                    self.local_map.set_zst(local);
+                } else {
+                    let slot = self.builder.create_sized_stack_slot(StackSlotData::new(
+                        StackSlotKind::ExplicitSlot,
+                        layout.size,
+                        layout.align.try_into().unwrap_or(0),
+                    ));
+                    self.local_map.set_stack_slot(local, slot);
+                }
             }
         }
         Ok(())
@@ -268,5 +290,40 @@ impl<'a> FunctionLowerer<'a> {
     /// Check if a type is a float type.
     fn is_float_type(&self, ty: types::Type) -> bool {
         ty == types::F32 || ty == types::F64
+    }
+
+    /// Get the SPL type ID for a local.
+    fn local_spl_type(&self, local: Local) -> TypeId {
+        self.body.local_decl(local).ty
+    }
+
+    /// Get the address of a local's stack slot.
+    ///
+    /// Returns `None` if the local is not stored in a stack slot.
+    fn local_stack_addr(&mut self, local: Local) -> Option<Value> {
+        match self.local_map.get(local)? {
+            LocalStorage::StackSlot(slot) => {
+                let ptr_ty = self.type_mapper.pointer_type();
+                Some(self.builder.ins().stack_addr(ptr_ty, slot, 0))
+            }
+            _ => None,
+        }
+    }
+
+    /// Load a value from a memory address.
+    fn load_from_addr(&mut self, addr: Value, ty: types::Type) -> Value {
+        let flags = MemFlags::trusted();
+        self.builder.ins().load(ty, flags, addr, 0)
+    }
+
+    /// Store a value to a memory address.
+    fn store_to_addr(&mut self, addr: Value, val: Value) {
+        let flags = MemFlags::trusted();
+        self.builder.ins().store(flags, val, addr, 0);
+    }
+
+    /// Get the storage kind for a local.
+    fn local_storage(&self, local: Local) -> Option<LocalStorage> {
+        self.local_map.get(local)
     }
 }

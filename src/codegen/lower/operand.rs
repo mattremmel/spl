@@ -1,11 +1,13 @@
 //! Operand lowering from MIR to Cranelift IR.
 
 use cranelift_codegen::ir::types;
-use cranelift_codegen::ir::{InstBuilder, Value};
+use cranelift_codegen::ir::{InstBuilder, MemFlags, Value};
 
+use crate::codegen::LocalStorage;
 use crate::codegen::error::CodegenError;
 use crate::mir::operand::{Constant, Operand};
-use crate::mir::types::Place;
+use crate::mir::types::{Local, Place, PlaceElem};
+use crate::sema::types::TypeId;
 
 use super::FunctionLowerer;
 
@@ -23,14 +25,200 @@ impl<'a> FunctionLowerer<'a> {
     }
 
     /// Read a value from a MIR place.
-    fn lower_place_read(&mut self, place: &Place) -> Result<Option<Value>, CodegenError> {
-        if !place.is_local() {
-            return Err(CodegenError::Internal(
-                "place projections not yet supported".to_string(),
-            ));
+    pub(super) fn lower_place_read(
+        &mut self,
+        place: &Place,
+    ) -> Result<Option<Value>, CodegenError> {
+        // Simple case: just a local with no projections
+        if place.is_local() {
+            // Check if it's a stack slot or variable
+            match self.local_storage(place.local) {
+                Some(LocalStorage::Variable(_)) => return Ok(self.use_var(place.local)),
+                Some(LocalStorage::StackSlot(_)) => {
+                    // Load the entire value from stack (only works for scalar-sized types)
+                    if let Some(clif_ty) = self.local_type(place.local) {
+                        let addr = self.local_stack_addr(place.local).ok_or_else(|| {
+                            CodegenError::Internal("expected stack slot".to_string())
+                        })?;
+                        return Ok(Some(self.load_from_addr(addr, clif_ty)));
+                    }
+                    // Compound type with no Cranelift type - return None (ZST-like for reads)
+                    return Ok(None);
+                }
+                Some(LocalStorage::Zst) => return Ok(None),
+                None => {
+                    return Err(CodegenError::Internal(format!(
+                        "local {:?} not found in local_map",
+                        place.local
+                    )));
+                }
+            }
         }
 
-        Ok(self.use_var(place.local))
+        // Complex case: projections (field, deref, index, etc.)
+        let (addr, result_ty) = self.compute_place_address(place)?;
+
+        // Load the value from the computed address
+        if let Some(clif_ty) = self.type_mapper.map_type(result_ty, self.types) {
+            let flags = MemFlags::trusted();
+            Ok(Some(self.builder.ins().load(clif_ty, flags, addr, 0)))
+        } else if self.type_mapper.is_zst(result_ty, self.types) {
+            Ok(None)
+        } else {
+            // Compound type - can't load directly into a value
+            // This case happens when reading a compound type through a projection
+            // The caller should handle this by copying memory
+            Err(CodegenError::Internal(
+                "cannot load compound type from place projection".to_string(),
+            ))
+        }
+    }
+
+    /// Compute the address of a place with projections.
+    ///
+    /// Returns the address as a Cranelift Value and the SPL type at that address.
+    pub(super) fn compute_place_address(
+        &mut self,
+        place: &Place,
+    ) -> Result<(Value, TypeId), CodegenError> {
+        // Start with the base local's address
+        let mut current_ty = self.local_spl_type(place.local);
+        let mut addr = self.get_local_address(place.local)?;
+
+        // Apply each projection
+        for proj in &place.projection {
+            match proj {
+                PlaceElem::Deref => {
+                    // Load the pointer value, then use it as the new address
+                    let ptr_ty = self.type_mapper.pointer_type();
+                    let flags = MemFlags::trusted();
+                    addr = self.builder.ins().load(ptr_ty, flags, addr, 0);
+
+                    // Update current_ty to the pointee type
+                    current_ty = self.layout.pointee_type(current_ty).ok_or_else(|| {
+                        CodegenError::Internal("deref on non-pointer type".to_string())
+                    })?;
+                }
+
+                PlaceElem::Field(field_idx) => {
+                    // Add field offset to the address
+                    let offset = self
+                        .layout
+                        .field_offset(current_ty, field_idx.index() as usize);
+                    if offset != 0 {
+                        addr = self.builder.ins().iadd_imm(addr, offset as i64);
+                    }
+
+                    // Update current_ty to the field type
+                    current_ty = self
+                        .layout
+                        .field_type(current_ty, field_idx.index() as usize)
+                        .ok_or_else(|| {
+                            CodegenError::Internal(format!(
+                                "field {} not found in type",
+                                field_idx.index()
+                            ))
+                        })?;
+                }
+
+                PlaceElem::Index(index_local) => {
+                    // Get the index value
+                    let index_val = self.use_var(*index_local).ok_or_else(|| {
+                        CodegenError::Internal("index local not found".to_string())
+                    })?;
+
+                    // Get the element stride
+                    let stride = self.layout.element_stride(current_ty);
+
+                    // Compute offset = index * stride
+                    let ptr_ty = self.type_mapper.pointer_type();
+
+                    // Extend index to pointer size if needed
+                    let index_val_ext = {
+                        let val_ty = self.builder.func.dfg.value_type(index_val);
+                        if val_ty.bits() < ptr_ty.bits() {
+                            self.builder.ins().uextend(ptr_ty, index_val)
+                        } else if val_ty.bits() > ptr_ty.bits() {
+                            self.builder.ins().ireduce(ptr_ty, index_val)
+                        } else {
+                            index_val
+                        }
+                    };
+
+                    let stride_val = self.builder.ins().iconst(ptr_ty, stride as i64);
+                    let offset = self.builder.ins().imul(index_val_ext, stride_val);
+                    addr = self.builder.ins().iadd(addr, offset);
+
+                    // Update current_ty to the element type
+                    current_ty = self.layout.element_type(current_ty).ok_or_else(|| {
+                        CodegenError::Internal("index on non-array type".to_string())
+                    })?;
+                }
+
+                PlaceElem::ConstantIndex { offset, from_end } => {
+                    if *from_end {
+                        return Err(CodegenError::Internal(
+                            "constant index from_end not yet supported".to_string(),
+                        ));
+                    }
+
+                    // Get the element stride
+                    let stride = self.layout.element_stride(current_ty);
+                    let byte_offset = (*offset as u32) * stride;
+
+                    if byte_offset != 0 {
+                        addr = self.builder.ins().iadd_imm(addr, byte_offset as i64);
+                    }
+
+                    // Update current_ty to the element type
+                    current_ty = self.layout.element_type(current_ty).ok_or_else(|| {
+                        CodegenError::Internal("constant index on non-array type".to_string())
+                    })?;
+                }
+
+                PlaceElem::Subslice { .. } => {
+                    return Err(CodegenError::Internal(
+                        "subslice projections not yet supported".to_string(),
+                    ));
+                }
+
+                PlaceElem::Downcast(_) => {
+                    // For now, downcast doesn't change the address (enum discriminant handling)
+                    // The variant data starts at the same address as the enum
+                    // In the future, we may need to handle enum layouts properly
+                }
+            }
+        }
+
+        Ok((addr, current_ty))
+    }
+
+    /// Get the address of a local (either stack slot address or address of the variable).
+    fn get_local_address(&mut self, local: Local) -> Result<Value, CodegenError> {
+        match self.local_storage(local) {
+            Some(LocalStorage::StackSlot(slot)) => {
+                let ptr_ty = self.type_mapper.pointer_type();
+                Ok(self.builder.ins().stack_addr(ptr_ty, slot, 0))
+            }
+            Some(LocalStorage::Variable(_var)) => {
+                // For variables, we need to spill to stack to get an address
+                // This is a limitation - we need to allocate a temporary stack slot
+                // For now, error out - the caller should handle this case
+                Err(CodegenError::Internal(format!(
+                    "cannot take address of SSA variable {:?}",
+                    local
+                )))
+            }
+            Some(LocalStorage::Zst) => {
+                // ZST has no address, but we can return a dummy pointer
+                let ptr_ty = self.type_mapper.pointer_type();
+                Ok(self.builder.ins().iconst(ptr_ty, 0))
+            }
+            None => Err(CodegenError::Internal(format!(
+                "local {:?} not found in local_map",
+                local
+            ))),
+        }
     }
 
     /// Lower a MIR constant to a Cranelift value.

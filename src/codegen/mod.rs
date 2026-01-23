@@ -30,6 +30,7 @@
 
 pub mod context;
 pub mod error;
+pub mod layout;
 pub mod locals;
 pub mod lower;
 pub mod module;
@@ -39,6 +40,7 @@ pub mod types;
 
 pub use context::CodegenContext;
 pub use error::CodegenError;
+pub use layout::{LayoutComputer, TypeLayout};
 pub use locals::{LocalMap, LocalStorage};
 pub use lower::FunctionLowerer;
 pub use module::{CompiledModule, FunctionDef, ModuleCompiler};
