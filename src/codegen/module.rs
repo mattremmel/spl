@@ -1,0 +1,453 @@
+//! Module-level compilation for multi-function programs.
+//!
+//! This module provides `ModuleCompiler` for compiling multiple MIR functions
+//! together, enabling cross-function calls.
+
+use cranelift_codegen::ir::AbiParam;
+use cranelift_frontend::FunctionBuilder;
+use cranelift_module::FuncId;
+
+use super::context::CodegenContext;
+use super::error::CodegenError;
+use super::lower::FunctionLowerer;
+use super::registry::{FunctionInfo, FunctionRegistry};
+use super::types::TypeMapper;
+use crate::mir::body::Body;
+use crate::sema::symbol::DefId;
+use crate::sema::types::TypeInterner;
+
+/// A function definition with its DefId and MIR body.
+pub struct FunctionDef<'a> {
+    /// The unique identifier for this function.
+    pub def_id: DefId,
+    /// The function name.
+    pub name: String,
+    /// The MIR body.
+    pub body: &'a Body,
+}
+
+impl<'a> FunctionDef<'a> {
+    /// Create a new function definition.
+    pub fn new(def_id: DefId, name: impl Into<String>, body: &'a Body) -> Self {
+        FunctionDef {
+            def_id,
+            name: name.into(),
+            body,
+        }
+    }
+}
+
+/// Result of module compilation.
+pub struct CompiledModule {
+    /// Map from DefId to function pointer.
+    function_ptrs: rustc_hash::FxHashMap<DefId, *const u8>,
+}
+
+impl CompiledModule {
+    /// Get a function pointer by DefId.
+    pub fn get_function_ptr(&self, def_id: DefId) -> Option<*const u8> {
+        self.function_ptrs.get(&def_id).copied()
+    }
+
+    /// Get a function pointer by DefId, or panic if not found.
+    ///
+    /// # Panics
+    /// Panics if the function is not in the module.
+    pub fn get_function_ptr_or_panic(&self, def_id: DefId) -> *const u8 {
+        self.function_ptrs
+            .get(&def_id)
+            .copied()
+            .unwrap_or_else(|| panic!("function {:?} not found in module", def_id))
+    }
+
+    /// Get the number of functions in the module.
+    pub fn len(&self) -> usize {
+        self.function_ptrs.len()
+    }
+
+    /// Check if the module is empty.
+    pub fn is_empty(&self) -> bool {
+        self.function_ptrs.is_empty()
+    }
+}
+
+/// Compiles multiple MIR functions as a module.
+///
+/// Uses a two-pass compilation strategy:
+/// 1. **Declaration pass**: Declare all functions and build the registry
+/// 2. **Definition pass**: Define all function bodies with access to the registry
+pub struct ModuleCompiler {
+    ctx: CodegenContext,
+    registry: FunctionRegistry,
+}
+
+impl ModuleCompiler {
+    /// Create a new module compiler.
+    pub fn new() -> Result<Self, CodegenError> {
+        Ok(ModuleCompiler {
+            ctx: CodegenContext::new_jit()?,
+            registry: FunctionRegistry::new(),
+        })
+    }
+
+    /// Compile multiple functions and return a compiled module.
+    ///
+    /// The functions can call each other via `TerminatorKind::Call`.
+    pub fn compile(
+        functions: &[FunctionDef<'_>],
+        types: &TypeInterner,
+    ) -> Result<CompiledModule, CodegenError> {
+        let mut compiler = Self::new()?;
+
+        // Pass 1: Declare all functions
+        let func_ids = compiler.declare_functions(functions, types)?;
+
+        // Pass 2: Define all function bodies
+        compiler.define_functions(functions, types, &func_ids)?;
+
+        // Pass 3: Finalize and collect function pointers
+        compiler.ctx.finalize();
+
+        let mut function_ptrs = rustc_hash::FxHashMap::default();
+        for (func_def, func_id) in functions.iter().zip(func_ids.iter()) {
+            let ptr = compiler.ctx.get_function_ptr(*func_id);
+            function_ptrs.insert(func_def.def_id, ptr);
+        }
+
+        Ok(CompiledModule { function_ptrs })
+    }
+
+    /// Declaration pass: declare all functions and build registry.
+    fn declare_functions(
+        &mut self,
+        functions: &[FunctionDef<'_>],
+        types: &TypeInterner,
+    ) -> Result<Vec<FuncId>, CodegenError> {
+        let type_mapper = self.ctx.type_mapper();
+        let mut func_ids = Vec::with_capacity(functions.len());
+
+        for func_def in functions {
+            let sig = Self::build_signature(&self.ctx, &type_mapper, func_def.body, types);
+            let func_id = self.ctx.declare_function(&func_def.name, &sig)?;
+
+            self.registry
+                .register(func_def.def_id, FunctionInfo::new(func_id, sig));
+            func_ids.push(func_id);
+        }
+
+        Ok(func_ids)
+    }
+
+    /// Definition pass: define all function bodies.
+    fn define_functions(
+        &mut self,
+        functions: &[FunctionDef<'_>],
+        types: &TypeInterner,
+        func_ids: &[FuncId],
+    ) -> Result<(), CodegenError> {
+        for (func_def, func_id) in functions.iter().zip(func_ids.iter()) {
+            self.define_single_function(func_def, types, *func_id)?;
+        }
+        Ok(())
+    }
+
+    /// Define a single function body.
+    fn define_single_function(
+        &mut self,
+        func_def: &FunctionDef<'_>,
+        types: &TypeInterner,
+        func_id: FuncId,
+    ) -> Result<(), CodegenError> {
+        let type_mapper = self.ctx.type_mapper();
+        let sig = Self::build_signature(&self.ctx, &type_mapper, func_def.body, types);
+
+        // Set up the function
+        self.ctx.compilation_context().func.signature = sig;
+
+        // Build the function body with registry access
+        {
+            let (func, func_ctx, module) = self.ctx.builder_context_with_module();
+            let builder = FunctionBuilder::new(func, func_ctx);
+            let lowerer =
+                FunctionLowerer::with_registry(builder, type_mapper, types, func_def.body)
+                    .set_registry(&self.registry)
+                    .set_module(module);
+            lowerer.lower_body()?;
+        }
+
+        // Define the function
+        self.ctx.define_function(func_id)?;
+
+        Ok(())
+    }
+
+    /// Build the Cranelift signature for a MIR body.
+    fn build_signature(
+        ctx: &CodegenContext,
+        type_mapper: &TypeMapper,
+        body: &Body,
+        types: &TypeInterner,
+    ) -> cranelift_codegen::ir::Signature {
+        let mut sig = ctx.new_signature();
+
+        // Add return type (if not ZST)
+        let return_ty = body.return_ty();
+        if let Some(clif_ty) = type_mapper.map_type(return_ty, types) {
+            sig.returns.push(AbiParam::new(clif_ty));
+        }
+
+        // Add parameter types
+        for arg in body.args() {
+            let arg_ty = body.local_decl(arg).ty;
+            if let Some(clif_ty) = type_mapper.map_type(arg_ty, types) {
+                sig.params.push(AbiParam::new(clif_ty));
+            }
+        }
+
+        sig
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mir::body::Body;
+    use crate::mir::operand::{Constant, Operand, Rvalue};
+    use crate::mir::statement::Statement;
+    use crate::mir::terminator::{Terminator, TerminatorKind};
+    use crate::mir::types::{Local, Place};
+
+    #[test]
+    fn compile_single_function() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn returns_42() -> i32 { 42 }
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(42)),
+            0..0,
+        ));
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "returns_42", &body)];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        assert_eq!(module.len(), 1);
+
+        let ptr = module.get_function_ptr(DefId(1)).unwrap();
+        let func: fn() -> i32 = unsafe { std::mem::transmute(ptr) };
+        assert_eq!(func(), 42);
+    }
+
+    #[test]
+    fn compile_two_independent_functions() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn returns_1() -> i32 { 1 }
+        let mut body1 = Body::new(i32_ty);
+        let entry1 = body1.alloc_block();
+        body1.block_mut(entry1).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(1)),
+            0..0,
+        ));
+        body1
+            .block_mut(entry1)
+            .set_terminator(Terminator::return_(0..0));
+
+        // fn returns_2() -> i32 { 2 }
+        let mut body2 = Body::new(i32_ty);
+        let entry2 = body2.alloc_block();
+        body2.block_mut(entry2).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(2)),
+            0..0,
+        ));
+        body2
+            .block_mut(entry2)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [
+            FunctionDef::new(DefId(1), "returns_1", &body1),
+            FunctionDef::new(DefId(2), "returns_2", &body2),
+        ];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        assert_eq!(module.len(), 2);
+
+        let ptr1 = module.get_function_ptr(DefId(1)).unwrap();
+        let ptr2 = module.get_function_ptr(DefId(2)).unwrap();
+
+        let func1: fn() -> i32 = unsafe { std::mem::transmute(ptr1) };
+        let func2: fn() -> i32 = unsafe { std::mem::transmute(ptr2) };
+
+        assert_eq!(func1(), 1);
+        assert_eq!(func2(), 2);
+    }
+
+    #[test]
+    fn compile_caller_callee() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn callee() -> i32 { 42 }
+        let mut callee_body = Body::new(i32_ty);
+        let callee_entry = callee_body.alloc_block();
+        callee_body
+            .block_mut(callee_entry)
+            .push_statement(Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::Use(Operand::const_int(42)),
+                0..0,
+            ));
+        callee_body
+            .block_mut(callee_entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        // fn caller() -> i32 { callee() }
+        let mut caller_body = Body::new(i32_ty);
+        let caller_entry = caller_body.alloc_block();
+        let after_call = caller_body.alloc_block();
+
+        // call callee() -> _0, then jump to after_call
+        caller_body
+            .block_mut(caller_entry)
+            .set_terminator(Terminator::new(
+                TerminatorKind::Call {
+                    func: Operand::Constant(Constant::FnDef(DefId(1))), // callee
+                    args: vec![],
+                    destination: Place::from_local(Local::RETURN_PLACE),
+                    target: Some(after_call),
+                },
+                0..0,
+            ));
+
+        caller_body
+            .block_mut(after_call)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [
+            FunctionDef::new(DefId(1), "callee", &callee_body),
+            FunctionDef::new(DefId(2), "caller", &caller_body),
+        ];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        let caller_ptr = module.get_function_ptr(DefId(2)).unwrap();
+        let caller: fn() -> i32 = unsafe { std::mem::transmute(caller_ptr) };
+
+        assert_eq!(caller(), 42);
+    }
+
+    #[test]
+    fn compile_call_with_args() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn add(a: i32, b: i32) -> i32 { a + b }
+        let mut add_body = Body::with_args(i32_ty, &[(i32_ty, false), (i32_ty, false)]);
+        let add_entry = add_body.alloc_block();
+
+        // _0 = _1 + _2
+        add_body
+            .block_mut(add_entry)
+            .push_statement(Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::BinaryOp(
+                    crate::mir::operand::BinOp::Add,
+                    Operand::copy_local(Local(1)),
+                    Operand::copy_local(Local(2)),
+                ),
+                0..0,
+            ));
+        add_body
+            .block_mut(add_entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        // fn caller() -> i32 { add(10, 32) }
+        let mut caller_body = Body::new(i32_ty);
+        let caller_entry = caller_body.alloc_block();
+        let after_call = caller_body.alloc_block();
+
+        caller_body
+            .block_mut(caller_entry)
+            .set_terminator(Terminator::new(
+                TerminatorKind::Call {
+                    func: Operand::Constant(Constant::FnDef(DefId(1))), // add
+                    args: vec![Operand::const_int(10), Operand::const_int(32)],
+                    destination: Place::from_local(Local::RETURN_PLACE),
+                    target: Some(after_call),
+                },
+                0..0,
+            ));
+
+        caller_body
+            .block_mut(after_call)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [
+            FunctionDef::new(DefId(1), "add", &add_body),
+            FunctionDef::new(DefId(2), "caller", &caller_body),
+        ];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        let caller_ptr = module.get_function_ptr(DefId(2)).unwrap();
+        let caller: fn() -> i32 = unsafe { std::mem::transmute(caller_ptr) };
+
+        assert_eq!(caller(), 42);
+    }
+
+    #[test]
+    fn compiled_module_get_function_ptr_or_panic() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(42)),
+            0..0,
+        ));
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        // This should not panic
+        let _ = module.get_function_ptr_or_panic(DefId(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "not found")]
+    fn compiled_module_get_function_ptr_or_panic_missing() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        // This should panic
+        let _ = module.get_function_ptr_or_panic(DefId(999));
+    }
+
+    #[test]
+    fn compiled_module_is_empty() {
+        let types = TypeInterner::new();
+        let functions: [FunctionDef<'_>; 0] = [];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        assert!(module.is_empty());
+        assert_eq!(module.len(), 0);
+    }
+}

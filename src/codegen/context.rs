@@ -99,6 +99,16 @@ impl CodegenContext {
         (&mut self.ctx.func, &mut self.func_ctx)
     }
 
+    /// Get mutable references to the function, function builder context, and module.
+    ///
+    /// This is useful for multi-function compilation where function calls need
+    /// to import function references into the current function.
+    pub fn builder_context_with_module(
+        &mut self,
+    ) -> (&mut Function, &mut FunctionBuilderContext, &mut JITModule) {
+        (&mut self.ctx.func, &mut self.func_ctx, &mut self.module)
+    }
+
     /// Define a function in the module.
     ///
     /// Call this after building the function body with a `FunctionBuilder`.

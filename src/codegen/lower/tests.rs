@@ -5,6 +5,7 @@
 use std::mem;
 
 use crate::codegen::CodegenContext;
+use crate::codegen::module::{FunctionDef, ModuleCompiler};
 use crate::mir::body::{Body, LocalDecl};
 use crate::mir::operand::{
     AggregateKind, BinOp, BorrowKind, CastKind, Constant, Operand, Rvalue, UnOp,
@@ -2654,31 +2655,611 @@ fn lower_zeroed_constant() {
     let _ptr = runner.compile(&body, "zeroed_constant");
 }
 
+// =============================================================================
+// Phase: Function Calls
+// =============================================================================
+
 #[test]
-#[ignore = "function calls not yet supported"]
-fn lower_function_call() {
-    let mut runner = JitTestRunner::new();
-    let i32_ty = runner.types_mut().i32();
+fn lower_call_no_args() {
+    let types = TypeInterner::new();
+    let i32_ty = types.i32();
 
-    let mut body = Body::new(i32_ty);
-    let entry = body.alloc_block();
-    let after_call = body.alloc_block();
+    // fn callee() -> i32 { 42 }
+    let mut callee_body = Body::new(i32_ty);
+    let callee_entry = callee_body.alloc_block();
+    callee_body
+        .block_mut(callee_entry)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(42)),
+            0..0,
+        ));
+    callee_body
+        .block_mut(callee_entry)
+        .set_terminator(Terminator::return_(0..0));
 
-    // call some_func() -> _0
+    // fn caller() -> i32 { callee() }
+    let mut caller_body = Body::new(i32_ty);
+    let caller_entry = caller_body.alloc_block();
+    let after_call = caller_body.alloc_block();
+
+    caller_body
+        .block_mut(caller_entry)
+        .set_terminator(Terminator::new(
+            TerminatorKind::Call {
+                func: Operand::Constant(Constant::FnDef(DefId(1))), // callee
+                args: vec![],
+                destination: Place::from_local(Local::RETURN_PLACE),
+                target: Some(after_call),
+            },
+            0..0,
+        ));
+
+    caller_body
+        .block_mut(after_call)
+        .set_terminator(Terminator::return_(0..0));
+
+    let functions = [
+        FunctionDef::new(DefId(1), "callee", &callee_body),
+        FunctionDef::new(DefId(2), "caller", &caller_body),
+    ];
+    let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+    let caller_ptr = module.get_function_ptr(DefId(2)).unwrap();
+    let caller: fn() -> i32 = unsafe { mem::transmute(caller_ptr) };
+
+    assert_eq!(caller(), 42);
+}
+
+#[test]
+fn lower_call_with_args() {
+    let types = TypeInterner::new();
+    let i32_ty = types.i32();
+
+    // fn add(a: i32, b: i32) -> i32 { a + b }
+    let mut add_body = Body::with_args(i32_ty, &[(i32_ty, false), (i32_ty, false)]);
+    let add_entry = add_body.alloc_block();
+
+    add_body
+        .block_mut(add_entry)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::BinaryOp(
+                BinOp::Add,
+                Operand::copy_local(Local(1)),
+                Operand::copy_local(Local(2)),
+            ),
+            0..0,
+        ));
+    add_body
+        .block_mut(add_entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    // fn caller() -> i32 { add(10, 32) }
+    let mut caller_body = Body::new(i32_ty);
+    let caller_entry = caller_body.alloc_block();
+    let after_call = caller_body.alloc_block();
+
+    caller_body
+        .block_mut(caller_entry)
+        .set_terminator(Terminator::new(
+            TerminatorKind::Call {
+                func: Operand::Constant(Constant::FnDef(DefId(1))), // add
+                args: vec![Operand::const_int(10), Operand::const_int(32)],
+                destination: Place::from_local(Local::RETURN_PLACE),
+                target: Some(after_call),
+            },
+            0..0,
+        ));
+
+    caller_body
+        .block_mut(after_call)
+        .set_terminator(Terminator::return_(0..0));
+
+    let functions = [
+        FunctionDef::new(DefId(1), "add", &add_body),
+        FunctionDef::new(DefId(2), "caller", &caller_body),
+    ];
+    let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+    let caller_ptr = module.get_function_ptr(DefId(2)).unwrap();
+    let caller: fn() -> i32 = unsafe { mem::transmute(caller_ptr) };
+
+    assert_eq!(caller(), 42);
+}
+
+#[test]
+fn lower_recursive_call() {
+    let types = TypeInterner::new();
+    let i32_ty = types.i32();
+
+    // fn factorial(n: i32) -> i32 {
+    //     if n <= 1 { 1 } else { n * factorial(n - 1) }
+    // }
+    let mut body = Body::with_args(i32_ty, &[(i32_ty, false)]);
+
+    // Locals:
+    // _0 = return place
+    // _1 = n (argument)
+    // _2 = temp for n <= 1
+    // _3 = temp for n - 1
+    // _4 = temp for factorial(n - 1)
+    // _5 = temp for n * factorial(n - 1)
+    let _temp_cond = body.alloc_local(LocalDecl::new(i32_ty, true)); // _2 - using i32 for bool
+    let _temp_n_minus_1 = body.alloc_local(LocalDecl::new(i32_ty, true)); // _3
+    let _temp_rec_result = body.alloc_local(LocalDecl::new(i32_ty, true)); // _4
+    let _temp_mul = body.alloc_local(LocalDecl::new(i32_ty, true)); // _5
+
+    let entry = body.alloc_block(); // bb0
+    let then_block = body.alloc_block(); // bb1 - return 1
+    let else_block = body.alloc_block(); // bb2 - compute n - 1
+    let call_block = body.alloc_block(); // bb3 - call factorial
+    let after_call = body.alloc_block(); // bb4 - multiply and return
+
+    // bb0: entry - check if n <= 1
+    // _2 = n <= 1
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local(2)),
+        Rvalue::BinaryOp(
+            BinOp::Le,
+            Operand::copy_local(Local(1)),
+            Operand::const_int(1),
+        ),
+        0..0,
+    ));
+    // switch on _2
     body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::SwitchInt {
+            discr: Operand::copy_local(Local(2)),
+            targets: SwitchTargets::new_bool(then_block, else_block),
+        },
+        0..0,
+    ));
+
+    // bb1: then - return 1
+    body.block_mut(then_block).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Use(Operand::const_int(1)),
+        0..0,
+    ));
+    body.block_mut(then_block)
+        .set_terminator(Terminator::return_(0..0));
+
+    // bb2: else - compute n - 1
+    body.block_mut(else_block).push_statement(Statement::assign(
+        Place::from_local(Local(3)),
+        Rvalue::BinaryOp(
+            BinOp::Sub,
+            Operand::copy_local(Local(1)),
+            Operand::const_int(1),
+        ),
+        0..0,
+    ));
+    body.block_mut(else_block)
+        .set_terminator(Terminator::goto(call_block, 0..0));
+
+    // bb3: call factorial(n - 1)
+    body.block_mut(call_block).set_terminator(Terminator::new(
         TerminatorKind::Call {
-            func: Operand::Constant(Constant::FnDef(DefId(1))),
-            args: vec![],
-            destination: Place::from_local(Local::RETURN_PLACE),
+            func: Operand::Constant(Constant::FnDef(DefId(1))), // factorial (self)
+            args: vec![Operand::copy_local(Local(3))],          // n - 1
+            destination: Place::from_local(Local(4)),           // result
             target: Some(after_call),
         },
         0..0,
     ));
 
+    // bb4: multiply n * result and return
+    body.block_mut(after_call).push_statement(Statement::assign(
+        Place::from_local(Local(5)),
+        Rvalue::BinaryOp(
+            BinOp::Mul,
+            Operand::copy_local(Local(1)),
+            Operand::copy_local(Local(4)),
+        ),
+        0..0,
+    ));
+    body.block_mut(after_call).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Use(Operand::copy_local(Local(5))),
+        0..0,
+    ));
     body.block_mut(after_call)
         .set_terminator(Terminator::return_(0..0));
 
-    let _ptr = runner.compile(&body, "function_call");
+    let functions = [FunctionDef::new(DefId(1), "factorial", &body)];
+    let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+    let factorial_ptr = module.get_function_ptr(DefId(1)).unwrap();
+    let factorial: fn(i32) -> i32 = unsafe { mem::transmute(factorial_ptr) };
+
+    assert_eq!(factorial(0), 1);
+    assert_eq!(factorial(1), 1);
+    assert_eq!(factorial(5), 120);
+    assert_eq!(factorial(10), 3628800);
+}
+
+#[test]
+fn lower_mutual_recursion() {
+    let types = TypeInterner::new();
+    let i32_ty = types.i32();
+
+    // fn is_even(n: i32) -> i32 {
+    //     if n == 0 { 1 } else { is_odd(n - 1) }
+    // }
+    // fn is_odd(n: i32) -> i32 {
+    //     if n == 0 { 0 } else { is_even(n - 1) }
+    // }
+
+    // Build is_even
+    let mut even_body = Body::with_args(i32_ty, &[(i32_ty, false)]);
+    let _even_temp_cond = even_body.alloc_local(LocalDecl::new(i32_ty, true)); // _2
+    let _even_temp_n_minus_1 = even_body.alloc_local(LocalDecl::new(i32_ty, true)); // _3
+
+    let even_entry = even_body.alloc_block(); // bb0
+    let even_then = even_body.alloc_block(); // bb1
+    let even_else = even_body.alloc_block(); // bb2
+    let even_call = even_body.alloc_block(); // bb3
+    let even_after = even_body.alloc_block(); // bb4
+
+    // bb0: check n == 0
+    even_body
+        .block_mut(even_entry)
+        .push_statement(Statement::assign(
+            Place::from_local(Local(2)),
+            Rvalue::BinaryOp(
+                BinOp::Eq,
+                Operand::copy_local(Local(1)),
+                Operand::const_int(0),
+            ),
+            0..0,
+        ));
+    even_body
+        .block_mut(even_entry)
+        .set_terminator(Terminator::new(
+            TerminatorKind::SwitchInt {
+                discr: Operand::copy_local(Local(2)),
+                targets: SwitchTargets::new_bool(even_then, even_else),
+            },
+            0..0,
+        ));
+
+    // bb1: return 1 (true)
+    even_body
+        .block_mut(even_then)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(1)),
+            0..0,
+        ));
+    even_body
+        .block_mut(even_then)
+        .set_terminator(Terminator::return_(0..0));
+
+    // bb2: compute n - 1
+    even_body
+        .block_mut(even_else)
+        .push_statement(Statement::assign(
+            Place::from_local(Local(3)),
+            Rvalue::BinaryOp(
+                BinOp::Sub,
+                Operand::copy_local(Local(1)),
+                Operand::const_int(1),
+            ),
+            0..0,
+        ));
+    even_body
+        .block_mut(even_else)
+        .set_terminator(Terminator::goto(even_call, 0..0));
+
+    // bb3: call is_odd(n - 1)
+    even_body
+        .block_mut(even_call)
+        .set_terminator(Terminator::new(
+            TerminatorKind::Call {
+                func: Operand::Constant(Constant::FnDef(DefId(2))), // is_odd
+                args: vec![Operand::copy_local(Local(3))],
+                destination: Place::from_local(Local::RETURN_PLACE),
+                target: Some(even_after),
+            },
+            0..0,
+        ));
+
+    // bb4: return
+    even_body
+        .block_mut(even_after)
+        .set_terminator(Terminator::return_(0..0));
+
+    // Build is_odd (similar structure)
+    let mut odd_body = Body::with_args(i32_ty, &[(i32_ty, false)]);
+    let _odd_temp_cond = odd_body.alloc_local(LocalDecl::new(i32_ty, true)); // _2
+    let _odd_temp_n_minus_1 = odd_body.alloc_local(LocalDecl::new(i32_ty, true)); // _3
+
+    let odd_entry = odd_body.alloc_block();
+    let odd_then = odd_body.alloc_block();
+    let odd_else = odd_body.alloc_block();
+    let odd_call = odd_body.alloc_block();
+    let odd_after = odd_body.alloc_block();
+
+    // bb0: check n == 0
+    odd_body
+        .block_mut(odd_entry)
+        .push_statement(Statement::assign(
+            Place::from_local(Local(2)),
+            Rvalue::BinaryOp(
+                BinOp::Eq,
+                Operand::copy_local(Local(1)),
+                Operand::const_int(0),
+            ),
+            0..0,
+        ));
+    odd_body
+        .block_mut(odd_entry)
+        .set_terminator(Terminator::new(
+            TerminatorKind::SwitchInt {
+                discr: Operand::copy_local(Local(2)),
+                targets: SwitchTargets::new_bool(odd_then, odd_else),
+            },
+            0..0,
+        ));
+
+    // bb1: return 0 (false)
+    odd_body
+        .block_mut(odd_then)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(0)),
+            0..0,
+        ));
+    odd_body
+        .block_mut(odd_then)
+        .set_terminator(Terminator::return_(0..0));
+
+    // bb2: compute n - 1
+    odd_body
+        .block_mut(odd_else)
+        .push_statement(Statement::assign(
+            Place::from_local(Local(3)),
+            Rvalue::BinaryOp(
+                BinOp::Sub,
+                Operand::copy_local(Local(1)),
+                Operand::const_int(1),
+            ),
+            0..0,
+        ));
+    odd_body
+        .block_mut(odd_else)
+        .set_terminator(Terminator::goto(odd_call, 0..0));
+
+    // bb3: call is_even(n - 1)
+    odd_body.block_mut(odd_call).set_terminator(Terminator::new(
+        TerminatorKind::Call {
+            func: Operand::Constant(Constant::FnDef(DefId(1))), // is_even
+            args: vec![Operand::copy_local(Local(3))],
+            destination: Place::from_local(Local::RETURN_PLACE),
+            target: Some(odd_after),
+        },
+        0..0,
+    ));
+
+    // bb4: return
+    odd_body
+        .block_mut(odd_after)
+        .set_terminator(Terminator::return_(0..0));
+
+    let functions = [
+        FunctionDef::new(DefId(1), "is_even", &even_body),
+        FunctionDef::new(DefId(2), "is_odd", &odd_body),
+    ];
+    let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+    let is_even_ptr = module.get_function_ptr(DefId(1)).unwrap();
+    let is_odd_ptr = module.get_function_ptr(DefId(2)).unwrap();
+
+    let is_even: fn(i32) -> i32 = unsafe { mem::transmute(is_even_ptr) };
+    let is_odd: fn(i32) -> i32 = unsafe { mem::transmute(is_odd_ptr) };
+
+    // 1 = true, 0 = false
+    assert_eq!(is_even(0), 1);
+    assert_eq!(is_even(1), 0);
+    assert_eq!(is_even(2), 1);
+    assert_eq!(is_even(10), 1);
+    assert_eq!(is_even(11), 0);
+
+    assert_eq!(is_odd(0), 0);
+    assert_eq!(is_odd(1), 1);
+    assert_eq!(is_odd(2), 0);
+    assert_eq!(is_odd(10), 0);
+    assert_eq!(is_odd(11), 1);
+}
+
+#[test]
+fn lower_call_multiple_args() {
+    let types = TypeInterner::new();
+    let i32_ty = types.i32();
+
+    // fn sum4(a: i32, b: i32, c: i32, d: i32) -> i32 { a + b + c + d }
+    let mut sum_body = Body::with_args(
+        i32_ty,
+        &[
+            (i32_ty, false),
+            (i32_ty, false),
+            (i32_ty, false),
+            (i32_ty, false),
+        ],
+    );
+    let _temp1 = sum_body.alloc_local(LocalDecl::new(i32_ty, true)); // _5
+    let _temp2 = sum_body.alloc_local(LocalDecl::new(i32_ty, true)); // _6
+    let sum_entry = sum_body.alloc_block();
+
+    // _5 = _1 + _2
+    sum_body
+        .block_mut(sum_entry)
+        .push_statement(Statement::assign(
+            Place::from_local(Local(5)),
+            Rvalue::BinaryOp(
+                BinOp::Add,
+                Operand::copy_local(Local(1)),
+                Operand::copy_local(Local(2)),
+            ),
+            0..0,
+        ));
+    // _6 = _5 + _3
+    sum_body
+        .block_mut(sum_entry)
+        .push_statement(Statement::assign(
+            Place::from_local(Local(6)),
+            Rvalue::BinaryOp(
+                BinOp::Add,
+                Operand::copy_local(Local(5)),
+                Operand::copy_local(Local(3)),
+            ),
+            0..0,
+        ));
+    // _0 = _6 + _4
+    sum_body
+        .block_mut(sum_entry)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::BinaryOp(
+                BinOp::Add,
+                Operand::copy_local(Local(6)),
+                Operand::copy_local(Local(4)),
+            ),
+            0..0,
+        ));
+    sum_body
+        .block_mut(sum_entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    // fn caller() -> i32 { sum4(1, 2, 3, 4) }
+    let mut caller_body = Body::new(i32_ty);
+    let caller_entry = caller_body.alloc_block();
+    let after_call = caller_body.alloc_block();
+
+    caller_body
+        .block_mut(caller_entry)
+        .set_terminator(Terminator::new(
+            TerminatorKind::Call {
+                func: Operand::Constant(Constant::FnDef(DefId(1))),
+                args: vec![
+                    Operand::const_int(1),
+                    Operand::const_int(2),
+                    Operand::const_int(3),
+                    Operand::const_int(4),
+                ],
+                destination: Place::from_local(Local::RETURN_PLACE),
+                target: Some(after_call),
+            },
+            0..0,
+        ));
+
+    caller_body
+        .block_mut(after_call)
+        .set_terminator(Terminator::return_(0..0));
+
+    let functions = [
+        FunctionDef::new(DefId(1), "sum4", &sum_body),
+        FunctionDef::new(DefId(2), "caller", &caller_body),
+    ];
+    let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+    let caller_ptr = module.get_function_ptr(DefId(2)).unwrap();
+    let caller: fn() -> i32 = unsafe { mem::transmute(caller_ptr) };
+
+    assert_eq!(caller(), 10); // 1 + 2 + 3 + 4 = 10
+}
+
+#[test]
+fn lower_call_chain() {
+    let types = TypeInterner::new();
+    let i32_ty = types.i32();
+
+    // fn a() -> i32 { 1 }
+    let mut a_body = Body::new(i32_ty);
+    let a_entry = a_body.alloc_block();
+    a_body.block_mut(a_entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Use(Operand::const_int(1)),
+        0..0,
+    ));
+    a_body
+        .block_mut(a_entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    // fn b() -> i32 { a() + 10 }
+    let mut b_body = Body::new(i32_ty);
+    let _b_temp = b_body.alloc_local(LocalDecl::new(i32_ty, true)); // _1 for a() result
+    let b_entry = b_body.alloc_block();
+    let b_after_call = b_body.alloc_block();
+
+    b_body.block_mut(b_entry).set_terminator(Terminator::new(
+        TerminatorKind::Call {
+            func: Operand::Constant(Constant::FnDef(DefId(1))), // a
+            args: vec![],
+            destination: Place::from_local(Local(1)),
+            target: Some(b_after_call),
+        },
+        0..0,
+    ));
+
+    b_body
+        .block_mut(b_after_call)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::BinaryOp(
+                BinOp::Add,
+                Operand::copy_local(Local(1)),
+                Operand::const_int(10),
+            ),
+            0..0,
+        ));
+    b_body
+        .block_mut(b_after_call)
+        .set_terminator(Terminator::return_(0..0));
+
+    // fn c() -> i32 { b() + 100 }
+    let mut c_body = Body::new(i32_ty);
+    let _c_temp = c_body.alloc_local(LocalDecl::new(i32_ty, true)); // _1 for b() result
+    let c_entry = c_body.alloc_block();
+    let c_after_call = c_body.alloc_block();
+
+    c_body.block_mut(c_entry).set_terminator(Terminator::new(
+        TerminatorKind::Call {
+            func: Operand::Constant(Constant::FnDef(DefId(2))), // b
+            args: vec![],
+            destination: Place::from_local(Local(1)),
+            target: Some(c_after_call),
+        },
+        0..0,
+    ));
+
+    c_body
+        .block_mut(c_after_call)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::BinaryOp(
+                BinOp::Add,
+                Operand::copy_local(Local(1)),
+                Operand::const_int(100),
+            ),
+            0..0,
+        ));
+    c_body
+        .block_mut(c_after_call)
+        .set_terminator(Terminator::return_(0..0));
+
+    let functions = [
+        FunctionDef::new(DefId(1), "a", &a_body),
+        FunctionDef::new(DefId(2), "b", &b_body),
+        FunctionDef::new(DefId(3), "c", &c_body),
+    ];
+    let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+    let c_ptr = module.get_function_ptr(DefId(3)).unwrap();
+    let c: fn() -> i32 = unsafe { mem::transmute(c_ptr) };
+
+    assert_eq!(c(), 111); // 1 + 10 + 100 = 111
 }
 
 #[test]

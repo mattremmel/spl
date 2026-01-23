@@ -13,9 +13,11 @@ mod tests;
 use cranelift_codegen::ir::types;
 use cranelift_codegen::ir::{AbiParam, Block, Value};
 use cranelift_frontend::{FunctionBuilder, Variable};
+use cranelift_jit::JITModule;
 use rustc_hash::FxHashMap;
 
 use crate::codegen::error::CodegenError;
+use crate::codegen::registry::FunctionRegistry;
 use crate::codegen::{CodegenContext, LocalMap, LocalStorage, TypeMapper};
 use crate::mir::body::Body;
 use crate::mir::terminator::BasicBlock;
@@ -36,6 +38,10 @@ pub struct FunctionLowerer<'a> {
     types: &'a TypeInterner,
     /// The MIR body being lowered.
     body: &'a Body,
+    /// Optional function registry for multi-function compilation.
+    func_registry: Option<&'a FunctionRegistry>,
+    /// Optional JIT module for importing functions.
+    module: Option<&'a mut JITModule>,
 }
 
 impl<'a> FunctionLowerer<'a> {
@@ -101,11 +107,37 @@ impl<'a> FunctionLowerer<'a> {
             block_map: FxHashMap::default(),
             types,
             body,
+            func_registry: None,
+            module: None,
         }
     }
 
+    /// Create a new function lowerer with registry support for multi-function compilation.
+    ///
+    /// Use `set_registry()` and `set_module()` to configure cross-function calls.
+    pub fn with_registry(
+        builder: FunctionBuilder<'a>,
+        type_mapper: TypeMapper,
+        types: &'a TypeInterner,
+        body: &'a Body,
+    ) -> Self {
+        Self::new(builder, type_mapper, types, body)
+    }
+
+    /// Set the function registry for resolving function references.
+    pub fn set_registry(mut self, registry: &'a FunctionRegistry) -> Self {
+        self.func_registry = Some(registry);
+        self
+    }
+
+    /// Set the JIT module for importing function references.
+    pub fn set_module(mut self, module: &'a mut JITModule) -> Self {
+        self.module = Some(module);
+        self
+    }
+
     /// Lower the entire MIR body to Cranelift IR.
-    fn lower_body(mut self) -> Result<(), CodegenError> {
+    pub fn lower_body(mut self) -> Result<(), CodegenError> {
         // Create Cranelift blocks for each MIR block
         for i in 0..self.body.num_blocks() {
             let mir_bb = BasicBlock::new(i as u32);
