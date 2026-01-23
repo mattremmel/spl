@@ -34,8 +34,13 @@ pub struct InferResult {
     pub expr_types: FxHashMap<Span, TypeId>,
     /// Map from local bindings (DefId) to their inferred types.
     pub binding_types: FxHashMap<DefId, TypeId>,
+    /// Map from spans to resolved DefIds (preserved from resolution).
+    pub resolutions: FxHashMap<Span, DefId>,
     /// Map from method call expression spans to their resolved method DefIds.
     pub method_resolutions: FxHashMap<Span, DefId>,
+    /// Map from type annotation spans to their resolved TypeIds.
+    /// Includes return type annotations (-> i32), parameter types (x: bool), etc.
+    pub type_annotation_types: FxHashMap<Span, TypeId>,
     /// Diagnostics produced during inference.
     pub diagnostics: Vec<Diagnostic>,
 }

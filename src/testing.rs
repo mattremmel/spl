@@ -931,11 +931,10 @@ mod tests {
         check_mir(
             "fn main() {}",
             &expect![[r#"
-                fn fn() -> ty7 {
+                fn fn() -> ty0 {
                     let _1: ty0;
 
                     bb0:
-                        _0 = copy _1
                         return
                 }
             "#]],

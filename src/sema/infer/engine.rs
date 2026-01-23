@@ -138,6 +138,11 @@ pub(super) struct InferEngine {
     /// Method resolutions: maps method call spans to resolved method DefIds.
     /// Separate from `resolutions` because method lookup happens during inference.
     pub(super) method_resolutions: FxHashMap<Span, DefId>,
+
+    /// Map from type annotation spans to their TypeIds.
+    /// Records the types of explicit type annotations like `-> i32`, `: bool`, etc.
+    /// These are separate from `expr_types` because type annotations are not expressions.
+    pub(super) type_annotation_types: FxHashMap<Span, TypeId>,
 }
 
 impl InferEngine {
@@ -160,6 +165,7 @@ impl InferEngine {
             current_self_type: None,
             current_loop_kind: None,
             method_resolutions: FxHashMap::default(),
+            type_annotation_types: FxHashMap::default(),
         }
     }
 
@@ -168,7 +174,9 @@ impl InferEngine {
             ctx: self.ctx,
             expr_types: self.expr_types,
             binding_types: self.binding_types,
+            resolutions: self.resolutions,
             method_resolutions: self.method_resolutions,
+            type_annotation_types: self.type_annotation_types,
             diagnostics: self.diagnostics,
         }
     }

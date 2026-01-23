@@ -102,6 +102,8 @@ struct LoweringContext {
     resolutions: FxHashMap<Span, DefId>,
     /// Map from method call spans to their resolved method DefIds.
     method_resolutions: FxHashMap<Span, DefId>,
+    /// Map from type annotation spans to their resolved TypeIds.
+    type_annotation_types: FxHashMap<Span, TypeId>,
 }
 
 impl LoweringContext {
@@ -114,8 +116,9 @@ impl LoweringContext {
             db,
             expr_types: infer_result.expr_types,
             binding_types: infer_result.binding_types,
-            resolutions: FxHashMap::default(), // Will be populated during lowering
+            resolutions: infer_result.resolutions,
             method_resolutions: infer_result.method_resolutions,
+            type_annotation_types: infer_result.type_annotation_types,
         }
     }
 
@@ -134,6 +137,14 @@ impl LoweringContext {
 
     fn get_type(&self, span: &Span) -> TypeId {
         self.expr_types
+            .get(span)
+            .copied()
+            .unwrap_or_else(|| self.db.types.error())
+    }
+
+    /// Get the type for a type annotation (like `-> i32` or `: bool`).
+    fn get_type_annotation(&self, span: &Span) -> TypeId {
+        self.type_annotation_types
             .get(span)
             .copied()
             .unwrap_or_else(|| self.db.types.error())
@@ -186,14 +197,12 @@ impl LoweringContext {
     }
 
     fn lower_function(&mut self, func: &FunctionDef) -> Option<HirFunction> {
-        let name = func.name()?.ident_token()?.text().to_string();
+        let ident_token = func.name()?.ident_token()?;
+        let name = ident_token.text().to_string();
         let span = Self::text_range_to_span(func.syntax().text_range());
 
-        // Get DefId from the function name span
-        let name_span = func
-            .name()
-            .map(|n| Self::text_range_to_span(n.syntax().text_range()))
-            .unwrap_or_else(|| span.clone());
+        // Get DefId from the function name span (use token range to match resolver)
+        let name_span = Self::text_range_to_span(ident_token.text_range());
         let def_id = self
             .resolutions
             .get(&name_span)
@@ -213,8 +222,12 @@ impl LoweringContext {
             })
             .unwrap_or_default();
 
-        // Get return type
-        let ret_type = self.get_type(&span);
+        // Get return type from the return type annotation's span, or default to unit
+        let ret_type = func
+            .ret_type()
+            .map(|rt| Self::text_range_to_span(rt.syntax().text_range()))
+            .map(|rt_span| self.get_type_annotation(&rt_span))
+            .unwrap_or_else(|| self.db.types.unit());
 
         // Lower body
         let body = func.body().map(|b| self.lower_block(&b));
@@ -234,8 +247,10 @@ impl LoweringContext {
         let span = Self::text_range_to_span(param.syntax().text_range());
 
         // Create a simple bind pattern for the parameter
-        let _name = param.name()?.ident_token()?.text().to_string();
-        let name_span = Self::text_range_to_span(param.name()?.syntax().text_range());
+        let ident_token = param.name()?.ident_token()?;
+        let _name = ident_token.text().to_string();
+        // Use the token's range to match how resolutions are stored
+        let name_span = Self::text_range_to_span(ident_token.text_range());
         let def_id = self
             .resolutions
             .get(&name_span)
@@ -370,17 +385,22 @@ impl LoweringContext {
         let mut stmts = Vec::new();
         let mut tail = None;
 
+        // Collect all children first so we can check if something is last
+        let children: Vec<_> = block.syntax().children().collect();
+        let last_idx = children.len().saturating_sub(1);
+
         // Process all children in source order
-        for child in block.syntax().children() {
+        for (idx, child) in children.into_iter().enumerate() {
+            let is_last = idx == last_idx;
+
             if let Some(stmt) = Stmt::cast(child.clone()) {
                 match &stmt {
                     Stmt::Expr(expr_stmt) => {
-                        // If this is the last item and has no semicolon, it's the tail
                         let has_semi = expr_stmt.semicolon().is_some();
                         if let Some(expr) = expr_stmt.expr() {
                             let expr_id = self.lower_expr(&expr);
-                            if !has_semi {
-                                // This might be a tail expression
+                            // Only treat as tail if no semicolon AND this is the last item
+                            if !has_semi && is_last {
                                 tail = Some(expr_id);
                             } else {
                                 let stmt_span =
@@ -461,9 +481,11 @@ impl LoweringContext {
         match pat {
             Pat::Ident(ident_pat) => {
                 let mutable = outer_mutable || ident_pat.mut_kw().is_some();
+                // Use the token's range to match how resolutions are stored
                 let name_span = ident_pat
                     .name()
-                    .map(|n| Self::text_range_to_span(n.syntax().text_range()))
+                    .and_then(|n| n.ident_token())
+                    .map(|t| Self::text_range_to_span(t.text_range()))
                     .unwrap_or_else(|| span.clone());
 
                 let def_id = self
@@ -680,12 +702,13 @@ impl LoweringContext {
     }
 
     fn lower_path_expr(&mut self, path_expr: &PathExpr, span: Span, ty: TypeId) -> ExprId {
-        // Get the DefId from the path
+        // Get the DefId from the path using the token's range to match resolver
         let path_span = path_expr
             .path()
             .and_then(|p| p.segments().next())
             .and_then(|seg| seg.name())
-            .map(|n| Self::text_range_to_span(n.syntax().text_range()))
+            .and_then(|n| n.token())
+            .map(|t| Self::text_range_to_span(t.text_range()))
             .unwrap_or_else(|| span.clone());
 
         let def_id = self

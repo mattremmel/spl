@@ -1811,6 +1811,14 @@ impl InferEngine {
     // =========================================================================
 
     pub(super) fn ast_type_to_type_id(&mut self, ty: &crate::ast::Type) -> TypeId {
+        let span = text_range_to_span(ty.syntax().text_range());
+        let type_id = self.ast_type_to_type_id_inner(ty);
+        self.type_annotation_types.insert(span, type_id);
+        type_id
+    }
+
+    /// Internal helper for type conversion without recording (used recursively).
+    fn ast_type_to_type_id_inner(&mut self, ty: &crate::ast::Type) -> TypeId {
         match ty {
             crate::ast::Type::Path(path_type) => {
                 let path = path_type.path();
@@ -1855,7 +1863,7 @@ impl InferEngine {
                                         .generic_args()
                                         .map(|args| {
                                             args.args()
-                                                .map(|t| self.ast_type_to_type_id(&t))
+                                                .map(|t| self.ast_type_to_type_id_inner(&t))
                                                 .collect()
                                         })
                                         .unwrap_or_default();
@@ -1874,7 +1882,7 @@ impl InferEngine {
                     Mutability::Shared
                 };
                 if let Some(inner) = ref_type.ty() {
-                    let inner_ty = self.ast_type_to_type_id(&inner);
+                    let inner_ty = self.ast_type_to_type_id_inner(&inner);
                     self.ctx.types.mk_ref(mutability, inner_ty)
                 } else {
                     self.ctx.types.error()
@@ -1882,7 +1890,7 @@ impl InferEngine {
             }
             crate::ast::Type::Array(array_type) => {
                 if let Some(elem_ty) = array_type.elem_ty() {
-                    let elem = self.ast_type_to_type_id(&elem_ty);
+                    let elem = self.ast_type_to_type_id_inner(&elem_ty);
                     // Get length from expression
                     let len = if let Some(len_expr) = array_type.len() {
                         // Try to evaluate as a constant
@@ -1911,7 +1919,7 @@ impl InferEngine {
             }
             crate::ast::Type::Slice(slice_type) => {
                 if let Some(elem_ty) = slice_type.elem_ty() {
-                    let elem = self.ast_type_to_type_id(&elem_ty);
+                    let elem = self.ast_type_to_type_id_inner(&elem_ty);
                     self.ctx.types.mk_slice(elem)
                 } else {
                     self.ctx.types.error()
@@ -1920,18 +1928,18 @@ impl InferEngine {
             crate::ast::Type::Tuple(tuple_type) => {
                 let elems: Vec<_> = tuple_type
                     .types()
-                    .map(|t| self.ast_type_to_type_id(&t))
+                    .map(|t| self.ast_type_to_type_id_inner(&t))
                     .collect();
                 self.ctx.types.mk_tuple(elems)
             }
             crate::ast::Type::FnPtr(fn_ptr) => {
                 let params: Vec<_> = fn_ptr
                     .param_types()
-                    .map(|t| self.ast_type_to_type_id(&t))
+                    .map(|t| self.ast_type_to_type_id_inner(&t))
                     .collect();
                 let ret = fn_ptr
                     .ret_type()
-                    .map(|t| self.ast_type_to_type_id(&t))
+                    .map(|t| self.ast_type_to_type_id_inner(&t))
                     .unwrap_or_else(|| self.ctx.types.unit());
                 self.ctx.types.mk_fn_ptr(params, ret)
             }

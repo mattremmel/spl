@@ -5,6 +5,7 @@ use crate::mir::body::{BasicBlockData, Body, LocalDecl};
 use crate::mir::statement::Statement;
 use crate::mir::terminator::{BasicBlock, Terminator, TerminatorKind};
 use crate::mir::types::Local;
+use crate::sema::symbol::DefId;
 use crate::sema::types::TypeId;
 
 /// Builder for constructing MIR bodies incrementally.
@@ -84,6 +85,11 @@ impl MirBuilder {
         self.basic_blocks[self.current_block].set_terminator(terminator);
     }
 
+    /// Check if the current basic block already has a terminator.
+    pub fn is_current_block_terminated(&self) -> bool {
+        self.basic_blocks[self.current_block].is_terminated()
+    }
+
     /// Allocate a new basic block and return its ID.
     pub fn alloc_block(&mut self) -> BasicBlock {
         let idx = self.basic_blocks.len() as u32;
@@ -106,6 +112,21 @@ impl MirBuilder {
     /// Consumes the builder and returns the completed Body.
     pub fn finish(self, arg_count: usize) -> Body {
         Body {
+            def_id: None,
+            name: None,
+            basic_blocks: self.basic_blocks,
+            locals: self.locals,
+            arg_count,
+        }
+    }
+
+    /// Finish building and produce a MIR Body with function metadata.
+    ///
+    /// Consumes the builder and returns the completed Body with def_id and name.
+    pub fn finish_with_metadata(self, arg_count: usize, def_id: DefId, name: String) -> Body {
+        Body {
+            def_id: Some(def_id),
+            name: Some(name),
             basic_blocks: self.basic_blocks,
             locals: self.locals,
             arg_count,

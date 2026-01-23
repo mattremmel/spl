@@ -3,6 +3,7 @@
 //! This module defines the Body type which represents a complete MIR function,
 //! including its basic blocks, local variables, and control flow graph.
 
+use crate::sema::symbol::DefId;
 use crate::sema::types::TypeId;
 
 use super::statement::Statement;
@@ -91,6 +92,10 @@ impl Default for BasicBlockData {
 /// A MIR function body.
 #[derive(Clone, Debug)]
 pub struct Body {
+    /// Definition ID of the function (if from HIR lowering).
+    pub def_id: Option<DefId>,
+    /// Name of the function (if from HIR lowering).
+    pub name: Option<String>,
     /// All basic blocks in this function.
     pub basic_blocks: Vec<BasicBlockData>,
     /// Local variable declarations.
@@ -107,6 +112,8 @@ impl Body {
     pub fn new(return_ty: TypeId) -> Self {
         let return_local = LocalDecl::new(return_ty, true);
         Body {
+            def_id: None,
+            name: None,
             basic_blocks: Vec::new(),
             locals: vec![return_local],
             arg_count: 0,
@@ -122,6 +129,8 @@ impl Body {
             locals.push(LocalDecl::new(*ty, *mutable));
         }
         Body {
+            def_id: None,
+            name: None,
             basic_blocks: Vec::new(),
             locals,
             arg_count: arg_types.len(),

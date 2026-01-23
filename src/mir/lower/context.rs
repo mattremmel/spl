@@ -652,23 +652,29 @@ impl<'hir> MirLoweringContext<'hir> {
         // Lower then branch
         builder.switch_to_block(then_bb);
         let then_operand = self.lower_expr_as_operand(builder, then_branch);
-        builder.push_statement(Statement::assign(
-            result_place.clone(),
-            Rvalue::Use(then_operand),
-            span.clone(),
-        ));
-        builder.set_terminator(TerminatorKind::Goto(join_bb), span.clone());
+        // Only add fallthrough if the branch didn't diverge (e.g., break/continue/return)
+        if !builder.is_current_block_terminated() {
+            builder.push_statement(Statement::assign(
+                result_place.clone(),
+                Rvalue::Use(then_operand),
+                span.clone(),
+            ));
+            builder.set_terminator(TerminatorKind::Goto(join_bb), span.clone());
+        }
 
         // Lower else branch (if present)
         if let Some(else_expr) = else_branch {
             builder.switch_to_block(else_bb);
             let else_operand = self.lower_expr_as_operand(builder, else_expr);
-            builder.push_statement(Statement::assign(
-                result_place.clone(),
-                Rvalue::Use(else_operand),
-                span.clone(),
-            ));
-            builder.set_terminator(TerminatorKind::Goto(join_bb), span.clone());
+            // Only add fallthrough if the branch didn't diverge
+            if !builder.is_current_block_terminated() {
+                builder.push_statement(Statement::assign(
+                    result_place.clone(),
+                    Rvalue::Use(else_operand),
+                    span.clone(),
+                ));
+                builder.set_terminator(TerminatorKind::Goto(join_bb), span.clone());
+            }
         }
 
         // Continue in join block
@@ -1102,6 +1108,7 @@ impl<'hir> MirLoweringContext<'hir> {
         // Add return terminator
         builder.set_terminator(TerminatorKind::Return, span);
 
-        builder.finish(func.params.len())
+        // Preserve function metadata (def_id and name) from HIR
+        builder.finish_with_metadata(func.params.len(), func.def_id, func.name.clone())
     }
 }

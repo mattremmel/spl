@@ -94,6 +94,8 @@ use rowan::ast::AstNode;
 pub struct CompileResult {
     /// MIR bodies if compilation succeeded (no errors).
     pub bodies: Option<Vec<mir::Body>>,
+    /// Type interner used during compilation (for codegen).
+    pub types: Option<sema::types::TypeInterner>,
     /// All diagnostics (errors and warnings).
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -158,6 +160,7 @@ pub fn compile(source: &str) -> CompileResult {
     if !parse.ok() {
         return CompileResult {
             bodies: None,
+            types: None,
             diagnostics,
         };
     }
@@ -167,6 +170,7 @@ pub fn compile(source: &str) -> CompileResult {
         diagnostics.push(Diagnostic::error("failed to parse source file"));
         return CompileResult {
             bodies: None,
+            types: None,
             diagnostics,
         };
     };
@@ -184,6 +188,7 @@ pub fn compile(source: &str) -> CompileResult {
     if has_errors {
         return CompileResult {
             bodies: None,
+            types: None,
             diagnostics,
         };
     }
@@ -194,9 +199,211 @@ pub fn compile(source: &str) -> CompileResult {
     // Phase 6: MIR lowering
     let bodies = mir::lower_hir_to_mir(&hir_db);
 
+    // Preserve the type interner for codegen
+    let types = hir_db.types;
+
     CompileResult {
         bodies: Some(bodies),
+        types: Some(types),
         diagnostics,
+    }
+}
+
+// ============================================================================
+// JIT Execution API
+// ============================================================================
+
+/// Errors that can occur during JIT execution.
+#[derive(Debug)]
+pub enum JitError {
+    /// Compilation failed with diagnostics.
+    CompileError(Vec<Diagnostic>),
+    /// Code generation failed.
+    CodegenError(codegen::CodegenError),
+    /// Runtime error during execution.
+    RuntimeError(codegen::RuntimeError),
+    /// No main function found in the program.
+    NoMain,
+}
+
+impl std::fmt::Display for JitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JitError::CompileError(diags) => {
+                write!(f, "compilation failed with {} error(s)", diags.len())
+            }
+            JitError::CodegenError(e) => write!(f, "codegen error: {}", e),
+            JitError::RuntimeError(e) => write!(f, "runtime error: {}", e),
+            JitError::NoMain => write!(f, "no main function found"),
+        }
+    }
+}
+
+impl std::error::Error for JitError {}
+
+impl From<codegen::CodegenError> for JitError {
+    fn from(e: codegen::CodegenError) -> Self {
+        JitError::CodegenError(e)
+    }
+}
+
+impl From<codegen::RuntimeError> for JitError {
+    fn from(e: codegen::RuntimeError) -> Self {
+        JitError::RuntimeError(e)
+    }
+}
+
+/// Compile and execute SPL source code, returning the i32 result of main().
+///
+/// This is a convenience function for JIT compilation and execution of SPL programs.
+/// The program must have a `main` function that returns `i32`.
+///
+/// # Example
+///
+/// ```
+/// use spl::jit_execute;
+///
+/// let result = jit_execute("fn main() -> i32 { 42 }");
+/// assert_eq!(result.unwrap(), 42);
+/// ```
+///
+/// # Errors
+///
+/// Returns `JitError::CompileError` if the source has syntax or semantic errors.
+/// Returns `JitError::NoMain` if no `main` function is defined.
+/// Returns `JitError::CodegenError` if code generation fails.
+/// Returns `JitError::RuntimeError` if execution fails (e.g., traps).
+pub fn jit_execute(source: &str) -> Result<i32, JitError> {
+    // Compile source to MIR
+    let result = compile(source);
+    if result.is_err() {
+        return Err(JitError::CompileError(result.diagnostics));
+    }
+
+    let bodies = result.bodies.unwrap();
+    let types = result.types.unwrap();
+
+    if bodies.is_empty() {
+        return Err(JitError::NoMain);
+    }
+
+    // Build function definitions from bodies (using preserved metadata)
+    let function_defs: Vec<_> = bodies
+        .iter()
+        .filter_map(|body| {
+            let def_id = body.def_id?;
+            let name = body.name.as_ref()?;
+            Some((def_id, name.as_str(), body))
+        })
+        .collect();
+
+    if function_defs.is_empty() {
+        return Err(JitError::NoMain);
+    }
+
+    // Find main function
+    let main_def_id = function_defs
+        .iter()
+        .find(|(_, name, _)| *name == "main")
+        .map(|(def_id, _, _)| *def_id)
+        .ok_or(JitError::NoMain)?;
+
+    // Compile to native code
+    let mut module = codegen::codegen_jit(&function_defs, &types)?;
+
+    // Set main and run
+    module.set_main(main_def_id);
+    let result = module.run_main()?;
+
+    Ok(result)
+}
+
+#[cfg(test)]
+mod jit_tests {
+    use super::*;
+
+    #[test]
+    fn jit_execute_returns_42() {
+        let result = jit_execute("fn main() -> i32 { 42 }");
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    fn jit_execute_compile_error() {
+        let result = jit_execute("fn main() { undefined; }");
+        assert!(matches!(result, Err(JitError::CompileError(_))));
+    }
+
+    #[test]
+    fn jit_execute_no_main() {
+        let result = jit_execute("fn foo() {}");
+        assert!(matches!(result, Err(JitError::NoMain)));
+    }
+
+    #[test]
+    fn jit_execute_function_call() {
+        let result = jit_execute(
+            r#"
+            fn add(a: i32, b: i32) -> i32 { a + b }
+            fn main() -> i32 { add(10, 32) }
+        "#,
+        );
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    fn jit_execute_arithmetic() {
+        let result = jit_execute("fn main() -> i32 { 1 + 2 * 3 }");
+        assert_eq!(result.unwrap(), 7);
+    }
+
+    #[test]
+    fn jit_execute_locals() {
+        let result = jit_execute("fn main() -> i32 { let x = 10; let y = 32; x + y }");
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    fn jit_execute_control_flow() {
+        let result = jit_execute(
+            r#"
+            fn main() -> i32 {
+                let x = 5;
+                if x > 3 { 1 } else { 0 }
+            }
+        "#,
+        );
+        assert_eq!(result.unwrap(), 1);
+    }
+
+    #[test]
+    fn jit_execute_loop() {
+        let result = jit_execute(
+            r#"
+            fn main() -> i32 {
+                let mut sum = 0;
+                let mut i = 1;
+                while i <= 10 {
+                    sum = sum + i;
+                    i = i + 1;
+                }
+                sum
+            }
+        "#,
+        );
+        assert_eq!(result.unwrap(), 55);
+    }
+
+    #[test]
+    fn jit_error_display_compile() {
+        let err = JitError::CompileError(vec![Diagnostic::error("test error")]);
+        assert!(err.to_string().contains("compilation failed"));
+    }
+
+    #[test]
+    fn jit_error_display_no_main() {
+        let err = JitError::NoMain;
+        assert!(err.to_string().contains("no main"));
     }
 }
 

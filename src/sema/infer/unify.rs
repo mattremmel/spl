@@ -479,6 +479,20 @@ impl InferEngine {
             let resolved = self.fully_resolve_type(type_id);
             self.binding_types.insert(def_id, resolved);
         }
+
+        // Resolve all expression types
+        let exprs: Vec<_> = self.expr_types.drain().collect();
+        for (span, type_id) in exprs {
+            let resolved = self.fully_resolve_type(type_id);
+            self.expr_types.insert(span, resolved);
+        }
+
+        // Resolve all type annotation types
+        let annotations: Vec<_> = self.type_annotation_types.drain().collect();
+        for (span, type_id) in annotations {
+            let resolved = self.fully_resolve_type(type_id);
+            self.type_annotation_types.insert(span, resolved);
+        }
     }
 
     fn collect_defaults(&self, type_id: TypeId, defaults: &mut Vec<(TypeVar, TypeId)>) {

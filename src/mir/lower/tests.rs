@@ -8721,3 +8721,59 @@ fn test_lower_missing_expr_produces_zeroed() {
         "Missing expression should produce Zeroed constant"
     );
 }
+
+// ========== Phase: Function Metadata Preservation (NATIVE-7) ==========
+
+#[test]
+fn lower_function_preserves_def_id() {
+    let bodies = lower_source("fn main() -> i32 { 42 }");
+    assert_eq!(bodies.len(), 1);
+    assert!(
+        bodies[0].def_id.is_some(),
+        "MIR body should preserve def_id from HIR"
+    );
+}
+
+#[test]
+fn lower_function_preserves_name() {
+    let bodies = lower_source("fn foo() {} fn bar() {}");
+    let names: Vec<_> = bodies.iter().filter_map(|b| b.name.as_deref()).collect();
+    assert!(names.contains(&"foo"), "Should preserve 'foo' name");
+    assert!(names.contains(&"bar"), "Should preserve 'bar' name");
+}
+
+#[test]
+fn lower_function_def_id_is_unique() {
+    let bodies = lower_source("fn foo() {} fn bar() {} fn baz() {}");
+    let def_ids: Vec<_> = bodies
+        .iter()
+        .filter_map(|b| b.def_id)
+        .map(|d| d.0) // Extract inner u32 for comparison
+        .collect();
+    assert_eq!(def_ids.len(), 3, "All functions should have def_ids");
+
+    // Each function should have a different def_id
+    assert_ne!(
+        def_ids[0], def_ids[1],
+        "foo and bar should have different def_ids"
+    );
+    assert_ne!(
+        def_ids[1], def_ids[2],
+        "bar and baz should have different def_ids"
+    );
+    assert_ne!(
+        def_ids[0], def_ids[2],
+        "foo and baz should have different def_ids"
+    );
+}
+
+#[test]
+fn lower_function_metadata_for_function_with_params() {
+    let bodies = lower_source("fn add(a: i32, b: i32) -> i32 { a + b }");
+    assert_eq!(bodies.len(), 1);
+    let body = &bodies[0];
+
+    assert!(body.def_id.is_some());
+    assert_eq!(body.name.as_deref(), Some("add"));
+    assert_eq!(body.arg_count, 2);
+}
