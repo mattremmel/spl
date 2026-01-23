@@ -242,13 +242,22 @@ pub fn link_object_to_executable(
     output: &Path,
     options: Option<&LinkOptions>,
 ) -> Result<(), LinkError> {
-    // Create a unique temporary file for the object using process ID and timestamp
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    // Create a unique temporary file for the object using process ID, timestamp, and counter
     let temp_dir = std::env::temp_dir();
     let unique_id = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let obj_path = temp_dir.join(format!("spl_temp_{}_{}.o", std::process::id(), unique_id));
+    let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
+    let obj_path = temp_dir.join(format!(
+        "spl_temp_{}_{}_{}.o",
+        std::process::id(),
+        unique_id,
+        counter
+    ));
 
     // Write object bytes to temp file
     let mut file = std::fs::File::create(&obj_path).map_err(LinkError::WriteObjectFile)?;
@@ -339,13 +348,123 @@ mod tests {
         assert!(matches!(link_err, LinkError::Io(_)));
     }
 
-    // Integration test: Requires object file to be valid
-    // This test is marked as ignored because it requires a valid object file
-    // and system linker to be available
     #[test]
-    #[ignore]
-    fn test_linker_integration() {
-        // This would test actual linking with a real object file
-        // Run with: cargo test test_linker_integration -- --ignored
+    fn test_link_error_source() {
+        use std::error::Error;
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "file not found");
+        let link_err = LinkError::WriteObjectFile(io_err);
+
+        // Verify source() returns the underlying error
+        assert!(link_err.source().is_some());
+    }
+
+    #[test]
+    fn test_link_error_linker_failed_no_source() {
+        use std::error::Error;
+        let link_err = LinkError::LinkerFailed {
+            status: Some(1),
+            stdout: String::new(),
+            stderr: "error".to_string(),
+        };
+
+        // LinkerFailed has no source error
+        assert!(link_err.source().is_none());
+    }
+
+    #[test]
+    fn test_link_error_display_all_variants() {
+        // Test all error variant display messages
+        let err1 = LinkError::WriteObjectFile(io::Error::other("write"));
+        assert!(err1.to_string().contains("write object file"));
+
+        let err2 = LinkError::SpawnLinker(io::Error::new(io::ErrorKind::NotFound, "not found"));
+        assert!(err2.to_string().contains("spawn linker"));
+
+        let err3 = LinkError::LinkerFailed {
+            status: None,
+            stdout: String::new(),
+            stderr: "killed".to_string(),
+        };
+        assert!(err3.to_string().contains("terminated by signal"));
+
+        let err4 = LinkError::ReadBinary(io::Error::other("read"));
+        assert!(err4.to_string().contains("read binary"));
+
+        let err5 = LinkError::Io(io::Error::other("generic"));
+        assert!(err5.to_string().contains("IO error"));
+    }
+
+    #[test]
+    fn test_link_options_empty() {
+        let opts = LinkOptions::new();
+        assert!(opts.libraries.is_empty());
+        assert!(opts.library_paths.is_empty());
+        assert!(opts.extra_args.is_empty());
+    }
+
+    #[test]
+    fn test_link_options_default() {
+        let opts = LinkOptions::default();
+        assert!(opts.libraries.is_empty());
+    }
+
+    #[test]
+    fn test_cc_linker_respects_cc_env() {
+        // Save current CC value
+        let old_cc = std::env::var("CC").ok();
+
+        // SAFETY: This test is single-threaded and we restore the old value
+        unsafe {
+            std::env::set_var("CC", "custom-cc");
+        }
+
+        let linker = CcLinker::new();
+        assert_eq!(linker.compiler_command(), "custom-cc");
+
+        // Restore old CC
+        // SAFETY: Restoring previous environment state
+        unsafe {
+            match old_cc {
+                Some(val) => std::env::set_var("CC", val),
+                None => std::env::remove_var("CC"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_link_error_to_codegen_error() {
+        use crate::codegen::CodegenError;
+
+        let link_err = LinkError::LinkerFailed {
+            status: Some(1),
+            stdout: String::new(),
+            stderr: "undefined symbol".to_string(),
+        };
+
+        let codegen_err: CodegenError = link_err.into();
+        assert!(matches!(codegen_err, CodegenError::ModuleError(_)));
+        assert!(codegen_err.to_string().contains("undefined symbol"));
+    }
+
+    #[test]
+    fn test_cc_linker_clone_and_debug() {
+        let linker = CcLinker::with_compiler("gcc");
+        let cloned = linker.clone();
+        assert_eq!(cloned.compiler_command(), "gcc");
+
+        // Test Debug impl
+        let debug_str = format!("{:?}", linker);
+        assert!(debug_str.contains("CcLinker"));
+    }
+
+    #[test]
+    fn test_link_options_clone_and_debug() {
+        let opts = LinkOptions::new().library("m");
+        let cloned = opts.clone();
+        assert_eq!(cloned.libraries, vec!["m"]);
+
+        // Test Debug impl
+        let debug_str = format!("{:?}", opts);
+        assert!(debug_str.contains("LinkOptions"));
     }
 }

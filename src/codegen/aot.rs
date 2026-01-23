@@ -429,4 +429,179 @@ mod tests {
         let _ = ctx.target();
         let _ = ctx.new_signature();
     }
+
+    #[test]
+    fn test_void_function() {
+        let mut ctx = AotContext::new().unwrap();
+
+        // Function with no return value
+        let sig = ctx.new_signature();
+        let func_id = ctx.declare_function("void_fn", &sig).unwrap();
+
+        ctx.compilation_context().func.signature = sig;
+
+        {
+            let (func, func_ctx) = ctx.builder_context();
+            let mut builder = FunctionBuilder::new(func, func_ctx);
+
+            let entry = builder.create_block();
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            builder.ins().return_(&[]);
+
+            builder.finalize();
+        }
+
+        ctx.define_function(func_id).unwrap();
+        let object_bytes = ctx.finish();
+
+        let obj = object::File::parse(&*object_bytes);
+        assert!(obj.is_ok());
+    }
+
+    #[test]
+    fn test_i64_function() {
+        let mut ctx = AotContext::new().unwrap();
+
+        // Function returning i64
+        let mut sig = ctx.new_signature();
+        sig.returns.push(AbiParam::new(types::I64));
+
+        let func_id = ctx.declare_function("i64_fn", &sig).unwrap();
+
+        ctx.compilation_context().func.signature = sig;
+
+        {
+            let (func, func_ctx) = ctx.builder_context();
+            let mut builder = FunctionBuilder::new(func, func_ctx);
+
+            let entry = builder.create_block();
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            let val = builder.ins().iconst(types::I64, 0x1_0000_0000i64);
+            builder.ins().return_(&[val]);
+
+            builder.finalize();
+        }
+
+        ctx.define_function(func_id).unwrap();
+        let object_bytes = ctx.finish();
+
+        let obj = object::File::parse(&*object_bytes);
+        assert!(obj.is_ok());
+    }
+
+    #[test]
+    fn test_f64_function() {
+        let mut ctx = AotContext::new().unwrap();
+
+        // Function returning f64
+        let mut sig = ctx.new_signature();
+        sig.returns.push(AbiParam::new(types::F64));
+
+        let func_id = ctx.declare_function("f64_fn", &sig).unwrap();
+
+        ctx.compilation_context().func.signature = sig;
+
+        {
+            let (func, func_ctx) = ctx.builder_context();
+            let mut builder = FunctionBuilder::new(func, func_ctx);
+
+            let entry = builder.create_block();
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            let val = builder.ins().f64const(std::f64::consts::PI);
+            builder.ins().return_(&[val]);
+
+            builder.finalize();
+        }
+
+        ctx.define_function(func_id).unwrap();
+        let object_bytes = ctx.finish();
+
+        let obj = object::File::parse(&*object_bytes);
+        assert!(obj.is_ok());
+    }
+
+    #[test]
+    fn test_declare_same_function_twice() {
+        let mut ctx = AotContext::new().unwrap();
+        let mut sig = ctx.new_signature();
+        sig.returns.push(AbiParam::new(types::I32));
+
+        let id1 = ctx.declare_function("same_name", &sig).unwrap();
+        let id2 = ctx.declare_function("same_name", &sig).unwrap();
+
+        // Declaring same name and signature returns same ID
+        assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn test_many_functions() {
+        let mut ctx = AotContext::new().unwrap();
+
+        let mut sig = ctx.new_signature();
+        sig.returns.push(AbiParam::new(types::I32));
+
+        // Declare and define 10 functions
+        let mut func_ids = Vec::new();
+        for i in 0..10 {
+            let id = ctx
+                .declare_function(&format!("fn_{}", i), &sig.clone())
+                .unwrap();
+            func_ids.push(id);
+        }
+
+        for (i, func_id) in func_ids.iter().enumerate() {
+            ctx.compilation_context().func.signature = sig.clone();
+            {
+                let (func, func_ctx) = ctx.builder_context();
+                let mut builder = FunctionBuilder::new(func, func_ctx);
+                let entry = builder.create_block();
+                builder.switch_to_block(entry);
+                builder.seal_block(entry);
+                let val = builder.ins().iconst(types::I32, i as i64);
+                builder.ins().return_(&[val]);
+                builder.finalize();
+            }
+            ctx.define_function(*func_id).unwrap();
+        }
+
+        let object_bytes = ctx.finish();
+
+        let obj = object::File::parse(&*object_bytes).expect("parse failed");
+        let symbol_names: Vec<_> = obj.symbols().filter_map(|s| s.name().ok()).collect();
+
+        // Verify all 10 functions exist
+        for i in 0..10 {
+            assert!(
+                symbol_names.iter().any(|n| n.contains(&format!("fn_{}", i))),
+                "missing fn_{} in {:?}",
+                i,
+                symbol_names
+            );
+        }
+    }
+
+    #[test]
+    fn test_func_mut_and_func_accessors() {
+        let mut ctx = AotContext::new().unwrap();
+        let mut sig = ctx.new_signature();
+        sig.returns.push(AbiParam::new(types::I32));
+
+        let _ = ctx.declare_function("test", &sig).unwrap();
+        ctx.compilation_context().func.signature = sig;
+
+        // Test func() accessor
+        let func_ref = ctx.func();
+        assert!(func_ref.signature.returns.len() == 1);
+
+        // Test func_mut() accessor
+        let func_mut_ref = ctx.func_mut();
+        func_mut_ref.signature.params.push(AbiParam::new(types::I32));
+        assert_eq!(ctx.func().signature.params.len(), 1);
+    }
 }

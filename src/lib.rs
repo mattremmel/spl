@@ -724,12 +724,17 @@ mod aot_tests {
 
     // Helper to create unique temp file paths for parallel tests
     fn unique_temp_exe(name: &str) -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+
         let temp_dir = std::env::temp_dir();
         let unique_id = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        temp_dir.join(format!("spl_test_{}_{}", name, unique_id))
+        let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let pid = std::process::id();
+        temp_dir.join(format!("spl_test_{}_{}_{}_{}",name, pid, unique_id, counter))
     }
 
     // Integration test: compile, link, and run a real executable
@@ -889,5 +894,167 @@ mod aot_tests {
         assert_eq!(jit_result, 120);
 
         let _ = fs::remove_file(&exe_path);
+    }
+
+    #[test]
+    fn compile_and_link_loop() {
+        use std::fs;
+
+        let exe_path = unique_temp_exe("loop");
+        let _ = fs::remove_file(&exe_path);
+
+        let result = compile_and_link(
+            r#"
+            fn main() -> i32 {
+                let mut sum = 0;
+                let mut i = 1;
+                while i <= 10 {
+                    sum = sum + i;
+                    i = i + 1;
+                }
+                sum
+            }
+        "#,
+            &exe_path,
+        );
+        assert!(result.is_ok(), "failed: {:?}", result.err());
+
+        let output = Command::new(&exe_path)
+            .output()
+            .expect("failed to execute");
+
+        // Sum 1..10 = 55
+        assert_eq!(output.status.code(), Some(55));
+
+        let _ = fs::remove_file(&exe_path);
+    }
+
+    #[test]
+    fn compile_and_link_negative_return() {
+        use std::fs;
+
+        let exe_path = unique_temp_exe("neg");
+        let _ = fs::remove_file(&exe_path);
+
+        let result = compile_and_link("fn main() -> i32 { -1 }", &exe_path);
+        assert!(result.is_ok(), "failed: {:?}", result.err());
+
+        let output = Command::new(&exe_path)
+            .output()
+            .expect("failed to execute");
+
+        // -1 as unsigned 8-bit is 255
+        assert_eq!(output.status.code(), Some(255));
+
+        let _ = fs::remove_file(&exe_path);
+    }
+
+    #[test]
+    fn compile_and_link_zero_return() {
+        use std::fs;
+
+        let exe_path = unique_temp_exe("zero");
+        let _ = fs::remove_file(&exe_path);
+
+        let result = compile_and_link("fn main() -> i32 { 0 }", &exe_path);
+        assert!(result.is_ok(), "failed: {:?}", result.err());
+
+        let output = Command::new(&exe_path)
+            .output()
+            .expect("failed to execute");
+
+        assert_eq!(output.status.code(), Some(0));
+
+        let _ = fs::remove_file(&exe_path);
+    }
+
+    #[test]
+    fn compile_and_link_large_return_wraps() {
+        use std::fs;
+
+        let exe_path = unique_temp_exe("large");
+        let _ = fs::remove_file(&exe_path);
+
+        // 300 should wrap to 300 % 256 = 44
+        let result = compile_and_link("fn main() -> i32 { 300 }", &exe_path);
+        assert!(result.is_ok(), "failed: {:?}", result.err());
+
+        let output = Command::new(&exe_path)
+            .output()
+            .expect("failed to execute");
+
+        assert_eq!(output.status.code(), Some(44)); // 300 % 256
+
+        let _ = fs::remove_file(&exe_path);
+    }
+
+    #[test]
+    fn compile_and_link_nested_calls() {
+        use std::fs;
+
+        let exe_path = unique_temp_exe("nested");
+        let _ = fs::remove_file(&exe_path);
+
+        let result = compile_and_link(
+            r#"
+            fn add(a: i32, b: i32) -> i32 { a + b }
+            fn mul(a: i32, b: i32) -> i32 { a * b }
+            fn main() -> i32 { add(mul(3, 4), mul(2, 3)) }
+        "#,
+            &exe_path,
+        );
+        assert!(result.is_ok(), "failed: {:?}", result.err());
+
+        let output = Command::new(&exe_path)
+            .output()
+            .expect("failed to execute");
+
+        // 3*4 + 2*3 = 12 + 6 = 18
+        assert_eq!(output.status.code(), Some(18));
+
+        let _ = fs::remove_file(&exe_path);
+    }
+
+    #[test]
+    fn aot_error_source_codegen() {
+        use std::error::Error;
+        let err = AotError::CodegenError(codegen::CodegenError::Internal("test".to_string()));
+        assert!(err.source().is_some());
+    }
+
+    #[test]
+    fn aot_error_source_io() {
+        use std::error::Error;
+        let err = AotError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "not found"));
+        assert!(err.source().is_some());
+    }
+
+    #[test]
+    fn aot_error_source_compile_error() {
+        use std::error::Error;
+        let err = AotError::CompileError(vec![]);
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn aot_error_display_all_variants() {
+        let err1 = AotError::CompileError(vec![Diagnostic::error("test"), Diagnostic::error("test2")]);
+        assert!(err1.to_string().contains("2 error"));
+
+        let err2 = AotError::CodegenError(codegen::CodegenError::Internal("internal".to_string()));
+        assert!(err2.to_string().contains("codegen error"));
+
+        let err3 = AotError::LinkError(codegen::LinkError::LinkerFailed {
+            status: Some(1),
+            stdout: String::new(),
+            stderr: "link failed".to_string(),
+        });
+        assert!(err3.to_string().contains("link error"));
+
+        let err4 = AotError::NoFunctions;
+        assert!(err4.to_string().contains("no functions"));
+
+        let err5 = AotError::Io(std::io::Error::other("io"));
+        assert!(err5.to_string().contains("IO error"));
     }
 }
