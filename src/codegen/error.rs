@@ -4,6 +4,19 @@
 
 use std::fmt;
 
+// =============================================================================
+// Trap codes for runtime errors
+// =============================================================================
+
+/// Trap code for unreachable code.
+pub const TRAP_UNREACHABLE: u8 = 0;
+
+/// Trap code for failed assertions.
+pub const TRAP_ASSERT_FAILED: u8 = 1;
+
+/// Trap code for unwinding resume.
+pub const TRAP_RESUME: u8 = 2;
+
 /// Errors that can occur during code generation.
 #[derive(Debug)]
 pub enum CodegenError {
@@ -47,6 +60,35 @@ impl fmt::Display for CodegenError {
 
 impl std::error::Error for CodegenError {}
 
+// =============================================================================
+// Runtime errors
+// =============================================================================
+
+/// Errors that can occur during runtime execution of compiled code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuntimeError {
+    /// The main function was not found in the compiled module.
+    MainNotFound,
+
+    /// A trap occurred during execution.
+    Trap {
+        /// The trap code (see TRAP_* constants).
+        code: Option<u8>,
+    },
+}
+
+impl fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RuntimeError::MainNotFound => write!(f, "main function not found"),
+            RuntimeError::Trap { code: Some(c) } => write!(f, "trap occurred: code {}", c),
+            RuntimeError::Trap { code: None } => write!(f, "trap occurred"),
+        }
+    }
+}
+
+impl std::error::Error for RuntimeError {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,5 +131,39 @@ mod tests {
         let err = CodegenError::Internal("test".to_string());
         let debug_str = format!("{:?}", err);
         assert!(debug_str.contains("Internal"));
+    }
+
+    #[test]
+    fn runtime_error_main_not_found() {
+        let err = RuntimeError::MainNotFound;
+        assert_eq!(err.to_string(), "main function not found");
+    }
+
+    #[test]
+    fn runtime_error_trap_with_code() {
+        let err = RuntimeError::Trap {
+            code: Some(TRAP_ASSERT_FAILED),
+        };
+        assert_eq!(err.to_string(), "trap occurred: code 1");
+    }
+
+    #[test]
+    fn runtime_error_trap_no_code() {
+        let err = RuntimeError::Trap { code: None };
+        assert_eq!(err.to_string(), "trap occurred");
+    }
+
+    #[test]
+    fn runtime_error_is_eq() {
+        let err1 = RuntimeError::MainNotFound;
+        let err2 = RuntimeError::MainNotFound;
+        assert_eq!(err1, err2);
+    }
+
+    #[test]
+    fn trap_codes_are_distinct() {
+        assert_ne!(TRAP_UNREACHABLE, TRAP_ASSERT_FAILED);
+        assert_ne!(TRAP_ASSERT_FAILED, TRAP_RESUME);
+        assert_ne!(TRAP_UNREACHABLE, TRAP_RESUME);
     }
 }

@@ -8,7 +8,7 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_module::FuncId;
 
 use super::context::CodegenContext;
-use super::error::CodegenError;
+use super::error::{CodegenError, RuntimeError};
 use super::lower::FunctionLowerer;
 use super::registry::{FunctionInfo, FunctionRegistry};
 use super::types::TypeMapper;
@@ -41,6 +41,8 @@ impl<'a> FunctionDef<'a> {
 pub struct CompiledModule {
     /// Map from DefId to function pointer.
     function_ptrs: rustc_hash::FxHashMap<DefId, *const u8>,
+    /// The DefId of the main function (if any).
+    main_def_id: Option<DefId>,
 }
 
 impl CompiledModule {
@@ -68,6 +70,48 @@ impl CompiledModule {
     /// Check if the module is empty.
     pub fn is_empty(&self) -> bool {
         self.function_ptrs.is_empty()
+    }
+
+    /// Set the main function DefId.
+    pub fn set_main(&mut self, def_id: DefId) {
+        self.main_def_id = Some(def_id);
+    }
+
+    /// Get the main function DefId.
+    pub fn main_def_id(&self) -> Option<DefId> {
+        self.main_def_id
+    }
+
+    /// Run a function by DefId and return its i32 result.
+    ///
+    /// # Safety
+    /// The function must have signature `fn() -> i32`.
+    ///
+    /// # Note
+    /// Traps (unreachable, assertion failures) will cause process termination
+    /// via SIGILL. Use `run_catching` for trap-safe execution in the future.
+    pub fn run(&self, def_id: DefId) -> Result<i32, RuntimeError> {
+        let ptr = self
+            .function_ptrs
+            .get(&def_id)
+            .copied()
+            .ok_or(RuntimeError::MainNotFound)?;
+
+        let func: fn() -> i32 = unsafe { std::mem::transmute(ptr) };
+        Ok(func())
+    }
+
+    /// Run the main function and return its i32 result.
+    ///
+    /// # Safety
+    /// The main function must have signature `fn() -> i32`.
+    ///
+    /// # Note
+    /// Traps (unreachable, assertion failures) will cause process termination
+    /// via SIGILL. Use `run_main_catching` for trap-safe execution in the future.
+    pub fn run_main(&self) -> Result<i32, RuntimeError> {
+        let def_id = self.main_def_id.ok_or(RuntimeError::MainNotFound)?;
+        self.run(def_id)
     }
 }
 
@@ -114,7 +158,10 @@ impl ModuleCompiler {
             function_ptrs.insert(func_def.def_id, ptr);
         }
 
-        Ok(CompiledModule { function_ptrs })
+        Ok(CompiledModule {
+            function_ptrs,
+            main_def_id: None,
+        })
     }
 
     /// Declaration pass: declare all functions and build registry.
@@ -449,5 +496,116 @@ mod tests {
 
         assert!(module.is_empty());
         assert_eq!(module.len(), 0);
+    }
+
+    #[test]
+    fn run_returns_value() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn returns_42() -> i32 { 42 }
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(42)),
+            0..0,
+        ));
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "returns_42", &body)];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        let result = module.run(DefId(1));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    fn run_with_invalid_def_id_returns_error() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(1)),
+            0..0,
+        ));
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        let result = module.run(DefId(999));
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::codegen::error::RuntimeError::MainNotFound
+        ));
+    }
+
+    #[test]
+    fn run_main_returns_value() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn main() -> i32 { 100 }
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(100)),
+            0..0,
+        ));
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "main", &body)];
+        let mut module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        // Set the main function
+        module.set_main(DefId(1));
+
+        let result = module.run_main();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 100);
+    }
+
+    #[test]
+    fn run_main_without_setting_main_returns_error() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        // Don't set main
+        let result = module.run_main();
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::codegen::error::RuntimeError::MainNotFound
+        ));
+    }
+
+    #[test]
+    fn main_def_id_accessor() {
+        let types = TypeInterner::new();
+        let functions: [FunctionDef<'_>; 0] = [];
+        let mut module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        assert!(module.main_def_id().is_none());
+
+        module.set_main(DefId(42));
+        assert_eq!(module.main_def_id(), Some(DefId(42)));
     }
 }

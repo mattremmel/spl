@@ -10,6 +10,7 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{FuncId, Linkage, Module};
 
 use super::error::CodegenError;
+use super::runtime::Runtime;
 use super::target::TargetConfig;
 use super::types::TypeMapper;
 
@@ -37,6 +38,34 @@ impl CodegenContext {
             target.isa().clone(),
             cranelift_module::default_libcall_names(),
         );
+
+        let module = JITModule::new(builder);
+        let ctx = module.make_context();
+        let func_ctx = FunctionBuilderContext::new();
+
+        Ok(Self {
+            module,
+            ctx,
+            func_ctx,
+        })
+    }
+
+    /// Create a new JIT compilation context with runtime function support.
+    ///
+    /// This variant allows registering external Rust functions that can be
+    /// called from JIT-compiled code.
+    pub fn new_jit_with_runtime(runtime: &Runtime) -> Result<Self, CodegenError> {
+        let target = TargetConfig::native()?;
+
+        let mut builder = JITBuilder::with_isa(
+            target.isa().clone(),
+            cranelift_module::default_libcall_names(),
+        );
+
+        // Register runtime symbols
+        for func in runtime.iter() {
+            builder.symbol(func.name, func.ptr);
+        }
 
         let module = JITModule::new(builder);
         let ctx = module.make_context();
@@ -362,5 +391,98 @@ mod tests {
 
         // Declaring with same name and signature should return same ID
         assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn new_jit_with_empty_runtime() {
+        let runtime = Runtime::new();
+        let ctx = CodegenContext::new_jit_with_runtime(&runtime);
+        assert!(ctx.is_ok());
+    }
+
+    #[test]
+    fn new_jit_with_runtime_registers_symbols() {
+        extern "C" fn external_add(a: i32, b: i32) -> i32 {
+            a + b
+        }
+
+        let mut runtime = Runtime::new();
+        let mut sig =
+            cranelift_codegen::ir::Signature::new(cranelift_codegen::isa::CallConv::SystemV);
+        sig.params.push(AbiParam::new(types::I32));
+        sig.params.push(AbiParam::new(types::I32));
+        sig.returns.push(AbiParam::new(types::I32));
+        runtime.register("external_add", external_add as *const u8, sig);
+
+        let ctx = CodegenContext::new_jit_with_runtime(&runtime);
+        assert!(ctx.is_ok());
+    }
+
+    #[test]
+    fn call_external_function_from_jit() {
+        use cranelift_module::Module;
+
+        extern "C" fn external_mul(a: i32, b: i32) -> i32 {
+            a * b
+        }
+
+        // Set up runtime with external function
+        let mut runtime = Runtime::new();
+        let mut external_sig =
+            cranelift_codegen::ir::Signature::new(cranelift_codegen::isa::CallConv::SystemV);
+        external_sig.params.push(AbiParam::new(types::I32));
+        external_sig.params.push(AbiParam::new(types::I32));
+        external_sig.returns.push(AbiParam::new(types::I32));
+        runtime.register(
+            "external_mul",
+            external_mul as *const u8,
+            external_sig.clone(),
+        );
+
+        let mut ctx = CodegenContext::new_jit_with_runtime(&runtime).unwrap();
+
+        // Declare the external function in the module
+        let external_func_id = ctx
+            .module
+            .declare_function("external_mul", Linkage::Import, &external_sig)
+            .unwrap();
+
+        // Create a wrapper function that calls the external
+        let mut wrapper_sig = ctx.new_signature();
+        wrapper_sig.returns.push(AbiParam::new(types::I32));
+
+        let wrapper_id = ctx.declare_function("wrapper", &wrapper_sig).unwrap();
+
+        // Build wrapper: fn wrapper() -> i32 { external_mul(6, 7) }
+        ctx.compilation_context().func.signature = wrapper_sig;
+
+        {
+            let (func, func_ctx, module) = ctx.builder_context_with_module();
+            let mut builder = FunctionBuilder::new(func, func_ctx);
+
+            let entry = builder.create_block();
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            // Import the external function
+            let func_ref = module.declare_func_in_func(external_func_id, builder.func);
+
+            // Call external_mul(6, 7)
+            let arg1 = builder.ins().iconst(types::I32, 6);
+            let arg2 = builder.ins().iconst(types::I32, 7);
+            let call = builder.ins().call(func_ref, &[arg1, arg2]);
+            let result = builder.inst_results(call)[0];
+
+            builder.ins().return_(&[result]);
+            builder.finalize();
+        }
+
+        ctx.define_function(wrapper_id).unwrap();
+        ctx.finalize();
+
+        let ptr = ctx.get_function_ptr(wrapper_id);
+        let wrapper: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+        assert_eq!(wrapper(), 42); // 6 * 7 = 42
     }
 }

@@ -1,9 +1,9 @@
 //! Terminator lowering from MIR to Cranelift IR.
 
-use cranelift_codegen::ir::InstBuilder;
+use cranelift_codegen::ir::{InstBuilder, TrapCode};
 use cranelift_module::Module;
 
-use crate::codegen::error::CodegenError;
+use crate::codegen::error::{CodegenError, TRAP_ASSERT_FAILED, TRAP_RESUME, TRAP_UNREACHABLE};
 use crate::mir::operand::{Constant, Operand};
 use crate::mir::terminator::{Terminator, TerminatorKind};
 use crate::mir::types::Local;
@@ -177,21 +177,44 @@ impl<'a> FunctionLowerer<'a> {
             }
 
             TerminatorKind::Assert {
-                cond: _,
-                expected: _,
+                cond,
+                expected,
                 target,
             } => {
-                // For now, asserts are no-ops (we trust the MIR is valid)
-                // In a full implementation, we'd trap on assertion failure
+                let cond_val = self
+                    .lower_operand(cond)?
+                    .ok_or_else(|| CodegenError::Internal("ZST assert condition".to_string()))?;
+
+                let fail_block = self.builder.create_block();
                 let target_block = self.get_block(*target);
-                self.builder.ins().jump(target_block, &[]);
+
+                // Branch based on expected value
+                if *expected {
+                    // expected=true: succeed if cond!=0, fail if cond==0
+                    self.builder
+                        .ins()
+                        .brif(cond_val, target_block, &[], fail_block, &[]);
+                } else {
+                    // expected=false: succeed if cond==0, fail if cond!=0
+                    self.builder
+                        .ins()
+                        .brif(cond_val, fail_block, &[], target_block, &[]);
+                }
+
+                // Fail block: trap with ASSERT_FAILED code
+                self.builder.switch_to_block(fail_block);
+                self.builder.seal_block(fail_block);
+                self.builder
+                    .ins()
+                    .trap(TrapCode::user(TRAP_ASSERT_FAILED).unwrap());
+
                 Ok(())
             }
 
             TerminatorKind::Unreachable => {
                 self.builder
                     .ins()
-                    .trap(cranelift_codegen::ir::TrapCode::user(0).unwrap());
+                    .trap(TrapCode::user(TRAP_UNREACHABLE).unwrap());
                 Ok(())
             }
 
@@ -199,7 +222,7 @@ impl<'a> FunctionLowerer<'a> {
                 // Resume unwinding - for now just trap
                 self.builder
                     .ins()
-                    .trap(cranelift_codegen::ir::TrapCode::user(1).unwrap());
+                    .trap(TrapCode::user(TRAP_RESUME).unwrap());
                 Ok(())
             }
         }

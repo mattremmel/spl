@@ -3484,3 +3484,195 @@ fn lower_float_rem() {
 
     let _ptr = runner.compile(&body, "float_rem");
 }
+
+// =============================================================================
+// Assert Terminator with Actual Branching and Trapping
+// =============================================================================
+
+#[test]
+fn assert_succeeds_when_true() {
+    // fn() -> i32 { assert(true, expected=true); 42 }
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+    let bool_ty = runner.types_mut().bool();
+
+    let mut body = Body::new(i32_ty);
+    let _cond_local = body.alloc_local(LocalDecl::new(bool_ty, true));
+    let entry = body.alloc_block();
+    let after_assert = body.alloc_block();
+
+    // entry: _1 = true; assert(_1, expected=true) -> after_assert
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local(1)),
+        Rvalue::Use(Operand::Constant(Constant::Bool(true))),
+        0..0,
+    ));
+    body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::Assert {
+            cond: Operand::Copy(Place::from_local(Local(1))),
+            expected: true,
+            target: after_assert,
+        },
+        0..0,
+    ));
+
+    // after_assert: _0 = 42; return
+    body.block_mut(after_assert)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            0..0,
+        ));
+    body.block_mut(after_assert)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "assert_succeeds_when_true");
+    let func: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(), 42);
+}
+
+#[test]
+#[ignore = "trap tests require signal handling; tested via runtime module"]
+fn assert_traps_when_condition_fails() {
+    // fn() -> i32 { assert(false, expected=true); 42 }
+    // Should trap before returning
+    //
+    // Note: This test is ignored because CPU traps (UD2 instruction) generate
+    // SIGILL signals which can't be caught by std::panic::catch_unwind.
+    // Trap handling is tested via the runtime module's run_main().
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+    let bool_ty = runner.types_mut().bool();
+
+    let mut body = Body::new(i32_ty);
+    let _cond_local = body.alloc_local(LocalDecl::new(bool_ty, true));
+    let entry = body.alloc_block();
+    let after_assert = body.alloc_block();
+
+    // entry: _1 = false; assert(_1, expected=true) -> after_assert
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local(1)),
+        Rvalue::Use(Operand::Constant(Constant::Bool(false))),
+        0..0,
+    ));
+    body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::Assert {
+            cond: Operand::Copy(Place::from_local(Local(1))),
+            expected: true,
+            target: after_assert,
+        },
+        0..0,
+    ));
+
+    // after_assert: _0 = 42; return (should not reach here)
+    body.block_mut(after_assert)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            0..0,
+        ));
+    body.block_mut(after_assert)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "assert_traps_when_condition_fails");
+    let func: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+    // This should trap - the test is ignored because catch_unwind can't catch signals
+    let result = std::panic::catch_unwind(func);
+    assert!(result.is_err(), "assert(false, expected=true) should trap");
+}
+
+#[test]
+fn assert_expected_false_succeeds() {
+    // fn() -> i32 { assert(false, expected=false); 42 }
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+    let bool_ty = runner.types_mut().bool();
+
+    let mut body = Body::new(i32_ty);
+    let _cond_local = body.alloc_local(LocalDecl::new(bool_ty, true));
+    let entry = body.alloc_block();
+    let after_assert = body.alloc_block();
+
+    // entry: _1 = false; assert(_1, expected=false) -> after_assert
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local(1)),
+        Rvalue::Use(Operand::Constant(Constant::Bool(false))),
+        0..0,
+    ));
+    body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::Assert {
+            cond: Operand::Copy(Place::from_local(Local(1))),
+            expected: false,
+            target: after_assert,
+        },
+        0..0,
+    ));
+
+    // after_assert: _0 = 42; return
+    body.block_mut(after_assert)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            0..0,
+        ));
+    body.block_mut(after_assert)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "assert_expected_false_succeeds");
+    let func: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(), 42);
+}
+
+#[test]
+#[ignore = "trap tests require signal handling; tested via runtime module"]
+fn assert_expected_false_traps() {
+    // fn() -> i32 { assert(true, expected=false); 42 }
+    // Should trap because condition is true but expected is false
+    //
+    // Note: This test is ignored because CPU traps (UD2 instruction) generate
+    // SIGILL signals which can't be caught by std::panic::catch_unwind.
+    // Trap handling is tested via the runtime module's run_main().
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+    let bool_ty = runner.types_mut().bool();
+
+    let mut body = Body::new(i32_ty);
+    let _cond_local = body.alloc_local(LocalDecl::new(bool_ty, true));
+    let entry = body.alloc_block();
+    let after_assert = body.alloc_block();
+
+    // entry: _1 = true; assert(_1, expected=false) -> after_assert
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local(1)),
+        Rvalue::Use(Operand::Constant(Constant::Bool(true))),
+        0..0,
+    ));
+    body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::Assert {
+            cond: Operand::Copy(Place::from_local(Local(1))),
+            expected: false,
+            target: after_assert,
+        },
+        0..0,
+    ));
+
+    // after_assert: _0 = 42; return (should not reach here)
+    body.block_mut(after_assert)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            0..0,
+        ));
+    body.block_mut(after_assert)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "assert_expected_false_traps");
+    let func: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+    // This should trap - the test is ignored because catch_unwind can't catch signals
+    let result = std::panic::catch_unwind(func);
+    assert!(result.is_err(), "assert(true, expected=false) should trap");
+}

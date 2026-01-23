@@ -35,16 +35,18 @@ pub mod locals;
 pub mod lower;
 pub mod module;
 pub mod registry;
+pub mod runtime;
 pub mod target;
 pub mod types;
 
 pub use context::CodegenContext;
-pub use error::CodegenError;
+pub use error::{CodegenError, RuntimeError, TRAP_ASSERT_FAILED, TRAP_RESUME, TRAP_UNREACHABLE};
 pub use layout::{LayoutComputer, TypeLayout};
 pub use locals::{LocalMap, LocalStorage};
 pub use lower::FunctionLowerer;
 pub use module::{CompiledModule, FunctionDef, ModuleCompiler};
 pub use registry::{FunctionInfo, FunctionRegistry};
+pub use runtime::{Runtime, RuntimeFunction};
 pub use target::TargetConfig;
 pub use types::TypeMapper;
 
