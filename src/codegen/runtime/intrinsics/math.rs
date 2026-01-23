@@ -1,51 +1,21 @@
 //! Math intrinsic functions.
 //!
-//! Pure mathematical functions that are easy to test.
+//! Most math intrinsics are emitted as inline Cranelift IR for better performance.
+//! Only `pow` requires a function call since Cranelift lacks a native instruction.
 
-use cranelift_codegen::ir::types;
+use cranelift_codegen::ir::{InstBuilder, Value, types};
+use cranelift_frontend::FunctionBuilder;
 
 use super::{Runtime, default_call_conv, make_signature};
 
-/// Register all math intrinsics.
+/// Register math intrinsics that require function calls.
+///
+/// Most math intrinsics are inlined directly. Only `__pow` needs registration
+/// since Cranelift doesn't have a native power instruction.
 pub fn register(runtime: &mut Runtime) {
     let call_conv = default_call_conv();
 
-    // __abs_int: (I64) -> I64
-    runtime.register(
-        "__abs_int",
-        __abs_int as *const u8,
-        make_signature(call_conv, &[types::I64], &[types::I64]),
-    );
-
-    // __abs_float: (F64) -> F64
-    runtime.register(
-        "__abs_float",
-        __abs_float as *const u8,
-        make_signature(call_conv, &[types::F64], &[types::F64]),
-    );
-
-    // __min_int: (I64, I64) -> I64
-    runtime.register(
-        "__min_int",
-        __min_int as *const u8,
-        make_signature(call_conv, &[types::I64, types::I64], &[types::I64]),
-    );
-
-    // __max_int: (I64, I64) -> I64
-    runtime.register(
-        "__max_int",
-        __max_int as *const u8,
-        make_signature(call_conv, &[types::I64, types::I64], &[types::I64]),
-    );
-
-    // __sqrt: (F64) -> F64
-    runtime.register(
-        "__sqrt",
-        __sqrt as *const u8,
-        make_signature(call_conv, &[types::F64], &[types::F64]),
-    );
-
-    // __pow: (F64, F64) -> F64
+    // __pow: (F64, F64) -> F64 - needs function call (no native instruction)
     runtime.register(
         "__pow",
         __pow as *const u8,
@@ -53,110 +23,138 @@ pub fn register(runtime: &mut Runtime) {
     );
 }
 
-/// Absolute value of an integer.
-pub extern "C" fn __abs_int(x: i64) -> i64 {
-    x.abs()
-}
-
-/// Absolute value of a float.
-pub extern "C" fn __abs_float(x: f64) -> f64 {
-    x.abs()
-}
-
-/// Minimum of two integers.
-pub extern "C" fn __min_int(a: i64, b: i64) -> i64 {
-    a.min(b)
-}
-
-/// Maximum of two integers.
-pub extern "C" fn __max_int(a: i64, b: i64) -> i64 {
-    a.max(b)
-}
-
-/// Square root of a float.
-pub extern "C" fn __sqrt(x: f64) -> f64 {
-    x.sqrt()
-}
-
 /// Power function: base^exp.
+///
+/// This is the only math intrinsic that requires a function call because
+/// Cranelift doesn't have a native power instruction.
 pub extern "C" fn __pow(base: f64, exp: f64) -> f64 {
     base.powf(exp)
+}
+
+// ============================================================================
+// Inline IR emission functions
+// ============================================================================
+//
+// These functions are public APIs for use by the codegen module when it
+// encounters calls to math intrinsics. They emit inline Cranelift IR instead
+// of function calls for better performance.
+
+/// Emit inline IR for integer absolute value.
+///
+/// Uses Cranelift's native `iabs` instruction.
+#[allow(dead_code)]
+pub fn emit_abs_int(builder: &mut FunctionBuilder, x: Value) -> Value {
+    builder.ins().iabs(x)
+}
+
+/// Emit inline IR for float absolute value.
+///
+/// Uses Cranelift's native `fabs` instruction.
+#[allow(dead_code)]
+pub fn emit_abs_float(builder: &mut FunctionBuilder, x: Value) -> Value {
+    builder.ins().fabs(x)
+}
+
+/// Emit inline IR for signed integer minimum.
+///
+/// Uses Cranelift's native `smin` instruction.
+#[allow(dead_code)]
+pub fn emit_min_int(builder: &mut FunctionBuilder, a: Value, b: Value) -> Value {
+    builder.ins().smin(a, b)
+}
+
+/// Emit inline IR for signed integer maximum.
+///
+/// Uses Cranelift's native `smax` instruction.
+#[allow(dead_code)]
+pub fn emit_max_int(builder: &mut FunctionBuilder, a: Value, b: Value) -> Value {
+    builder.ins().smax(a, b)
+}
+
+/// Emit inline IR for floating-point square root.
+///
+/// Uses Cranelift's native `sqrt` instruction.
+#[allow(dead_code)]
+pub fn emit_sqrt(builder: &mut FunctionBuilder, x: Value) -> Value {
+    builder.ins().sqrt(x)
+}
+
+// ============================================================================
+// Intrinsic lookup for codegen
+// ============================================================================
+
+/// Math intrinsics that can be emitted inline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum InlineMathIntrinsic {
+    AbsInt,
+    AbsFloat,
+    MinInt,
+    MaxInt,
+    Sqrt,
+}
+
+#[allow(dead_code)]
+impl InlineMathIntrinsic {
+    /// Try to look up an inline math intrinsic by name.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "__abs_int" => Some(Self::AbsInt),
+            "__abs_float" => Some(Self::AbsFloat),
+            "__min_int" => Some(Self::MinInt),
+            "__max_int" => Some(Self::MaxInt),
+            "__sqrt" => Some(Self::Sqrt),
+            _ => None,
+        }
+    }
+
+    /// Emit the inline IR for this intrinsic.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the wrong number of arguments is provided.
+    pub fn emit(self, builder: &mut FunctionBuilder, args: &[Value]) -> Value {
+        match self {
+            Self::AbsInt => {
+                assert_eq!(args.len(), 1, "__abs_int requires 1 argument");
+                emit_abs_int(builder, args[0])
+            }
+            Self::AbsFloat => {
+                assert_eq!(args.len(), 1, "__abs_float requires 1 argument");
+                emit_abs_float(builder, args[0])
+            }
+            Self::MinInt => {
+                assert_eq!(args.len(), 2, "__min_int requires 2 arguments");
+                emit_min_int(builder, args[0], args[1])
+            }
+            Self::MaxInt => {
+                assert_eq!(args.len(), 2, "__max_int requires 2 arguments");
+                emit_max_int(builder, args[0], args[1])
+            }
+            Self::Sqrt => {
+                assert_eq!(args.len(), 1, "__sqrt requires 1 argument");
+                emit_sqrt(builder, args[0])
+            }
+        }
+    }
+
+    /// Get the number of arguments this intrinsic expects.
+    pub fn arg_count(self) -> usize {
+        match self {
+            Self::AbsInt | Self::AbsFloat | Self::Sqrt => 1,
+            Self::MinInt | Self::MaxInt => 2,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cranelift_codegen::ir::types;
+    use crate::codegen::context::CodegenContext;
+    use cranelift_codegen::ir::AbiParam;
+    use std::mem;
 
-    // ==================== Direct call tests ====================
-
-    #[test]
-    fn abs_int_positive() {
-        assert_eq!(__abs_int(42), 42);
-    }
-
-    #[test]
-    fn abs_int_negative() {
-        assert_eq!(__abs_int(-42), 42);
-    }
-
-    #[test]
-    fn abs_int_zero() {
-        assert_eq!(__abs_int(0), 0);
-    }
-
-    #[test]
-    fn abs_float_positive() {
-        assert_eq!(__abs_float(2.5), 2.5);
-    }
-
-    #[test]
-    fn abs_float_negative() {
-        assert_eq!(__abs_float(-2.5), 2.5);
-    }
-
-    #[test]
-    fn min_int_first_smaller() {
-        assert_eq!(__min_int(1, 5), 1);
-    }
-
-    #[test]
-    fn min_int_second_smaller() {
-        assert_eq!(__min_int(10, 3), 3);
-    }
-
-    #[test]
-    fn min_int_equal() {
-        assert_eq!(__min_int(7, 7), 7);
-    }
-
-    #[test]
-    fn max_int_first_larger() {
-        assert_eq!(__max_int(10, 3), 10);
-    }
-
-    #[test]
-    fn max_int_second_larger() {
-        assert_eq!(__max_int(1, 5), 5);
-    }
-
-    #[test]
-    fn max_int_equal() {
-        assert_eq!(__max_int(7, 7), 7);
-    }
-
-    #[test]
-    fn sqrt_perfect_square() {
-        assert_eq!(__sqrt(4.0), 2.0);
-        assert_eq!(__sqrt(9.0), 3.0);
-        assert_eq!(__sqrt(16.0), 4.0);
-    }
-
-    #[test]
-    fn sqrt_non_perfect() {
-        let result = __sqrt(2.0);
-        assert!((result - std::f64::consts::SQRT_2).abs() < 1e-10);
-    }
+    // ==================== Direct call tests (for __pow only) ====================
 
     #[test]
     fn pow_integer_exponent() {
@@ -170,83 +168,27 @@ mod tests {
         assert!((result - 2.0).abs() < 1e-10);
     }
 
+    #[test]
+    fn pow_zero_exponent() {
+        assert_eq!(__pow(5.0, 0.0), 1.0);
+    }
+
+    #[test]
+    fn pow_one_exponent() {
+        assert_eq!(__pow(5.0, 1.0), 5.0);
+    }
+
     // ==================== Registration tests ====================
 
     #[test]
-    fn register_adds_all_math_intrinsics() {
+    fn register_adds_pow_intrinsic() {
         let mut runtime = Runtime::new();
         register(&mut runtime);
 
-        assert!(runtime.contains("__abs_int"));
-        assert!(runtime.contains("__abs_float"));
-        assert!(runtime.contains("__min_int"));
-        assert!(runtime.contains("__max_int"));
-        assert!(runtime.contains("__sqrt"));
+        // Only __pow should be registered (others are inlined)
         assert!(runtime.contains("__pow"));
-    }
-
-    // ==================== Signature tests ====================
-
-    #[test]
-    fn abs_int_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__abs_int").unwrap();
-        assert_eq!(func.signature.params.len(), 1);
-        assert_eq!(func.signature.params[0].value_type, types::I64);
-        assert_eq!(func.signature.returns.len(), 1);
-        assert_eq!(func.signature.returns[0].value_type, types::I64);
-    }
-
-    #[test]
-    fn abs_float_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__abs_float").unwrap();
-        assert_eq!(func.signature.params.len(), 1);
-        assert_eq!(func.signature.params[0].value_type, types::F64);
-        assert_eq!(func.signature.returns.len(), 1);
-        assert_eq!(func.signature.returns[0].value_type, types::F64);
-    }
-
-    #[test]
-    fn min_int_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__min_int").unwrap();
-        assert_eq!(func.signature.params.len(), 2);
-        assert_eq!(func.signature.params[0].value_type, types::I64);
-        assert_eq!(func.signature.params[1].value_type, types::I64);
-        assert_eq!(func.signature.returns.len(), 1);
-        assert_eq!(func.signature.returns[0].value_type, types::I64);
-    }
-
-    #[test]
-    fn max_int_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__max_int").unwrap();
-        assert_eq!(func.signature.params.len(), 2);
-        assert_eq!(func.signature.params[0].value_type, types::I64);
-        assert_eq!(func.signature.params[1].value_type, types::I64);
-        assert_eq!(func.signature.returns.len(), 1);
-        assert_eq!(func.signature.returns[0].value_type, types::I64);
-    }
-
-    #[test]
-    fn sqrt_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__sqrt").unwrap();
-        assert_eq!(func.signature.params.len(), 1);
-        assert_eq!(func.signature.params[0].value_type, types::F64);
-        assert_eq!(func.signature.returns.len(), 1);
-        assert_eq!(func.signature.returns[0].value_type, types::F64);
+        assert!(!runtime.contains("__abs_int")); // Should NOT be registered
+        assert!(!runtime.contains("__sqrt")); // Should NOT be registered
     }
 
     #[test]
@@ -262,194 +204,263 @@ mod tests {
         assert_eq!(func.signature.returns[0].value_type, types::F64);
     }
 
-    // ==================== Edge case tests ====================
+    // ==================== Intrinsic lookup tests ====================
 
     #[test]
-    fn abs_int_min_value() {
-        // i64::MIN.abs() panics, but wrapping_abs returns MIN
-        // We use the standard abs which will panic - this documents the behavior
-        // In a real implementation, we might want to handle this differently
-        assert_eq!(__abs_int(i64::MAX), i64::MAX);
+    fn inline_intrinsic_from_name() {
+        assert_eq!(InlineMathIntrinsic::from_name("__abs_int"), Some(InlineMathIntrinsic::AbsInt));
+        assert_eq!(InlineMathIntrinsic::from_name("__abs_float"), Some(InlineMathIntrinsic::AbsFloat));
+        assert_eq!(InlineMathIntrinsic::from_name("__min_int"), Some(InlineMathIntrinsic::MinInt));
+        assert_eq!(InlineMathIntrinsic::from_name("__max_int"), Some(InlineMathIntrinsic::MaxInt));
+        assert_eq!(InlineMathIntrinsic::from_name("__sqrt"), Some(InlineMathIntrinsic::Sqrt));
+        assert_eq!(InlineMathIntrinsic::from_name("__pow"), None); // pow is NOT inline
+        assert_eq!(InlineMathIntrinsic::from_name("unknown"), None);
     }
 
     #[test]
-    fn min_max_with_negatives() {
-        assert_eq!(__min_int(-10, -5), -10);
-        assert_eq!(__max_int(-10, -5), -5);
-    }
-
-    #[test]
-    fn sqrt_zero() {
-        assert_eq!(__sqrt(0.0), 0.0);
-    }
-
-    #[test]
-    fn pow_zero_exponent() {
-        assert_eq!(__pow(5.0, 0.0), 1.0);
-    }
-
-    #[test]
-    fn pow_one_exponent() {
-        assert_eq!(__pow(5.0, 1.0), 5.0);
+    fn inline_intrinsic_arg_count() {
+        assert_eq!(InlineMathIntrinsic::AbsInt.arg_count(), 1);
+        assert_eq!(InlineMathIntrinsic::AbsFloat.arg_count(), 1);
+        assert_eq!(InlineMathIntrinsic::Sqrt.arg_count(), 1);
+        assert_eq!(InlineMathIntrinsic::MinInt.arg_count(), 2);
+        assert_eq!(InlineMathIntrinsic::MaxInt.arg_count(), 2);
     }
 
     // ==================== JIT integration tests ====================
 
     #[test]
-    fn jit_call_abs_int() {
-        use crate::codegen::context::CodegenContext;
-        use cranelift_codegen::ir::{AbiParam, InstBuilder};
-        use cranelift_frontend::FunctionBuilder;
-        use cranelift_module::{Linkage, Module};
-        use std::mem;
+    fn jit_inline_abs_int() {
+        let mut ctx = CodegenContext::new_jit().unwrap();
 
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-        let abs_sig = runtime.get("__abs_int").unwrap().signature.clone();
+        // fn test(x: i64) -> i64 { abs(x) }
+        let mut sig = ctx.new_signature();
+        sig.params.push(AbiParam::new(types::I64));
+        sig.returns.push(AbiParam::new(types::I64));
+        let func_id = ctx.declare_function("test", &sig).unwrap();
 
-        let mut ctx = CodegenContext::new_jit_with_runtime(&runtime).unwrap();
-
-        // Create wrapper: fn test() -> i64 { __abs_int(-42) }
-        let mut wrapper_sig = ctx.new_signature();
-        wrapper_sig.returns.push(AbiParam::new(types::I64));
-        let wrapper_id = ctx.declare_function("test", &wrapper_sig).unwrap();
-
-        ctx.compilation_context().func.signature = wrapper_sig;
+        ctx.compilation_context().func.signature = sig;
 
         {
-            let (func, func_ctx, module) = ctx.builder_context_with_module();
-
-            // Declare the external function inside the mutable borrow
-            let abs_func_id = module
-                .declare_function("__abs_int", Linkage::Import, &abs_sig)
-                .unwrap();
-
+            let (func, func_ctx) = ctx.builder_context();
             let mut builder = FunctionBuilder::new(func, func_ctx);
 
             let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
             builder.switch_to_block(entry);
             builder.seal_block(entry);
 
-            let func_ref = module.declare_func_in_func(abs_func_id, builder.func);
-            let arg = builder.ins().iconst(types::I64, -42);
-            let call = builder.ins().call(func_ref, &[arg]);
-            let result = builder.inst_results(call)[0];
+            let x = builder.block_params(entry)[0];
+            let result = emit_abs_int(&mut builder, x);
 
             builder.ins().return_(&[result]);
             builder.finalize();
         }
 
-        ctx.define_function(wrapper_id).unwrap();
+        ctx.define_function(func_id).unwrap();
         ctx.finalize();
 
-        let ptr = ctx.get_function_ptr(wrapper_id);
-        let test: fn() -> i64 = unsafe { mem::transmute(ptr) };
+        let ptr = ctx.get_function_ptr(func_id);
+        let test: fn(i64) -> i64 = unsafe { mem::transmute(ptr) };
 
-        assert_eq!(test(), 42);
+        assert_eq!(test(42), 42);
+        assert_eq!(test(-42), 42);
+        assert_eq!(test(0), 0);
     }
 
     #[test]
-    fn jit_call_min_int() {
-        use crate::codegen::context::CodegenContext;
-        use cranelift_codegen::ir::{AbiParam, InstBuilder};
-        use cranelift_frontend::FunctionBuilder;
-        use cranelift_module::{Linkage, Module};
-        use std::mem;
+    fn jit_inline_abs_float() {
+        let mut ctx = CodegenContext::new_jit().unwrap();
 
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-        let min_sig = runtime.get("__min_int").unwrap().signature.clone();
+        let mut sig = ctx.new_signature();
+        sig.params.push(AbiParam::new(types::F64));
+        sig.returns.push(AbiParam::new(types::F64));
+        let func_id = ctx.declare_function("test", &sig).unwrap();
 
-        let mut ctx = CodegenContext::new_jit_with_runtime(&runtime).unwrap();
-
-        // Create wrapper: fn test() -> i64 { __min_int(10, 5) }
-        let mut wrapper_sig = ctx.new_signature();
-        wrapper_sig.returns.push(AbiParam::new(types::I64));
-        let wrapper_id = ctx.declare_function("test", &wrapper_sig).unwrap();
-
-        ctx.compilation_context().func.signature = wrapper_sig;
+        ctx.compilation_context().func.signature = sig;
 
         {
-            let (func, func_ctx, module) = ctx.builder_context_with_module();
-
-            let min_func_id = module
-                .declare_function("__min_int", Linkage::Import, &min_sig)
-                .unwrap();
-
+            let (func, func_ctx) = ctx.builder_context();
             let mut builder = FunctionBuilder::new(func, func_ctx);
 
             let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
             builder.switch_to_block(entry);
             builder.seal_block(entry);
 
-            let func_ref = module.declare_func_in_func(min_func_id, builder.func);
-            let a = builder.ins().iconst(types::I64, 10);
-            let b = builder.ins().iconst(types::I64, 5);
-            let call = builder.ins().call(func_ref, &[a, b]);
-            let result = builder.inst_results(call)[0];
+            let x = builder.block_params(entry)[0];
+            let result = emit_abs_float(&mut builder, x);
 
             builder.ins().return_(&[result]);
             builder.finalize();
         }
 
-        ctx.define_function(wrapper_id).unwrap();
+        ctx.define_function(func_id).unwrap();
         ctx.finalize();
 
-        let ptr = ctx.get_function_ptr(wrapper_id);
-        let test: fn() -> i64 = unsafe { mem::transmute(ptr) };
+        let ptr = ctx.get_function_ptr(func_id);
+        let test: fn(f64) -> f64 = unsafe { mem::transmute(ptr) };
 
-        assert_eq!(test(), 5);
+        assert_eq!(test(2.5), 2.5);
+        assert_eq!(test(-2.5), 2.5);
     }
 
     #[test]
-    fn jit_call_sqrt() {
-        use crate::codegen::context::CodegenContext;
-        use cranelift_codegen::ir::{AbiParam, InstBuilder};
-        use cranelift_frontend::FunctionBuilder;
-        use cranelift_module::{Linkage, Module};
-        use std::mem;
+    fn jit_inline_min_int() {
+        let mut ctx = CodegenContext::new_jit().unwrap();
 
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-        let sqrt_sig = runtime.get("__sqrt").unwrap().signature.clone();
+        let mut sig = ctx.new_signature();
+        sig.params.push(AbiParam::new(types::I64));
+        sig.params.push(AbiParam::new(types::I64));
+        sig.returns.push(AbiParam::new(types::I64));
+        let func_id = ctx.declare_function("test", &sig).unwrap();
 
-        let mut ctx = CodegenContext::new_jit_with_runtime(&runtime).unwrap();
-
-        // Create wrapper: fn test() -> f64 { __sqrt(16.0) }
-        let mut wrapper_sig = ctx.new_signature();
-        wrapper_sig.returns.push(AbiParam::new(types::F64));
-        let wrapper_id = ctx.declare_function("test", &wrapper_sig).unwrap();
-
-        ctx.compilation_context().func.signature = wrapper_sig;
+        ctx.compilation_context().func.signature = sig;
 
         {
-            let (func, func_ctx, module) = ctx.builder_context_with_module();
-
-            let sqrt_func_id = module
-                .declare_function("__sqrt", Linkage::Import, &sqrt_sig)
-                .unwrap();
-
+            let (func, func_ctx) = ctx.builder_context();
             let mut builder = FunctionBuilder::new(func, func_ctx);
 
             let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
             builder.switch_to_block(entry);
             builder.seal_block(entry);
 
-            let func_ref = module.declare_func_in_func(sqrt_func_id, builder.func);
-            let arg = builder.ins().f64const(16.0);
-            let call = builder.ins().call(func_ref, &[arg]);
-            let result = builder.inst_results(call)[0];
+            let a = builder.block_params(entry)[0];
+            let b = builder.block_params(entry)[1];
+            let result = emit_min_int(&mut builder, a, b);
 
             builder.ins().return_(&[result]);
             builder.finalize();
         }
 
-        ctx.define_function(wrapper_id).unwrap();
+        ctx.define_function(func_id).unwrap();
         ctx.finalize();
 
-        let ptr = ctx.get_function_ptr(wrapper_id);
-        let test: fn() -> f64 = unsafe { mem::transmute(ptr) };
+        let ptr = ctx.get_function_ptr(func_id);
+        let test: fn(i64, i64) -> i64 = unsafe { mem::transmute(ptr) };
 
-        assert_eq!(test(), 4.0);
+        assert_eq!(test(10, 5), 5);
+        assert_eq!(test(5, 10), 5);
+        assert_eq!(test(7, 7), 7);
+        assert_eq!(test(-10, -5), -10);
+    }
+
+    #[test]
+    fn jit_inline_max_int() {
+        let mut ctx = CodegenContext::new_jit().unwrap();
+
+        let mut sig = ctx.new_signature();
+        sig.params.push(AbiParam::new(types::I64));
+        sig.params.push(AbiParam::new(types::I64));
+        sig.returns.push(AbiParam::new(types::I64));
+        let func_id = ctx.declare_function("test", &sig).unwrap();
+
+        ctx.compilation_context().func.signature = sig;
+
+        {
+            let (func, func_ctx) = ctx.builder_context();
+            let mut builder = FunctionBuilder::new(func, func_ctx);
+
+            let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            let a = builder.block_params(entry)[0];
+            let b = builder.block_params(entry)[1];
+            let result = emit_max_int(&mut builder, a, b);
+
+            builder.ins().return_(&[result]);
+            builder.finalize();
+        }
+
+        ctx.define_function(func_id).unwrap();
+        ctx.finalize();
+
+        let ptr = ctx.get_function_ptr(func_id);
+        let test: fn(i64, i64) -> i64 = unsafe { mem::transmute(ptr) };
+
+        assert_eq!(test(10, 5), 10);
+        assert_eq!(test(5, 10), 10);
+        assert_eq!(test(7, 7), 7);
+        assert_eq!(test(-10, -5), -5);
+    }
+
+    #[test]
+    fn jit_inline_sqrt() {
+        let mut ctx = CodegenContext::new_jit().unwrap();
+
+        let mut sig = ctx.new_signature();
+        sig.params.push(AbiParam::new(types::F64));
+        sig.returns.push(AbiParam::new(types::F64));
+        let func_id = ctx.declare_function("test", &sig).unwrap();
+
+        ctx.compilation_context().func.signature = sig;
+
+        {
+            let (func, func_ctx) = ctx.builder_context();
+            let mut builder = FunctionBuilder::new(func, func_ctx);
+
+            let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            let x = builder.block_params(entry)[0];
+            let result = emit_sqrt(&mut builder, x);
+
+            builder.ins().return_(&[result]);
+            builder.finalize();
+        }
+
+        ctx.define_function(func_id).unwrap();
+        ctx.finalize();
+
+        let ptr = ctx.get_function_ptr(func_id);
+        let test: fn(f64) -> f64 = unsafe { mem::transmute(ptr) };
+
+        assert_eq!(test(4.0), 2.0);
+        assert_eq!(test(9.0), 3.0);
+        assert_eq!(test(16.0), 4.0);
+    }
+
+    #[test]
+    fn jit_inline_via_enum() {
+        let mut ctx = CodegenContext::new_jit().unwrap();
+
+        // Test using the InlineMathIntrinsic enum API
+        let mut sig = ctx.new_signature();
+        sig.params.push(AbiParam::new(types::I64));
+        sig.returns.push(AbiParam::new(types::I64));
+        let func_id = ctx.declare_function("test", &sig).unwrap();
+
+        ctx.compilation_context().func.signature = sig;
+
+        {
+            let (func, func_ctx) = ctx.builder_context();
+            let mut builder = FunctionBuilder::new(func, func_ctx);
+
+            let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            let x = builder.block_params(entry)[0];
+
+            // Look up and emit via the enum API
+            let intrinsic = InlineMathIntrinsic::from_name("__abs_int").unwrap();
+            let result = intrinsic.emit(&mut builder, &[x]);
+
+            builder.ins().return_(&[result]);
+            builder.finalize();
+        }
+
+        ctx.define_function(func_id).unwrap();
+        ctx.finalize();
+
+        let ptr = ctx.get_function_ptr(func_id);
+        let test: fn(i64) -> i64 = unsafe { mem::transmute(ptr) };
+
+        assert_eq!(test(-42), 42);
     }
 }
