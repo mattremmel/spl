@@ -1,6 +1,48 @@
 //! String intrinsic functions (stubs).
 //!
 //! Functions for string operations. Currently implemented as stubs.
+//!
+//! # String Representation
+//!
+//! SPL strings are represented as (pointer, length) pairs, not null-terminated.
+//! This is more efficient and allows embedded nulls, but requires passing both
+//! values through the ABI.
+//!
+//! # Current Status
+//!
+//! - `__str_len`: Implemented (trivially returns the length parameter)
+//! - `__str_concat`: Stub (needs memory allocation)
+//!
+//! # Memory Allocation for Concatenation
+//!
+//! `__str_concat` needs to allocate a new buffer for the result. Options:
+//!
+//! ## malloc-based
+//! ```c
+//! StringResult __str_concat(const char* a, int64_t a_len,
+//!                           const char* b, int64_t b_len) {
+//!     char* buf = malloc(a_len + b_len);
+//!     memcpy(buf, a, a_len);
+//!     memcpy(buf + a_len, b, b_len);
+//!     return (StringResult){buf, a_len + b_len};
+//! }
+//! ```
+//!
+//! ## Arena-based (preferred for expression temporaries)
+//! ```text
+//! fn __str_concat(a: String, b: String) -> String {
+//!     let buf = arena_alloc(a.len + b.len);
+//!     memcpy(buf, a.ptr, a.len);
+//!     memcpy(buf + a.len, b.ptr, b.len);
+//!     String { ptr: buf, len: a.len + b.len }
+//! }
+//! ```
+//!
+//! # Self-Hosting
+//!
+//! String operations are fundamental to a compiler (source code, error messages,
+//! symbol names). A working `__str_concat` and related functions are prerequisites
+//! for self-hosting.
 
 use cranelift_codegen::ir::types;
 

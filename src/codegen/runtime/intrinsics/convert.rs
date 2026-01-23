@@ -2,6 +2,51 @@
 //!
 //! Functions for converting between types. Currently implemented as stubs
 //! that return null/zero values.
+//!
+//! # Why Stubs?
+//!
+//! These functions need to allocate memory for their string results, which
+//! requires deciding on a memory management strategy:
+//!
+//! - **Arena allocator**: Fast, but requires manual lifetime management
+//! - **Reference counting**: Automatic, but has overhead
+//! - **Garbage collection**: Automatic, but complex to implement
+//! - **Caller-provided buffer**: No allocation, but less convenient
+//!
+//! # Implementation Options
+//!
+//! ## With heap allocation (malloc)
+//! ```c
+//! StringResult __int_to_string(int64_t x) {
+//!     char* buf = malloc(21);  // max i64 digits + sign + null
+//!     int len = snprintf(buf, 21, "%lld", x);
+//!     return (StringResult){buf, len};
+//! }
+//! // Caller must free the returned pointer
+//! ```
+//!
+//! ## With arena allocator
+//! ```text
+//! fn __int_to_string(x: Int) -> String {
+//!     let buf = arena_alloc(21);
+//!     let len = format_int(x, buf);
+//!     String { ptr: buf, len }
+//! }
+//! // Arena is reset at end of expression/statement
+//! ```
+//!
+//! ## With caller-provided buffer
+//! ```text
+//! fn __int_to_string(x: Int, buf: *mut u8, capacity: Int) -> Int {
+//!     // Returns length written, or -1 if buffer too small
+//! }
+//! ```
+//!
+//! # Self-Hosting
+//!
+//! The implementation chosen here will affect the entire language's string
+//! handling. For self-hosting, a simple arena or malloc-based approach is
+//! recommended initially, with potential optimization later.
 
 use cranelift_codegen::ir::types;
 

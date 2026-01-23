@@ -1,6 +1,38 @@
 //! Panic intrinsic functions.
 //!
 //! Functions for aborting program execution.
+//!
+//! # Current Implementation
+//!
+//! Uses Rust's `panic!` macro, which unwinds the stack and prints a message.
+//! Note that `extern "C"` functions cannot unwind, so this actually aborts.
+//!
+//! # Self-Hosting Alternatives
+//!
+//! ## libc
+//! ```c
+//! void __abort() {
+//!     write(STDERR_FILENO, "abort\n", 6);
+//!     _exit(1);  // or abort() for core dump
+//! }
+//! ```
+//!
+//! ## Raw syscalls (Linux x86_64)
+//! ```text
+//! // SYS_exit_group = 231
+//! mov rax, 231
+//! mov rdi, 1      // exit code
+//! syscall
+//! ```
+//!
+//! ## With error message
+//! For better debugging, print a message before exiting:
+//! ```text
+//! fn __abort() -> ! {
+//!     __print_str("abort called\n");
+//!     __exit(1);
+//! }
+//! ```
 
 use super::{Runtime, default_call_conv, make_signature};
 

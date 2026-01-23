@@ -1,6 +1,43 @@
 //! I/O intrinsic functions.
 //!
 //! Functions for printing values to stdout.
+//!
+//! # Current Implementation
+//!
+//! These intrinsics are implemented as Rust functions using `print!` macros,
+//! which go through Rust's stdout buffering and formatting infrastructure.
+//!
+//! # Self-Hosting Alternatives
+//!
+//! When self-hosting, these will need to be reimplemented using one of:
+//!
+//! ## libc
+//! ```c
+//! // Link against libc and call directly
+//! write(STDOUT_FILENO, buffer, len);  // for raw bytes
+//! printf("%lld", value);               // for formatted output
+//! ```
+//!
+//! ## Raw syscalls (Linux x86_64)
+//! ```text
+//! // SYS_write = 1
+//! mov rax, 1      // syscall number
+//! mov rdi, 1      // fd = stdout
+//! mov rsi, buf    // buffer pointer
+//! mov rdx, len    // buffer length
+//! syscall
+//! ```
+//!
+//! ## SPL implementation
+//! ```text
+//! fn __print_int(x: Int) {
+//!     let buf = int_to_ascii(x);  // format to stack buffer
+//!     __write(1, buf.ptr, buf.len);  // thin syscall wrapper
+//! }
+//! ```
+//!
+//! The integer-to-ASCII conversion would need to be implemented in SPL or
+//! as inline IR (repeated division by 10, digit extraction).
 
 use cranelift_codegen::ir::types;
 
