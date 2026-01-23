@@ -859,15 +859,13 @@ mod tests {
             &expect![[r#"
                 PrefixExpr@0..6
                   MINUS@0..1 "-"
-                  CallExpr@1..6
-                    PathExpr@1..4
-                      Path@1..4
-                        PathSegment@1..4
-                          NameRef@1..4
-                            IDENT@1..4 "foo"
-                    ArgList@4..6
-                      L_PAREN@4..5 "("
-                      R_PAREN@5..6 ")"
+                  ApplyExpr@1..6
+                    Path@1..4
+                      PathSegment@1..4
+                        NameRef@1..4
+                          IDENT@1..4 "foo"
+                    L_PAREN@4..5 "("
+                    R_PAREN@5..6 ")"
             "#]],
         );
     }

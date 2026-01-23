@@ -11,6 +11,8 @@ ast_node!(TupleExpr);
 ast_node!(ArrayExpr);
 ast_node!(StructExpr);
 ast_node!(StructExprField);
+ast_node!(ApplyExpr);
+ast_node!(ApplyArg);
 ast_node!(BinExpr);
 ast_node!(PrefixExpr);
 ast_node!(RefExpr);
@@ -45,6 +47,7 @@ pub enum Expr {
     Tuple(TupleExpr),
     Array(ArrayExpr),
     Struct(StructExpr),
+    Apply(ApplyExpr),
     Binary(BinExpr),
     Prefix(PrefixExpr),
     Ref(RefExpr),
@@ -79,6 +82,7 @@ impl AstNode for Expr {
                 | SyntaxKind::TupleExpr
                 | SyntaxKind::ArrayExpr
                 | SyntaxKind::StructExpr
+                | SyntaxKind::ApplyExpr
                 | SyntaxKind::BinExpr
                 | SyntaxKind::PrefixExpr
                 | SyntaxKind::RefExpr
@@ -110,6 +114,7 @@ impl AstNode for Expr {
             SyntaxKind::TupleExpr => Some(Expr::Tuple(TupleExpr(node))),
             SyntaxKind::ArrayExpr => Some(Expr::Array(ArrayExpr(node))),
             SyntaxKind::StructExpr => Some(Expr::Struct(StructExpr(node))),
+            SyntaxKind::ApplyExpr => Some(Expr::Apply(ApplyExpr(node))),
             SyntaxKind::BinExpr => Some(Expr::Binary(BinExpr(node))),
             SyntaxKind::PrefixExpr => Some(Expr::Prefix(PrefixExpr(node))),
             SyntaxKind::RefExpr => Some(Expr::Ref(RefExpr(node))),
@@ -142,6 +147,7 @@ impl AstNode for Expr {
             Expr::Tuple(it) => it.syntax(),
             Expr::Array(it) => it.syntax(),
             Expr::Struct(it) => it.syntax(),
+            Expr::Apply(it) => it.syntax(),
             Expr::Binary(it) => it.syntax(),
             Expr::Prefix(it) => it.syntax(),
             Expr::Ref(it) => it.syntax(),
@@ -243,6 +249,42 @@ impl StructExprField {
     }
 
     pub fn expr(&self) -> Option<Expr> {
+        child(&self.0)
+    }
+}
+
+impl ApplyExpr {
+    /// Get the path being applied (the callee - could be a function or struct).
+    pub fn path(&self) -> Option<Path> {
+        child(&self.0)
+    }
+
+    /// Get all arguments to this application.
+    pub fn args(&self) -> impl Iterator<Item = ApplyArg> {
+        children(&self.0)
+    }
+
+    /// Get the struct update base if present: `..base`
+    pub fn update_base(&self) -> Option<StructUpdateBase> {
+        child(&self.0)
+    }
+}
+
+impl ApplyArg {
+    /// Get the argument name if this is a named argument (`name = value`).
+    /// Returns `None` for positional arguments.
+    pub fn name(&self) -> Option<NameRef> {
+        child(&self.0)
+    }
+
+    /// Get the argument name token directly (for named args where
+    /// the name is stored as a raw IDENT token, not wrapped in NameRef).
+    pub fn name_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::IDENT)
+    }
+
+    /// Get the argument value expression.
+    pub fn value(&self) -> Option<Expr> {
         child(&self.0)
     }
 }

@@ -67,29 +67,46 @@ fn ident_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
 /// Parse an identifier, path, struct pattern, or enum pattern.
 /// Lookahead is needed to distinguish:
 /// - `x` (ident)
-/// - `Point { x }` (struct pattern)
+/// - `Point(x = a)` (struct pattern with named field)
+/// - `Point(x, y)` (struct pattern shorthand OR enum pattern)
 /// - `Some(x)` (enum pattern)
 fn ident_or_struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     // Check if this is a path (has :: or . after identifier)
     let is_path = p.peek(1) == Some(SyntaxKind::COLON_COLON)
         || p.peek(1) == Some(SyntaxKind::DOT);
-    // Check if this is a struct pattern (has { after identifier or path)
-    let is_struct = p.peek(1) == Some(SyntaxKind::L_BRACE);
-    // Check if this is an enum pattern (has ( after identifier)
-    let is_enum = p.peek(1) == Some(SyntaxKind::L_PAREN);
+    // Check if this is a pattern with parentheses (struct or enum)
+    let has_parens = p.peek(1) == Some(SyntaxKind::L_PAREN);
+    // Check if it looks like a struct pattern: Path(IDENT = ...)
+    let is_struct = has_parens && looks_like_struct_pat(p);
 
     if is_path {
         // This is a path - could be struct pattern or enum pattern with qualified name
         path_or_struct_or_enum_pat(p)
     } else if is_struct {
-        // Struct pattern: Name { ... }
+        // Struct pattern with named fields: Name(x = a, ...)
         struct_pat(p)
-    } else if is_enum {
-        // Enum pattern: Some(x)
+    } else if has_parens {
+        // Enum pattern or struct shorthand: Some(x) or Point(x, y)
+        // Parse as enum pattern; semantic analysis will handle struct shorthand
         enum_pat(p)
     } else {
         // Simple identifier pattern
         ident_pat(p)
+    }
+}
+
+/// Check if the upcoming pattern looks like a struct pattern.
+/// Returns true if we see `(IDENT =` indicating a named struct field.
+fn looks_like_struct_pat(p: &mut Parser<'_>) -> bool {
+    // peek(1) is L_PAREN, peek(2) is first token inside
+    let first = p.peek(2);
+    let second = p.peek(3);
+
+    match (first, second) {
+        // IDENT = ... (named field)
+        (Some(SyntaxKind::IDENT), Some(SyntaxKind::EQ)) => true,
+        // Otherwise (shorthand or enum pattern) - parse as enum
+        _ => false,
     }
 }
 
@@ -100,15 +117,26 @@ fn path_or_struct_or_enum_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, Par
     // Use structured path parsing (no generics in patterns)
     crate::parser::path::path_no_generics(p)?;
 
-    // Check if followed by { for struct pattern
-    if p.at(SyntaxKind::L_BRACE) {
-        // Struct pattern with path
-        parse_struct_fields(p)?;
-        Ok(m.complete(p, SyntaxKind::StructPat))
-    } else if p.at(SyntaxKind::L_PAREN) {
-        // Enum pattern with path: Option::Some(x), Some(x)
-        parse_enum_args(p)?;
-        Ok(m.complete(p, SyntaxKind::TuplePat)) // Reuse TuplePat for enum patterns
+    // Check if followed by ( for struct or enum pattern
+    if p.at(SyntaxKind::L_PAREN) {
+        // Look ahead to determine struct vs enum pattern
+        // Struct pattern has named fields: (IDENT = ...)
+        let first = p.peek(1);
+        let second = p.peek(2);
+        let is_struct = matches!(
+            (first, second),
+            (Some(SyntaxKind::IDENT), Some(SyntaxKind::EQ))
+        );
+
+        if is_struct {
+            // Struct pattern with path: path::Point(x = a, ...)
+            parse_struct_fields(p)?;
+            Ok(m.complete(p, SyntaxKind::StructPat))
+        } else {
+            // Enum pattern with path: Option::Some(x), Some(x)
+            parse_enum_args(p)?;
+            Ok(m.complete(p, SyntaxKind::TuplePat)) // Reuse TuplePat for enum patterns
+        }
     } else {
         // Just a path used as identifier pattern (for unit enum variants like None)
         Ok(m.complete(p, SyntaxKind::IdentPat))
@@ -141,7 +169,7 @@ fn parse_enum_args(p: &mut Parser<'_>) -> Result<(), ParseError> {
     Ok(())
 }
 
-/// Parse a struct pattern: `Point { x, y }`, `Point { x: a, y: b }`, `Point { x, .. }`
+/// Parse a struct pattern: `Point(x = a, y = b)`, `Point(x, y)`, `Point(x, ..)`
 fn struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     crate::parser::path::path_no_generics(p)?; // Use Path for consistency (single-segment)
@@ -149,25 +177,25 @@ fn struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     Ok(m.complete(p, SyntaxKind::StructPat))
 }
 
-/// Parse struct pattern fields: `{ x, y }`, `{ x: a, .. }`
+/// Parse struct pattern fields: `(x = a, y = b)`, `(x, y, ..)`
 fn parse_struct_fields(p: &mut Parser<'_>) -> Result<(), ParseError> {
-    p.expect(SyntaxKind::L_BRACE)?;
+    p.expect(SyntaxKind::L_PAREN)?;
 
-    if !p.at(SyntaxKind::R_BRACE) {
+    if !p.at(SyntaxKind::R_PAREN) {
         struct_pat_field(p)?;
         while p.eat(SyntaxKind::COMMA) {
-            if p.at(SyntaxKind::R_BRACE) {
+            if p.at(SyntaxKind::R_PAREN) {
                 break;
             }
             struct_pat_field(p)?;
         }
     }
 
-    p.expect(SyntaxKind::R_BRACE)?;
+    p.expect(SyntaxKind::R_PAREN)?;
     Ok(())
 }
 
-/// Parse a struct pattern field: `x`, `x: pattern`, or `..`
+/// Parse a struct pattern field: `x`, `x = pattern`, or `..`
 fn struct_pat_field(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     // Check for rest pattern `..`
     if p.at(SyntaxKind::DOT_DOT) {
@@ -177,8 +205,8 @@ fn struct_pat_field(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     crate::parser::path::name_ref(p)?; // Wrap in NameRef (field reference)
 
-    // Check for `: pattern`
-    if p.eat(SyntaxKind::COLON) {
+    // Check for `= pattern`
+    if p.eat(SyntaxKind::EQ) {
         pattern(p)?;
     }
 
@@ -875,152 +903,9 @@ mod tests {
 
     #[test]
     fn struct_pattern_simple() {
+        // Struct pattern with named fields (explicit)
         check_expr(
-            "{ let Point { x, y } = p; }",
-            &expect![[r#"
-                BlockExpr@0..27
-                  Block@0..27
-                    L_BRACE@0..1 "{"
-                    LetStmt@1..25
-                      WHITESPACE@1..2 " "
-                      LET_KW@2..5 "let"
-                      StructPat@5..20
-                        Path@5..11
-                          PathSegment@5..11
-                            NameRef@5..11
-                              WHITESPACE@5..6 " "
-                              IDENT@6..11 "Point"
-                        WHITESPACE@11..12 " "
-                        L_BRACE@12..13 "{"
-                        StructPatField@13..15
-                          NameRef@13..15
-                            WHITESPACE@13..14 " "
-                            IDENT@14..15 "x"
-                        COMMA@15..16 ","
-                        StructPatField@16..18
-                          NameRef@16..18
-                            WHITESPACE@16..17 " "
-                            IDENT@17..18 "y"
-                        WHITESPACE@18..19 " "
-                        R_BRACE@19..20 "}"
-                      WHITESPACE@20..21 " "
-                      EQ@21..22 "="
-                      PathExpr@22..24
-                        Path@22..24
-                          PathSegment@22..24
-                            NameRef@22..24
-                              WHITESPACE@22..23 " "
-                              IDENT@23..24 "p"
-                      SEMI@24..25 ";"
-                    WHITESPACE@25..26 " "
-                    R_BRACE@26..27 "}"
-            "#]],
-        );
-    }
-
-    #[test]
-    fn struct_pattern_with_rename() {
-        check_expr(
-            "{ let Point { x: a, y: b } = p; }",
-            &expect![[r#"
-                BlockExpr@0..33
-                  Block@0..33
-                    L_BRACE@0..1 "{"
-                    LetStmt@1..31
-                      WHITESPACE@1..2 " "
-                      LET_KW@2..5 "let"
-                      StructPat@5..26
-                        Path@5..11
-                          PathSegment@5..11
-                            NameRef@5..11
-                              WHITESPACE@5..6 " "
-                              IDENT@6..11 "Point"
-                        WHITESPACE@11..12 " "
-                        L_BRACE@12..13 "{"
-                        StructPatField@13..18
-                          NameRef@13..15
-                            WHITESPACE@13..14 " "
-                            IDENT@14..15 "x"
-                          COLON@15..16 ":"
-                          IdentPat@16..18
-                            Name@16..18
-                              WHITESPACE@16..17 " "
-                              IDENT@17..18 "a"
-                        COMMA@18..19 ","
-                        StructPatField@19..24
-                          NameRef@19..21
-                            WHITESPACE@19..20 " "
-                            IDENT@20..21 "y"
-                          COLON@21..22 ":"
-                          IdentPat@22..24
-                            Name@22..24
-                              WHITESPACE@22..23 " "
-                              IDENT@23..24 "b"
-                        WHITESPACE@24..25 " "
-                        R_BRACE@25..26 "}"
-                      WHITESPACE@26..27 " "
-                      EQ@27..28 "="
-                      PathExpr@28..30
-                        Path@28..30
-                          PathSegment@28..30
-                            NameRef@28..30
-                              WHITESPACE@28..29 " "
-                              IDENT@29..30 "p"
-                      SEMI@30..31 ";"
-                    WHITESPACE@31..32 " "
-                    R_BRACE@32..33 "}"
-            "#]],
-        );
-    }
-
-    #[test]
-    fn struct_pattern_with_rest() {
-        check_expr(
-            "{ let Point { x, .. } = p; }",
-            &expect![[r#"
-                BlockExpr@0..28
-                  Block@0..28
-                    L_BRACE@0..1 "{"
-                    LetStmt@1..26
-                      WHITESPACE@1..2 " "
-                      LET_KW@2..5 "let"
-                      StructPat@5..21
-                        Path@5..11
-                          PathSegment@5..11
-                            NameRef@5..11
-                              WHITESPACE@5..6 " "
-                              IDENT@6..11 "Point"
-                        WHITESPACE@11..12 " "
-                        L_BRACE@12..13 "{"
-                        StructPatField@13..15
-                          NameRef@13..15
-                            WHITESPACE@13..14 " "
-                            IDENT@14..15 "x"
-                        COMMA@15..16 ","
-                        RestPat@16..19
-                          WHITESPACE@16..17 " "
-                          DOT_DOT@17..19 ".."
-                        WHITESPACE@19..20 " "
-                        R_BRACE@20..21 "}"
-                      WHITESPACE@21..22 " "
-                      EQ@22..23 "="
-                      PathExpr@23..25
-                        Path@23..25
-                          PathSegment@23..25
-                            NameRef@23..25
-                              WHITESPACE@23..24 " "
-                              IDENT@24..25 "p"
-                      SEMI@25..26 ";"
-                    WHITESPACE@26..27 " "
-                    R_BRACE@27..28 "}"
-            "#]],
-        );
-    }
-
-    #[test]
-    fn struct_pattern_qualified_path() {
-        check_expr(
-            "{ let module::Point { x } = p; }",
+            "{ let Point(x = x, y = y) = p; }",
             &expect![[r#"
                 BlockExpr@0..32
                   Block@0..32
@@ -1029,23 +914,33 @@ mod tests {
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       StructPat@5..25
-                        Path@5..19
-                          PathSegment@5..12
-                            NameRef@5..12
+                        Path@5..11
+                          PathSegment@5..11
+                            NameRef@5..11
                               WHITESPACE@5..6 " "
-                              IDENT@6..12 "module"
-                          COLON_COLON@12..14 "::"
-                          PathSegment@14..19
-                            NameRef@14..19
-                              IDENT@14..19 "Point"
-                        WHITESPACE@19..20 " "
-                        L_BRACE@20..21 "{"
-                        StructPatField@21..23
-                          NameRef@21..23
-                            WHITESPACE@21..22 " "
-                            IDENT@22..23 "x"
-                        WHITESPACE@23..24 " "
-                        R_BRACE@24..25 "}"
+                              IDENT@6..11 "Point"
+                        L_PAREN@11..12 "("
+                        StructPatField@12..17
+                          NameRef@12..13
+                            IDENT@12..13 "x"
+                          WHITESPACE@13..14 " "
+                          EQ@14..15 "="
+                          IdentPat@15..17
+                            Name@15..17
+                              WHITESPACE@15..16 " "
+                              IDENT@16..17 "x"
+                        COMMA@17..18 ","
+                        StructPatField@18..24
+                          NameRef@18..20
+                            WHITESPACE@18..19 " "
+                            IDENT@19..20 "y"
+                          WHITESPACE@20..21 " "
+                          EQ@21..22 "="
+                          IdentPat@22..24
+                            Name@22..24
+                              WHITESPACE@22..23 " "
+                              IDENT@23..24 "y"
+                        R_PAREN@24..25 ")"
                       WHITESPACE@25..26 " "
                       EQ@26..27 "="
                       PathExpr@27..29
@@ -1062,36 +957,184 @@ mod tests {
     }
 
     #[test]
-    fn struct_pattern_empty() {
+    fn struct_pattern_with_rename() {
         check_expr(
-            "{ let Unit {} = u; }",
+            "{ let Point(x = a, y = b) = p; }",
             &expect![[r#"
-                BlockExpr@0..20
-                  Block@0..20
+                BlockExpr@0..32
+                  Block@0..32
                     L_BRACE@0..1 "{"
-                    LetStmt@1..18
+                    LetStmt@1..30
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
-                      StructPat@5..13
+                      StructPat@5..25
+                        Path@5..11
+                          PathSegment@5..11
+                            NameRef@5..11
+                              WHITESPACE@5..6 " "
+                              IDENT@6..11 "Point"
+                        L_PAREN@11..12 "("
+                        StructPatField@12..17
+                          NameRef@12..13
+                            IDENT@12..13 "x"
+                          WHITESPACE@13..14 " "
+                          EQ@14..15 "="
+                          IdentPat@15..17
+                            Name@15..17
+                              WHITESPACE@15..16 " "
+                              IDENT@16..17 "a"
+                        COMMA@17..18 ","
+                        StructPatField@18..24
+                          NameRef@18..20
+                            WHITESPACE@18..19 " "
+                            IDENT@19..20 "y"
+                          WHITESPACE@20..21 " "
+                          EQ@21..22 "="
+                          IdentPat@22..24
+                            Name@22..24
+                              WHITESPACE@22..23 " "
+                              IDENT@23..24 "b"
+                        R_PAREN@24..25 ")"
+                      WHITESPACE@25..26 " "
+                      EQ@26..27 "="
+                      PathExpr@27..29
+                        Path@27..29
+                          PathSegment@27..29
+                            NameRef@27..29
+                              WHITESPACE@27..28 " "
+                              IDENT@28..29 "p"
+                      SEMI@29..30 ";"
+                    WHITESPACE@30..31 " "
+                    R_BRACE@31..32 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_pattern_with_rest() {
+        check_expr(
+            "{ let Point(x = x, ..) = p; }",
+            &expect![[r#"
+                BlockExpr@0..29
+                  Block@0..29
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..27
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      StructPat@5..22
+                        Path@5..11
+                          PathSegment@5..11
+                            NameRef@5..11
+                              WHITESPACE@5..6 " "
+                              IDENT@6..11 "Point"
+                        L_PAREN@11..12 "("
+                        StructPatField@12..17
+                          NameRef@12..13
+                            IDENT@12..13 "x"
+                          WHITESPACE@13..14 " "
+                          EQ@14..15 "="
+                          IdentPat@15..17
+                            Name@15..17
+                              WHITESPACE@15..16 " "
+                              IDENT@16..17 "x"
+                        COMMA@17..18 ","
+                        RestPat@18..21
+                          WHITESPACE@18..19 " "
+                          DOT_DOT@19..21 ".."
+                        R_PAREN@21..22 ")"
+                      WHITESPACE@22..23 " "
+                      EQ@23..24 "="
+                      PathExpr@24..26
+                        Path@24..26
+                          PathSegment@24..26
+                            NameRef@24..26
+                              WHITESPACE@24..25 " "
+                              IDENT@25..26 "p"
+                      SEMI@26..27 ";"
+                    WHITESPACE@27..28 " "
+                    R_BRACE@28..29 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_pattern_qualified_path() {
+        check_expr(
+            "{ let module::Point(x = x) = p; }",
+            &expect![[r#"
+                BlockExpr@0..33
+                  Block@0..33
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..31
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      StructPat@5..26
+                        Path@5..19
+                          PathSegment@5..12
+                            NameRef@5..12
+                              WHITESPACE@5..6 " "
+                              IDENT@6..12 "module"
+                          COLON_COLON@12..14 "::"
+                          PathSegment@14..19
+                            NameRef@14..19
+                              IDENT@14..19 "Point"
+                        L_PAREN@19..20 "("
+                        StructPatField@20..25
+                          NameRef@20..21
+                            IDENT@20..21 "x"
+                          WHITESPACE@21..22 " "
+                          EQ@22..23 "="
+                          IdentPat@23..25
+                            Name@23..25
+                              WHITESPACE@23..24 " "
+                              IDENT@24..25 "x"
+                        R_PAREN@25..26 ")"
+                      WHITESPACE@26..27 " "
+                      EQ@27..28 "="
+                      PathExpr@28..30
+                        Path@28..30
+                          PathSegment@28..30
+                            NameRef@28..30
+                              WHITESPACE@28..29 " "
+                              IDENT@29..30 "p"
+                      SEMI@30..31 ";"
+                    WHITESPACE@31..32 " "
+                    R_BRACE@32..33 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn struct_pattern_empty() {
+        // Empty struct pattern: Unit() - parsed as TuplePat (call-like)
+        check_expr(
+            "{ let Unit() = u; }",
+            &expect![[r#"
+                BlockExpr@0..19
+                  Block@0..19
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..17
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      TuplePat@5..12
                         Path@5..10
                           PathSegment@5..10
                             NameRef@5..10
                               WHITESPACE@5..6 " "
                               IDENT@6..10 "Unit"
-                        WHITESPACE@10..11 " "
-                        L_BRACE@11..12 "{"
-                        R_BRACE@12..13 "}"
-                      WHITESPACE@13..14 " "
-                      EQ@14..15 "="
-                      PathExpr@15..17
-                        Path@15..17
-                          PathSegment@15..17
-                            NameRef@15..17
-                              WHITESPACE@15..16 " "
-                              IDENT@16..17 "u"
-                      SEMI@17..18 ";"
-                    WHITESPACE@18..19 " "
-                    R_BRACE@19..20 "}"
+                        L_PAREN@10..11 "("
+                        R_PAREN@11..12 ")"
+                      WHITESPACE@12..13 " "
+                      EQ@13..14 "="
+                      PathExpr@14..16
+                        Path@14..16
+                          PathSegment@14..16
+                            NameRef@14..16
+                              WHITESPACE@14..15 " "
+                              IDENT@15..16 "u"
+                      SEMI@16..17 ";"
+                    WHITESPACE@17..18 " "
+                    R_BRACE@18..19 "}"
             "#]],
         );
     }
@@ -1099,54 +1142,55 @@ mod tests {
     #[test]
     fn struct_pattern_nested() {
         check_expr(
-            "{ let Outer { inner: Inner { x } } = o; }",
+            "{ let Outer(inner = Inner(x = x)) = o; }",
             &expect![[r#"
-                BlockExpr@0..41
-                  Block@0..41
+                BlockExpr@0..40
+                  Block@0..40
                     L_BRACE@0..1 "{"
-                    LetStmt@1..39
+                    LetStmt@1..38
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
-                      StructPat@5..34
+                      StructPat@5..33
                         Path@5..11
                           PathSegment@5..11
                             NameRef@5..11
                               WHITESPACE@5..6 " "
                               IDENT@6..11 "Outer"
-                        WHITESPACE@11..12 " "
-                        L_BRACE@12..13 "{"
-                        StructPatField@13..32
-                          NameRef@13..19
-                            WHITESPACE@13..14 " "
-                            IDENT@14..19 "inner"
-                          COLON@19..20 ":"
-                          StructPat@20..32
-                            Path@20..26
-                              PathSegment@20..26
-                                NameRef@20..26
-                                  WHITESPACE@20..21 " "
-                                  IDENT@21..26 "Inner"
-                            WHITESPACE@26..27 " "
-                            L_BRACE@27..28 "{"
-                            StructPatField@28..30
-                              NameRef@28..30
-                                WHITESPACE@28..29 " "
-                                IDENT@29..30 "x"
-                            WHITESPACE@30..31 " "
-                            R_BRACE@31..32 "}"
-                        WHITESPACE@32..33 " "
-                        R_BRACE@33..34 "}"
-                      WHITESPACE@34..35 " "
-                      EQ@35..36 "="
-                      PathExpr@36..38
-                        Path@36..38
-                          PathSegment@36..38
-                            NameRef@36..38
-                              WHITESPACE@36..37 " "
-                              IDENT@37..38 "o"
-                      SEMI@38..39 ";"
-                    WHITESPACE@39..40 " "
-                    R_BRACE@40..41 "}"
+                        L_PAREN@11..12 "("
+                        StructPatField@12..32
+                          NameRef@12..17
+                            IDENT@12..17 "inner"
+                          WHITESPACE@17..18 " "
+                          EQ@18..19 "="
+                          StructPat@19..32
+                            Path@19..25
+                              PathSegment@19..25
+                                NameRef@19..25
+                                  WHITESPACE@19..20 " "
+                                  IDENT@20..25 "Inner"
+                            L_PAREN@25..26 "("
+                            StructPatField@26..31
+                              NameRef@26..27
+                                IDENT@26..27 "x"
+                              WHITESPACE@27..28 " "
+                              EQ@28..29 "="
+                              IdentPat@29..31
+                                Name@29..31
+                                  WHITESPACE@29..30 " "
+                                  IDENT@30..31 "x"
+                            R_PAREN@31..32 ")"
+                        R_PAREN@32..33 ")"
+                      WHITESPACE@33..34 " "
+                      EQ@34..35 "="
+                      PathExpr@35..37
+                        Path@35..37
+                          PathSegment@35..37
+                            NameRef@35..37
+                              WHITESPACE@35..36 " "
+                              IDENT@36..37 "o"
+                      SEMI@37..38 ";"
+                    WHITESPACE@38..39 " "
+                    R_BRACE@39..40 "}"
             "#]],
         );
     }
@@ -1388,39 +1432,37 @@ mod tests {
 
     #[test]
     fn struct_pattern_all_rest() {
+        // Rest-only pattern: Point(..) - parsed as TuplePat with rest
         check_expr(
-            "{ let Point { .. } = p; }",
+            "{ let Point(..) = p; }",
             &expect![[r#"
-                BlockExpr@0..25
-                  Block@0..25
+                BlockExpr@0..22
+                  Block@0..22
                     L_BRACE@0..1 "{"
-                    LetStmt@1..23
+                    LetStmt@1..20
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
-                      StructPat@5..18
+                      TuplePat@5..15
                         Path@5..11
                           PathSegment@5..11
                             NameRef@5..11
                               WHITESPACE@5..6 " "
                               IDENT@6..11 "Point"
-                        WHITESPACE@11..12 " "
-                        L_BRACE@12..13 "{"
-                        RestPat@13..16
-                          WHITESPACE@13..14 " "
-                          DOT_DOT@14..16 ".."
-                        WHITESPACE@16..17 " "
-                        R_BRACE@17..18 "}"
-                      WHITESPACE@18..19 " "
-                      EQ@19..20 "="
-                      PathExpr@20..22
-                        Path@20..22
-                          PathSegment@20..22
-                            NameRef@20..22
-                              WHITESPACE@20..21 " "
-                              IDENT@21..22 "p"
-                      SEMI@22..23 ";"
-                    WHITESPACE@23..24 " "
-                    R_BRACE@24..25 "}"
+                        L_PAREN@11..12 "("
+                        RestPat@12..14
+                          DOT_DOT@12..14 ".."
+                        R_PAREN@14..15 ")"
+                      WHITESPACE@15..16 " "
+                      EQ@16..17 "="
+                      PathExpr@17..19
+                        Path@17..19
+                          PathSegment@17..19
+                            NameRef@17..19
+                              WHITESPACE@17..18 " "
+                              IDENT@18..19 "p"
+                      SEMI@19..20 ";"
+                    WHITESPACE@20..21 " "
+                    R_BRACE@21..22 "}"
             "#]],
         );
     }
@@ -1428,69 +1470,68 @@ mod tests {
     #[test]
     fn struct_pattern_deeply_nested() {
         check_expr(
-            "{ let A { b: B { c: C { x } } } = a; }",
+            "{ let A(b = B(c = C(x = x))) = a; }",
             &expect![[r#"
-                BlockExpr@0..38
-                  Block@0..38
+                BlockExpr@0..35
+                  Block@0..35
                     L_BRACE@0..1 "{"
-                    LetStmt@1..36
+                    LetStmt@1..33
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
-                      StructPat@5..31
+                      StructPat@5..28
                         Path@5..7
                           PathSegment@5..7
                             NameRef@5..7
                               WHITESPACE@5..6 " "
                               IDENT@6..7 "A"
-                        WHITESPACE@7..8 " "
-                        L_BRACE@8..9 "{"
-                        StructPatField@9..29
-                          NameRef@9..11
-                            WHITESPACE@9..10 " "
-                            IDENT@10..11 "b"
-                          COLON@11..12 ":"
-                          StructPat@12..29
-                            Path@12..14
-                              PathSegment@12..14
-                                NameRef@12..14
-                                  WHITESPACE@12..13 " "
-                                  IDENT@13..14 "B"
-                            WHITESPACE@14..15 " "
-                            L_BRACE@15..16 "{"
-                            StructPatField@16..27
-                              NameRef@16..18
-                                WHITESPACE@16..17 " "
-                                IDENT@17..18 "c"
-                              COLON@18..19 ":"
-                              StructPat@19..27
-                                Path@19..21
-                                  PathSegment@19..21
-                                    NameRef@19..21
-                                      WHITESPACE@19..20 " "
-                                      IDENT@20..21 "C"
-                                WHITESPACE@21..22 " "
-                                L_BRACE@22..23 "{"
-                                StructPatField@23..25
-                                  NameRef@23..25
-                                    WHITESPACE@23..24 " "
-                                    IDENT@24..25 "x"
-                                WHITESPACE@25..26 " "
-                                R_BRACE@26..27 "}"
-                            WHITESPACE@27..28 " "
-                            R_BRACE@28..29 "}"
-                        WHITESPACE@29..30 " "
-                        R_BRACE@30..31 "}"
-                      WHITESPACE@31..32 " "
-                      EQ@32..33 "="
-                      PathExpr@33..35
-                        Path@33..35
-                          PathSegment@33..35
-                            NameRef@33..35
-                              WHITESPACE@33..34 " "
-                              IDENT@34..35 "a"
-                      SEMI@35..36 ";"
-                    WHITESPACE@36..37 " "
-                    R_BRACE@37..38 "}"
+                        L_PAREN@7..8 "("
+                        StructPatField@8..27
+                          NameRef@8..9
+                            IDENT@8..9 "b"
+                          WHITESPACE@9..10 " "
+                          EQ@10..11 "="
+                          StructPat@11..27
+                            Path@11..13
+                              PathSegment@11..13
+                                NameRef@11..13
+                                  WHITESPACE@11..12 " "
+                                  IDENT@12..13 "B"
+                            L_PAREN@13..14 "("
+                            StructPatField@14..26
+                              NameRef@14..15
+                                IDENT@14..15 "c"
+                              WHITESPACE@15..16 " "
+                              EQ@16..17 "="
+                              StructPat@17..26
+                                Path@17..19
+                                  PathSegment@17..19
+                                    NameRef@17..19
+                                      WHITESPACE@17..18 " "
+                                      IDENT@18..19 "C"
+                                L_PAREN@19..20 "("
+                                StructPatField@20..25
+                                  NameRef@20..21
+                                    IDENT@20..21 "x"
+                                  WHITESPACE@21..22 " "
+                                  EQ@22..23 "="
+                                  IdentPat@23..25
+                                    Name@23..25
+                                      WHITESPACE@23..24 " "
+                                      IDENT@24..25 "x"
+                                R_PAREN@25..26 ")"
+                            R_PAREN@26..27 ")"
+                        R_PAREN@27..28 ")"
+                      WHITESPACE@28..29 " "
+                      EQ@29..30 "="
+                      PathExpr@30..32
+                        Path@30..32
+                          PathSegment@30..32
+                            NameRef@30..32
+                              WHITESPACE@30..31 " "
+                              IDENT@31..32 "a"
+                      SEMI@32..33 ";"
+                    WHITESPACE@33..34 " "
+                    R_BRACE@34..35 "}"
             "#]],
         );
     }

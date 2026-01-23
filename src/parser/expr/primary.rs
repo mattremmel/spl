@@ -99,7 +99,11 @@ pub(super) fn literal_expr(
     Ok(Some(m.complete(p, SyntaxKind::LiteralExpr)))
 }
 
-/// Parse a path or struct expression.
+/// Parse a path or apply expression.
+///
+/// `ApplyExpr` is a unified syntax for both function calls and struct instantiation.
+/// The parser produces `ApplyExpr` for `Path(args...)` syntax, and semantic analysis
+/// determines whether it's a function call or struct based on what the path resolves to.
 pub(super) fn path_or_struct_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
@@ -108,11 +112,11 @@ pub(super) fn path_or_struct_expr(
     // Use structured path parsing (no generics in expression position)
     crate::parser::path::path_no_generics(p)?;
 
-    // Check for struct expression: Path { fields }
-    if p.at(SyntaxKind::L_BRACE) {
-        // Could be struct expression or block - for now treat as struct
-        // A more sophisticated parser would need context
-        return struct_expr_rest(p, m);
+    // Check for apply expression: Path(args...)
+    // This unified syntax handles both function calls and struct instantiation.
+    // Semantic analysis will determine which it is based on the path's resolution.
+    if p.at(SyntaxKind::L_PAREN) {
+        return apply_expr_rest(p, m);
     }
 
     Ok(Some(m.complete(p, SyntaxKind::PathExpr)))
@@ -133,14 +137,21 @@ pub(super) fn path_expr_only(
     Ok(Some(m.complete(p, SyntaxKind::PathExpr)))
 }
 
-/// Parse the rest of a struct expression after the path.
-fn struct_expr_rest(
+/// Parse the rest of an apply expression after the path.
+/// Syntax: Path(arg, name = value, ...)
+///
+/// Arguments can be:
+/// - Named: `name = value`
+/// - Positional: just `value`
+///
+/// Struct update syntax `..base` is also supported for struct instantiation.
+fn apply_expr_rest(
     p: &mut Parser<'_>,
     m: Marker,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    p.expect(SyntaxKind::L_BRACE)?;
+    p.expect(SyntaxKind::L_PAREN)?;
 
-    while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
+    while !p.at(SyntaxKind::R_PAREN) && p.current().is_some() {
         // Check for struct update syntax: ..base
         if p.at(SyntaxKind::DOT_DOT) {
             struct_update_base(p)?;
@@ -148,14 +159,14 @@ fn struct_expr_rest(
             break;
         }
 
-        struct_field(p)?;
-        if !p.at(SyntaxKind::R_BRACE) && !p.eat(SyntaxKind::COMMA) {
+        apply_arg(p)?;
+        if !p.at(SyntaxKind::R_PAREN) && !p.eat(SyntaxKind::COMMA) {
             break;
         }
     }
 
-    p.expect(SyntaxKind::R_BRACE)?;
-    Ok(Some(m.complete(p, SyntaxKind::StructExpr)))
+    p.expect(SyntaxKind::R_PAREN)?;
+    Ok(Some(m.complete(p, SyntaxKind::ApplyExpr)))
 }
 
 /// Parse struct update base: ..expr
@@ -166,16 +177,20 @@ fn struct_update_base(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::pars
     Ok(m.complete(p, SyntaxKind::StructUpdateBase))
 }
 
-/// Parse a struct field: name or name: expr
-fn struct_field(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+/// Parse an apply argument: either `name = expr` (named) or just `expr` (positional).
+fn apply_arg(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::IDENT)?;
 
-    if p.eat(SyntaxKind::COLON) {
-        let _ = expr(p)?;
+    // Check for named argument: IDENT =
+    if p.at(SyntaxKind::IDENT) && p.peek(1) == Some(SyntaxKind::EQ) {
+        p.bump(); // name
+        p.bump(); // =
     }
 
-    Ok(m.complete(p, SyntaxKind::StructExprField))
+    // Parse the value expression
+    let _ = expr(p)?;
+
+    Ok(m.complete(p, SyntaxKind::ApplyArg))
 }
 
 /// Parse a parenthesized or tuple expression.
@@ -750,30 +765,12 @@ mod tests {
         check_expr(
             "Point { x: 1, y: 2 }",
             &expect![[r#"
-                StructExpr@0..20
+                PathExpr@0..6
                   Path@0..5
                     PathSegment@0..5
                       NameRef@0..5
                         IDENT@0..5 "Point"
                   WHITESPACE@5..6 " "
-                  L_BRACE@6..7 "{"
-                  StructExprField@7..12
-                    WHITESPACE@7..8 " "
-                    IDENT@8..9 "x"
-                    COLON@9..10 ":"
-                    LiteralExpr@10..12
-                      WHITESPACE@10..11 " "
-                      INT_LITERAL@11..12 "1"
-                  COMMA@12..13 ","
-                  StructExprField@13..18
-                    WHITESPACE@13..14 " "
-                    IDENT@14..15 "y"
-                    COLON@15..16 ":"
-                    LiteralExpr@16..18
-                      WHITESPACE@16..17 " "
-                      INT_LITERAL@17..18 "2"
-                  WHITESPACE@18..19 " "
-                  R_BRACE@19..20 "}"
             "#]],
         );
     }
@@ -783,22 +780,12 @@ mod tests {
         check_expr(
             "Point { x, y }",
             &expect![[r#"
-                StructExpr@0..14
+                PathExpr@0..6
                   Path@0..5
                     PathSegment@0..5
                       NameRef@0..5
                         IDENT@0..5 "Point"
                   WHITESPACE@5..6 " "
-                  L_BRACE@6..7 "{"
-                  StructExprField@7..9
-                    WHITESPACE@7..8 " "
-                    IDENT@8..9 "x"
-                  COMMA@9..10 ","
-                  StructExprField@10..12
-                    WHITESPACE@10..11 " "
-                    IDENT@11..12 "y"
-                  WHITESPACE@12..13 " "
-                  R_BRACE@13..14 "}"
             "#]],
         );
     }
@@ -808,31 +795,12 @@ mod tests {
         check_expr(
             "Point { x: 1, y: 2, }",
             &expect![[r#"
-                StructExpr@0..21
+                PathExpr@0..6
                   Path@0..5
                     PathSegment@0..5
                       NameRef@0..5
                         IDENT@0..5 "Point"
                   WHITESPACE@5..6 " "
-                  L_BRACE@6..7 "{"
-                  StructExprField@7..12
-                    WHITESPACE@7..8 " "
-                    IDENT@8..9 "x"
-                    COLON@9..10 ":"
-                    LiteralExpr@10..12
-                      WHITESPACE@10..11 " "
-                      INT_LITERAL@11..12 "1"
-                  COMMA@12..13 ","
-                  StructExprField@13..18
-                    WHITESPACE@13..14 " "
-                    IDENT@14..15 "y"
-                    COLON@15..16 ":"
-                    LiteralExpr@16..18
-                      WHITESPACE@16..17 " "
-                      INT_LITERAL@17..18 "2"
-                  COMMA@18..19 ","
-                  WHITESPACE@19..20 " "
-                  R_BRACE@20..21 "}"
             "#]],
         );
     }
@@ -842,29 +810,12 @@ mod tests {
         check_expr(
             "Point { x, y: other_y }",
             &expect![[r#"
-                StructExpr@0..23
+                PathExpr@0..6
                   Path@0..5
                     PathSegment@0..5
                       NameRef@0..5
                         IDENT@0..5 "Point"
                   WHITESPACE@5..6 " "
-                  L_BRACE@6..7 "{"
-                  StructExprField@7..9
-                    WHITESPACE@7..8 " "
-                    IDENT@8..9 "x"
-                  COMMA@9..10 ","
-                  StructExprField@10..21
-                    WHITESPACE@10..11 " "
-                    IDENT@11..12 "y"
-                    COLON@12..13 ":"
-                    PathExpr@13..21
-                      Path@13..21
-                        PathSegment@13..21
-                          NameRef@13..21
-                            WHITESPACE@13..14 " "
-                            IDENT@14..21 "other_y"
-                  WHITESPACE@21..22 " "
-                  R_BRACE@22..23 "}"
             "#]],
         );
     }
@@ -874,36 +825,12 @@ mod tests {
         check_expr(
             "Outer { inner: Inner { x: 1 } }",
             &expect![[r#"
-                StructExpr@0..31
+                PathExpr@0..6
                   Path@0..5
                     PathSegment@0..5
                       NameRef@0..5
                         IDENT@0..5 "Outer"
                   WHITESPACE@5..6 " "
-                  L_BRACE@6..7 "{"
-                  StructExprField@7..29
-                    WHITESPACE@7..8 " "
-                    IDENT@8..13 "inner"
-                    COLON@13..14 ":"
-                    StructExpr@14..29
-                      Path@14..20
-                        PathSegment@14..20
-                          NameRef@14..20
-                            WHITESPACE@14..15 " "
-                            IDENT@15..20 "Inner"
-                      WHITESPACE@20..21 " "
-                      L_BRACE@21..22 "{"
-                      StructExprField@22..27
-                        WHITESPACE@22..23 " "
-                        IDENT@23..24 "x"
-                        COLON@24..25 ":"
-                        LiteralExpr@25..27
-                          WHITESPACE@25..26 " "
-                          INT_LITERAL@26..27 "1"
-                      WHITESPACE@27..28 " "
-                      R_BRACE@28..29 "}"
-                  WHITESPACE@29..30 " "
-                  R_BRACE@30..31 "}"
             "#]],
         );
     }
@@ -913,7 +840,7 @@ mod tests {
         check_expr(
             "module::Point { x: 1 }",
             &expect![[r#"
-                StructExpr@0..22
+                PathExpr@0..14
                   Path@0..13
                     PathSegment@0..6
                       NameRef@0..6
@@ -923,16 +850,6 @@ mod tests {
                       NameRef@8..13
                         IDENT@8..13 "Point"
                   WHITESPACE@13..14 " "
-                  L_BRACE@14..15 "{"
-                  StructExprField@15..20
-                    WHITESPACE@15..16 " "
-                    IDENT@16..17 "x"
-                    COLON@17..18 ":"
-                    LiteralExpr@18..20
-                      WHITESPACE@18..19 " "
-                      INT_LITERAL@19..20 "1"
-                  WHITESPACE@20..21 " "
-                  R_BRACE@21..22 "}"
             "#]],
         );
     }

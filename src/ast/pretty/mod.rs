@@ -253,6 +253,7 @@ impl AstPrinter {
             Expr::Tuple(t) => self.print_tuple_expr(t),
             Expr::Array(a) => self.print_array_expr(a),
             Expr::Struct(s) => self.print_struct_expr(s),
+            Expr::Apply(a) => self.print_apply_expr(a),
             Expr::Binary(b) => self.print_binary_expr(b),
             Expr::Prefix(p) => self.print_prefix_expr(p),
             Expr::Ref(r) => self.print_ref_expr(r),
@@ -428,6 +429,45 @@ impl AstPrinter {
                 p.line("UpdateBase");
                 p.indented(|p| {
                     if let Some(expr) = base.expr() {
+                        p.print_expr(&expr);
+                    }
+                });
+            }
+        });
+    }
+
+    fn print_apply_expr(&mut self, a: &ApplyExpr) {
+        let path_str = a
+            .path()
+            .map(|p| {
+                p.segments()
+                    .filter_map(|s| {
+                        s.name()
+                            .and_then(|n| n.token())
+                            .map(|t| t.text().to_string())
+                    })
+                    .collect::<Vec<_>>()
+                    .join("::")
+            })
+            .unwrap_or_else(|| "?".to_string());
+        self.line(&format!("ApplyExpr \"{path_str}\""));
+        self.indented(|p| {
+            for arg in a.args() {
+                let name = arg
+                    .name_token()
+                    .map(|t| t.text().to_string())
+                    .or_else(|| {
+                        arg.name()
+                            .and_then(|n| n.token())
+                            .map(|t| t.text().to_string())
+                    });
+                if let Some(name) = name {
+                    p.line(&format!("NamedArg \"{name}\""));
+                } else {
+                    p.line("PositionalArg");
+                }
+                p.indented(|p| {
+                    if let Some(expr) = arg.value() {
                         p.print_expr(&expr);
                     }
                 });

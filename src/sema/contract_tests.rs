@@ -171,7 +171,7 @@ mod tests {
                 struct Wrapper(value: T) where T
 
                 fn test() {
-                    let w: Wrapper(i32) = Wrapper { value: 42 };
+                    let w: Wrapper(i32) = Wrapper(value = 42);
                 }
             "#;
 
@@ -276,7 +276,7 @@ mod tests {
             // Struct defined after use should still resolve
             let source = r#"
                 fn uses_point() {
-                    let p = Point { x: 1, y: 2 };
+                    let p = Point(x = 1, y = 2);
                 }
 
                 struct Point(x: i32, y: i32)
@@ -474,7 +474,7 @@ mod tests {
                 struct Point(x: i32, y: i32)
 
                 fn test() {
-                    let p = Point { x: 1, y: 2 };
+                    let p = Point(x = 1, y = 2);
                 }
             "#;
 
@@ -490,7 +490,7 @@ mod tests {
                 struct Point(x: i32, y: i32)
 
                 fn test() {
-                    let p = Point { x: 1 };
+                    let p = Point(x = 1);
                 }
             "#;
 
@@ -635,8 +635,8 @@ mod tests {
                 }
 
                 fn main() {
-                    let origin = Point { x: 0, y: 0 };
-                    let target = Point { x: 3, y: 4 };
+                    let origin = Point(x = 0, y = 0);
+                    let target = Point(x = 3, y = 4);
 
                     let dist = distance_squared(&origin, &target);
 
@@ -692,7 +692,7 @@ mod tests {
 
                 impl Counter {
                     fn new(): Counter {
-                        Counter { value: 0 }
+                        Counter(value = 0)
                     }
 
                     fn get(&self): i32 {
@@ -705,7 +705,7 @@ mod tests {
                 }
 
                 fn main() {
-                    let c = Counter { value: 0 };
+                    let c = Counter(value = 0);
                     let v = c.get();
                 }
             "#;

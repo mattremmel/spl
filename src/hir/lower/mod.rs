@@ -66,7 +66,7 @@ use crate::hir::{
 use crate::lexer::Span;
 use crate::sema::infer::InferResult;
 use crate::sema::symbol::DefId;
-use crate::sema::types::TypeId;
+use crate::sema::types::{Type, TypeId};
 use crate::syntax::SyntaxKind;
 use folding::{
     parse_char_literal, parse_float_literal_value, parse_int_literal_value, parse_string_literal,
@@ -641,6 +641,7 @@ impl LoweringContext {
             Expr::Tuple(tuple) => self.lower_tuple_expr(tuple, span, ty),
             Expr::Array(array) => self.lower_array_expr(array, span, ty),
             Expr::Struct(struct_expr) => self.lower_struct_expr(struct_expr, span, ty),
+            Expr::Apply(apply_expr) => self.lower_apply_expr(apply_expr, span, ty),
             Expr::Binary(bin) => self.lower_binary_expr(bin, span, ty),
             Expr::Prefix(prefix) => self.lower_prefix_expr(prefix, span, ty),
             Expr::Ref(ref_expr) => self.lower_ref_expr(ref_expr, span, ty),
@@ -820,6 +821,112 @@ impl LoweringContext {
 
         let expr = HirExpr {
             kind: HirExprKind::Struct { def_id, fields },
+            ty,
+            span,
+        };
+        self.db.alloc_expr(expr)
+    }
+
+    fn lower_apply_expr(
+        &mut self,
+        apply_expr: &crate::ast::ApplyExpr,
+        span: Span,
+        ty: TypeId,
+    ) -> ExprId {
+        // Check if the expression's type is a struct type - if so, it's struct instantiation
+        let is_struct = matches!(self.db.types.get(ty), Type::Struct(_, _));
+
+        if is_struct {
+            // Lower as struct instantiation
+            self.lower_apply_as_struct(apply_expr, span, ty)
+        } else {
+            // Lower as function call
+            self.lower_apply_as_call(apply_expr, span, ty)
+        }
+    }
+
+    fn lower_apply_as_struct(
+        &mut self,
+        apply_expr: &crate::ast::ApplyExpr,
+        span: Span,
+        ty: TypeId,
+    ) -> ExprId {
+        // Get the struct DefId from the path
+        let path_span = apply_expr
+            .path()
+            .and_then(|p| p.segments().next())
+            .and_then(|seg| seg.name())
+            .map(|n| Self::text_range_to_span(n.syntax().text_range()))
+            .unwrap_or_else(|| span.clone());
+
+        let def_id = self
+            .resolutions
+            .get(&path_span)
+            .copied()
+            .unwrap_or(DefId(0));
+
+        // Lower field initializers from arguments
+        let fields: Vec<_> = apply_expr
+            .args()
+            .filter_map(|arg| {
+                // Get field name from named argument
+                let name = arg.name_token().map(|t| t.text().to_string()).or_else(|| {
+                    arg.name().and_then(|n| n.token().map(|t| t.text().to_string()))
+                })?;
+                let value = arg.value().map(|e| self.lower_expr(&e))?;
+                Some((name, value))
+            })
+            .collect();
+
+        let expr = HirExpr {
+            kind: HirExprKind::Struct { def_id, fields },
+            ty,
+            span,
+        };
+        self.db.alloc_expr(expr)
+    }
+
+    fn lower_apply_as_call(
+        &mut self,
+        apply_expr: &crate::ast::ApplyExpr,
+        span: Span,
+        ty: TypeId,
+    ) -> ExprId {
+        // Build a synthetic callee expression from the path
+        let callee = apply_expr
+            .path()
+            .map(|path| {
+                // Get the DefId for the path
+                let def_id = path
+                    .segments()
+                    .next()
+                    .and_then(|seg| seg.name())
+                    .and_then(|n| n.token())
+                    .map(|t| Self::text_range_to_span(t.text_range()))
+                    .and_then(|span| self.resolutions.get(&span).copied())
+                    .unwrap_or(DefId(0));
+
+                // Get the type for the path (function type)
+                let path_span = Self::text_range_to_span(path.syntax().text_range());
+                let path_ty = self.get_type(&path_span);
+
+                let expr = HirExpr {
+                    kind: HirExprKind::Var(def_id),
+                    ty: path_ty,
+                    span: path_span,
+                };
+                self.db.alloc_expr(expr)
+            })
+            .unwrap_or_else(|| self.lower_missing(span.clone()));
+
+        // Lower arguments
+        let args: Vec<_> = apply_expr
+            .args()
+            .filter_map(|arg| arg.value().map(|e| self.lower_expr(&e)))
+            .collect();
+
+        let expr = HirExpr {
+            kind: HirExprKind::Call { callee, args },
             ty,
             span,
         };

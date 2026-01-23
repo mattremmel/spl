@@ -271,19 +271,17 @@ mod tests {
         check_expr(
             "Vec::new()",
             &expect![[r#"
-                CallExpr@0..10
-                  PathExpr@0..8
-                    Path@0..8
-                      PathSegment@0..3
-                        NameRef@0..3
-                          IDENT@0..3 "Vec"
-                      COLON_COLON@3..5 "::"
-                      PathSegment@5..8
-                        NameRef@5..8
-                          IDENT@5..8 "new"
-                  ArgList@8..10
-                    L_PAREN@8..9 "("
-                    R_PAREN@9..10 ")"
+                ApplyExpr@0..10
+                  Path@0..8
+                    PathSegment@0..3
+                      NameRef@0..3
+                        IDENT@0..3 "Vec"
+                    COLON_COLON@3..5 "::"
+                    PathSegment@5..8
+                      NameRef@5..8
+                        IDENT@5..8 "new"
+                  L_PAREN@8..9 "("
+                  R_PAREN@9..10 ")"
             "#]],
         );
     }

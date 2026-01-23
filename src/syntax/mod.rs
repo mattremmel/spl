@@ -123,6 +123,8 @@ pub enum SyntaxKind {
     StructExpr,
     StructExprField,
     StructUpdateBase,
+    ApplyExpr,
+    ApplyArg,
     BinExpr,
     PrefixExpr,
     RefExpr,

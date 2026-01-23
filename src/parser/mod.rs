@@ -803,7 +803,7 @@ pub(crate) mod tests {
 
             impl Point {
                 fn new(x: i32, y: i32): Point {
-                    Point { x, y }
+                    Point(x, y)
                 }
 
                 fn distance(&self, other: &Point): f64 {
@@ -872,7 +872,7 @@ pub(crate) mod tests {
         let parse = parse(
             r#"
             fn foo() {
-                bar(Point { x: Inner { y: 1 } });
+                bar(Point(x = Inner(y = 1)));
             }
         "#,
         );

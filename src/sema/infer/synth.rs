@@ -1,9 +1,9 @@
 //! Expression type synthesis and checking.
 
 use crate::ast::{
-    ArrayExpr, BinExpr, BlockExpr, BreakExpr, CallExpr, CastExpr, ContinueExpr, Expr, FieldExpr,
-    ForExpr, IfExpr, IndexExpr, LoopExpr, MethodCallExpr, ParenExpr, Pat, PathExpr, PrefixExpr,
-    RangeExpr, RefExpr, ReturnExpr, SliceExpr, StructExpr, TupleExpr, WhileExpr,
+    ApplyExpr, ArrayExpr, BinExpr, BlockExpr, BreakExpr, CallExpr, CastExpr, ContinueExpr, Expr,
+    FieldExpr, ForExpr, IfExpr, IndexExpr, LoopExpr, MethodCallExpr, ParenExpr, Pat, PathExpr,
+    PrefixExpr, RangeExpr, RefExpr, ReturnExpr, SliceExpr, StructExpr, TupleExpr, WhileExpr,
 };
 use crate::ast::{Block, LetStmt, LiteralExpr, Stmt};
 use crate::diagnostic::Diagnostic;
@@ -230,6 +230,7 @@ impl InferEngine {
             Expr::Tuple(tuple) => self.synth_tuple(tuple),
             Expr::Array(array) => self.synth_array(array),
             Expr::Struct(struct_expr) => self.synth_struct(struct_expr),
+            Expr::Apply(apply_expr) => self.synth_apply(apply_expr),
             Expr::Binary(bin) => self.synth_binary(bin),
             Expr::Prefix(prefix) => self.synth_prefix(prefix),
             Expr::Ref(ref_expr) => self.synth_ref(ref_expr),
@@ -590,6 +591,221 @@ impl InferEngine {
         );
 
         result
+    }
+
+    fn synth_apply(&mut self, apply_expr: &ApplyExpr) -> TypeId {
+        // Get the path from the apply expression
+        let path = match apply_expr.path() {
+            Some(p) => p,
+            None => return self.ctx.types.error(),
+        };
+
+        // Get the first segment to determine what we're applying
+        let segment = match path.segments().next() {
+            Some(s) => s,
+            None => return self.ctx.types.error(),
+        };
+
+        let name_ref = match segment.name() {
+            Some(n) => n,
+            None => return self.ctx.types.error(),
+        };
+
+        let token = match name_ref.token() {
+            Some(t) => t,
+            None => return self.ctx.types.error(),
+        };
+
+        let span = text_range_to_span(token.text_range());
+        let def_id = match self.resolutions.get(&span) {
+            Some(id) => *id,
+            None => return self.ctx.types.error(),
+        };
+
+        // Determine if this is a function or struct based on what's in the resolution
+        // Check if it's a function (has a function signature)
+        if let Some(sig) = self.fn_signatures.get(&def_id).cloned() {
+            // It's a function call
+            return self.synth_apply_as_call(apply_expr, &sig);
+        }
+
+        // Check if it's a struct (has struct fields)
+        if self.struct_fields.contains_key(&def_id) {
+            return self.synth_apply_as_struct(apply_expr, def_id);
+        }
+
+        // Check if it's a type alias that resolves to a struct
+        if let Some(&target_ty) = self.type_alias_targets.get(&def_id) {
+            let resolved = self.resolve_type(target_ty);
+            if let Type::Struct(actual_def_id, _) = self.ctx.types.get(resolved) {
+                return self.synth_apply_as_struct(apply_expr, *actual_def_id);
+            }
+        }
+
+        // Unknown - emit error
+        self.diagnostics.push(
+            Diagnostic::error("cannot apply: not a function or struct")
+                .with_label(span, "not callable or instantiable"),
+        );
+        self.ctx.types.error()
+    }
+
+    /// Synthesize type for an apply expression being used as a function call
+    fn synth_apply_as_call(
+        &mut self,
+        apply_expr: &ApplyExpr,
+        sig: &super::engine::FnSignature,
+    ) -> TypeId {
+        let (param_types, ret_ty) = self.instantiate_signature(sig);
+
+        // Check argument count
+        let args: Vec<_> = apply_expr.args().collect();
+        if args.len() != param_types.len() {
+            let span = text_range_to_span(apply_expr.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error(format!(
+                    "expected {} argument{}, found {}",
+                    param_types.len(),
+                    if param_types.len() == 1 { "" } else { "s" },
+                    args.len()
+                ))
+                .with_label(span, "wrong number of arguments"),
+            );
+            return ret_ty;
+        }
+
+        // Check each argument using check_expr which handles coercion
+        for (arg, &expected_ty) in args.iter().zip(param_types.iter()) {
+            if let Some(expr) = arg.value() {
+                self.check_expr(&expr, expected_ty);
+            }
+        }
+
+        ret_ty
+    }
+
+    /// Synthesize type for an apply expression being used as struct instantiation
+    fn synth_apply_as_struct(
+        &mut self,
+        apply_expr: &ApplyExpr,
+        struct_def_id: crate::DefId,
+    ) -> TypeId {
+        // Get struct type params and create substitution map
+        let type_params = self
+            .struct_type_params
+            .get(&struct_def_id)
+            .cloned()
+            .unwrap_or_default();
+
+        // Create fresh type variables for each type parameter and build substitution
+        let mut subst: FxHashMap<_, _> = FxHashMap::default();
+        let mut type_args = Vec::new();
+        for param_def_id in &type_params {
+            let fresh_var = self.fresh_type_var();
+            subst.insert(*param_def_id, fresh_var);
+            type_args.push(fresh_var);
+        }
+
+        // Get struct field info and substitute type params
+        let fields_info = self
+            .struct_fields
+            .get(&struct_def_id)
+            .cloned()
+            .unwrap_or_default();
+        let instantiated_fields: Vec<(String, TypeId)> = fields_info
+            .iter()
+            .map(|(name, ty)| (name.clone(), self.substitute_type_params(*ty, &subst)))
+            .collect();
+        let field_map: FxHashMap<_, _> = instantiated_fields.iter().cloned().collect();
+
+        // Check for struct update syntax: ..base
+        let has_update_base = if let Some(update_base) = apply_expr.update_base() {
+            if let Some(base_expr) = update_base.expr() {
+                let base_ty = self.synth_expr(&base_expr);
+                let expected_struct_ty = self.ctx.types.mk_struct(struct_def_id, type_args.clone());
+                if !self.unify(base_ty, expected_struct_ty) {
+                    let span = text_range_to_span(base_expr.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("struct update base has wrong type")
+                            .with_label(span, "wrong type"),
+                    );
+                }
+            }
+            true
+        } else {
+            false
+        };
+
+        // Track seen fields
+        let mut seen_fields = std::collections::HashSet::new();
+
+        // Process each argument (field initializer)
+        for arg in apply_expr.args() {
+            // Get the field name from the argument
+            let field_name = if let Some(token) = arg.name_token() {
+                // Named argument via token: name = value
+                Some(token.text().to_string())
+            } else if let Some(name_ref) = arg.name() {
+                // Named argument: name = value
+                name_ref.token().map(|t| t.text().to_string())
+            } else {
+                // Positional/shorthand argument - try to get name from value if it's a path
+                if let Some(Expr::Path(path_expr)) = arg.value() {
+                    if let Some(path) = path_expr.path() {
+                        if let Some(seg) = path.segments().next() {
+                            if let Some(nr) = seg.name() {
+                                nr.token().map(|t| t.text().to_string())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            };
+
+            let field_name = match field_name {
+                Some(n) => n,
+                None => continue,
+            };
+
+            // Find the field in the struct
+            if let Some(&expected_type) = field_map.get(&field_name) {
+                seen_fields.insert(field_name.clone());
+
+                // Synthesize and check the value expression
+                if let Some(value_expr) = arg.value() {
+                    self.check_expr(&value_expr, expected_type);
+                }
+            } else {
+                // Unknown field
+                let span = text_range_to_span(arg.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error(format!("unknown field `{}`", field_name))
+                        .with_label(span, "unknown field"),
+                );
+            }
+        }
+
+        // Check for missing fields (only if no update base)
+        if !has_update_base {
+            for (field_name, _) in &instantiated_fields {
+                if !seen_fields.contains(field_name) {
+                    let span = text_range_to_span(apply_expr.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("missing field `{}`", field_name))
+                            .with_label(span, "missing field"),
+                    );
+                }
+            }
+        }
+
+        self.ctx.types.mk_struct(struct_def_id, type_args)
     }
 
     fn synth_binary(&mut self, bin: &BinExpr) -> TypeId {

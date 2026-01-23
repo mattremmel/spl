@@ -388,15 +388,13 @@ mod tests {
             &expect![[r#"
                 PrefixExpr@0..6
                   MINUS@0..1 "-"
-                  CallExpr@1..6
-                    PathExpr@1..4
-                      Path@1..4
-                        PathSegment@1..4
-                          NameRef@1..4
-                            IDENT@1..4 "foo"
-                    ArgList@4..6
-                      L_PAREN@4..5 "("
-                      R_PAREN@5..6 ")"
+                  ApplyExpr@1..6
+                    Path@1..4
+                      PathSegment@1..4
+                        NameRef@1..4
+                          IDENT@1..4 "foo"
+                    L_PAREN@4..5 "("
+                    R_PAREN@5..6 ")"
             "#]],
         );
     }
@@ -425,21 +423,21 @@ mod tests {
         check_expr(
             "foo(1, 2)",
             &expect![[r#"
-                CallExpr@0..9
-                  PathExpr@0..3
-                    Path@0..3
-                      PathSegment@0..3
-                        NameRef@0..3
-                          IDENT@0..3 "foo"
-                  ArgList@3..9
-                    L_PAREN@3..4 "("
+                ApplyExpr@0..9
+                  Path@0..3
+                    PathSegment@0..3
+                      NameRef@0..3
+                        IDENT@0..3 "foo"
+                  L_PAREN@3..4 "("
+                  ApplyArg@4..5
                     LiteralExpr@4..5
                       INT_LITERAL@4..5 "1"
-                    COMMA@5..6 ","
+                  COMMA@5..6 ","
+                  ApplyArg@6..8
                     LiteralExpr@6..8
                       WHITESPACE@6..7 " "
                       INT_LITERAL@7..8 "2"
-                    R_PAREN@8..9 ")"
+                  R_PAREN@8..9 ")"
             "#]],
         );
     }
@@ -449,28 +447,28 @@ mod tests {
         check_expr(
             "foo(a, b,)",
             &expect![[r#"
-                CallExpr@0..10
-                  PathExpr@0..3
-                    Path@0..3
-                      PathSegment@0..3
-                        NameRef@0..3
-                          IDENT@0..3 "foo"
-                  ArgList@3..10
-                    L_PAREN@3..4 "("
+                ApplyExpr@0..10
+                  Path@0..3
+                    PathSegment@0..3
+                      NameRef@0..3
+                        IDENT@0..3 "foo"
+                  L_PAREN@3..4 "("
+                  ApplyArg@4..5
                     PathExpr@4..5
                       Path@4..5
                         PathSegment@4..5
                           NameRef@4..5
                             IDENT@4..5 "a"
-                    COMMA@5..6 ","
+                  COMMA@5..6 ","
+                  ApplyArg@6..8
                     PathExpr@6..8
                       Path@6..8
                         PathSegment@6..8
                           NameRef@6..8
                             WHITESPACE@6..7 " "
                             IDENT@7..8 "b"
-                    COMMA@8..9 ","
-                    R_PAREN@9..10 ")"
+                  COMMA@8..9 ","
+                  R_PAREN@9..10 ")"
             "#]],
         );
     }
@@ -480,33 +478,29 @@ mod tests {
         check_expr(
             "foo(bar(baz()))",
             &expect![[r#"
-                CallExpr@0..15
-                  PathExpr@0..3
-                    Path@0..3
-                      PathSegment@0..3
-                        NameRef@0..3
-                          IDENT@0..3 "foo"
-                  ArgList@3..15
-                    L_PAREN@3..4 "("
-                    CallExpr@4..14
-                      PathExpr@4..7
-                        Path@4..7
-                          PathSegment@4..7
-                            NameRef@4..7
-                              IDENT@4..7 "bar"
-                      ArgList@7..14
-                        L_PAREN@7..8 "("
-                        CallExpr@8..13
-                          PathExpr@8..11
-                            Path@8..11
-                              PathSegment@8..11
-                                NameRef@8..11
-                                  IDENT@8..11 "baz"
-                          ArgList@11..13
-                            L_PAREN@11..12 "("
-                            R_PAREN@12..13 ")"
-                        R_PAREN@13..14 ")"
-                    R_PAREN@14..15 ")"
+                ApplyExpr@0..15
+                  Path@0..3
+                    PathSegment@0..3
+                      NameRef@0..3
+                        IDENT@0..3 "foo"
+                  L_PAREN@3..4 "("
+                  ApplyArg@4..14
+                    ApplyExpr@4..14
+                      Path@4..7
+                        PathSegment@4..7
+                          NameRef@4..7
+                            IDENT@4..7 "bar"
+                      L_PAREN@7..8 "("
+                      ApplyArg@8..13
+                        ApplyExpr@8..13
+                          Path@8..11
+                            PathSegment@8..11
+                              NameRef@8..11
+                                IDENT@8..11 "baz"
+                          L_PAREN@11..12 "("
+                          R_PAREN@12..13 ")"
+                      R_PAREN@13..14 ")"
+                  R_PAREN@14..15 ")"
             "#]],
         );
     }
@@ -519,15 +513,13 @@ mod tests {
                 CallExpr@0..15
                   ParenExpr@0..10
                     L_PAREN@0..1 "("
-                    CallExpr@1..9
-                      PathExpr@1..7
-                        Path@1..7
-                          PathSegment@1..7
-                            NameRef@1..7
-                              IDENT@1..7 "get_fn"
-                      ArgList@7..9
-                        L_PAREN@7..8 "("
-                        R_PAREN@8..9 ")"
+                    ApplyExpr@1..9
+                      Path@1..7
+                        PathSegment@1..7
+                          NameRef@1..7
+                            IDENT@1..7 "get_fn"
+                      L_PAREN@7..8 "("
+                      R_PAREN@8..9 ")"
                     R_PAREN@9..10 ")"
                   ArgList@10..15
                     L_PAREN@10..11 "("
@@ -607,15 +599,13 @@ mod tests {
             "get_obj().field",
             &expect![[r#"
                 FieldExpr@0..15
-                  CallExpr@0..9
-                    PathExpr@0..7
-                      Path@0..7
-                        PathSegment@0..7
-                          NameRef@0..7
-                            IDENT@0..7 "get_obj"
-                    ArgList@7..9
-                      L_PAREN@7..8 "("
-                      R_PAREN@8..9 ")"
+                  ApplyExpr@0..9
+                    Path@0..7
+                      PathSegment@0..7
+                        NameRef@0..7
+                          IDENT@0..7 "get_obj"
+                    L_PAREN@7..8 "("
+                    R_PAREN@8..9 ")"
                   DOT@9..10 "."
                   IDENT@10..15 "field"
             "#]],

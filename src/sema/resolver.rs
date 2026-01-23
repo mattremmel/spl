@@ -34,9 +34,9 @@
 
 use crate::DefId;
 use crate::ast::{
-    Block, Expr, FieldDef, FunctionDef, GenericParam, ImplBlock, Item, LetStmt, Name, NameRef,
-    Param, ParamList, Pat, Path, PathSegment, SelfParam, SourceFile, Stmt, StructDef, StructExpr,
-    StructExprField, StructPat, StructPatField, Type, TypeAlias, WhereClause,
+    ApplyExpr, Block, Expr, FieldDef, FunctionDef, GenericParam, ImplBlock, Item, LetStmt, Name,
+    NameRef, Param, ParamList, Pat, Path, PathSegment, SelfParam, SourceFile, Stmt, StructDef,
+    StructExpr, StructExprField, StructPat, StructPatField, Type, TypeAlias, WhereClause,
 };
 use crate::diagnostic::Diagnostic;
 use crate::lexer::Span;
@@ -536,6 +536,7 @@ impl<'ctx> Resolver<'ctx> {
                 }
             }
             Expr::Struct(struct_expr) => self.resolve_struct_expr(struct_expr),
+            Expr::Apply(apply_expr) => self.resolve_apply_expr(apply_expr),
             Expr::Binary(bin_expr) => {
                 if let Some(lhs) = bin_expr.lhs() {
                     self.resolve_expr(&lhs);
@@ -710,6 +711,22 @@ impl<'ctx> Resolver<'ctx> {
         // Just resolve the value expression
         if let Some(expr) = field.expr() {
             self.resolve_expr(&expr);
+        }
+    }
+
+    fn resolve_apply_expr(&mut self, apply_expr: &ApplyExpr) {
+        // Resolve the path (could be struct type or function)
+        if let Some(path) = apply_expr.path() {
+            self.resolve_path(&path);
+        }
+
+        // Resolve argument values
+        for arg in apply_expr.args() {
+            // Note: Named argument name resolution requires type info (deferred to type checking)
+            // Just resolve the value expression
+            if let Some(value) = arg.value() {
+                self.resolve_expr(&value);
+            }
         }
     }
 
@@ -1123,7 +1140,7 @@ mod tests {
 
     #[test]
     fn resolve_struct_expr() {
-        check_ok("struct Point(x: i32, y: i32) fn main() { Point { x: 1, y: 2 }; }");
+        check_ok("struct Point(x: i32, y: i32) fn main() { Point(x = 1, y = 2); }");
     }
 
     #[test]
@@ -1508,21 +1525,23 @@ mod tests {
     #[test]
     fn resolve_struct_pattern() {
         check_ok(
-            "struct Point(x: i32, y: i32) fn main() { let Point { x: a, y: b } = Point { x: 1, y: 2 }; a + b; }",
+            "struct Point(x: i32, y: i32) fn main() { let Point(x = a, y = b) = Point(x = 1, y = 2); a + b; }",
         );
     }
 
     #[test]
     fn resolve_struct_pattern_shorthand() {
+        // Shorthand patterns are now parsed as TuplePat (for enum-style patterns)
+        // Use explicit naming to get StructPat
         check_ok(
-            "struct Point(x: i32, y: i32) fn main() { let Point { x, y } = Point { x: 1, y: 2 }; x + y; }",
+            "struct Point(x: i32, y: i32) fn main() { let Point(x = x, y = y) = Point(x = 1, y = 2); x + y; }",
         );
     }
 
     #[test]
     fn resolve_struct_pattern_undefined_struct() {
         check_err(
-            "fn main() { let UndefinedStruct { x } = foo; }",
+            "fn main() { let UndefinedStruct(x = x) = foo; }",
             &["cannot find `UndefinedStruct`"],
         );
     }
@@ -1635,14 +1654,14 @@ mod tests {
     #[test]
     fn resolve_struct_expr_with_var_fields() {
         check_ok(
-            "struct Point(x: i32, y: i32) fn main() { let a = 1; let b = 2; Point { x: a, y: b }; }",
+            "struct Point(x: i32, y: i32) fn main() { let a = 1; let b = 2; Point(x = a, y = b); }",
         );
     }
 
     #[test]
     fn resolve_struct_expr_undefined_in_field() {
         check_err(
-            "struct Point(x: i32, y: i32) fn main() { Point { x: undef, y: 0 }; }",
+            "struct Point(x: i32, y: i32) fn main() { Point(x = undef, y = 0); }",
             &["cannot find `undef`"],
         );
     }

@@ -325,16 +325,14 @@ mod tests {
                   Block@0..10
                     L_BRACE@0..1 "{"
                     ExprStmt@1..8
-                      CallExpr@1..7
-                        PathExpr@1..5
-                          Path@1..5
-                            PathSegment@1..5
-                              NameRef@1..5
-                                WHITESPACE@1..2 " "
-                                IDENT@2..5 "foo"
-                        ArgList@5..7
-                          L_PAREN@5..6 "("
-                          R_PAREN@6..7 ")"
+                      ApplyExpr@1..7
+                        Path@1..5
+                          PathSegment@1..5
+                            NameRef@1..5
+                              WHITESPACE@1..2 " "
+                              IDENT@2..5 "foo"
+                        L_PAREN@5..6 "("
+                        R_PAREN@6..7 ")"
                       SEMI@7..8 ";"
                     WHITESPACE@8..9 " "
                     R_BRACE@9..10 "}"
@@ -432,27 +430,23 @@ mod tests {
                   Block@0..16
                     L_BRACE@0..1 "{"
                     ExprStmt@1..8
-                      CallExpr@1..7
-                        PathExpr@1..5
-                          Path@1..5
-                            PathSegment@1..5
-                              NameRef@1..5
-                                WHITESPACE@1..2 " "
-                                IDENT@2..5 "foo"
-                        ArgList@5..7
-                          L_PAREN@5..6 "("
-                          R_PAREN@6..7 ")"
+                      ApplyExpr@1..7
+                        Path@1..5
+                          PathSegment@1..5
+                            NameRef@1..5
+                              WHITESPACE@1..2 " "
+                              IDENT@2..5 "foo"
+                        L_PAREN@5..6 "("
+                        R_PAREN@6..7 ")"
                       SEMI@7..8 ";"
-                    CallExpr@8..14
-                      PathExpr@8..12
-                        Path@8..12
-                          PathSegment@8..12
-                            NameRef@8..12
-                              WHITESPACE@8..9 " "
-                              IDENT@9..12 "bar"
-                      ArgList@12..14
-                        L_PAREN@12..13 "("
-                        R_PAREN@13..14 ")"
+                    ApplyExpr@8..14
+                      Path@8..12
+                        PathSegment@8..12
+                          NameRef@8..12
+                            WHITESPACE@8..9 " "
+                            IDENT@9..12 "bar"
+                      L_PAREN@12..13 "("
+                      R_PAREN@13..14 ")"
                     WHITESPACE@14..15 " "
                     R_BRACE@15..16 "}"
             "#]],

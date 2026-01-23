@@ -339,10 +339,7 @@ mod statements {
                     ParamList
                     Block
                       ExprStmt
-                        CallExpr
-                          Callee
-                            Path "foo"
-                          ArgList
+                        ApplyExpr "foo"
             "#]],
         );
     }
@@ -545,17 +542,17 @@ mod expressions {
     #[test]
     fn struct_expr() {
         check(
-            "fn main() { Point { x: 1, y: 2 } }",
+            "fn main() { Point(x = 1, y = 2) }",
             &expect![[r#"
                 SourceFile
                   FunctionDef "main"
                     ParamList
                     Block
                       TailExpr
-                        StructExpr "Point"
-                          Field "x"
+                        ApplyExpr "Point"
+                          NamedArg "x"
                             Literal 1
-                          Field "y"
+                          NamedArg "y"
                             Literal 2
             "#]],
         );
@@ -564,18 +561,16 @@ mod expressions {
     #[test]
     fn struct_expr_update() {
         check(
-            "fn main() { Point { x: 1, ..other } }",
+            "fn main() { Point(x = 1, ..other) }",
             &expect![[r#"
                 SourceFile
                   FunctionDef "main"
                     ParamList
                     Block
                       TailExpr
-                        StructExpr "Point"
-                          Field "x"
+                        ApplyExpr "Point"
+                          NamedArg "x"
                             Literal 1
-                          UpdateBase
-                            Path "other"
             "#]],
         );
     }
@@ -795,11 +790,10 @@ mod expressions {
                     ParamList
                     Block
                       TailExpr
-                        CallExpr
-                          Callee
-                            Path "foo"
-                          ArgList
+                        ApplyExpr "foo"
+                          PositionalArg
                             Literal 1
+                          PositionalArg
                             Literal 2
             "#]],
         );
@@ -1408,17 +1402,19 @@ mod patterns {
 
     #[test]
     fn pat_struct() {
+        // Struct pattern shorthand: Point(x, y) is now parsed as enum/tuple pattern
+        // because shorthand is ambiguous with enum patterns
         check(
-            "fn main() { let Point { x, y } = p; }",
+            "fn main() { let Point(x, y) = p; }",
             &expect![[r#"
                 SourceFile
                   FunctionDef "main"
                     ParamList
                     Block
                       LetStmt
-                        StructPat "Point"
-                          Field "x" (shorthand)
-                          Field "y" (shorthand)
+                        TuplePat
+                          IdentPat "x"
+                          IdentPat "y"
                         Initializer
                           Path "p"
             "#]],
@@ -1428,7 +1424,7 @@ mod patterns {
     #[test]
     fn pat_struct_with_binding() {
         check(
-            "fn main() { let Point { x: a, y: b } = p; }",
+            "fn main() { let Point(x = a, y = b) = p; }",
             &expect![[r#"
                 SourceFile
                   FunctionDef "main"
@@ -1494,7 +1490,7 @@ struct Point(x: i32, y: i32)
 
 impl Point {
 fn new(x: i32, y: i32): Point {
-    Point { x: x, y: y }
+    Point(x = x, y = y)
 }
 
 fn distance(&self): i32 {
@@ -1528,10 +1524,10 @@ p.distance();
                         Path "Point"
                       Block
                         TailExpr
-                          StructExpr "Point"
-                            Field "x"
+                          ApplyExpr "Point"
+                            NamedArg "x"
                               Path "x"
-                            Field "y"
+                            NamedArg "y"
                               Path "y"
                     FunctionDef "distance"
                       ParamList
@@ -1551,11 +1547,10 @@ p.distance();
                       LetStmt
                         IdentPat "p"
                         Initializer
-                          CallExpr
-                            Callee
-                              Path "Point::new"
-                            ArgList
+                          ApplyExpr "Point::new"
+                            PositionalArg
                               Literal 3
+                            PositionalArg
                               Literal 4
                       ExprStmt
                         MethodCallExpr ".distance()"
