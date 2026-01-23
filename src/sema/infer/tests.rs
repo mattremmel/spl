@@ -295,7 +295,7 @@ fn infer_from_let_annotation_nested() {
 
 #[test]
 fn infer_from_return_type() {
-    check("fn f(): i64 { let x = 42; x }", "i64");
+    check("fn f(): i64 { let x = 42; return x; }", "i64");
 }
 
 #[test]
@@ -305,7 +305,7 @@ fn infer_from_return_type_explicit() {
 
 #[test]
 fn infer_from_return_type_block() {
-    check("fn f(): i64 { let x = 42; x }", "i64");
+    check("fn f(): i64 { let x = 42; return x; }", "i64");
 }
 
 #[test]
@@ -2294,7 +2294,7 @@ fn no_warn_return_at_end() {
 fn no_warn_in_if_branch() {
     // No warning when return is in an if branch (other code still reachable)
     check(
-        "fn f(b: bool): i32 { if b { return 1; } let x: i32 = 2; x }",
+        "fn f(b: bool): i32 { if b { return 1; } let x: i32 = 2; return x; }",
         "i32",
     );
 }
@@ -2480,7 +2480,7 @@ fn return_path_if_else_explicit() {
 fn return_path_diverging_then_tail() {
     // If one branch returns, tail after if is still reachable - valid
     check(
-        "fn f(b: bool): i32 { if b { return 1; } 0 } fn main() { let x = f(true); }",
+        "fn f(b: bool): i32 { if b { return 1; } return 0; } fn main() { let x = f(true); }",
         "i32",
     );
 }
@@ -2648,7 +2648,7 @@ fn warn_code_after_loop_no_break() {
 fn no_warn_code_after_if_one_returns() {
     // Code after if where only one branch returns is reachable
     check(
-        "fn f(b: bool): i32 { if b { return 1; } let x = 2; x }",
+        "fn f(b: bool): i32 { if b { return 1; } let x = 2; return x; }",
         "i32",
     );
 }
@@ -2882,7 +2882,7 @@ fn never_from_loop_without_break() {
 fn never_in_early_return_pattern() {
     // Return in one branch, value in another - function return type propagates
     check(
-        "fn f(b: bool): i32 { if b { return 1; } 42 } fn main() { let x = f(true); }",
+        "fn f(b: bool): i32 { if b { return 1; } return 42; } fn main() { let x = f(true); }",
         "i32",
     );
 }
@@ -2907,5 +2907,75 @@ fn type_var_bidirectional_through_function() {
     check(
         "fn identity(x: T): T where T { x } fn main() { let a: i64 = identity(1); }",
         "i64",
+    );
+}
+
+// =============================================================================
+// Implicit Return Semantics - Single Expression vs Multi-Statement
+// =============================================================================
+
+#[test]
+fn implicit_return_single_literal() {
+    // Single literal expression - implicit return allowed
+    check("fn f(): i32 { 42 } fn main() { let x = f(); }", "i32");
+}
+
+#[test]
+fn implicit_return_single_binary_expr() {
+    // Single binary expression - implicit return allowed
+    check(
+        "fn f(x: i32): i32 { x * 2 } fn main() { let y = f(21); }",
+        "i32",
+    );
+}
+
+#[test]
+fn implicit_return_single_if_expr() {
+    // Single if-expression - implicit return allowed
+    check(
+        "fn f(a: i32, b: i32): i32 { if a > b { a } else { b } } fn main() { let x = f(1, 2); }",
+        "i32",
+    );
+}
+
+#[test]
+fn explicit_return_with_statements() {
+    // Statements with explicit return - allowed
+    check(
+        "fn f(x: i32): i32 { let y = x; return y + 1; } fn main() { let z = f(5); }",
+        "i32",
+    );
+}
+
+#[test]
+fn unit_return_with_statements_no_return_needed() {
+    // Unit return type - no return needed even with statements
+    check("fn f() { let x = 1; } fn main() { let y = f(); }", "()");
+}
+
+#[test]
+fn error_implicit_return_with_statements() {
+    // Statements with implicit return - ERROR
+    check_err(
+        "fn f(x: i32): i32 { let y = x; y + 1 }",
+        &["implicit return not allowed when function body contains statements"],
+    );
+}
+
+#[test]
+fn error_implicit_return_with_multiple_statements() {
+    // Multiple statements with implicit return - ERROR
+    check_err(
+        "fn f(): i32 { let a = 1; let b = 2; a + b }",
+        &["implicit return not allowed when function body contains statements"],
+    );
+}
+
+#[test]
+fn block_expression_in_let_still_works() {
+    // Block expressions (not function bodies) should still work normally
+    check(
+        "fn f(): i32 { let x = { let y = 1; y + 1 }; return x; } fn main() { let z = f(); }",
+        "i32",
     );
 }

@@ -1,6 +1,6 @@
 //! Top-level type inference for source files and functions.
 
-use crate::ast::{FunctionDef, Item, SourceFile, WhereClause};
+use crate::ast::{Expr, FunctionDef, Item, SourceFile, WhereClause};
 use crate::diagnostic::Diagnostic;
 use crate::sema::symbol::DefId;
 use crate::sema::types::{Mutability, PrimitiveKind, Type, TypeId};
@@ -533,6 +533,30 @@ impl InferEngine {
         // Infer body
         if let Some(body) = func.body() {
             let body_ty = self.synth_block(&body);
+
+            // Check for implicit return with statements (disallowed)
+            let has_statements = body.statements().next().is_some();
+            let has_tail = body.tail_expr().is_some();
+
+            if has_statements && has_tail {
+                let resolved_ret = self.resolve_type(sig.ret);
+                let ret_is_non_unit = !self.is_unit_type(resolved_ret);
+
+                if ret_is_non_unit {
+                    // Check if tail is already an explicit return expression
+                    if let Some(tail_expr) = body.tail_expr()
+                        && !matches!(tail_expr, Expr::Return(_))
+                    {
+                        let span = text_range_to_span(tail_expr.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "implicit return not allowed when function body contains statements",
+                            )
+                            .with_label(span, "add `return` here"),
+                        );
+                    }
+                }
+            }
 
             // Check return type matches
             if !self.unify(sig.ret, body_ty) {

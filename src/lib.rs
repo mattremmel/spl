@@ -535,7 +535,7 @@ mod jit_tests {
 
     #[test]
     fn jit_execute_locals() {
-        let result = jit_execute("fn main(): i32 { let x = 10; let y = 32; x + y }");
+        let result = jit_execute("fn main(): i32 { let x = 10; let y = 32; return x + y; }");
         assert_eq!(result.unwrap(), 42);
     }
 
@@ -545,7 +545,7 @@ mod jit_tests {
             r#"
             fn main(): i32 {
                 let x = 5;
-                if x > 3 { 1 } else { 0 }
+                return if x > 3 { 1 } else { 0 };
             }
         "#,
         );
@@ -563,7 +563,7 @@ mod jit_tests {
                     sum = sum + i;
                     i = i + 1;
                 }
-                sum
+                return sum;
             }
         "#,
         );
@@ -792,7 +792,7 @@ mod aot_tests {
             fn main(): i32 {
                 let x = 10;
                 let y = 3;
-                x * y + 2
+                return x * y + 2;
             }
         "#,
             &exe_path,
@@ -844,7 +844,7 @@ mod aot_tests {
             r#"
             fn main(): i32 {
                 let x = 5;
-                if x > 3 { 100 } else { 0 }
+                return if x > 3 { 100 } else { 0 };
             }
         "#,
             &exe_path,
@@ -910,7 +910,7 @@ mod aot_tests {
                     sum = sum + i;
                     i = i + 1;
                 }
-                sum
+                return sum;
             }
         "#,
             &exe_path,
