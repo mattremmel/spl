@@ -9,15 +9,20 @@
 //!
 //! # Module Structure
 //!
+//! - [`aot`]: AOT (ahead-of-time) compilation context for object files
+//! - [`context`]: JIT compilation context
 //! - [`error`]: Error types for code generation
+//! - [`link`]: Linker abstraction for creating executables
+//! - [`locals`]: Local variable storage allocation
+//! - [`module`]: Module-level compilation (JIT and AOT)
 //! - [`target`]: Target ISA configuration (native and cross-compilation)
 //! - [`types`]: SPL type to Cranelift type mapping
-//! - [`locals`]: Local variable storage allocation
-//! - [`context`]: JIT compilation context
 //!
 //! # Usage
 //!
-//! For JIT compilation:
+//! ## JIT Compilation
+//!
+//! For immediate execution:
 //!
 //! ```ignore
 //! use spl::codegen::CodegenContext;
@@ -27,10 +32,28 @@
 //! ctx.finalize();
 //! let ptr = ctx.get_function_ptr(func_id);
 //! ```
+//!
+//! ## AOT Compilation
+//!
+//! For generating object files and executables:
+//!
+//! ```ignore
+//! use spl::codegen::{AotModuleCompiler, link_object_to_executable};
+//! use std::path::Path;
+//!
+//! // Compile to object file
+//! let obj = AotModuleCompiler::compile(&functions, &types)?;
+//! let object_bytes = obj.into_bytes();
+//!
+//! // Link to executable
+//! link_object_to_executable(&object_bytes, Path::new("output"), None)?;
+//! ```
 
+pub mod aot;
 pub mod context;
 pub mod error;
 pub mod layout;
+pub mod link;
 pub mod locals;
 pub mod lower;
 pub mod module;
@@ -39,12 +62,14 @@ pub mod runtime;
 pub mod target;
 pub mod types;
 
+pub use aot::AotContext;
 pub use context::CodegenContext;
 pub use error::{CodegenError, RuntimeError, TRAP_ASSERT_FAILED, TRAP_RESUME, TRAP_UNREACHABLE};
 pub use layout::{LayoutComputer, TypeLayout};
+pub use link::{CcLinker, LinkError, LinkOptions, Linker, link_object_to_executable};
 pub use locals::{LocalMap, LocalStorage};
 pub use lower::FunctionLowerer;
-pub use module::{CompiledModule, FunctionDef, ModuleCompiler};
+pub use module::{AotModuleCompiler, CompiledModule, CompiledObjectFile, FunctionDef, ModuleCompiler};
 pub use registry::{FunctionInfo, FunctionRegistry};
 pub use runtime::{Runtime, RuntimeFunction};
 pub use target::TargetConfig;

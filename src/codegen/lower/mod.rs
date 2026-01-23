@@ -15,7 +15,7 @@ use cranelift_codegen::ir::{
     AbiParam, Block, InstBuilder, MemFlags, StackSlotData, StackSlotKind, Value,
 };
 use cranelift_frontend::{FunctionBuilder, Variable};
-use cranelift_jit::JITModule;
+use cranelift_module::Module;
 use rustc_hash::FxHashMap;
 
 use crate::codegen::error::CodegenError;
@@ -45,8 +45,8 @@ pub struct FunctionLowerer<'a> {
     body: &'a Body,
     /// Optional function registry for multi-function compilation.
     func_registry: Option<&'a FunctionRegistry>,
-    /// Optional JIT module for importing functions.
-    module: Option<&'a mut JITModule>,
+    /// Optional module for importing functions (works with both JIT and AOT).
+    module: Option<&'a mut dyn Module>,
 }
 
 impl<'a> FunctionLowerer<'a> {
@@ -137,8 +137,8 @@ impl<'a> FunctionLowerer<'a> {
         self
     }
 
-    /// Set the JIT module for importing function references.
-    pub fn set_module(mut self, module: &'a mut JITModule) -> Self {
+    /// Set the module for importing function references (works with both JIT and AOT).
+    pub fn set_module(mut self, module: &'a mut dyn Module) -> Self {
         self.module = Some(module);
         self
     }

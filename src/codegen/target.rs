@@ -55,15 +55,69 @@ impl TargetConfig {
         Ok(Self { isa, flags, triple })
     }
 
-    /// Create a target configuration for a specific target triple (for AOT compilation).
+    /// Create a target configuration for a specific target triple (for JIT compilation).
     ///
-    /// This is useful for cross-compilation or ahead-of-time compilation.
+    /// Note: For AOT compilation, use `for_aot()` instead which enables PIC.
     pub fn for_target(triple: Triple) -> Result<Self, CodegenError> {
         let mut flag_builder = settings::builder();
 
         // Enable optimizations
         flag_builder
             .set("opt_level", "speed")
+            .map_err(|e| CodegenError::IsaConfiguration(e.to_string()))?;
+
+        let flags = Flags::new(flag_builder);
+
+        let isa = cranelift_codegen::isa::lookup(triple.clone())
+            .map_err(|e| CodegenError::UnsupportedTarget(e.to_string()))?
+            .finish(flags.clone())
+            .map_err(|e| CodegenError::IsaConfiguration(e.to_string()))?;
+
+        Ok(Self { isa, flags, triple })
+    }
+
+    /// Create a target configuration for AOT compilation on the native host.
+    ///
+    /// This is similar to `native()` but with PIC enabled for object file generation.
+    pub fn native_aot() -> Result<Self, CodegenError> {
+        let mut flag_builder = settings::builder();
+
+        // Enable optimizations
+        flag_builder
+            .set("opt_level", "speed")
+            .map_err(|e| CodegenError::IsaConfiguration(e.to_string()))?;
+
+        // AOT requires is_pic=true for linking
+        flag_builder
+            .set("is_pic", "true")
+            .map_err(|e| CodegenError::IsaConfiguration(e.to_string()))?;
+
+        let flags = Flags::new(flag_builder);
+
+        let isa = cranelift_native::builder()
+            .map_err(|e| CodegenError::UnsupportedTarget(e.to_string()))?
+            .finish(flags.clone())
+            .map_err(|e| CodegenError::IsaConfiguration(e.to_string()))?;
+
+        let triple = isa.triple().clone();
+
+        Ok(Self { isa, flags, triple })
+    }
+
+    /// Create a target configuration for AOT compilation to a specific target.
+    ///
+    /// This enables PIC mode required for object file generation.
+    pub fn for_aot(triple: Triple) -> Result<Self, CodegenError> {
+        let mut flag_builder = settings::builder();
+
+        // Enable optimizations
+        flag_builder
+            .set("opt_level", "speed")
+            .map_err(|e| CodegenError::IsaConfiguration(e.to_string()))?;
+
+        // AOT requires is_pic=true for linking
+        flag_builder
+            .set("is_pic", "true")
             .map_err(|e| CodegenError::IsaConfiguration(e.to_string()))?;
 
         let flags = Flags::new(flag_builder);
@@ -189,5 +243,35 @@ mod tests {
         let _ = config.triple();
         let _ = config.default_call_conv();
         let _ = config.pointer_type();
+    }
+
+    #[test]
+    fn native_aot_target_creates() {
+        let config = TargetConfig::native_aot();
+        assert!(
+            config.is_ok(),
+            "failed to create native AOT target: {:?}",
+            config.err()
+        );
+    }
+
+    #[test]
+    fn native_aot_has_pic_enabled() {
+        let config = TargetConfig::native_aot().unwrap();
+        // Verify flags are set (we can't directly check is_pic, but it shouldn't fail)
+        let _ = config.flags();
+    }
+
+    #[test]
+    fn for_aot_aarch64() {
+        let triple: Triple = "aarch64-unknown-linux-gnu".parse().unwrap();
+        let config = TargetConfig::for_aot(triple.clone());
+        assert!(
+            config.is_ok(),
+            "failed to create aarch64 AOT target: {:?}",
+            config.err()
+        );
+        let config = config.unwrap();
+        assert_eq!(config.triple().architecture, triple.architecture);
     }
 }

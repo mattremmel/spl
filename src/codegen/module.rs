@@ -7,6 +7,7 @@ use cranelift_codegen::ir::AbiParam;
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::FuncId;
 
+use super::aot::AotContext;
 use super::context::CodegenContext;
 use super::error::{CodegenError, RuntimeError};
 use super::lower::FunctionLowerer;
@@ -255,6 +256,197 @@ impl ModuleCompiler {
     }
 }
 
+// =============================================================================
+// AOT Module Compiler
+// =============================================================================
+
+/// Result of AOT compilation.
+pub struct CompiledObjectFile {
+    /// The raw object file bytes.
+    bytes: Vec<u8>,
+    /// Map from DefId to function name (for symbol lookup).
+    function_names: rustc_hash::FxHashMap<DefId, String>,
+    /// The DefId of the main function (if any).
+    main_def_id: Option<DefId>,
+}
+
+impl CompiledObjectFile {
+    /// Get the raw object file bytes.
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Consume self and return the object file bytes.
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+
+    /// Get the function name for a DefId.
+    pub fn get_function_name(&self, def_id: DefId) -> Option<&str> {
+        self.function_names.get(&def_id).map(|s| s.as_str())
+    }
+
+    /// Get the number of functions in the object file.
+    pub fn len(&self) -> usize {
+        self.function_names.len()
+    }
+
+    /// Check if the object file is empty.
+    pub fn is_empty(&self) -> bool {
+        self.function_names.is_empty()
+    }
+
+    /// Set the main function DefId.
+    pub fn set_main(&mut self, def_id: DefId) {
+        self.main_def_id = Some(def_id);
+    }
+
+    /// Get the main function DefId.
+    pub fn main_def_id(&self) -> Option<DefId> {
+        self.main_def_id
+    }
+}
+
+/// Compiles multiple MIR functions to an object file.
+///
+/// Uses the same two-pass compilation strategy as `ModuleCompiler`:
+/// 1. **Declaration pass**: Declare all functions and build the registry
+/// 2. **Definition pass**: Define all function bodies with access to the registry
+pub struct AotModuleCompiler {
+    ctx: AotContext,
+    registry: FunctionRegistry,
+}
+
+impl AotModuleCompiler {
+    /// Create a new AOT module compiler.
+    pub fn new() -> Result<Self, CodegenError> {
+        Ok(AotModuleCompiler {
+            ctx: AotContext::new()?,
+            registry: FunctionRegistry::new(),
+        })
+    }
+
+    /// Compile multiple functions and return a compiled object file.
+    ///
+    /// The functions can call each other via `TerminatorKind::Call`.
+    pub fn compile(
+        functions: &[FunctionDef<'_>],
+        types: &TypeInterner,
+    ) -> Result<CompiledObjectFile, CodegenError> {
+        let mut compiler = Self::new()?;
+
+        // Pass 1: Declare all functions
+        let func_ids = compiler.declare_functions(functions, types)?;
+
+        // Pass 2: Define all function bodies
+        compiler.define_functions(functions, types, &func_ids)?;
+
+        // Pass 3: Emit object file and collect metadata
+        let bytes = compiler.ctx.finish();
+
+        let mut function_names = rustc_hash::FxHashMap::default();
+        for func_def in functions {
+            function_names.insert(func_def.def_id, func_def.name.clone());
+        }
+
+        Ok(CompiledObjectFile {
+            bytes,
+            function_names,
+            main_def_id: None,
+        })
+    }
+
+    /// Declaration pass: declare all functions and build registry.
+    fn declare_functions(
+        &mut self,
+        functions: &[FunctionDef<'_>],
+        types: &TypeInterner,
+    ) -> Result<Vec<FuncId>, CodegenError> {
+        let type_mapper = self.ctx.type_mapper();
+        let mut func_ids = Vec::with_capacity(functions.len());
+
+        for func_def in functions {
+            let sig = Self::build_signature(&self.ctx, &type_mapper, func_def.body, types);
+            let func_id = self.ctx.declare_function(&func_def.name, &sig)?;
+
+            self.registry
+                .register(func_def.def_id, FunctionInfo::new(func_id, sig));
+            func_ids.push(func_id);
+        }
+
+        Ok(func_ids)
+    }
+
+    /// Definition pass: define all function bodies.
+    fn define_functions(
+        &mut self,
+        functions: &[FunctionDef<'_>],
+        types: &TypeInterner,
+        func_ids: &[FuncId],
+    ) -> Result<(), CodegenError> {
+        for (func_def, func_id) in functions.iter().zip(func_ids.iter()) {
+            self.define_single_function(func_def, types, *func_id)?;
+        }
+        Ok(())
+    }
+
+    /// Define a single function body.
+    fn define_single_function(
+        &mut self,
+        func_def: &FunctionDef<'_>,
+        types: &TypeInterner,
+        func_id: FuncId,
+    ) -> Result<(), CodegenError> {
+        let type_mapper = self.ctx.type_mapper();
+        let sig = Self::build_signature(&self.ctx, &type_mapper, func_def.body, types);
+
+        // Set up the function
+        self.ctx.compilation_context().func.signature = sig;
+
+        // Build the function body with registry access
+        {
+            let (func, func_ctx, module) = self.ctx.builder_context_with_module();
+            let builder = FunctionBuilder::new(func, func_ctx);
+            let lowerer =
+                FunctionLowerer::with_registry(builder, type_mapper, types, func_def.body)
+                    .set_registry(&self.registry)
+                    .set_module(module);
+            lowerer.lower_body()?;
+        }
+
+        // Define the function
+        self.ctx.define_function(func_id)?;
+
+        Ok(())
+    }
+
+    /// Build the Cranelift signature for a MIR body.
+    fn build_signature(
+        ctx: &AotContext,
+        type_mapper: &TypeMapper,
+        body: &Body,
+        types: &TypeInterner,
+    ) -> cranelift_codegen::ir::Signature {
+        let mut sig = ctx.new_signature();
+
+        // Add return type (if not ZST)
+        let return_ty = body.return_ty();
+        if let Some(clif_ty) = type_mapper.map_type(return_ty, types) {
+            sig.returns.push(AbiParam::new(clif_ty));
+        }
+
+        // Add parameter types
+        for arg in body.args() {
+            let arg_ty = body.local_decl(arg).ty;
+            if let Some(clif_ty) = type_mapper.map_type(arg_ty, types) {
+                sig.params.push(AbiParam::new(clif_ty));
+            }
+        }
+
+        sig
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,6 +455,7 @@ mod tests {
     use crate::mir::statement::Statement;
     use crate::mir::terminator::{Terminator, TerminatorKind};
     use crate::mir::types::{Local, Place};
+    use object::{Object, ObjectSymbol};
 
     #[test]
     fn compile_single_function() {
@@ -778,5 +971,309 @@ mod tests {
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         assert_eq!(module.run(DefId(1)).unwrap(), -42);
+    }
+
+    // =========================================================================
+    // AOT Module Compiler Tests (Phases 3-4)
+    // =========================================================================
+
+    #[test]
+    fn aot_compile_return_constant() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn returns_42() -> i32 { 42 }
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(42)),
+            0..0,
+        ));
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "returns_42", &body)];
+        let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        assert_eq!(obj.len(), 1);
+        assert!(!obj.is_empty());
+        assert_eq!(obj.get_function_name(DefId(1)), Some("returns_42"));
+
+        // Verify the object file is valid
+        let parsed = object::File::parse(obj.bytes()).expect("failed to parse object file");
+        let symbol_names: Vec<_> = parsed
+            .symbols()
+            .filter_map(|s| s.name().ok())
+            .collect();
+        assert!(
+            symbol_names.iter().any(|n| n.contains("returns_42")),
+            "expected 'returns_42' symbol"
+        );
+    }
+
+    #[test]
+    fn aot_compile_arithmetic() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn add_one(x: i32) -> i32 { x + 1 }
+        let mut body = Body::with_args(i32_ty, &[(i32_ty, false)]);
+        let entry = body.alloc_block();
+        body.block_mut(entry).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::BinaryOp(
+                crate::mir::operand::BinOp::Add,
+                Operand::copy_local(Local(1)),
+                Operand::const_int(1),
+            ),
+            0..0,
+        ));
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "add_one", &body)];
+        let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        // Just verify it compiles and produces valid object
+        let parsed = object::File::parse(obj.bytes());
+        assert!(parsed.is_ok());
+    }
+
+    #[test]
+    fn aot_compile_conditionals() {
+        use crate::mir::terminator::SwitchTargets;
+
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn returns_based_on_condition() -> i32 { if true { 1 } else { 0 } }
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        let then_block = body.alloc_block();
+        let else_block = body.alloc_block();
+        let exit_block = body.alloc_block();
+
+        // Entry: branch on true (non-zero -> then_block, zero -> else_block)
+        body.block_mut(entry).set_terminator(Terminator::new(
+            TerminatorKind::SwitchInt {
+                discr: Operand::const_bool(true),
+                targets: SwitchTargets::new_bool(then_block, else_block),
+            },
+            0..0,
+        ));
+
+        // Then: _0 = 1
+        body.block_mut(then_block)
+            .push_statement(Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::Use(Operand::const_int(1)),
+                0..0,
+            ));
+        body.block_mut(then_block)
+            .set_terminator(Terminator::new(TerminatorKind::Goto(exit_block), 0..0));
+
+        // Else: _0 = 0
+        body.block_mut(else_block)
+            .push_statement(Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::Use(Operand::const_int(0)),
+                0..0,
+            ));
+        body.block_mut(else_block)
+            .set_terminator(Terminator::new(TerminatorKind::Goto(exit_block), 0..0));
+
+        // Exit: return
+        body.block_mut(exit_block)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "conditional", &body)];
+        let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        let parsed = object::File::parse(obj.bytes());
+        assert!(parsed.is_ok());
+    }
+
+    #[test]
+    fn aot_compile_multiple_functions() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn returns_1() -> i32 { 1 }
+        let mut body1 = Body::new(i32_ty);
+        let entry1 = body1.alloc_block();
+        body1.block_mut(entry1).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(1)),
+            0..0,
+        ));
+        body1
+            .block_mut(entry1)
+            .set_terminator(Terminator::return_(0..0));
+
+        // fn returns_2() -> i32 { 2 }
+        let mut body2 = Body::new(i32_ty);
+        let entry2 = body2.alloc_block();
+        body2.block_mut(entry2).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(2)),
+            0..0,
+        ));
+        body2
+            .block_mut(entry2)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [
+            FunctionDef::new(DefId(1), "returns_1", &body1),
+            FunctionDef::new(DefId(2), "returns_2", &body2),
+        ];
+        let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        assert_eq!(obj.len(), 2);
+        assert_eq!(obj.get_function_name(DefId(1)), Some("returns_1"));
+        assert_eq!(obj.get_function_name(DefId(2)), Some("returns_2"));
+
+        // Verify both symbols exist in the object file
+        let parsed = object::File::parse(obj.bytes()).expect("failed to parse");
+        let symbol_names: Vec<_> = parsed
+            .symbols()
+            .filter_map(|s| s.name().ok())
+            .collect();
+        assert!(symbol_names.iter().any(|n| n.contains("returns_1")));
+        assert!(symbol_names.iter().any(|n| n.contains("returns_2")));
+    }
+
+    #[test]
+    fn aot_cross_function_calls() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn callee() -> i32 { 42 }
+        let mut callee_body = Body::new(i32_ty);
+        let callee_entry = callee_body.alloc_block();
+        callee_body
+            .block_mut(callee_entry)
+            .push_statement(Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::Use(Operand::const_int(42)),
+                0..0,
+            ));
+        callee_body
+            .block_mut(callee_entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        // fn caller() -> i32 { callee() }
+        let mut caller_body = Body::new(i32_ty);
+        let caller_entry = caller_body.alloc_block();
+        let after_call = caller_body.alloc_block();
+
+        caller_body
+            .block_mut(caller_entry)
+            .set_terminator(Terminator::new(
+                TerminatorKind::Call {
+                    func: Operand::Constant(Constant::FnDef(DefId(1))), // callee
+                    args: vec![],
+                    destination: Place::from_local(Local::RETURN_PLACE),
+                    target: Some(after_call),
+                },
+                0..0,
+            ));
+
+        caller_body
+            .block_mut(after_call)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [
+            FunctionDef::new(DefId(1), "callee", &callee_body),
+            FunctionDef::new(DefId(2), "caller", &caller_body),
+        ];
+        let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        // Verify object file has both symbols
+        let parsed = object::File::parse(obj.bytes()).expect("failed to parse");
+        let symbol_names: Vec<_> = parsed
+            .symbols()
+            .filter_map(|s| s.name().ok())
+            .collect();
+        assert!(symbol_names.iter().any(|n| n.contains("callee")));
+        assert!(symbol_names.iter().any(|n| n.contains("caller")));
+    }
+
+    #[test]
+    fn aot_symbols_all_exported() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // Create three functions
+        let mut bodies = vec![];
+        for i in 0..3 {
+            let mut body = Body::new(i32_ty);
+            let entry = body.alloc_block();
+            body.block_mut(entry).push_statement(Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::Use(Operand::const_int(i)),
+                0..0,
+            ));
+            body.block_mut(entry)
+                .set_terminator(Terminator::return_(0..0));
+            bodies.push(body);
+        }
+
+        let functions: Vec<_> = bodies
+            .iter()
+            .enumerate()
+            .map(|(i, b)| FunctionDef::new(DefId(i as u32 + 1), format!("fn_{}", i), b))
+            .collect();
+
+        let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        let parsed = object::File::parse(obj.bytes()).expect("failed to parse");
+        let symbol_names: Vec<_> = parsed
+            .symbols()
+            .filter_map(|s| s.name().ok())
+            .collect();
+
+        // Verify all three symbols exist
+        assert!(symbol_names.iter().any(|n| n.contains("fn_0")));
+        assert!(symbol_names.iter().any(|n| n.contains("fn_1")));
+        assert!(symbol_names.iter().any(|n| n.contains("fn_2")));
+    }
+
+    #[test]
+    fn aot_compiled_object_accessors() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let mut obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        // Test accessors
+        assert!(!obj.bytes().is_empty());
+        assert!(obj.main_def_id().is_none());
+
+        obj.set_main(DefId(1));
+        assert_eq!(obj.main_def_id(), Some(DefId(1)));
+    }
+
+    #[test]
+    fn aot_into_bytes() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        let bytes = obj.into_bytes();
+        assert!(!bytes.is_empty());
     }
 }

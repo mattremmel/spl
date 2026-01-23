@@ -318,6 +318,182 @@ pub fn jit_execute(source: &str) -> Result<i32, JitError> {
     Ok(result)
 }
 
+// ============================================================================
+// AOT Compilation API
+// ============================================================================
+
+use std::path::Path;
+
+/// Errors that can occur during AOT compilation.
+#[derive(Debug)]
+pub enum AotError {
+    /// Compilation failed with diagnostics.
+    CompileError(Vec<Diagnostic>),
+    /// Code generation failed.
+    CodegenError(codegen::CodegenError),
+    /// Linking failed.
+    LinkError(codegen::LinkError),
+    /// No functions to compile.
+    NoFunctions,
+    /// IO error (writing files, etc.).
+    Io(std::io::Error),
+}
+
+impl std::fmt::Display for AotError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AotError::CompileError(diags) => {
+                write!(f, "compilation failed with {} error(s)", diags.len())
+            }
+            AotError::CodegenError(e) => write!(f, "codegen error: {}", e),
+            AotError::LinkError(e) => write!(f, "link error: {}", e),
+            AotError::NoFunctions => write!(f, "no functions to compile"),
+            AotError::Io(e) => write!(f, "IO error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for AotError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            AotError::CodegenError(e) => Some(e),
+            AotError::LinkError(e) => Some(e),
+            AotError::Io(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<codegen::CodegenError> for AotError {
+    fn from(e: codegen::CodegenError) -> Self {
+        AotError::CodegenError(e)
+    }
+}
+
+impl From<codegen::LinkError> for AotError {
+    fn from(e: codegen::LinkError) -> Self {
+        AotError::LinkError(e)
+    }
+}
+
+impl From<std::io::Error> for AotError {
+    fn from(e: std::io::Error) -> Self {
+        AotError::Io(e)
+    }
+}
+
+/// Compile SPL source code to an object file.
+///
+/// Returns the raw object file bytes that can be written to disk or linked.
+///
+/// # Example
+///
+/// ```
+/// use spl::compile_to_object;
+///
+/// let object_bytes = compile_to_object("fn main() -> i32 { 42 }").unwrap();
+/// // object_bytes can be written to a .o file or linked into an executable
+/// ```
+///
+/// # Errors
+///
+/// Returns `AotError::CompileError` if the source has syntax or semantic errors.
+/// Returns `AotError::NoFunctions` if no functions are defined.
+/// Returns `AotError::CodegenError` if code generation fails.
+pub fn compile_to_object(source: &str) -> Result<Vec<u8>, AotError> {
+    // Compile source to MIR
+    let result = compile(source);
+    if result.is_err() {
+        return Err(AotError::CompileError(result.diagnostics));
+    }
+
+    let bodies = result.bodies.unwrap();
+    let types = result.types.unwrap();
+
+    if bodies.is_empty() {
+        return Err(AotError::NoFunctions);
+    }
+
+    // Build function definitions from bodies
+    let function_defs: Vec<_> = bodies
+        .iter()
+        .filter_map(|body| {
+            let def_id = body.def_id?;
+            let name = body.name.as_ref()?;
+            Some(codegen::FunctionDef::new(def_id, name.as_str(), body))
+        })
+        .collect();
+
+    if function_defs.is_empty() {
+        return Err(AotError::NoFunctions);
+    }
+
+    // Compile to object file
+    let obj = codegen::AotModuleCompiler::compile(&function_defs, &types)?;
+
+    Ok(obj.into_bytes())
+}
+
+/// Compile SPL source code and link it into an executable.
+///
+/// This function:
+/// 1. Compiles the source to MIR
+/// 2. Generates an object file
+/// 3. Links it into a standalone executable
+///
+/// # Example
+///
+/// ```ignore
+/// use spl::compile_and_link;
+/// use std::path::Path;
+///
+/// compile_and_link("fn main() -> i32 { 42 }", Path::new("/tmp/my_program")).unwrap();
+/// // /tmp/my_program is now an executable that returns 42
+/// ```
+///
+/// # Errors
+///
+/// Returns `AotError::CompileError` if the source has syntax or semantic errors.
+/// Returns `AotError::NoFunctions` if no functions are defined.
+/// Returns `AotError::CodegenError` if code generation fails.
+/// Returns `AotError::LinkError` if linking fails.
+pub fn compile_and_link(source: &str, output: &Path) -> Result<(), AotError> {
+    let object_bytes = compile_to_object(source)?;
+    codegen::link_object_to_executable(&object_bytes, output, None)?;
+    Ok(())
+}
+
+/// Compile SPL source code and link it with custom options.
+///
+/// This is like `compile_and_link` but allows specifying linker options
+/// (libraries to link, search paths, etc.).
+///
+/// # Example
+///
+/// ```ignore
+/// use spl::{compile_and_link_with_options, codegen::LinkOptions};
+/// use std::path::Path;
+///
+/// let options = LinkOptions::new()
+///     .library("m")           // Link against libm
+///     .library_path("/usr/local/lib");
+///
+/// compile_and_link_with_options(
+///     "fn main() -> i32 { 42 }",
+///     Path::new("/tmp/my_program"),
+///     &options,
+/// ).unwrap();
+/// ```
+pub fn compile_and_link_with_options(
+    source: &str,
+    output: &Path,
+    options: &codegen::LinkOptions,
+) -> Result<(), AotError> {
+    let object_bytes = compile_to_object(source)?;
+    codegen::link_object_to_executable(&object_bytes, output, Some(options))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod jit_tests {
     use super::*;
@@ -497,5 +673,221 @@ mod compile_tests {
         let result = compile("fn main() {}");
         let warning_count = result.warnings().count();
         assert_eq!(warning_count, 0);
+    }
+}
+
+#[cfg(test)]
+mod aot_tests {
+    use super::*;
+    use std::process::Command;
+
+    #[test]
+    fn compile_to_object_simple() {
+        let result = compile_to_object("fn main() -> i32 { 42 }");
+        assert!(result.is_ok(), "failed to compile: {:?}", result.err());
+        let bytes = result.unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn compile_to_object_multiple_functions() {
+        let result = compile_to_object(
+            r#"
+            fn add(a: i32, b: i32) -> i32 { a + b }
+            fn main() -> i32 { add(10, 32) }
+        "#,
+        );
+        assert!(result.is_ok(), "failed to compile: {:?}", result.err());
+    }
+
+    #[test]
+    fn compile_to_object_compile_error() {
+        let result = compile_to_object("fn main() { undefined; }");
+        assert!(matches!(result, Err(AotError::CompileError(_))));
+    }
+
+    #[test]
+    fn compile_to_object_no_functions() {
+        // Empty source has no functions
+        let result = compile_to_object("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn aot_error_display() {
+        let err = AotError::NoFunctions;
+        assert!(err.to_string().contains("no functions"));
+
+        let err = AotError::CompileError(vec![Diagnostic::error("test")]);
+        assert!(err.to_string().contains("compilation failed"));
+    }
+
+    // Helper to create unique temp file paths for parallel tests
+    fn unique_temp_exe(name: &str) -> std::path::PathBuf {
+        let temp_dir = std::env::temp_dir();
+        let unique_id = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        temp_dir.join(format!("spl_test_{}_{}", name, unique_id))
+    }
+
+    // Integration test: compile, link, and run a real executable
+    // This test actually links and executes the binary
+    #[test]
+    fn compile_and_link_and_execute() {
+        use std::fs;
+
+        let exe_path = unique_temp_exe("exe");
+
+        // Clean up any previous test file
+        let _ = fs::remove_file(&exe_path);
+
+        // Compile and link
+        let result = compile_and_link("fn main() -> i32 { 42 }", &exe_path);
+        assert!(
+            result.is_ok(),
+            "failed to compile and link: {:?}",
+            result.err()
+        );
+
+        // Verify the executable exists
+        assert!(exe_path.exists(), "executable was not created");
+
+        // Run the executable and check the exit code
+        let output = Command::new(&exe_path)
+            .output()
+            .expect("failed to execute compiled binary");
+
+        // On Unix, exit code is the return value from main (mod 256)
+        assert_eq!(
+            output.status.code(),
+            Some(42),
+            "unexpected exit code: {:?}",
+            output.status
+        );
+
+        // Clean up
+        let _ = fs::remove_file(&exe_path);
+    }
+
+    #[test]
+    fn compile_and_link_arithmetic() {
+        use std::fs;
+
+        let exe_path = unique_temp_exe("arith");
+
+        let _ = fs::remove_file(&exe_path);
+
+        let result = compile_and_link(
+            r#"
+            fn main() -> i32 {
+                let x = 10;
+                let y = 3;
+                x * y + 2
+            }
+        "#,
+            &exe_path,
+        );
+        assert!(result.is_ok(), "failed: {:?}", result.err());
+
+        let output = Command::new(&exe_path)
+            .output()
+            .expect("failed to execute");
+
+        // 10 * 3 + 2 = 32
+        assert_eq!(output.status.code(), Some(32));
+
+        let _ = fs::remove_file(&exe_path);
+    }
+
+    #[test]
+    fn compile_and_link_function_calls() {
+        use std::fs;
+
+        let exe_path = unique_temp_exe("calls");
+
+        let _ = fs::remove_file(&exe_path);
+
+        let result = compile_and_link(
+            r#"
+            fn double(x: i32) -> i32 { x * 2 }
+            fn main() -> i32 { double(21) }
+        "#,
+            &exe_path,
+        );
+        assert!(result.is_ok(), "failed: {:?}", result.err());
+
+        let output = Command::new(&exe_path)
+            .output()
+            .expect("failed to execute");
+
+        // double(21) = 42
+        assert_eq!(output.status.code(), Some(42));
+
+        let _ = fs::remove_file(&exe_path);
+    }
+
+    #[test]
+    fn compile_and_link_conditionals() {
+        use std::fs;
+
+        let exe_path = unique_temp_exe("cond");
+
+        let _ = fs::remove_file(&exe_path);
+
+        let result = compile_and_link(
+            r#"
+            fn main() -> i32 {
+                let x = 5;
+                if x > 3 { 100 } else { 0 }
+            }
+        "#,
+            &exe_path,
+        );
+        assert!(result.is_ok(), "failed: {:?}", result.err());
+
+        let output = Command::new(&exe_path)
+            .output()
+            .expect("failed to execute");
+
+        // x > 3, so returns 100
+        assert_eq!(output.status.code(), Some(100));
+
+        let _ = fs::remove_file(&exe_path);
+    }
+
+    #[test]
+    fn aot_jit_output_equivalence() {
+        // Verify that AOT and JIT produce the same results
+        use std::fs;
+
+        let source = r#"
+            fn factorial(n: i32) -> i32 {
+                if n <= 1 { 1 } else { n * factorial(n - 1) }
+            }
+            fn main() -> i32 { factorial(5) }
+        "#;
+
+        // JIT result
+        let jit_result = jit_execute(source).expect("JIT failed");
+
+        // AOT result
+        let exe_path = unique_temp_exe("equiv");
+        let _ = fs::remove_file(&exe_path);
+
+        compile_and_link(source, &exe_path).expect("AOT failed");
+
+        let output = Command::new(&exe_path)
+            .output()
+            .expect("failed to execute");
+
+        let aot_result = output.status.code().unwrap();
+
+        // 5! = 120, but exit codes are mod 256, so both should be 120
+        assert_eq!(jit_result, aot_result, "JIT and AOT produced different results");
+        assert_eq!(jit_result, 120);
+
+        let _ = fs::remove_file(&exe_path);
     }
 }
