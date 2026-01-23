@@ -1093,11 +1093,7 @@ fn struct_multiple_impls() {
     );
 }
 
-// TODO: Fix struct instantiation with named fields inside impl methods
-// This is a known issue related to the ApplyExpr unification work.
-// The field name lookup works correctly outside impl methods but fails inside.
 #[test]
-#[ignore = "struct instantiation with named fields inside impl methods needs investigation"]
 fn struct_self_type() {
     check(
         "struct S(a: i32) impl S { fn new(): Self { S(a: 0) } } fn main() { let x = S::new(); }",

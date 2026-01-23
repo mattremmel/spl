@@ -600,12 +600,19 @@ impl InferEngine {
             None => return self.ctx.types.error(),
         };
 
-        // Get the first segment to determine what we're applying
-        let segment = match path.segments().next() {
-            Some(s) => s,
-            None => return self.ctx.types.error(),
-        };
+        // Collect all path segments
+        let segments: Vec<_> = path.segments().collect();
+        if segments.is_empty() {
+            return self.ctx.types.error();
+        }
 
+        // Handle multi-segment paths like `S::new` (associated function call)
+        if segments.len() >= 2 {
+            return self.synth_apply_qualified_path(apply_expr, &segments);
+        }
+
+        // Single segment path - could be struct instantiation or function call
+        let segment = &segments[0];
         let name_ref = match segment.name() {
             Some(n) => n,
             None => return self.ctx.types.error(),
@@ -646,6 +653,96 @@ impl InferEngine {
         self.diagnostics.push(
             Diagnostic::error("cannot apply: not a function or struct")
                 .with_label(span, "not callable or instantiable"),
+        );
+        self.ctx.types.error()
+    }
+
+    /// Handle qualified paths like `S::new()` - associated function calls
+    fn synth_apply_qualified_path(
+        &mut self,
+        apply_expr: &ApplyExpr,
+        segments: &[crate::ast::PathSegment],
+    ) -> TypeId {
+        // Get the first segment which should resolve to a type (struct)
+        let first_segment = &segments[0];
+        let first_name_ref = match first_segment.name() {
+            Some(n) => n,
+            None => return self.ctx.types.error(),
+        };
+
+        let first_token = match first_name_ref.token() {
+            Some(t) => t,
+            None => return self.ctx.types.error(),
+        };
+
+        let first_span = text_range_to_span(first_token.text_range());
+        let first_def_id = match self.resolutions.get(&first_span) {
+            Some(id) => *id,
+            None => return self.ctx.types.error(),
+        };
+
+        // Get the struct def_id (handle type aliases too)
+        let struct_def_id = if self.struct_fields.contains_key(&first_def_id) {
+            first_def_id
+        } else if let Some(&target_ty) = self.type_alias_targets.get(&first_def_id) {
+            let resolved = self.resolve_type(target_ty);
+            if let Type::Struct(actual_def_id, _) = self.ctx.types.get(resolved) {
+                *actual_def_id
+            } else {
+                self.diagnostics.push(
+                    Diagnostic::error("not a struct type")
+                        .with_label(first_span, "expected struct"),
+                );
+                return self.ctx.types.error();
+            }
+        } else {
+            self.diagnostics.push(
+                Diagnostic::error("not a struct type")
+                    .with_label(first_span, "expected struct"),
+            );
+            return self.ctx.types.error();
+        };
+
+        // Get the last segment which should be the method name
+        let last_segment = &segments[segments.len() - 1];
+        let method_name_ref = match last_segment.name() {
+            Some(n) => n,
+            None => return self.ctx.types.error(),
+        };
+
+        let method_token = match method_name_ref.token() {
+            Some(t) => t,
+            None => return self.ctx.types.error(),
+        };
+
+        let method_name = method_token.text().to_string();
+
+        // Look up the method in the struct's impl
+        let method_def_ids = self
+            .struct_methods
+            .get(&struct_def_id)
+            .cloned()
+            .unwrap_or_default();
+
+        for method_def_id in method_def_ids {
+            let symbol = self.ctx.get_symbol(method_def_id);
+            let fn_name = self.ctx.resolve(symbol.name);
+            if fn_name == method_name
+                && let Some(sig) = self.fn_signatures.get(&method_def_id).cloned()
+            {
+                // Store the resolution for the method
+                let method_span = text_range_to_span(method_token.text_range());
+                self.method_resolutions.insert(method_span, method_def_id);
+
+                return self.synth_apply_as_call(apply_expr, &sig);
+            }
+        }
+
+        // Method not found
+        let method_span = text_range_to_span(method_token.text_range());
+        self.diagnostics.push(
+            Diagnostic::error(format!("method `{}` not found", method_name))
+                .with_label(method_span, "unknown method"),
         );
         self.ctx.types.error()
     }
