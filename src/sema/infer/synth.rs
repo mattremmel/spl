@@ -933,9 +933,9 @@ impl InferEngine {
             receiver_type_val = self.ctx.types.get(inner_resolved).clone();
         }
 
-        // Get the struct def_id from the receiver type
-        let struct_def_id = match &receiver_type_val {
-            Type::Struct(def_id, _) => *def_id,
+        // Get the struct def_id and type_args from the receiver type
+        let (struct_def_id, receiver_type_args) = match &receiver_type_val {
+            Type::Struct(def_id, type_args) => (*def_id, type_args.clone()),
             _ => {
                 let span = text_range_to_span(apply_expr.syntax().text_range());
                 self.diagnostics.push(
@@ -978,7 +978,12 @@ impl InferEngine {
                 self.method_resolutions.insert(method_span, method_def_id);
 
                 // Call the method with adjusted argument handling for self parameter
-                return self.synth_method_call_with_receiver(apply_expr, &sig, receiver_type);
+                return self.synth_method_call_with_receiver(
+                    apply_expr,
+                    &sig,
+                    struct_def_id,
+                    &receiver_type_args,
+                );
             }
         }
 
@@ -996,10 +1001,39 @@ impl InferEngine {
         &mut self,
         apply_expr: &ApplyExpr,
         sig: &super::engine::FnSignature,
-        _receiver_type: TypeId,
+        struct_def_id: crate::DefId,
+        receiver_type_args: &[TypeId],
     ) -> TypeId {
-        // sig.params already excludes self (self is handled separately in method signatures)
-        let (param_types, ret_ty) = self.instantiate_signature(sig);
+        // Get struct type params for building substitution map
+        let struct_type_params = self
+            .struct_type_params
+            .get(&struct_def_id)
+            .cloned()
+            .unwrap_or_default();
+
+        // Build substitution map: impl type params -> receiver's type args
+        // sig.type_params structure: [impl_params..., method_params...]
+        // where impl_params.len() == struct_type_params.len()
+        let mut subst: FxHashMap<_, _> = FxHashMap::default();
+        let impl_param_count = struct_type_params.len();
+        for (i, &param_def_id) in sig.type_params.iter().enumerate() {
+            let type_arg = if i < impl_param_count && i < receiver_type_args.len() {
+                // This is an impl type param at position i, map to receiver's type arg
+                receiver_type_args[i]
+            } else {
+                // This is a method-specific type param, create fresh type var
+                self.fresh_type_var()
+            };
+            subst.insert(param_def_id, type_arg);
+        }
+
+        // Substitute in params and return type
+        let param_types: Vec<TypeId> = sig
+            .params
+            .iter()
+            .map(|(_, ty)| self.substitute_type_params(*ty, &subst))
+            .collect();
+        let ret_ty = self.substitute_type_params(sig.ret, &subst);
 
         // Check argument count
         let args: Vec<_> = apply_expr.args().collect();

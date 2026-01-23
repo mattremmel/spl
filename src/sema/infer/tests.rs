@@ -1664,7 +1664,6 @@ fn test_assign_field_through_immutable_ref() {
 // Phase 1: Track Type Parameters in FnSignature
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_fn_identity_infers_from_arg() {
     check(
         "fn identity(x: T): T where T { x } fn main() { let a = identity(42); }",
@@ -1673,7 +1672,6 @@ fn generic_fn_identity_infers_from_arg() {
 }
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_fn_identity_infers_from_context() {
     check(
         "fn identity(x: T): T where T { x } fn main() { let a: i64 = identity(42); }",
@@ -1684,7 +1682,6 @@ fn generic_fn_identity_infers_from_context() {
 // Phase 2: Instantiate Generic Functions
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_fn_two_params_same_type() {
     check(
         "fn pair(a: T, b: T): T where T { a } fn main() { let x = pair(1, 2); }",
@@ -1693,7 +1690,6 @@ fn generic_fn_two_params_same_type() {
 }
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_fn_multiple_type_params() {
     check(
         "fn swap(a: A, b: B): B where A, B { b } fn main() { let x = swap(1, true); }",
@@ -1704,7 +1700,6 @@ fn generic_fn_multiple_type_params() {
 // Phase 3: Generic Struct Instantiation
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_struct_field_access() {
     check(
         "struct Wrapper(value: T) where T fn main() { let w = Wrapper(value: 42); let x = w.value; }",
@@ -1713,10 +1708,9 @@ fn generic_struct_field_access() {
 }
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_struct_multiple_fields() {
     check(
-        "struct Pair(first: A, second: B) where A, B fn main() { let p = Pair(first = 1, second = true); let x = p.second; }",
+        "struct Pair(first: A, second: B) where A, B fn main() { let p = Pair(first: 1, second: true); let x = p.second; }",
         "bool",
     );
 }
@@ -1724,7 +1718,6 @@ fn generic_struct_multiple_fields() {
 // Phase 4: Generic Methods
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_struct_method_returns_param() {
     check(
         "struct Wrapper(value: T) where T impl Wrapper(T) where T { fn get(&self): T { self.value } } fn main() { let w = Wrapper(value: 42); let x = w.get(); }",
@@ -1735,7 +1728,6 @@ fn generic_struct_method_returns_param() {
 // Phase 5: Error Cases
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn error_generic_type_mismatch() {
     check_err(
         "fn pair(a: T, b: T): T where T { a } fn main() { pair(1, true); }",
@@ -1746,7 +1738,6 @@ fn error_generic_type_mismatch() {
 // Phase 6: Edge Cases
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_nested_calls() {
     check(
         "fn identity(x: T): T where T { x } fn main() { let a = identity(identity(42)); }",
@@ -1755,7 +1746,6 @@ fn generic_nested_calls() {
 }
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_multiple_instantiations() {
     check(
         "fn identity(x: T): T where T { x } fn main() { let a = identity(42); let b = identity(true); }",
@@ -1766,7 +1756,6 @@ fn generic_multiple_instantiations() {
 // Phase 7: Method-Specific Type Parameters
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_method_with_own_type_param() {
     // Method has its own type parameter U distinct from impl type param T
     check(
@@ -1785,7 +1774,6 @@ fn generic_method_with_own_type_param() {
 }
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_method_uses_both_impl_and_own_type_param() {
     // Method returns T (from impl) but takes U (method-specific)
     check(
@@ -1806,7 +1794,6 @@ fn generic_method_uses_both_impl_and_own_type_param() {
 // Phase 8: Generic Functions Returning Generic Structs
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_fn_returns_generic_struct() {
     check(
         r#"
@@ -1822,7 +1809,6 @@ fn generic_fn_returns_generic_struct() {
 }
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn generic_fn_returns_generic_struct_inferred_from_context() {
     check(
         r#"
@@ -1840,7 +1826,6 @@ fn generic_fn_returns_generic_struct_inferred_from_context() {
 // Phase 9: Nested Generic Types
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn nested_generic_struct() {
     check(
         r#"
@@ -2686,7 +2671,6 @@ fn float_var_unifies_with_floats_not_integers() {
 }
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn general_var_unifies_with_anything() {
     // Generic type parameters create general Var that can unify with anything
     check(
@@ -2901,7 +2885,6 @@ fn type_var_chain_through_multiple_lets() {
 }
 
 #[test]
-#[ignore = "needs semantic support for where clause generics"]
 fn type_var_bidirectional_through_function() {
     // Type should flow both ways: argument constrains param, return constrains usage
     check(
