@@ -1,6 +1,6 @@
-//! String intrinsic functions (stubs).
+//! String intrinsic functions.
 //!
-//! Functions for string operations. Currently implemented as stubs.
+//! Functions for string operations including comparison, searching, and manipulation.
 //!
 //! # String Representation
 //!
@@ -10,12 +10,25 @@
 //!
 //! # Current Status
 //!
-//! - `__str_len`: Implemented (trivially returns the length parameter)
-//! - `__str_concat`: Stub (needs memory allocation)
+//! Implemented:
+//! - `__str_len`: Returns the length parameter (trivial)
+//! - `__str_eq`: Compare two strings for equality
+//! - `__str_cmp`: Compare two strings lexicographically
+//! - `__str_find`: Find substring in string
+//! - `__str_contains`: Check if string contains substring
+//! - `__str_starts_with`: Check if string starts with prefix
+//! - `__str_ends_with`: Check if string ends with suffix
+//! - `__str_char_at`: Get character at index
 //!
-//! # Memory Allocation for Concatenation
+//! Stubs (need memory allocation):
+//! - `__str_concat`: Concatenate two strings
+//! - `__str_slice`: Extract substring
+//! - `__str_to_upper`: Convert to uppercase
+//! - `__str_to_lower`: Convert to lowercase
 //!
-//! `__str_concat` needs to allocate a new buffer for the result. Options:
+//! # Memory Allocation for String Operations
+//!
+//! Operations that create new strings need to allocate memory. Options:
 //!
 //! ## malloc-based
 //! ```c
@@ -53,12 +66,93 @@ use super::{Runtime, default_call_conv, make_signature};
 pub fn register(runtime: &mut Runtime) {
     let call_conv = default_call_conv();
 
+    // ==================== Query operations ====================
+
     // __str_len: (*const u8, I64) -> I64
     runtime.register(
         "__str_len",
         __str_len as *const u8,
         make_signature(call_conv, &[types::I64, types::I64], &[types::I64]),
     );
+
+    // __str_eq: (ptr1, len1, ptr2, len2) -> I8 (bool)
+    runtime.register(
+        "__str_eq",
+        __str_eq as *const u8,
+        make_signature(
+            call_conv,
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[types::I8],
+        ),
+    );
+
+    // __str_cmp: (ptr1, len1, ptr2, len2) -> I64 (-1, 0, 1)
+    runtime.register(
+        "__str_cmp",
+        __str_cmp as *const u8,
+        make_signature(
+            call_conv,
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        ),
+    );
+
+    // __str_find: (haystack_ptr, haystack_len, needle_ptr, needle_len) -> I64 (index or -1)
+    runtime.register(
+        "__str_find",
+        __str_find as *const u8,
+        make_signature(
+            call_conv,
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        ),
+    );
+
+    // __str_contains: (haystack_ptr, haystack_len, needle_ptr, needle_len) -> I8
+    runtime.register(
+        "__str_contains",
+        __str_contains as *const u8,
+        make_signature(
+            call_conv,
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[types::I8],
+        ),
+    );
+
+    // __str_starts_with: (str_ptr, str_len, prefix_ptr, prefix_len) -> I8
+    runtime.register(
+        "__str_starts_with",
+        __str_starts_with as *const u8,
+        make_signature(
+            call_conv,
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[types::I8],
+        ),
+    );
+
+    // __str_ends_with: (str_ptr, str_len, suffix_ptr, suffix_len) -> I8
+    runtime.register(
+        "__str_ends_with",
+        __str_ends_with as *const u8,
+        make_signature(
+            call_conv,
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[types::I8],
+        ),
+    );
+
+    // __str_char_at: (ptr, len, index) -> I32 (char or -1)
+    runtime.register(
+        "__str_char_at",
+        __str_char_at as *const u8,
+        make_signature(
+            call_conv,
+            &[types::I64, types::I64, types::I64],
+            &[types::I32],
+        ),
+    );
+
+    // ==================== Allocation operations (stubs) ====================
 
     // __str_concat: (*const u8, I64, *const u8, I64) -> (*const u8, I64)
     runtime.register(
@@ -70,22 +164,256 @@ pub fn register(runtime: &mut Runtime) {
             &[types::I64, types::I64],
         ),
     );
+
+    // __str_slice: (ptr, len, start, end) -> (ptr, len)
+    runtime.register(
+        "__str_slice",
+        __str_slice as *const u8,
+        make_signature(
+            call_conv,
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[types::I64, types::I64],
+        ),
+    );
+
+    // __str_to_upper: (ptr, len) -> (ptr, len)
+    runtime.register(
+        "__str_to_upper",
+        __str_to_upper as *const u8,
+        make_signature(
+            call_conv,
+            &[types::I64, types::I64],
+            &[types::I64, types::I64],
+        ),
+    );
+
+    // __str_to_lower: (ptr, len) -> (ptr, len)
+    runtime.register(
+        "__str_to_lower",
+        __str_to_lower as *const u8,
+        make_signature(
+            call_conv,
+            &[types::I64, types::I64],
+            &[types::I64, types::I64],
+        ),
+    );
 }
+
+// ==================== Query operations ====================
 
 /// Get the length of a string.
 ///
 /// Returns the provided length, or 0 if the pointer is null.
 pub extern "C" fn __str_len(ptr: *const u8, len: i64) -> i64 {
-    if ptr.is_null() {
-        0
-    } else {
-        len
+    if ptr.is_null() { 0 } else { len }
+}
+
+/// Compare two strings for equality.
+///
+/// Returns 1 if equal, 0 otherwise.
+pub extern "C" fn __str_eq(ptr1: *const u8, len1: i64, ptr2: *const u8, len2: i64) -> i8 {
+    if len1 != len2 {
+        return 0;
+    }
+    if ptr1.is_null() && ptr2.is_null() {
+        return 1;
+    }
+    if ptr1.is_null() || ptr2.is_null() {
+        return 0;
+    }
+    if len1 <= 0 {
+        return 1; // Both empty
+    }
+
+    // SAFETY: Caller guarantees valid pointers
+    unsafe {
+        let slice1 = std::slice::from_raw_parts(ptr1, len1 as usize);
+        let slice2 = std::slice::from_raw_parts(ptr2, len2 as usize);
+        if slice1 == slice2 { 1 } else { 0 }
     }
 }
+
+/// Compare two strings lexicographically.
+///
+/// Returns:
+/// - negative if str1 < str2
+/// - 0 if str1 == str2
+/// - positive if str1 > str2
+pub extern "C" fn __str_cmp(ptr1: *const u8, len1: i64, ptr2: *const u8, len2: i64) -> i64 {
+    if ptr1.is_null() && ptr2.is_null() {
+        return 0;
+    }
+    if ptr1.is_null() {
+        return -1;
+    }
+    if ptr2.is_null() {
+        return 1;
+    }
+
+    // SAFETY: Caller guarantees valid pointers
+    unsafe {
+        let slice1 = if len1 > 0 {
+            std::slice::from_raw_parts(ptr1, len1 as usize)
+        } else {
+            &[]
+        };
+        let slice2 = if len2 > 0 {
+            std::slice::from_raw_parts(ptr2, len2 as usize)
+        } else {
+            &[]
+        };
+
+        match slice1.cmp(slice2) {
+            std::cmp::Ordering::Less => -1,
+            std::cmp::Ordering::Equal => 0,
+            std::cmp::Ordering::Greater => 1,
+        }
+    }
+}
+
+/// Find the first occurrence of a substring.
+///
+/// Returns the byte index of the first match, or -1 if not found.
+pub extern "C" fn __str_find(
+    haystack_ptr: *const u8,
+    haystack_len: i64,
+    needle_ptr: *const u8,
+    needle_len: i64,
+) -> i64 {
+    if haystack_ptr.is_null() || needle_ptr.is_null() {
+        return -1;
+    }
+    if needle_len <= 0 {
+        return 0; // Empty needle matches at start
+    }
+    if haystack_len <= 0 || needle_len > haystack_len {
+        return -1;
+    }
+
+    // SAFETY: Caller guarantees valid pointers
+    unsafe {
+        let haystack = std::slice::from_raw_parts(haystack_ptr, haystack_len as usize);
+        let needle = std::slice::from_raw_parts(needle_ptr, needle_len as usize);
+
+        // Simple search (could be optimized with Boyer-Moore, etc.)
+        for i in 0..=(haystack_len - needle_len) as usize {
+            if haystack[i..i + needle.len()] == *needle {
+                return i as i64;
+            }
+        }
+        -1
+    }
+}
+
+/// Check if a string contains a substring.
+///
+/// Returns 1 if found, 0 otherwise.
+pub extern "C" fn __str_contains(
+    haystack_ptr: *const u8,
+    haystack_len: i64,
+    needle_ptr: *const u8,
+    needle_len: i64,
+) -> i8 {
+    if __str_find(haystack_ptr, haystack_len, needle_ptr, needle_len) >= 0 {
+        1
+    } else {
+        0
+    }
+}
+
+/// Check if a string starts with a prefix.
+///
+/// Returns 1 if true, 0 otherwise.
+pub extern "C" fn __str_starts_with(
+    str_ptr: *const u8,
+    str_len: i64,
+    prefix_ptr: *const u8,
+    prefix_len: i64,
+) -> i8 {
+    if prefix_len <= 0 {
+        return 1; // Empty prefix always matches
+    }
+    if str_ptr.is_null() || prefix_ptr.is_null() {
+        return 0;
+    }
+    if prefix_len > str_len {
+        return 0;
+    }
+
+    // SAFETY: Caller guarantees valid pointers
+    unsafe {
+        let str_slice = std::slice::from_raw_parts(str_ptr, prefix_len as usize);
+        let prefix_slice = std::slice::from_raw_parts(prefix_ptr, prefix_len as usize);
+        if str_slice == prefix_slice { 1 } else { 0 }
+    }
+}
+
+/// Check if a string ends with a suffix.
+///
+/// Returns 1 if true, 0 otherwise.
+pub extern "C" fn __str_ends_with(
+    str_ptr: *const u8,
+    str_len: i64,
+    suffix_ptr: *const u8,
+    suffix_len: i64,
+) -> i8 {
+    if suffix_len <= 0 {
+        return 1; // Empty suffix always matches
+    }
+    if str_ptr.is_null() || suffix_ptr.is_null() {
+        return 0;
+    }
+    if suffix_len > str_len {
+        return 0;
+    }
+
+    // SAFETY: Caller guarantees valid pointers
+    unsafe {
+        let start = (str_len - suffix_len) as usize;
+        let str_slice = std::slice::from_raw_parts(str_ptr.add(start), suffix_len as usize);
+        let suffix_slice = std::slice::from_raw_parts(suffix_ptr, suffix_len as usize);
+        if str_slice == suffix_slice { 1 } else { 0 }
+    }
+}
+
+/// Get the character at a byte index.
+///
+/// Returns the Unicode code point at the given byte index, or -1 if:
+/// - index is out of bounds
+/// - index points to the middle of a multi-byte character
+/// - the string is invalid UTF-8
+pub extern "C" fn __str_char_at(ptr: *const u8, len: i64, index: i64) -> i32 {
+    if ptr.is_null() || index < 0 || index >= len {
+        return -1;
+    }
+
+    // SAFETY: Caller guarantees valid pointer
+    unsafe {
+        let slice = std::slice::from_raw_parts(ptr, len as usize);
+        match std::str::from_utf8(slice) {
+            Ok(s) => {
+                // Find the character that starts at this byte index
+                for (byte_idx, ch) in s.char_indices() {
+                    if byte_idx == index as usize {
+                        return ch as i32;
+                    }
+                    if byte_idx > index as usize {
+                        break; // Passed the index, must be middle of char
+                    }
+                }
+                -1
+            }
+            Err(_) => -1,
+        }
+    }
+}
+
+// ==================== Allocation operations (stubs) ====================
 
 /// Concatenate two strings (stub).
 ///
 /// Returns (null, 0) as this is not yet implemented.
+/// When implemented, will allocate a new buffer for the result.
 pub extern "C" fn __str_concat(
     _ptr1: *const u8,
     _len1: i64,
@@ -93,6 +421,44 @@ pub extern "C" fn __str_concat(
     _len2: i64,
 ) -> StringResult {
     // Stub: return null pointer and zero length
+    StringResult {
+        ptr: std::ptr::null(),
+        len: 0,
+    }
+}
+
+/// Extract a substring (stub).
+///
+/// Returns (null, 0) as this is not yet implemented.
+/// When implemented, will return (ptr + start, end - start) for a view,
+/// or allocate a new buffer for a copy.
+pub extern "C" fn __str_slice(
+    _ptr: *const u8,
+    _len: i64,
+    _start: i64,
+    _end: i64,
+) -> StringResult {
+    // Stub: return null pointer and zero length
+    StringResult {
+        ptr: std::ptr::null(),
+        len: 0,
+    }
+}
+
+/// Convert string to uppercase (stub).
+///
+/// Returns (null, 0) as this is not yet implemented.
+pub extern "C" fn __str_to_upper(_ptr: *const u8, _len: i64) -> StringResult {
+    StringResult {
+        ptr: std::ptr::null(),
+        len: 0,
+    }
+}
+
+/// Convert string to lowercase (stub).
+///
+/// Returns (null, 0) as this is not yet implemented.
+pub extern "C" fn __str_to_lower(_ptr: *const u8, _len: i64) -> StringResult {
     StringResult {
         ptr: std::ptr::null(),
         len: 0,
@@ -127,6 +493,221 @@ mod tests {
     }
 
     #[test]
+    fn str_eq_equal_strings() {
+        let s1 = "Hello";
+        let s2 = "Hello";
+        assert_eq!(
+            __str_eq(s1.as_ptr(), s1.len() as i64, s2.as_ptr(), s2.len() as i64),
+            1
+        );
+    }
+
+    #[test]
+    fn str_eq_different_strings() {
+        let s1 = "Hello";
+        let s2 = "World";
+        assert_eq!(
+            __str_eq(s1.as_ptr(), s1.len() as i64, s2.as_ptr(), s2.len() as i64),
+            0
+        );
+    }
+
+    #[test]
+    fn str_eq_different_lengths() {
+        let s1 = "Hello";
+        let s2 = "Hell";
+        assert_eq!(
+            __str_eq(s1.as_ptr(), s1.len() as i64, s2.as_ptr(), s2.len() as i64),
+            0
+        );
+    }
+
+    #[test]
+    fn str_cmp_equal() {
+        let s1 = "abc";
+        let s2 = "abc";
+        assert_eq!(
+            __str_cmp(s1.as_ptr(), s1.len() as i64, s2.as_ptr(), s2.len() as i64),
+            0
+        );
+    }
+
+    #[test]
+    fn str_cmp_less_than() {
+        let s1 = "abc";
+        let s2 = "abd";
+        assert!(__str_cmp(s1.as_ptr(), s1.len() as i64, s2.as_ptr(), s2.len() as i64) < 0);
+    }
+
+    #[test]
+    fn str_cmp_greater_than() {
+        let s1 = "abd";
+        let s2 = "abc";
+        assert!(__str_cmp(s1.as_ptr(), s1.len() as i64, s2.as_ptr(), s2.len() as i64) > 0);
+    }
+
+    #[test]
+    fn str_cmp_prefix() {
+        let s1 = "abc";
+        let s2 = "abcd";
+        assert!(__str_cmp(s1.as_ptr(), s1.len() as i64, s2.as_ptr(), s2.len() as i64) < 0);
+    }
+
+    #[test]
+    fn str_find_found() {
+        let haystack = "Hello, World!";
+        let needle = "World";
+        assert_eq!(
+            __str_find(
+                haystack.as_ptr(),
+                haystack.len() as i64,
+                needle.as_ptr(),
+                needle.len() as i64
+            ),
+            7
+        );
+    }
+
+    #[test]
+    fn str_find_not_found() {
+        let haystack = "Hello, World!";
+        let needle = "Foo";
+        assert_eq!(
+            __str_find(
+                haystack.as_ptr(),
+                haystack.len() as i64,
+                needle.as_ptr(),
+                needle.len() as i64
+            ),
+            -1
+        );
+    }
+
+    #[test]
+    fn str_find_at_start() {
+        let haystack = "Hello";
+        let needle = "He";
+        assert_eq!(
+            __str_find(
+                haystack.as_ptr(),
+                haystack.len() as i64,
+                needle.as_ptr(),
+                needle.len() as i64
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn str_find_empty_needle() {
+        let haystack = "Hello";
+        let needle = "";
+        assert_eq!(
+            __str_find(
+                haystack.as_ptr(),
+                haystack.len() as i64,
+                needle.as_ptr(),
+                0
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn str_contains_true() {
+        let haystack = "Hello, World!";
+        let needle = "World";
+        assert_eq!(
+            __str_contains(
+                haystack.as_ptr(),
+                haystack.len() as i64,
+                needle.as_ptr(),
+                needle.len() as i64
+            ),
+            1
+        );
+    }
+
+    #[test]
+    fn str_contains_false() {
+        let haystack = "Hello, World!";
+        let needle = "Foo";
+        assert_eq!(
+            __str_contains(
+                haystack.as_ptr(),
+                haystack.len() as i64,
+                needle.as_ptr(),
+                needle.len() as i64
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn str_starts_with_true() {
+        let s = "Hello, World!";
+        let prefix = "Hello";
+        assert_eq!(
+            __str_starts_with(s.as_ptr(), s.len() as i64, prefix.as_ptr(), prefix.len() as i64),
+            1
+        );
+    }
+
+    #[test]
+    fn str_starts_with_false() {
+        let s = "Hello, World!";
+        let prefix = "World";
+        assert_eq!(
+            __str_starts_with(s.as_ptr(), s.len() as i64, prefix.as_ptr(), prefix.len() as i64),
+            0
+        );
+    }
+
+    #[test]
+    fn str_ends_with_true() {
+        let s = "Hello, World!";
+        let suffix = "World!";
+        assert_eq!(
+            __str_ends_with(s.as_ptr(), s.len() as i64, suffix.as_ptr(), suffix.len() as i64),
+            1
+        );
+    }
+
+    #[test]
+    fn str_ends_with_false() {
+        let s = "Hello, World!";
+        let suffix = "Hello";
+        assert_eq!(
+            __str_ends_with(s.as_ptr(), s.len() as i64, suffix.as_ptr(), suffix.len() as i64),
+            0
+        );
+    }
+
+    #[test]
+    fn str_char_at_ascii() {
+        let s = "Hello";
+        assert_eq!(__str_char_at(s.as_ptr(), s.len() as i64, 0), 'H' as i32);
+        assert_eq!(__str_char_at(s.as_ptr(), s.len() as i64, 4), 'o' as i32);
+    }
+
+    #[test]
+    fn str_char_at_unicode() {
+        let s = "Héllo";
+        assert_eq!(__str_char_at(s.as_ptr(), s.len() as i64, 0), 'H' as i32);
+        assert_eq!(__str_char_at(s.as_ptr(), s.len() as i64, 1), 'é' as i32);
+        // Index 2 is middle of 'é' (2-byte char), should return -1
+        assert_eq!(__str_char_at(s.as_ptr(), s.len() as i64, 2), -1);
+        assert_eq!(__str_char_at(s.as_ptr(), s.len() as i64, 3), 'l' as i32);
+    }
+
+    #[test]
+    fn str_char_at_out_of_bounds() {
+        let s = "Hello";
+        assert_eq!(__str_char_at(s.as_ptr(), s.len() as i64, 10), -1);
+        assert_eq!(__str_char_at(s.as_ptr(), s.len() as i64, -1), -1);
+    }
+
+    #[test]
     fn str_concat_returns_null() {
         let s1 = "Hello";
         let s2 = "World";
@@ -140,6 +721,28 @@ mod tests {
         assert_eq!(result.len, 0);
     }
 
+    #[test]
+    fn str_slice_returns_null() {
+        let s = "Hello";
+        let result = __str_slice(s.as_ptr(), s.len() as i64, 1, 4);
+        assert!(result.ptr.is_null());
+        assert_eq!(result.len, 0);
+    }
+
+    #[test]
+    fn str_to_upper_returns_null() {
+        let s = "hello";
+        let result = __str_to_upper(s.as_ptr(), s.len() as i64);
+        assert!(result.ptr.is_null());
+    }
+
+    #[test]
+    fn str_to_lower_returns_null() {
+        let s = "HELLO";
+        let result = __str_to_lower(s.as_ptr(), s.len() as i64);
+        assert!(result.ptr.is_null());
+    }
+
     // ==================== Registration tests ====================
 
     #[test]
@@ -147,8 +750,21 @@ mod tests {
         let mut runtime = Runtime::new();
         register(&mut runtime);
 
+        // Query operations
         assert!(runtime.contains("__str_len"));
+        assert!(runtime.contains("__str_eq"));
+        assert!(runtime.contains("__str_cmp"));
+        assert!(runtime.contains("__str_find"));
+        assert!(runtime.contains("__str_contains"));
+        assert!(runtime.contains("__str_starts_with"));
+        assert!(runtime.contains("__str_ends_with"));
+        assert!(runtime.contains("__str_char_at"));
+
+        // Allocation operations (stubs)
         assert!(runtime.contains("__str_concat"));
+        assert!(runtime.contains("__str_slice"));
+        assert!(runtime.contains("__str_to_upper"));
+        assert!(runtime.contains("__str_to_lower"));
     }
 
     // ==================== Signature tests ====================
@@ -164,6 +780,42 @@ mod tests {
         assert_eq!(func.signature.params[1].value_type, types::I64); // len
         assert_eq!(func.signature.returns.len(), 1);
         assert_eq!(func.signature.returns[0].value_type, types::I64);
+    }
+
+    #[test]
+    fn str_eq_signature() {
+        let mut runtime = Runtime::new();
+        register(&mut runtime);
+
+        let func = runtime.get("__str_eq").unwrap();
+        assert_eq!(func.signature.params.len(), 4);
+        assert_eq!(func.signature.returns.len(), 1);
+        assert_eq!(func.signature.returns[0].value_type, types::I8);
+    }
+
+    #[test]
+    fn str_cmp_signature() {
+        let mut runtime = Runtime::new();
+        register(&mut runtime);
+
+        let func = runtime.get("__str_cmp").unwrap();
+        assert_eq!(func.signature.params.len(), 4);
+        assert_eq!(func.signature.returns.len(), 1);
+        assert_eq!(func.signature.returns[0].value_type, types::I64);
+    }
+
+    #[test]
+    fn str_char_at_signature() {
+        let mut runtime = Runtime::new();
+        register(&mut runtime);
+
+        let func = runtime.get("__str_char_at").unwrap();
+        assert_eq!(func.signature.params.len(), 3);
+        assert_eq!(func.signature.params[0].value_type, types::I64); // ptr
+        assert_eq!(func.signature.params[1].value_type, types::I64); // len
+        assert_eq!(func.signature.params[2].value_type, types::I64); // index
+        assert_eq!(func.signature.returns.len(), 1);
+        assert_eq!(func.signature.returns[0].value_type, types::I32);
     }
 
     #[test]
@@ -197,6 +849,19 @@ mod tests {
         let result = __str_concat(std::ptr::null(), 0, std::ptr::null(), 0);
         assert!(result.ptr.is_null());
         assert_eq!(result.len, 0);
+    }
+
+    #[test]
+    fn str_eq_both_null() {
+        assert_eq!(__str_eq(std::ptr::null(), 0, std::ptr::null(), 0), 1);
+    }
+
+    #[test]
+    fn str_cmp_null_handling() {
+        let s = "hello";
+        assert_eq!(__str_cmp(std::ptr::null(), 0, std::ptr::null(), 0), 0);
+        assert!(__str_cmp(std::ptr::null(), 0, s.as_ptr(), s.len() as i64) < 0);
+        assert!(__str_cmp(s.as_ptr(), s.len() as i64, std::ptr::null(), 0) > 0);
     }
 
     // ==================== JIT integration tests ====================

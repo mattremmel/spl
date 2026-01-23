@@ -93,10 +93,13 @@
 //! 4. **Optional**: Replace C runtime with SPL implementations over time
 
 mod convert;
+mod debug;
 mod io;
 mod math;
+mod memory;
 mod panic;
 mod string;
+mod system;
 
 use cranelift_codegen::ir::{AbiParam, Signature};
 use cranelift_codegen::isa::CallConv;
@@ -110,6 +113,9 @@ pub fn register_all(runtime: &mut Runtime) {
     panic::register(runtime);
     convert::register(runtime);
     string::register(runtime);
+    memory::register(runtime);
+    system::register(runtime);
+    debug::register(runtime);
 }
 
 /// Create a Cranelift signature with the given parameter and return types.
