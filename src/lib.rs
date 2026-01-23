@@ -65,6 +65,7 @@
 //!   rather than produce invalid MIR that would cause worse problems downstream.
 
 pub mod ast;
+pub mod codegen;
 pub mod diagnostic;
 pub mod hir;
 pub mod lexer;

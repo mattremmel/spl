@@ -11,6 +11,14 @@ logos = "0.15"
 rowan = "0.15"
 rustc-hash = "2.1"
 
+# Cranelift code generation
+cranelift-codegen = "0.120"
+cranelift-frontend = "0.120"
+cranelift-module = "0.120"
+cranelift-jit = "0.120"
+cranelift-native = "0.120"
+target-lexicon = "0.13"
+
 [dev-dependencies]
 pretty_assertions = "1.4"
 expect-test = "1.5"
