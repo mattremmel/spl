@@ -29,6 +29,9 @@ ast_node!(ReturnExpr);
 ast_node!(BlockExpr);
 ast_node!(CastExpr);
 ast_node!(RangeExpr);
+ast_node!(IsExpr);
+ast_node!(MatchExpr);
+ast_node!(MatchArm);
 ast_node!(ArgList);
 ast_node!(Path);
 ast_node!(PathSegment);
@@ -60,6 +63,8 @@ pub enum Expr {
     Block(BlockExpr),
     Cast(CastExpr),
     Range(RangeExpr),
+    Is(IsExpr),
+    Match(MatchExpr),
 }
 
 impl AstNode for Expr {
@@ -92,6 +97,8 @@ impl AstNode for Expr {
                 | SyntaxKind::BlockExpr
                 | SyntaxKind::CastExpr
                 | SyntaxKind::RangeExpr
+                | SyntaxKind::IsExpr
+                | SyntaxKind::MatchExpr
         )
     }
 
@@ -121,6 +128,8 @@ impl AstNode for Expr {
             SyntaxKind::BlockExpr => Some(Expr::Block(BlockExpr(node))),
             SyntaxKind::CastExpr => Some(Expr::Cast(CastExpr(node))),
             SyntaxKind::RangeExpr => Some(Expr::Range(RangeExpr(node))),
+            SyntaxKind::IsExpr => Some(Expr::Is(IsExpr(node))),
+            SyntaxKind::MatchExpr => Some(Expr::Match(MatchExpr(node))),
             _ => None,
         }
     }
@@ -151,6 +160,8 @@ impl AstNode for Expr {
             Expr::Block(it) => it.syntax(),
             Expr::Cast(it) => it.syntax(),
             Expr::Range(it) => it.syntax(),
+            Expr::Is(it) => it.syntax(),
+            Expr::Match(it) => it.syntax(),
         }
     }
 }
@@ -520,5 +531,70 @@ impl PathSegment {
 
     pub fn generic_args(&self) -> Option<crate::ast::GenericArgs> {
         child(&self.0)
+    }
+}
+
+impl IsExpr {
+    /// Get the left-hand side expression being matched.
+    pub fn lhs(&self) -> Option<Expr> {
+        children::<Expr>(&self.0).next()
+    }
+
+    /// Get the `is` keyword token.
+    pub fn is_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::IS_KW)
+    }
+
+    /// Check if this is an `is not` expression.
+    pub fn is_negated(&self) -> bool {
+        token(&self.0, SyntaxKind::NOT_KW).is_some()
+    }
+
+    /// Get the pattern being matched against.
+    pub fn pattern(&self) -> Option<Pat> {
+        child(&self.0)
+    }
+}
+
+impl MatchExpr {
+    /// Get the `match` keyword token.
+    pub fn match_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::MATCH_KW)
+    }
+
+    /// Get the scrutinee expression (value being matched).
+    pub fn scrutinee(&self) -> Option<Expr> {
+        child(&self.0)
+    }
+
+    /// Get the match arms.
+    pub fn arms(&self) -> impl Iterator<Item = MatchArm> {
+        children(&self.0)
+    }
+}
+
+impl MatchArm {
+    /// Get the pattern for this arm.
+    pub fn pattern(&self) -> Option<Pat> {
+        child(&self.0)
+    }
+
+    /// Get the guard expression, if any (the `if condition` part).
+    pub fn guard(&self) -> Option<Expr> {
+        // Guard is the expression between `if` and `=>`
+        // We need to find the expression that comes after `if` keyword
+        let if_token = token(&self.0, SyntaxKind::IF_KW)?;
+        let arrow_pos = token(&self.0, SyntaxKind::FAT_ARROW)?.text_range().start();
+        children::<Expr>(&self.0).find(|expr| {
+            let pos = expr.syntax().text_range().start();
+            pos > if_token.text_range().end() && pos < arrow_pos
+        })
+    }
+
+    /// Get the body expression (the result if this arm matches).
+    pub fn body(&self) -> Option<Expr> {
+        // Body is the expression after `=>`
+        let arrow_pos = token(&self.0, SyntaxKind::FAT_ARROW)?.text_range().end();
+        children::<Expr>(&self.0).find(|expr| expr.syntax().text_range().start() >= arrow_pos)
     }
 }

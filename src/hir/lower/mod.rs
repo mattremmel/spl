@@ -659,6 +659,8 @@ impl LoweringContext {
             Expr::Block(block_expr) => self.lower_block_expr(block_expr),
             Expr::Cast(cast) => self.lower_cast_expr(cast, span, ty),
             Expr::Range(_) => self.lower_missing(span), // TODO
+            // New syntax - not yet implemented in HIR lowering
+            Expr::Is(_) | Expr::Match(_) => self.lower_missing(span), // TODO: Implement pattern matching
         }
     }
 

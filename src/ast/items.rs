@@ -20,6 +20,8 @@ ast_node!(FieldDef);
 ast_node!(Name);
 ast_node!(NameRef);
 ast_node!(Visibility);
+ast_node!(WhereClause);
+ast_node!(TypeBound);
 
 // === Typed accessors ===
 
@@ -96,6 +98,10 @@ impl FunctionDef {
         child(&self.0)
     }
 
+    pub fn where_clause(&self) -> Option<WhereClause> {
+        child(&self.0)
+    }
+
     pub fn body(&self) -> Option<Block> {
         child(&self.0)
     }
@@ -117,6 +123,10 @@ impl StructDef {
     pub fn field_list(&self) -> Option<FieldList> {
         child(&self.0)
     }
+
+    pub fn where_clause(&self) -> Option<WhereClause> {
+        child(&self.0)
+    }
 }
 
 impl ImplBlock {
@@ -125,6 +135,10 @@ impl ImplBlock {
     }
 
     pub fn self_ty(&self) -> Option<Type> {
+        child(&self.0)
+    }
+
+    pub fn where_clause(&self) -> Option<WhereClause> {
         child(&self.0)
     }
 
@@ -147,6 +161,10 @@ impl TypeAlias {
     }
 
     pub fn ty(&self) -> Option<Type> {
+        child(&self.0)
+    }
+
+    pub fn where_clause(&self) -> Option<WhereClause> {
         child(&self.0)
     }
 }
@@ -265,6 +283,25 @@ impl Visibility {
     }
 
     /// Returns the path for `pub(in path)` visibility.
+    pub fn path(&self) -> Option<Path> {
+        child(&self.0)
+    }
+}
+
+impl WhereClause {
+    /// Get the `where` keyword token.
+    pub fn where_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::WHERE_KW)
+    }
+
+    /// Get the type parameters with their bounds.
+    pub fn type_params(&self) -> impl Iterator<Item = GenericParam> {
+        children(&self.0)
+    }
+}
+
+impl TypeBound {
+    /// Get the path of the trait bound.
     pub fn path(&self) -> Option<Path> {
         child(&self.0)
     }

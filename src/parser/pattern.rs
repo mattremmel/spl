@@ -64,42 +64,81 @@ fn ident_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     Ok(m.complete(p, SyntaxKind::IdentPat))
 }
 
-/// Parse an identifier, path, or struct pattern.
-/// Lookahead is needed to distinguish `x` (ident) from `Point { x }` (struct).
+/// Parse an identifier, path, struct pattern, or enum pattern.
+/// Lookahead is needed to distinguish:
+/// - `x` (ident)
+/// - `Point { x }` (struct pattern)
+/// - `Some(x)` (enum pattern)
 fn ident_or_struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
-    // Check if this is a path (has :: after identifier)
-    let is_path = p.peek(1) == Some(SyntaxKind::COLON_COLON);
+    // Check if this is a path (has :: or . after identifier)
+    let is_path = p.peek(1) == Some(SyntaxKind::COLON_COLON)
+        || p.peek(1) == Some(SyntaxKind::DOT);
     // Check if this is a struct pattern (has { after identifier or path)
     let is_struct = p.peek(1) == Some(SyntaxKind::L_BRACE);
+    // Check if this is an enum pattern (has ( after identifier)
+    let is_enum = p.peek(1) == Some(SyntaxKind::L_PAREN);
 
     if is_path {
-        // This is a path - could be struct pattern with qualified name
-        path_or_struct_pat(p)
+        // This is a path - could be struct pattern or enum pattern with qualified name
+        path_or_struct_or_enum_pat(p)
     } else if is_struct {
         // Struct pattern: Name { ... }
         struct_pat(p)
+    } else if is_enum {
+        // Enum pattern: Some(x)
+        enum_pat(p)
     } else {
         // Simple identifier pattern
         ident_pat(p)
     }
 }
 
-/// Parse a path and determine if it's followed by struct fields.
-fn path_or_struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+/// Parse a path and determine if it's followed by struct fields or enum args.
+fn path_or_struct_or_enum_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
 
     // Use structured path parsing (no generics in patterns)
     crate::parser::path::path_no_generics(p)?;
 
-    // Check if followed by {
+    // Check if followed by { for struct pattern
     if p.at(SyntaxKind::L_BRACE) {
         // Struct pattern with path
         parse_struct_fields(p)?;
         Ok(m.complete(p, SyntaxKind::StructPat))
+    } else if p.at(SyntaxKind::L_PAREN) {
+        // Enum pattern with path: Option::Some(x), Some(x)
+        parse_enum_args(p)?;
+        Ok(m.complete(p, SyntaxKind::TuplePat)) // Reuse TuplePat for enum patterns
     } else {
-        // Just a path used as identifier pattern (unusual but valid)
+        // Just a path used as identifier pattern (for unit enum variants like None)
         Ok(m.complete(p, SyntaxKind::IdentPat))
     }
+}
+
+/// Parse an enum pattern: `Some(x)`, `Ok(value)`
+fn enum_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+    let m = p.start();
+    crate::parser::path::path_no_generics(p)?; // Parse the variant name
+    parse_enum_args(p)?;
+    Ok(m.complete(p, SyntaxKind::TuplePat)) // Reuse TuplePat for enum patterns
+}
+
+/// Parse enum pattern arguments: `(pattern, ...)`
+fn parse_enum_args(p: &mut Parser<'_>) -> Result<(), ParseError> {
+    p.expect(SyntaxKind::L_PAREN)?;
+
+    if !p.at(SyntaxKind::R_PAREN) {
+        pattern(p)?;
+        while p.eat(SyntaxKind::COMMA) {
+            if p.at(SyntaxKind::R_PAREN) {
+                break;
+            }
+            pattern(p)?;
+        }
+    }
+
+    p.expect(SyntaxKind::R_PAREN)?;
+    Ok(())
 }
 
 /// Parse a struct pattern: `Point { x, y }`, `Point { x: a, y: b }`, `Point { x, .. }`

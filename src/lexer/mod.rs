@@ -74,6 +74,14 @@ pub enum Token {
     Crate,
     #[token("super")]
     Super,
+    #[token("where")]
+    Where,
+    #[token("is")]
+    Is,
+    #[token("not")]
+    Not,
+    #[token("match")]
+    Match,
 
     // === Operators ===
     // Arithmetic
@@ -127,6 +135,8 @@ pub enum Token {
     // Other operators
     #[token("->")]
     Arrow,
+    #[token("=>")]
+    FatArrow,
     #[token("::")]
     ColonColon,
     #[token("..")]

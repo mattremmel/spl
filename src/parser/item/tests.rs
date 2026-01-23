@@ -1815,3 +1815,227 @@ fn struct_tuple_pub() {
         "#]],
     );
 }
+
+// === New Syntax Tests: Colon Return Type ===
+
+#[test]
+fn function_colon_return_type() {
+    check_item(
+        "fn foo(): i32 {}",
+        &expect![[r#"
+            FunctionDef@0..16
+              FN_KW@0..2 "fn"
+              Name@2..6
+                WHITESPACE@2..3 " "
+                IDENT@3..6 "foo"
+              ParamList@6..8
+                L_PAREN@6..7 "("
+                R_PAREN@7..8 ")"
+              COLON@8..9 ":"
+              PathType@9..13
+                Path@9..13
+                  PathSegment@9..13
+                    NameRef@9..13
+                      WHITESPACE@9..10 " "
+                      IDENT@10..13 "i32"
+              Block@13..16
+                WHITESPACE@13..14 " "
+                L_BRACE@14..15 "{"
+                R_BRACE@15..16 "}"
+        "#]],
+    );
+}
+
+// === New Syntax Tests: Where Clause ===
+
+#[test]
+fn function_with_where_clause() {
+    check_item(
+        "fn id(x: T): T where T {}",
+        &expect![[r#"
+            FunctionDef@0..25
+              FN_KW@0..2 "fn"
+              Name@2..5
+                WHITESPACE@2..3 " "
+                IDENT@3..5 "id"
+              ParamList@5..11
+                L_PAREN@5..6 "("
+                Param@6..10
+                  Name@6..7
+                    IDENT@6..7 "x"
+                  COLON@7..8 ":"
+                  PathType@8..10
+                    Path@8..10
+                      PathSegment@8..10
+                        NameRef@8..10
+                          WHITESPACE@8..9 " "
+                          IDENT@9..10 "T"
+                R_PAREN@10..11 ")"
+              COLON@11..12 ":"
+              PathType@12..14
+                Path@12..14
+                  PathSegment@12..14
+                    NameRef@12..14
+                      WHITESPACE@12..13 " "
+                      IDENT@13..14 "T"
+              WhereClause@14..22
+                WHITESPACE@14..15 " "
+                WHERE_KW@15..20 "where"
+                GenericParam@20..22
+                  Name@20..22
+                    WHITESPACE@20..21 " "
+                    IDENT@21..22 "T"
+              Block@22..25
+                WHITESPACE@22..23 " "
+                L_BRACE@23..24 "{"
+                R_BRACE@24..25 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn function_with_where_clause_multiple_params() {
+    check_item(
+        "fn pair(a: T, b: U): (T, U) where T, U {}",
+        &expect![[r#"
+            FunctionDef@0..41
+              FN_KW@0..2 "fn"
+              Name@2..7
+                WHITESPACE@2..3 " "
+                IDENT@3..7 "pair"
+              ParamList@7..19
+                L_PAREN@7..8 "("
+                Param@8..12
+                  Name@8..9
+                    IDENT@8..9 "a"
+                  COLON@9..10 ":"
+                  PathType@10..12
+                    Path@10..12
+                      PathSegment@10..12
+                        NameRef@10..12
+                          WHITESPACE@10..11 " "
+                          IDENT@11..12 "T"
+                COMMA@12..13 ","
+                Param@13..18
+                  Name@13..15
+                    WHITESPACE@13..14 " "
+                    IDENT@14..15 "b"
+                  COLON@15..16 ":"
+                  PathType@16..18
+                    Path@16..18
+                      PathSegment@16..18
+                        NameRef@16..18
+                          WHITESPACE@16..17 " "
+                          IDENT@17..18 "U"
+                R_PAREN@18..19 ")"
+              COLON@19..20 ":"
+              TupleType@20..27
+                WHITESPACE@20..21 " "
+                L_PAREN@21..22 "("
+                PathType@22..23
+                  Path@22..23
+                    PathSegment@22..23
+                      NameRef@22..23
+                        IDENT@22..23 "T"
+                COMMA@23..24 ","
+                PathType@24..26
+                  Path@24..26
+                    PathSegment@24..26
+                      NameRef@24..26
+                        WHITESPACE@24..25 " "
+                        IDENT@25..26 "U"
+                R_PAREN@26..27 ")"
+              WhereClause@27..38
+                WHITESPACE@27..28 " "
+                WHERE_KW@28..33 "where"
+                GenericParam@33..35
+                  Name@33..35
+                    WHITESPACE@33..34 " "
+                    IDENT@34..35 "T"
+                COMMA@35..36 ","
+                GenericParam@36..38
+                  Name@36..38
+                    WHITESPACE@36..37 " "
+                    IDENT@37..38 "U"
+              Block@38..41
+                WHITESPACE@38..39 " "
+                L_BRACE@39..40 "{"
+                R_BRACE@40..41 "}"
+        "#]],
+    );
+}
+
+// === New Syntax Tests: Struct with Parentheses ===
+
+#[test]
+fn struct_parenthesized_named_fields() {
+    check_item(
+        "struct Point(x: i32, y: i32)",
+        &expect![[r#"
+            StructDef@0..28
+              STRUCT_KW@0..6 "struct"
+              Name@6..12
+                WHITESPACE@6..7 " "
+                IDENT@7..12 "Point"
+              FieldList@12..28
+                L_PAREN@12..13 "("
+                FieldDef@13..19
+                  Name@13..14
+                    IDENT@13..14 "x"
+                  COLON@14..15 ":"
+                  PathType@15..19
+                    Path@15..19
+                      PathSegment@15..19
+                        NameRef@15..19
+                          WHITESPACE@15..16 " "
+                          IDENT@16..19 "i32"
+                COMMA@19..20 ","
+                FieldDef@20..27
+                  Name@20..22
+                    WHITESPACE@20..21 " "
+                    IDENT@21..22 "y"
+                  COLON@22..23 ":"
+                  PathType@23..27
+                    Path@23..27
+                      PathSegment@23..27
+                        NameRef@23..27
+                          WHITESPACE@23..24 " "
+                          IDENT@24..27 "i32"
+                R_PAREN@27..28 ")"
+        "#]],
+    );
+}
+
+#[test]
+fn struct_parenthesized_with_where() {
+    check_item(
+        "struct Box(value: T) where T",
+        &expect![[r#"
+            StructDef@0..28
+              STRUCT_KW@0..6 "struct"
+              Name@6..10
+                WHITESPACE@6..7 " "
+                IDENT@7..10 "Box"
+              FieldList@10..20
+                L_PAREN@10..11 "("
+                FieldDef@11..19
+                  Name@11..16
+                    IDENT@11..16 "value"
+                  COLON@16..17 ":"
+                  PathType@17..19
+                    Path@17..19
+                      PathSegment@17..19
+                        NameRef@17..19
+                          WHITESPACE@17..18 " "
+                          IDENT@18..19 "T"
+                R_PAREN@19..20 ")"
+              WhereClause@20..28
+                WHITESPACE@20..21 " "
+                WHERE_KW@21..26 "where"
+                GenericParam@26..28
+                  Name@26..28
+                    WHITESPACE@26..27 " "
+                    IDENT@27..28 "T"
+        "#]],
+    );
+}

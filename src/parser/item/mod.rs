@@ -40,7 +40,11 @@ fn opt_visibility(p: &mut Parser<'_>) -> Option<CompletedMarker> {
     Some(m.complete(p, SyntaxKind::Visibility))
 }
 
-/// Parse a function definition: `[pub] fn name[<generics>](params) [-> Type] { body }`
+/// Parse a function definition: `[pub] fn name[<generics>](params) [: Type | -> Type] [where ...] { body }`
+///
+/// Supports both old syntax (`-> Type`) and new syntax (`: Type`) for return types.
+/// New syntax: `fn foo(): i32 where T { ... }`
+/// Old syntax: `fn foo() -> i32 { ... }` (still supported for backwards compatibility)
 pub(crate) fn function_def(
     p: &mut Parser<'_>,
 ) -> Result<CompletedMarker, crate::parser::ParseError> {
@@ -55,7 +59,7 @@ pub(crate) fn function_def(
     // Function name
     name(p)?;
 
-    // Optional generic parameters
+    // Optional generic parameters (old style: <T, U>)
     if p.at(SyntaxKind::LT) {
         generic_params(p)?;
     }
@@ -63,15 +67,73 @@ pub(crate) fn function_def(
     // Parameter list
     param_list(p)?;
 
-    // Optional return type
-    if p.eat(SyntaxKind::ARROW) {
+    // Optional return type - support both `:` (new) and `->` (old) syntax
+    if p.eat(SyntaxKind::COLON) || p.eat(SyntaxKind::ARROW) {
         stmt::type_annotation(p)?;
+    }
+
+    // Optional where clause (new syntax: `where T, U: Clone`)
+    if p.at(SyntaxKind::WHERE_KW) {
+        where_clause(p)?;
     }
 
     // Function body
     expr::block(p)?;
 
     Ok(m.complete(p, SyntaxKind::FunctionDef))
+}
+
+/// Parse a where clause: `where T, U: Clone, ...`
+fn where_clause(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    p.expect(SyntaxKind::WHERE_KW)?;
+
+    // Parse comma-separated type parameters with optional bounds
+    loop {
+        where_type_param(p)?;
+
+        if !p.eat(SyntaxKind::COMMA) {
+            break;
+        }
+
+        // Allow trailing comma before block
+        if p.at(SyntaxKind::L_BRACE) {
+            break;
+        }
+    }
+
+    Ok(m.complete(p, SyntaxKind::WhereClause))
+}
+
+/// Parse a type parameter in a where clause: `T` or `T: Bound + OtherBound`
+fn where_type_param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    // Type parameter name
+    name(p)?;
+
+    // Optional bounds
+    if p.eat(SyntaxKind::COLON) {
+        // Parse first bound
+        type_bound(p)?;
+
+        // Parse additional bounds separated by +
+        while p.eat(SyntaxKind::PLUS) {
+            type_bound(p)?;
+        }
+    }
+
+    Ok(m.complete(p, SyntaxKind::GenericParam))
+}
+
+/// Parse a type bound: `Clone` or `Iterator<Item = T>`
+fn type_bound(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    // Parse the path (trait name, possibly with generics)
+    crate::parser::path::path(p)?;
+
+    Ok(m.complete(p, SyntaxKind::TypeBound))
 }
 
 /// Parse a name (identifier).
@@ -183,7 +245,10 @@ fn generic_param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::P
     Ok(m.complete(p, SyntaxKind::GenericParam))
 }
 
-/// Parse a struct definition: `[pub] struct Name[<generics>] { fields }`
+/// Parse a struct definition.
+///
+/// New syntax: `[pub] struct Name(fields) [where ...]`
+/// Old syntax: `[pub] struct Name[<generics>] { fields }` (still supported)
 pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
 
@@ -196,22 +261,101 @@ pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
     // Struct name
     name(p)?;
 
-    // Optional generic parameters
+    // Optional generic parameters (old style: <T, U>)
     if p.at(SyntaxKind::LT) {
         generic_params(p)?;
     }
 
-    // Unit struct (semicolon), tuple struct (parens), or field list (braces)
+    // Check what follows to determine struct type:
+    // - `;` -> unit struct
+    // - `(` followed by field definitions -> new parenthesized struct OR old tuple struct
+    // - `{` -> old brace-delimited field list
+    // - `where` -> new syntax with where clause before body
     if p.eat(SyntaxKind::SEMI) {
         // Unit struct
     } else if p.at(SyntaxKind::L_PAREN) {
-        tuple_field_list(p)?;
-        p.expect(SyntaxKind::SEMI)?;
+        // Could be new parenthesized struct or old tuple struct
+        // New syntax: struct Point(x: i32, y: i32)
+        // Old syntax: struct Point(i32, i32);
+        // We'll treat both as the same for now - the new syntax is compatible
+        paren_field_list(p)?;
+
+        // Optional where clause (new syntax)
+        if p.at(SyntaxKind::WHERE_KW) {
+            where_clause(p)?;
+        }
+
+        // Old tuple struct syntax requires semicolon; new syntax doesn't
+        p.eat(SyntaxKind::SEMI);
+    } else if p.at(SyntaxKind::WHERE_KW) {
+        // New syntax: where clause before body (must have parens after)
+        where_clause(p)?;
+        // Expect empty parens or field list
+        if p.at(SyntaxKind::L_PAREN) {
+            paren_field_list(p)?;
+        }
     } else {
+        // Old syntax: brace-delimited field list
         field_list(p)?;
     }
 
     Ok(m.complete(p, SyntaxKind::StructDef))
+}
+
+/// Parse a parenthesized field list: `([pub] name: Type, ...)`
+/// Supports both new named fields `(x: i32)` and old tuple fields `(i32)`
+fn paren_field_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    p.expect(SyntaxKind::L_PAREN)?;
+
+    let mut index = 0u32;
+    while !p.at(SyntaxKind::R_PAREN) && p.current().is_some() {
+        // Check if this is a named field (new syntax) or tuple field (old syntax)
+        // Named field: [pub] name: Type
+        // Tuple field: [pub] Type
+        if let Err(err) = paren_field_def(p, index) {
+            p.recover_with_error(err, TUPLE_FIELD_RECOVERY_SET);
+        }
+        index += 1;
+        if !p.eat(SyntaxKind::COMMA) && !p.at(SyntaxKind::R_PAREN) {
+            let err = p.error_at_current("expected ',' or ')'".to_string());
+            p.error(err);
+        }
+    }
+
+    p.expect(SyntaxKind::R_PAREN)?;
+    Ok(m.complete(p, SyntaxKind::FieldList))
+}
+
+/// Parse a field in parenthesized struct: `[pub] name: Type` or `[pub] Type`
+fn paren_field_def(
+    p: &mut Parser<'_>,
+    index: u32,
+) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    opt_visibility(p);
+
+    // Check if this is named field or tuple field
+    // Named: `name: Type` - identifier followed by colon
+    // Tuple: `Type` - just a type
+    let is_named = p.at(SyntaxKind::IDENT)
+        && p.peek_at(1, SyntaxKind::COLON)
+        && !p.peek_at(2, SyntaxKind::COLON); // Avoid confusing `path::Type` with named field
+
+    if is_named {
+        // Named field: name: Type
+        name(p)?;
+        p.expect(SyntaxKind::COLON)?;
+        stmt::type_annotation(p)?;
+    } else {
+        // Tuple field: just Type - use synthetic index name
+        let name_m = p.start();
+        p.emit_synthetic_token(SyntaxKind::INT_LITERAL, index.to_string());
+        name_m.complete(p, SyntaxKind::Name);
+        stmt::type_annotation(p)?;
+    }
+
+    Ok(m.complete(p, SyntaxKind::FieldDef))
 }
 
 /// Recovery set for field list (field start or list end).
@@ -310,7 +454,7 @@ fn tuple_field_def(
     Ok(m.complete(p, SyntaxKind::FieldDef))
 }
 
-/// Parse a type alias: `[pub] type Name[<generics>] = Type;`
+/// Parse a type alias: `[pub] type Name[<generics>] = Type [where ...];`
 pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
 
@@ -323,7 +467,7 @@ pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
     // Alias name
     name(p)?;
 
-    // Optional generic parameters
+    // Optional generic parameters (old syntax: <T, U>)
     if p.at(SyntaxKind::LT) {
         generic_params(p)?;
     }
@@ -331,6 +475,11 @@ pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
     // = Type
     p.expect(SyntaxKind::EQ)?;
     stmt::type_annotation(p)?;
+
+    // Optional where clause (new syntax)
+    if p.at(SyntaxKind::WHERE_KW) {
+        where_clause(p)?;
+    }
 
     // Semicolon
     p.expect(SyntaxKind::SEMI)?;
@@ -342,20 +491,28 @@ pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
 const IMPL_ITEM_RECOVERY_SET: &[SyntaxKind] =
     &[SyntaxKind::FN_KW, SyntaxKind::PUB_KW, SyntaxKind::R_BRACE];
 
-/// Parse an impl block: `impl [<generics>] Type { items }`
+/// Parse an impl block.
+///
+/// New syntax: `impl Type(Args) where T { items }`
+/// Old syntax: `impl [<generics>] Type { items }`
 pub(crate) fn impl_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
 
     // impl keyword
     p.expect(SyntaxKind::IMPL_KW)?;
 
-    // Optional generic parameters
+    // Optional generic parameters (old syntax: <T, U>)
     if p.at(SyntaxKind::LT) {
         generic_params(p)?;
     }
 
-    // Self type
+    // Self type (may include parenthesized generic args in new syntax)
     stmt::type_annotation(p)?;
+
+    // Optional where clause (new syntax)
+    if p.at(SyntaxKind::WHERE_KW) {
+        where_clause(p)?;
+    }
 
     // Items block
     p.expect(SyntaxKind::L_BRACE)?;

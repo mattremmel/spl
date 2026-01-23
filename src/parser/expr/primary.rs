@@ -40,8 +40,54 @@ pub(super) fn primary_expr(
         BREAK_KW => break_expr(p),
         CONTINUE_KW => continue_expr(p),
         RETURN_KW => return_expr(p),
+        // Match expression
+        MATCH_KW => match_expr(p),
         _ => Ok(None),
     })
+}
+
+/// Parse a match expression: `match expr { arms }`
+pub(super) fn match_expr(
+    p: &mut Parser<'_>,
+) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+    let m = p.start();
+    p.expect(SyntaxKind::MATCH_KW)?;
+
+    // Scrutinee expression (no struct expressions allowed)
+    super::expr_no_struct(p)?;
+
+    // Match body
+    p.expect(SyntaxKind::L_BRACE)?;
+
+    while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
+        match_arm(p)?;
+    }
+
+    p.expect(SyntaxKind::R_BRACE)?;
+
+    Ok(Some(m.complete(p, SyntaxKind::MatchExpr)))
+}
+
+/// Parse a match arm: `pattern [if guard] => expr,`
+fn match_arm(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    // Pattern
+    crate::parser::pattern::pattern(p)?;
+
+    // Optional guard: `if condition`
+    if p.eat(SyntaxKind::IF_KW) {
+        expr(p)?;
+    }
+
+    // Arrow and body expression
+    p.expect(SyntaxKind::FAT_ARROW)?;
+    expr(p)?;
+
+    // Match arms are separated by commas
+    p.eat(SyntaxKind::COMMA);
+
+    Ok(m.complete(p, SyntaxKind::MatchArm))
 }
 
 /// Parse a literal expression.
@@ -949,6 +995,148 @@ mod tests {
                       INT_LITERAL@2..4 "42"
                     WHITESPACE@4..5 " "
                     R_BRACE@5..6 "}"
+            "#]],
+        );
+    }
+
+    // === New Syntax: Match Expression ===
+
+    #[test]
+    fn match_expr_simple() {
+        check_expr(
+            "match x { 1 => 2, }",
+            &expect![[r#"
+                MatchExpr@0..19
+                  MATCH_KW@0..5 "match"
+                  PathExpr@5..7
+                    Path@5..7
+                      PathSegment@5..7
+                        NameRef@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
+                  WHITESPACE@7..8 " "
+                  L_BRACE@8..9 "{"
+                  MatchArm@9..17
+                    LiteralPat@9..11
+                      WHITESPACE@9..10 " "
+                      INT_LITERAL@10..11 "1"
+                    WHITESPACE@11..12 " "
+                    FAT_ARROW@12..14 "=>"
+                    LiteralExpr@14..16
+                      WHITESPACE@14..15 " "
+                      INT_LITERAL@15..16 "2"
+                    COMMA@16..17 ","
+                  WHITESPACE@17..18 " "
+                  R_BRACE@18..19 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn match_expr_multiple_arms() {
+        check_expr(
+            "match x { Some(v) => v, None => 0, }",
+            &expect![[r#"
+                MatchExpr@0..36
+                  MATCH_KW@0..5 "match"
+                  PathExpr@5..7
+                    Path@5..7
+                      PathSegment@5..7
+                        NameRef@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
+                  WHITESPACE@7..8 " "
+                  L_BRACE@8..9 "{"
+                  MatchArm@9..23
+                    TuplePat@9..17
+                      Path@9..14
+                        PathSegment@9..14
+                          NameRef@9..14
+                            WHITESPACE@9..10 " "
+                            IDENT@10..14 "Some"
+                      L_PAREN@14..15 "("
+                      IdentPat@15..16
+                        Name@15..16
+                          IDENT@15..16 "v"
+                      R_PAREN@16..17 ")"
+                    WHITESPACE@17..18 " "
+                    FAT_ARROW@18..20 "=>"
+                    PathExpr@20..22
+                      Path@20..22
+                        PathSegment@20..22
+                          NameRef@20..22
+                            WHITESPACE@20..21 " "
+                            IDENT@21..22 "v"
+                    COMMA@22..23 ","
+                  MatchArm@23..34
+                    IdentPat@23..28
+                      Name@23..28
+                        WHITESPACE@23..24 " "
+                        IDENT@24..28 "None"
+                    WHITESPACE@28..29 " "
+                    FAT_ARROW@29..31 "=>"
+                    LiteralExpr@31..33
+                      WHITESPACE@31..32 " "
+                      INT_LITERAL@32..33 "0"
+                    COMMA@33..34 ","
+                  WHITESPACE@34..35 " "
+                  R_BRACE@35..36 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn match_expr_with_guard() {
+        check_expr(
+            "match x { n if n > 0 => 1, _ => 0, }",
+            &expect![[r#"
+                MatchExpr@0..36
+                  MATCH_KW@0..5 "match"
+                  PathExpr@5..7
+                    Path@5..7
+                      PathSegment@5..7
+                        NameRef@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
+                  WHITESPACE@7..8 " "
+                  L_BRACE@8..9 "{"
+                  MatchArm@9..26
+                    IdentPat@9..11
+                      Name@9..11
+                        WHITESPACE@9..10 " "
+                        IDENT@10..11 "n"
+                    WHITESPACE@11..12 " "
+                    IF_KW@12..14 "if"
+                    BinExpr@14..20
+                      PathExpr@14..16
+                        Path@14..16
+                          PathSegment@14..16
+                            NameRef@14..16
+                              WHITESPACE@14..15 " "
+                              IDENT@15..16 "n"
+                      WHITESPACE@16..17 " "
+                      GT@17..18 ">"
+                      LiteralExpr@18..20
+                        WHITESPACE@18..19 " "
+                        INT_LITERAL@19..20 "0"
+                    WHITESPACE@20..21 " "
+                    FAT_ARROW@21..23 "=>"
+                    LiteralExpr@23..25
+                      WHITESPACE@23..24 " "
+                      INT_LITERAL@24..25 "1"
+                    COMMA@25..26 ","
+                  MatchArm@26..34
+                    WildcardPat@26..28
+                      WHITESPACE@26..27 " "
+                      IDENT@27..28 "_"
+                    WHITESPACE@28..29 " "
+                    FAT_ARROW@29..31 "=>"
+                    LiteralExpr@31..33
+                      WHITESPACE@31..32 " "
+                      INT_LITERAL@32..33 "0"
+                    COMMA@33..34 ","
+                  WHITESPACE@34..35 " "
+                  R_BRACE@35..36 "}"
             "#]],
         );
     }

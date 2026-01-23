@@ -1,6 +1,6 @@
 # SPL Lexical Grammar
 
-This document defines the lexical structure of SPL (Simple Programming Language) - a multi-paradigm, statically-typed language with Rust-inspired syntax.
+This document defines the lexical structure of SPL (Simple Programming Language) - a multi-paradigm, statically-typed language with a clean, modern syntax.
 
 ## Overview
 
@@ -10,7 +10,7 @@ The lexer transforms source text into a stream of tokens. Whitespace and comment
 
 ## Keywords
 
-SPL reserves 25 keywords that cannot be used as identifiers:
+SPL reserves 29 keywords that cannot be used as identifiers:
 
 | Keyword    | Description                          |
 |------------|--------------------------------------|
@@ -29,7 +29,7 @@ SPL reserves 25 keywords that cannot be used as identifiers:
 | `break`    | Exit loop                            |
 | `continue` | Skip to next iteration               |
 | `return`   | Return from function                 |
-| `as`       | Type cast operator                   |
+| `as`       | Type cast operator (safe only)       |
 | `true`     | Boolean literal true                 |
 | `false`    | Boolean literal false                |
 | `pub`      | Public visibility modifier           |
@@ -39,6 +39,10 @@ SPL reserves 25 keywords that cannot be used as identifiers:
 | `mod`      | Module declaration                   |
 | `crate`    | Root module reference                |
 | `super`    | Parent module reference              |
+| `where`    | Generic type constraints             |
+| `is`       | Pattern matching operator            |
+| `not`      | Negation in `is not` pattern         |
+| `match`    | Match expression                     |
 
 ---
 
@@ -86,29 +90,31 @@ SPL reserves 25 keywords that cannot be used as identifiers:
 
 ### Other Operators
 
-| Operator | Description              |
-|----------|--------------------------|
-| `->`     | Return type annotation   |
-| `.`      | Member access            |
-| `::`     | Path separator           |
-| `&`      | Reference                |
-| `..`     | Range                    |
-| `$`      | End of array (in slices) |
+| Operator | Description                      |
+|----------|----------------------------------|
+| `.`      | Member access / path separator   |
+| `&`      | Reference                        |
+| `..`     | Range                            |
+| `$`      | End of array (in slices)         |
+
+**Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses: `Vec(i32)` instead of `Vec<i32>`.
 
 ### Operator Precedence (highest to lowest)
 
 | Precedence | Operators                    | Associativity |
 |------------|------------------------------|---------------|
-| 1          | `.` `::`                     | Left          |
+| 1          | `.` `()` `[]`                | Left          |
 | 2          | `!` `-` (unary) `&`          | Right         |
-| 3          | `*` `/` `%`                  | Left          |
-| 4          | `+` `-`                      | Left          |
-| 5          | `..`                         | Left          |
-| 6          | `<` `>` `<=` `>=`            | Left          |
-| 7          | `==` `!=`                    | Left          |
-| 8          | `&&`                         | Left          |
-| 9          | `\|\|`                       | Left          |
-| 10         | `=` `+=` `-=` `*=` `/=` `%=` | Right         |
+| 3          | `as`                         | Left          |
+| 4          | `*` `/` `%`                  | Left          |
+| 5          | `+` `-`                      | Left          |
+| 6          | `..`                         | Left          |
+| 7          | `<` `>` `<=` `>=`            | Left          |
+| 8          | `==` `!=`                    | Left          |
+| 9          | `is` `is not`                | Left          |
+| 10         | `&&`                         | Left          |
+| 11         | `\|\|`                       | Left          |
+| 12         | `=` `+=` `-=` `*=` `/=` `%=` | Right         |
 
 ---
 
@@ -272,13 +278,13 @@ Whitespace is not significant except to separate tokens that would otherwise mer
 
 | Category    | Examples                                    |
 |-------------|---------------------------------------------|
-| Keyword     | `let`, `fn`, `if`, `struct`, `true`         |
+| Keyword     | `let`, `fn`, `if`, `struct`, `where`, `is`  |
 | Identifier  | `foo`, `Point2D`, `_value`                  |
 | Integer     | `42`, `0xFF`, `0b1010`, `1_000_000`         |
 | Float       | `3.14`, `1e10`, `2.5e-3`                    |
 | String      | `"hello"`, `"line\nbreak"`                  |
 | Char        | `'a'`, `'\n'`                               |
-| Operator    | `+`, `==`, `&&`, `->`                       |
+| Operator    | `+`, `==`, `&&`, `.`, `is`                  |
 | Delimiter   | `(`, `)`, `{`, `}`, `;`, `,`                |
 | Comment     | `// ...`, `/* ... */`                       |
 
@@ -289,58 +295,82 @@ Whitespace is not significant except to separate tokens that would otherwise mer
 The following example demonstrates all token categories:
 
 ```spl
-// Point struct with public fields
-pub struct Point {
-    x: f64,
-    y: f64,
-}
+// Point struct with public fields (parentheses, not braces)
+pub struct Point(
+    pub x: f64,
+    pub y: f64,
+)
 
 impl Point {
-    pub fn new(x: f64, y: f64) -> Point {
-        Point { x: x, y: y }
+    // Return type uses colon, not arrow
+    pub fn new(x: f64, y: f64): Point {
+        return Point(x = x, y = y)
     }
 
-    pub fn distance(&self, other: &Point) -> f64 {
-        let dx = self.x - other.x;
-        let dy = self.y - other.y;
-        (dx * dx + dy * dy).sqrt()
+    // Named parameters with 'from' label
+    pub fn distance(&self, from other: &Point): f64 {
+        let dx = self.x - other.x
+        let dy = self.y - other.y
+        return (dx * dx + dy * dy).sqrt()
     }
+}
+
+// Generic function with where clause
+fn identity(x: T): T where T {
+    return x
 }
 
 fn main() {
-    let mut p1 = Point::new(0.0, 0.0);
-    let p2 = Point::new(3.0, 4.0);
+    // Struct instantiation with named fields
+    let mut p1 = Point.new(0.0, 0.0)
+    let p2 = Point(x = 3.0, y = 4.0)
 
-    // Calculate distance
-    let dist = p1.distance(&p2);
+    // Calculate distance using named argument
+    let dist = p1.distance(from = &p2)
 
     /* Update p1 position
        using compound assignment */
-    p1.x += 1.5e1;
-    p1.y += 0x0A as f64;
+    p1.x += 1.5e1
+    p1.y += 0x0A as f64
 
     // Loop with range
     for i in 0..10 {
         if i % 2 == 0 {
-            continue;
+            continue
         }
         // Process odd numbers
     }
 
+    // Pattern matching with 'is'
+    let maybe_value: Option(i32) = Some(42)
+    if maybe_value is Some(v) {
+        // Use v here
+    }
+
+    if maybe_value is not None {
+        // Value exists
+    }
+
+    // Match expression
+    let result = match maybe_value {
+        Some(x) => x * 2,
+        None => 0,
+    }
+
     // Boolean and character literals
-    let flag: bool = true;
-    let ch: char = '\n';
-    let msg: str = "Hello, SPL!\n";
+    let flag: bool = true
+    let ch: char = '\n'
+    let msg: str = "Hello, SPL!\n"
 
     // Control flow
     while flag && dist > 0.0 {
         if dist <= 5.0 {
-            break;
+            break
         }
     }
 
     loop {
-        return;
+        return
     }
 }
 ```

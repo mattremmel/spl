@@ -156,6 +156,26 @@ fn keyword_super() {
     check_single("super", Token::Super);
 }
 
+#[test]
+fn keyword_where() {
+    check_single("where", Token::Where);
+}
+
+#[test]
+fn keyword_is() {
+    check_single("is", Token::Is);
+}
+
+#[test]
+fn keyword_not() {
+    check_single("not", Token::Not);
+}
+
+#[test]
+fn keyword_match() {
+    check_single("match", Token::Match);
+}
+
 // ============================================================
 // Operators - Arithmetic
 // ============================================================

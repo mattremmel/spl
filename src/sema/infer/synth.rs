@@ -248,6 +248,13 @@ impl InferEngine {
             Expr::Block(block_expr) => self.synth_block_expr(block_expr),
             Expr::Cast(cast) => self.synth_cast(cast),
             Expr::Range(range) => self.synth_range(range),
+            // New syntax - not yet fully implemented in semantic analysis
+            Expr::Is(_) | Expr::Match(_) => {
+                // TODO: Implement proper type checking for `is` and `match` expressions
+                // For now, return bool for `is` (pattern match result) and
+                // type variable for `match` (requires unifying arm types)
+                self.ctx.types.bool()
+            }
         };
         self.expr_types.insert(span, type_id);
         type_id

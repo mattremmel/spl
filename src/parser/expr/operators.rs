@@ -94,6 +94,18 @@ pub(super) fn infix_expr(
         return Ok(m.complete(p, SyntaxKind::CastExpr));
     }
 
+    // Handle 'is' pattern matching specially: `expr is [not] Pattern`
+    if op == SyntaxKind::IS_KW {
+        p.bump(); // is
+
+        // Optional 'not' for `is not Pattern`
+        p.eat(SyntaxKind::NOT_KW);
+
+        // Parse pattern
+        crate::parser::pattern::pattern(p)?;
+        return Ok(m.complete(p, SyntaxKind::IsExpr));
+    }
+
     // Regular binary operator
     p.bump();
     let _ = expr_bp(p, r_bp, allow_struct)?;
@@ -1469,6 +1481,124 @@ mod tests {
                     BANG@1..2 "!"
                     LiteralExpr@2..6
                       TRUE_KW@2..6 "true"
+            "#]],
+        );
+    }
+
+    // === New Syntax: `is` Expression ===
+
+    #[test]
+    fn is_expr_simple() {
+        check_expr(
+            "x is Some",
+            &expect![[r#"
+                IsExpr@0..9
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
+                  WHITESPACE@1..2 " "
+                  IS_KW@2..4 "is"
+                  IdentPat@4..9
+                    Name@4..9
+                      WHITESPACE@4..5 " "
+                      IDENT@5..9 "Some"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn is_expr_with_binding() {
+        check_expr(
+            "x is Some(v)",
+            &expect![[r#"
+                IsExpr@0..12
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
+                  WHITESPACE@1..2 " "
+                  IS_KW@2..4 "is"
+                  TuplePat@4..12
+                    Path@4..9
+                      PathSegment@4..9
+                        NameRef@4..9
+                          WHITESPACE@4..5 " "
+                          IDENT@5..9 "Some"
+                    L_PAREN@9..10 "("
+                    IdentPat@10..11
+                      Name@10..11
+                        IDENT@10..11 "v"
+                    R_PAREN@11..12 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn is_not_expr() {
+        check_expr(
+            "x is not None",
+            &expect![[r#"
+                IsExpr@0..13
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
+                  WHITESPACE@1..2 " "
+                  IS_KW@2..4 "is"
+                  WHITESPACE@4..5 " "
+                  NOT_KW@5..8 "not"
+                  IdentPat@8..13
+                    Name@8..13
+                      WHITESPACE@8..9 " "
+                      IDENT@9..13 "None"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn is_expr_combined_with_and() {
+        // x is Some(v) && v > 0
+        check_expr(
+            "x is Some(v) && v > 0",
+            &expect![[r#"
+                BinExpr@0..21
+                  IsExpr@0..12
+                    PathExpr@0..1
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "x"
+                    WHITESPACE@1..2 " "
+                    IS_KW@2..4 "is"
+                    TuplePat@4..12
+                      Path@4..9
+                        PathSegment@4..9
+                          NameRef@4..9
+                            WHITESPACE@4..5 " "
+                            IDENT@5..9 "Some"
+                      L_PAREN@9..10 "("
+                      IdentPat@10..11
+                        Name@10..11
+                          IDENT@10..11 "v"
+                      R_PAREN@11..12 ")"
+                  WHITESPACE@12..13 " "
+                  AND_AND@13..15 "&&"
+                  BinExpr@15..21
+                    PathExpr@15..17
+                      Path@15..17
+                        PathSegment@15..17
+                          NameRef@15..17
+                            WHITESPACE@15..16 " "
+                            IDENT@16..17 "v"
+                    WHITESPACE@17..18 " "
+                    GT@18..19 ">"
+                    LiteralExpr@19..21
+                      WHITESPACE@19..20 " "
+                      INT_LITERAL@20..21 "0"
             "#]],
         );
     }

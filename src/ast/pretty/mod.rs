@@ -297,7 +297,47 @@ impl AstPrinter {
             Expr::Block(b) => self.print_block_expr(b),
             Expr::Cast(c) => self.print_cast_expr(c),
             Expr::Range(r) => self.print_range_expr(r),
+            Expr::Is(i) => self.print_is_expr(i),
+            Expr::Match(m) => self.print_match_expr(m),
         }
+    }
+
+    fn print_is_expr(&mut self, is_expr: &IsExpr) {
+        self.line(if is_expr.is_negated() { "IsNotExpr" } else { "IsExpr" });
+        self.indented(|p| {
+            if let Some(lhs) = is_expr.lhs() {
+                p.print_expr(&lhs);
+            }
+            if let Some(pat) = is_expr.pattern() {
+                p.line(&format!("Pattern: {}", pat.syntax()));
+            }
+        });
+    }
+
+    fn print_match_expr(&mut self, match_expr: &MatchExpr) {
+        self.line("MatchExpr");
+        self.indented(|p| {
+            if let Some(scrutinee) = match_expr.scrutinee() {
+                p.print_expr(&scrutinee);
+            }
+            for arm in match_expr.arms() {
+                p.line("MatchArm");
+                p.indented(|p| {
+                    if let Some(guard) = arm.guard() {
+                        p.line("Guard:");
+                        p.indented(|p| {
+                            p.print_expr(&guard);
+                        });
+                    }
+                    if let Some(body) = arm.body() {
+                        p.line("Body:");
+                        p.indented(|p| {
+                            p.print_expr(&body);
+                        });
+                    }
+                });
+            }
+        });
     }
 
     fn print_literal(&mut self, lit: &LiteralExpr) {

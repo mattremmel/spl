@@ -664,6 +664,32 @@ impl<'ctx> Resolver<'ctx> {
                     self.resolve_expr(&end);
                 }
             }
+            // New syntax - pattern matching expressions
+            Expr::Is(is_expr) => {
+                // Resolve the expression being matched
+                if let Some(lhs) = is_expr.lhs() {
+                    self.resolve_expr(&lhs);
+                }
+                // Pattern introduces bindings but we don't track those yet
+                // TODO: Implement pattern binding resolution
+            }
+            Expr::Match(match_expr) => {
+                // Resolve the scrutinee
+                if let Some(scrutinee) = match_expr.scrutinee() {
+                    self.resolve_expr(&scrutinee);
+                }
+                // Resolve each arm
+                for arm in match_expr.arms() {
+                    // Pattern introduces bindings - would need to create scope
+                    // TODO: Implement proper scope for pattern bindings
+                    if let Some(guard) = arm.guard() {
+                        self.resolve_expr(&guard);
+                    }
+                    if let Some(body) = arm.body() {
+                        self.resolve_expr(&body);
+                    }
+                }
+            }
         }
     }
 

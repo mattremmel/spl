@@ -138,14 +138,15 @@ fn lhs(
 const BP_ASSIGN: (u8, u8) = (2, 1); // r_bp < l_bp: right-associative
 const BP_LOGICAL_OR: (u8, u8) = (3, 4);
 const BP_LOGICAL_AND: (u8, u8) = (5, 6);
-const BP_EQUALITY: (u8, u8) = (7, 8);
-const BP_COMPARISON: (u8, u8) = (9, 10);
-const BP_RANGE: (u8, u8) = (11, 12);
-const BP_ADDITIVE: (u8, u8) = (13, 14);
-const BP_MULTIPLICATIVE: (u8, u8) = (15, 16);
-const BP_CAST: (u8, u8) = (17, 18);
-const BP_PREFIX: u8 = 19;
-const BP_POSTFIX: u8 = 21;
+const BP_IS: (u8, u8) = (7, 8); // Pattern matching: `x is Some(v)`
+const BP_EQUALITY: (u8, u8) = (9, 10);
+const BP_COMPARISON: (u8, u8) = (11, 12);
+const BP_RANGE: (u8, u8) = (13, 14);
+const BP_ADDITIVE: (u8, u8) = (15, 16);
+const BP_MULTIPLICATIVE: (u8, u8) = (17, 18);
+const BP_CAST: (u8, u8) = (19, 20);
+const BP_PREFIX: u8 = 21;
+const BP_POSTFIX: u8 = 23;
 
 /// Prefix operator binding power ((), right).
 fn prefix_bp(op: SyntaxKind) -> Option<((), u8)> {
@@ -175,6 +176,9 @@ fn infix_bp(op: SyntaxKind) -> Option<(u8, u8)> {
 
         // Logical AND (left-associative)
         SyntaxKind::AND_AND => Some(BP_LOGICAL_AND),
+
+        // Pattern matching: `x is Pattern` or `x is not Pattern` (left-associative)
+        SyntaxKind::IS_KW => Some(BP_IS),
 
         // Equality (left-associative)
         SyntaxKind::EQ_EQ | SyntaxKind::NE => Some(BP_EQUALITY),

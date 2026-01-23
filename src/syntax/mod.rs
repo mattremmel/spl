@@ -32,6 +32,10 @@ pub enum SyntaxKind {
     SELF_VALUE_KW,
     CRATE_KW,
     SUPER_KW,
+    WHERE_KW,
+    IS_KW,
+    NOT_KW,
+    MATCH_KW,
 
     // Operators
     PLUS,
@@ -55,6 +59,7 @@ pub enum SyntaxKind {
     SLASH_EQ,
     PERCENT_EQ,
     ARROW,
+    FAT_ARROW,
     COLON_COLON,
     DOT_DOT,
     DOT,
@@ -101,6 +106,9 @@ pub enum SyntaxKind {
     GenericArgs,
     FieldList,
     FieldDef,
+    WhereClause,
+    TypeBound,
+    LabelSpec,
 
     // Statements
     Block,
@@ -134,6 +142,9 @@ pub enum SyntaxKind {
     BlockExpr,
     CastExpr,
     RangeExpr,
+    IsExpr,
+    MatchExpr,
+    MatchArm,
     ArgList,
 
     // Types
@@ -205,6 +216,10 @@ impl From<Token> for SyntaxKind {
             Token::SelfValue => Self::SELF_VALUE_KW,
             Token::Crate => Self::CRATE_KW,
             Token::Super => Self::SUPER_KW,
+            Token::Where => Self::WHERE_KW,
+            Token::Is => Self::IS_KW,
+            Token::Not => Self::NOT_KW,
+            Token::Match => Self::MATCH_KW,
             Token::Plus => Self::PLUS,
             Token::Minus => Self::MINUS,
             Token::Star => Self::STAR,
@@ -226,6 +241,7 @@ impl From<Token> for SyntaxKind {
             Token::SlashEq => Self::SLASH_EQ,
             Token::PercentEq => Self::PERCENT_EQ,
             Token::Arrow => Self::ARROW,
+            Token::FatArrow => Self::FAT_ARROW,
             Token::ColonColon => Self::COLON_COLON,
             Token::DotDot => Self::DOT_DOT,
             Token::Dot => Self::DOT,
