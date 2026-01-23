@@ -542,7 +542,7 @@ mod expressions {
     #[test]
     fn struct_expr() {
         check(
-            "fn main() { Point(x = 1, y = 2) }",
+            "fn main() { Point(x: 1, y: 2) }",
             &expect![[r#"
                 SourceFile
                   FunctionDef "main"
@@ -561,7 +561,7 @@ mod expressions {
     #[test]
     fn struct_expr_update() {
         check(
-            "fn main() { Point(x = 1, ..other) }",
+            "fn main() { Point(x: 1, ..other) }",
             &expect![[r#"
                 SourceFile
                   FunctionDef "main"
@@ -1424,7 +1424,7 @@ mod patterns {
     #[test]
     fn pat_struct_with_binding() {
         check(
-            "fn main() { let Point(x = a, y = b) = p; }",
+            "fn main() { let Point(x: a, y: b) = p; }",
             &expect![[r#"
                 SourceFile
                   FunctionDef "main"
@@ -1490,7 +1490,7 @@ struct Point(x: i32, y: i32)
 
 impl Point {
 fn new(x: i32, y: i32): Point {
-    Point(x = x, y = y)
+    Point(x: x, y: y)
 }
 
 fn distance(&self): i32 {

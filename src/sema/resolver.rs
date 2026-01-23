@@ -1114,7 +1114,7 @@ mod tests {
 
     #[test]
     fn resolve_nested_blocks() {
-        check_ok("fn main() { let x = 1; { let y = x; { let z = y; z; } } }");
+        check_ok("fn main() { let x = 1; { let y: x; { let z = y; z; } } }");
     }
 
     #[test]
@@ -1140,7 +1140,7 @@ mod tests {
 
     #[test]
     fn resolve_struct_expr() {
-        check_ok("struct Point(x: i32, y: i32) fn main() { Point(x = 1, y = 2); }");
+        check_ok("struct Point(x: i32, y: i32) fn main() { Point(x: 1, y: 2); }");
     }
 
     #[test]
@@ -1525,7 +1525,7 @@ mod tests {
     #[test]
     fn resolve_struct_pattern() {
         check_ok(
-            "struct Point(x: i32, y: i32) fn main() { let Point(x = a, y = b) = Point(x = 1, y = 2); a + b; }",
+            "struct Point(x: i32, y: i32) fn main() { let Point(x: a, y: b) = Point(x: 1, y: 2); a + b; }",
         );
     }
 
@@ -1534,14 +1534,14 @@ mod tests {
         // Shorthand patterns are now parsed as TuplePat (for enum-style patterns)
         // Use explicit naming to get StructPat
         check_ok(
-            "struct Point(x: i32, y: i32) fn main() { let Point(x = x, y = y) = Point(x = 1, y = 2); x + y; }",
+            "struct Point(x: i32, y: i32) fn main() { let Point(x: x, y: y) = Point(x: 1, y: 2); x + y; }",
         );
     }
 
     #[test]
     fn resolve_struct_pattern_undefined_struct() {
         check_err(
-            "fn main() { let UndefinedStruct(x = x) = foo; }",
+            "fn main() { let UndefinedStruct(x: x) = foo; }",
             &["cannot find `UndefinedStruct`"],
         );
     }
@@ -1654,14 +1654,14 @@ mod tests {
     #[test]
     fn resolve_struct_expr_with_var_fields() {
         check_ok(
-            "struct Point(x: i32, y: i32) fn main() { let a = 1; let b = 2; Point(x = a, y = b); }",
+            "struct Point(x: i32, y: i32) fn main() { let a = 1; let b = 2; Point(x: a, y: b); }",
         );
     }
 
     #[test]
     fn resolve_struct_expr_undefined_in_field() {
         check_err(
-            "struct Point(x: i32, y: i32) fn main() { Point(x = undef, y = 0); }",
+            "struct Point(x: i32, y: i32) fn main() { Point(x: undef, y: 0); }",
             &["cannot find `undef`"],
         );
     }

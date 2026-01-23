@@ -872,7 +872,7 @@ pub(crate) mod tests {
         let parse = parse(
             r#"
             fn foo() {
-                bar(Point(x = Inner(y = 1)));
+                bar(Point(x: Inner(y: 1)));
             }
         "#,
         );

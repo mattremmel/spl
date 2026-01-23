@@ -8596,7 +8596,7 @@ fn test_lower_let_tuple_pattern_nested() {
 fn test_lower_let_struct_pattern() {
     let source = r#"
         struct Point(x: i32, y: i32)
-        fn main(): i32 { let Point(x = x, y = y) = Point(x = 1, y = 2); x }
+        fn main(): i32 { let Point(x: x, y: y) = Point(x: 1, y: 2); x }
     "#;
     let bodies = lower_source(source);
 
@@ -8628,7 +8628,7 @@ fn test_lower_let_struct_pattern() {
 fn test_lower_let_struct_pattern_with_rest() {
     let source = r#"
         struct Point(x: i32, y: i32, z: i32)
-        fn main(): i32 { let Point(x = x, ..) = Point(x = 1, y = 2, z = 3); x }
+        fn main(): i32 { let Point(x: x, ..) = Point(x: 1, y: 2, z: 3); x }
     "#;
     let bodies = lower_source(source);
 

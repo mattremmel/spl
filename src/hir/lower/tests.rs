@@ -1119,7 +1119,7 @@ fn lower_wildcard_pattern() {
 #[test]
 fn lower_struct_pattern() {
     let db = lower(
-        "struct Point(x: i32, y: i32) fn main() { let Point(x = x, y = y) = Point(x = 1, y = 2); }",
+        "struct Point(x: i32, y: i32) fn main() { let Point(x: x, y: y) = Point(x: 1, y: 2); }",
     );
 
     for (_, pat) in db.pats.iter() {
@@ -1137,7 +1137,7 @@ fn lower_struct_pattern() {
 
 #[test]
 fn lower_struct_expr() {
-    let db = lower("struct Point(x: i32, y: i32) fn main() { Point(x = 1, y = 2); }");
+    let db = lower("struct Point(x: i32, y: i32) fn main() { Point(x: 1, y: 2); }");
 
     for (_, expr) in db.exprs.iter() {
         if let HirExprKind::Struct { fields, .. } = &expr.kind {
@@ -1151,7 +1151,7 @@ fn lower_struct_expr() {
 #[test]
 fn lower_field_access() {
     let db =
-        lower("struct Point(x: i32, y: i32) fn main() { let p = Point(x = 1, y = 2); p.x; }");
+        lower("struct Point(x: i32, y: i32) fn main() { let p = Point(x: 1, y: 2); p.x; }");
 
     for (_, expr) in db.exprs.iter() {
         if let HirExprKind::Field { field, .. } = &expr.kind {

@@ -1008,7 +1008,7 @@ fn struct_construct_empty() {
 #[test]
 fn struct_construct_one_field() {
     check(
-        "struct S(a: i32) fn main() { let x = S(a = 42); }",
+        "struct S(a: i32) fn main() { let x = S(a: 42); }",
         "S",
     );
 }
@@ -1016,7 +1016,7 @@ fn struct_construct_one_field() {
 #[test]
 fn struct_construct_multiple_fields() {
     check(
-        "struct S(a: i32, b: bool) fn main() { let x = S(a = 1, b = true); }",
+        "struct S(a: i32, b: bool) fn main() { let x = S(a: 1, b: true); }",
         "S",
     );
 }
@@ -1024,7 +1024,7 @@ fn struct_construct_multiple_fields() {
 #[test]
 fn struct_field_access() {
     check(
-        "struct S(a: i32) fn main() { let x = S(a = 42); let y = x.a; }",
+        "struct S(a: i32) fn main() { let x = S(a: 42); let y = x.a; }",
         "i32",
     );
 }
@@ -1032,7 +1032,7 @@ fn struct_field_access() {
 #[test]
 fn struct_field_type() {
     check(
-        "struct S(a: i64) fn main() { let x = S(a = 42); let y = x.a; }",
+        "struct S(a: i64) fn main() { let x = S(a: 42); let y = x.a; }",
         "i64",
     );
 }
@@ -1040,7 +1040,7 @@ fn struct_field_type() {
 #[test]
 fn struct_field_infers_literal() {
     check(
-        "struct S(a: i64) fn main() { let x = S(a = 42); }",
+        "struct S(a: i64) fn main() { let x = S(a: 42); }",
         "S",
     );
 }
@@ -1048,7 +1048,7 @@ fn struct_field_infers_literal() {
 #[test]
 fn struct_nested() {
     check(
-        "struct A(x: i32) struct B(a: A) fn main() { let b = B(a = A(x = 1)); }",
+        "struct A(x: i32) struct B(a: A) fn main() { let b = B(a: A(x: 1)); }",
         "B",
     );
 }
@@ -1056,7 +1056,7 @@ fn struct_nested() {
 #[test]
 fn struct_in_function_param() {
     check(
-        "struct S(a: i32) fn f(s: S) {} fn main() { let x = S(a = 1); f(x); }",
+        "struct S(a: i32) fn f(s: S) {} fn main() { let x = S(a: 1); f(x); }",
         "S",
     );
 }
@@ -1064,7 +1064,7 @@ fn struct_in_function_param() {
 #[test]
 fn struct_in_function_return() {
     check(
-        "struct S(a: i32) fn f(): S { S(a = 1) } fn main() { let x = f(); }",
+        "struct S(a: i32) fn f(): S { S(a: 1) } fn main() { let x = f(); }",
         "S",
     );
 }
@@ -1072,7 +1072,7 @@ fn struct_in_function_return() {
 #[test]
 fn struct_method_call() {
     check(
-        "struct S(a: i32) impl S { fn get(&self): i32 { self.a } } fn main() { let s = S(a = 1); let x = s.get(); }",
+        "struct S(a: i32) impl S { fn get(&self): i32 { self.a } } fn main() { let s = S(a: 1); let x = s.get(); }",
         "i32",
     );
 }
@@ -1080,7 +1080,7 @@ fn struct_method_call() {
 #[test]
 fn struct_method_with_params() {
     check(
-        "struct S(a: i32) impl S { fn set(&mut self, v: i32) { self.a = v; } } fn main() { let mut s = S(a = 1); s.set(2); let x = s.a; }",
+        "struct S(a: i32) impl S { fn set(&mut self, v: i32) { self.a = v; } } fn main() { let mut s = S(a: 1); s.set(2); let x = s.a; }",
         "i32",
     );
 }
@@ -1100,7 +1100,7 @@ fn struct_multiple_impls() {
 #[ignore = "struct instantiation with named fields inside impl methods needs investigation"]
 fn struct_self_type() {
     check(
-        "struct S(a: i32) impl S { fn new(): Self { S(a = 0) } } fn main() { let x = S::new(); }",
+        "struct S(a: i32) impl S { fn new(): Self { S(a: 0) } } fn main() { let x = S::new(); }",
         "S",
     );
 }
@@ -1116,7 +1116,7 @@ fn struct_field_shorthand() {
 #[test]
 fn struct_update_syntax() {
     check(
-        "struct S(a: i32, b: i32) fn main() { let s = S(a = 1, b = 2); let x = S(a = 3, ..s); }",
+        "struct S(a: i32, b: i32) fn main() { let s = S(a: 1, b: 2); let x = S(a: 3, ..s); }",
         "S",
     );
 }
@@ -1256,7 +1256,7 @@ fn error_missing_field() {
 #[test]
 fn error_unknown_field() {
     check_err(
-        "struct S(a: i32) fn main() { let x = S(b = 1); }",
+        "struct S(a: i32) fn main() { let x = S(b: 1); }",
         &["unknown field"],
     );
 }
@@ -1264,7 +1264,7 @@ fn error_unknown_field() {
 #[test]
 fn error_field_type_mismatch() {
     check_err(
-        "struct S(a: i32) fn main() { let x = S(a = true); }",
+        "struct S(a: i32) fn main() { let x = S(a: true); }",
         &["type mismatch"],
     );
 }
@@ -1272,7 +1272,7 @@ fn error_field_type_mismatch() {
 #[test]
 fn error_access_nonexistent_field() {
     check_err(
-        "struct S(a: i32) fn main() { let x = S(a = 1); x.b; }",
+        "struct S(a: i32) fn main() { let x = S(a: 1); x.b; }",
         &["no field"],
     );
 }
@@ -1444,7 +1444,7 @@ fn inference_through_multiple_assignments() {
 fn inference_nested_struct_fields() {
     // Inference through nested struct field access
     check(
-        "struct Inner(val: i64) struct Outer(inner: Inner) fn main() { let o = Outer(inner = Inner(val = 42)); let x = o.inner.val; }",
+        "struct Inner(val: i64) struct Outer(inner: Inner) fn main() { let o = Outer(inner: Inner(val: 42)); let x = o.inner.val; }",
         "i64",
     );
 }
@@ -1608,7 +1608,7 @@ fn add_assign_to_mutable() {
 #[test]
 fn error_assign_field_immutable_binding() {
     check_err(
-        "struct S(a: i32) fn main() { let s = S(a = 1); s.a = 2; }",
+        "struct S(a: i32) fn main() { let s = S(a: 1); s.a = 2; }",
         &["cannot assign"],
     );
 }
@@ -1616,7 +1616,7 @@ fn error_assign_field_immutable_binding() {
 #[test]
 fn assign_field_mutable_binding() {
     check(
-        "struct S(a: i32) fn main() { let mut s = S(a = 1); s.a = 2; let x = s.a; }",
+        "struct S(a: i32) fn main() { let mut s = S(a: 1); s.a = 2; let x = s.a; }",
         "i32",
     );
 }
@@ -1665,7 +1665,7 @@ fn test_mutable_borrow_of_literal_produces_error() {
 #[test]
 fn test_assign_field_through_immutable_ref() {
     check_err(
-        "struct S(x: i32) fn main() { let s = S(x = 1); let r = &s; r.x = 2; }",
+        "struct S(x: i32) fn main() { let s = S(x: 1); let r = &s; r.x = 2; }",
         &["cannot assign to field of immutable reference"],
     );
 }
@@ -1720,7 +1720,7 @@ fn generic_fn_multiple_type_params() {
 #[ignore = "needs semantic support for where clause generics"]
 fn generic_struct_field_access() {
     check(
-        "struct Wrapper(value: T) where T fn main() { let w = Wrapper(value = 42); let x = w.value; }",
+        "struct Wrapper(value: T) where T fn main() { let w = Wrapper(value: 42); let x = w.value; }",
         "i32",
     );
 }
@@ -1740,7 +1740,7 @@ fn generic_struct_multiple_fields() {
 #[ignore = "needs semantic support for where clause generics"]
 fn generic_struct_method_returns_param() {
     check(
-        "struct Wrapper(value: T) where T impl Wrapper(T) where T { fn get(&self): T { self.value } } fn main() { let w = Wrapper(value = 42); let x = w.get(); }",
+        "struct Wrapper(value: T) where T impl Wrapper(T) where T { fn get(&self): T { self.value } } fn main() { let w = Wrapper(value: 42); let x = w.get(); }",
         "i32",
     );
 }
@@ -1789,7 +1789,7 @@ fn generic_method_with_own_type_param() {
             fn transform(&self, other: U): U where U { other }
         }
         fn main() {
-            let w = Wrapper(value = 42);
+            let w = Wrapper(value: 42);
             let x = w.transform(true);
         }
         "#,
@@ -1808,7 +1808,7 @@ fn generic_method_uses_both_impl_and_own_type_param() {
             fn with_other(&self, _other: U): T where U { self.value }
         }
         fn main() {
-            let w = Wrapper(value = 42);
+            let w = Wrapper(value: 42);
             let x = w.with_other(true);
         }
         "#,
@@ -1824,7 +1824,7 @@ fn generic_fn_returns_generic_struct() {
     check(
         r#"
         struct Wrapper(value: T) where T
-        fn wrap(x: T): Wrapper(T) where T { Wrapper(value = x) }
+        fn wrap(x: T): Wrapper(T) where T { Wrapper(value: x) }
         fn main() {
             let w = wrap(42);
             let x = w.value;
@@ -1840,7 +1840,7 @@ fn generic_fn_returns_generic_struct_inferred_from_context() {
     check(
         r#"
         struct Wrapper(value: T) where T
-        fn wrap(x: T): Wrapper(T) where T { Wrapper(value = x) }
+        fn wrap(x: T): Wrapper(T) where T { Wrapper(value: x) }
         fn main() {
             let w: Wrapper(i64) = wrap(42);
             let x = w.value;
@@ -1860,7 +1860,7 @@ fn nested_generic_struct() {
         struct Inner(value: T) where T
         struct Outer(inner: Inner(T)) where T
         fn main() {
-            let o = Outer(inner = Inner(value = 42));
+            let o = Outer(inner: Inner(value: 42));
             let x = o.inner.value;
         }
         "#,
@@ -2211,7 +2211,7 @@ fn alias_chain_ok() {
 #[test]
 fn alias_to_struct_ok() {
     check(
-        "struct S(x: i32) type Alias = S; fn main() { let a = Alias(x = 42); }",
+        "struct S(x: i32) type Alias = S; fn main() { let a = Alias(x: 42); }",
         "S",
     );
 }
@@ -2703,15 +2703,15 @@ fn float_var_unifies_with_floats_not_integers() {
 fn general_var_unifies_with_anything() {
     // Generic type parameters create general Var that can unify with anything
     check(
-        "struct Box(value: T) where T fn main() { let b = Box(value = 42); }",
+        "struct Box(value: T) where T fn main() { let b = Box(value: 42); }",
         "Box",
     );
     check(
-        "struct Box(value: T) where T fn main() { let b = Box(value = true); }",
+        "struct Box(value: T) where T fn main() { let b = Box(value: true); }",
         "Box",
     );
     check(
-        "struct Box(value: T) where T fn main() { let b = Box(value = 3.14); }",
+        "struct Box(value: T) where T fn main() { let b = Box(value: 3.14); }",
         "Box",
     );
 }
@@ -2827,7 +2827,7 @@ fn ref_coercion_mut_to_shared_explicit() {
 fn ref_coercion_in_method_receiver() {
     // &mut self should work where &self is expected (for read-only methods)
     check(
-        "struct S(x: i32) impl S { fn get(&self): i32 { self.x } } fn main() { let mut s = S(x = 1); let y = (&mut s).get(); }",
+        "struct S(x: i32) impl S { fn get(&self): i32 { self.x } } fn main() { let mut s = S(x: 1); let y = (&mut s).get(); }",
         "i32",
     );
 }

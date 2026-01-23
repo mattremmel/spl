@@ -138,10 +138,10 @@ pub(super) fn path_expr_only(
 }
 
 /// Parse the rest of an apply expression after the path.
-/// Syntax: Path(arg, name = value, ...)
+/// Syntax: Path(arg, name: value, ...)
 ///
 /// Arguments can be:
-/// - Named: `name = value`
+/// - Named: `name: value`
 /// - Positional: just `value`
 ///
 /// Struct update syntax `..base` is also supported for struct instantiation.
@@ -177,14 +177,14 @@ fn struct_update_base(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::pars
     Ok(m.complete(p, SyntaxKind::StructUpdateBase))
 }
 
-/// Parse an apply argument: either `name = expr` (named) or just `expr` (positional).
+/// Parse an apply argument: either `name: expr` (named) or just `expr` (positional).
 fn apply_arg(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
 
-    // Check for named argument: IDENT =
-    if p.at(SyntaxKind::IDENT) && p.peek(1) == Some(SyntaxKind::EQ) {
+    // Check for named argument: IDENT :
+    if p.at(SyntaxKind::IDENT) && p.peek(1) == Some(SyntaxKind::COLON) {
         p.bump(); // name
-        p.bump(); // =
+        p.bump(); // :
     }
 
     // Parse the value expression
