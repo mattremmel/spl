@@ -157,27 +157,6 @@ pub(crate) fn type_annotation(
     Ok(m.complete(p, SyntaxKind::PathType))
 }
 
-/// Parse generic arguments: `<T, U, ...>`
-pub(crate) fn generic_args(
-    p: &mut Parser<'_>,
-) -> Result<CompletedMarker, crate::parser::ParseError> {
-    let m = p.start();
-    p.expect(SyntaxKind::LT)?;
-
-    if !p.at(SyntaxKind::GT) {
-        type_annotation(p)?;
-        while p.eat(SyntaxKind::COMMA) {
-            if p.at(SyntaxKind::GT) {
-                break;
-            }
-            type_annotation(p)?;
-        }
-    }
-
-    p.expect(SyntaxKind::GT)?;
-    Ok(m.complete(p, SyntaxKind::GenericArgs))
-}
-
 /// Parse a block with statements: `{ stmt* [expr] }`
 pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
@@ -699,7 +678,7 @@ mod tests {
     #[test]
     fn generic_type_single_arg() {
         check_expr(
-            "{ let x: Vec<i32>; }",
+            "{ let x: Vec(i32); }",
             &expect![[r#"
                 BlockExpr@0..20
                   Block@0..20
@@ -719,13 +698,13 @@ mod tests {
                               WHITESPACE@8..9 " "
                               IDENT@9..12 "Vec"
                             GenericArgs@12..17
-                              LT@12..13 "<"
+                              L_PAREN@12..13 "("
                               PathType@13..16
                                 Path@13..16
                                   PathSegment@13..16
                                     NameRef@13..16
                                       IDENT@13..16 "i32"
-                              GT@16..17 ">"
+                              R_PAREN@16..17 ")"
                       SEMI@17..18 ";"
                     WHITESPACE@18..19 " "
                     R_BRACE@19..20 "}"
@@ -736,7 +715,7 @@ mod tests {
     #[test]
     fn generic_type_multiple_args() {
         check_expr(
-            "{ let x: HashMap<String, i32>; }",
+            "{ let x: HashMap(String, i32); }",
             &expect![[r#"
                 BlockExpr@0..32
                   Block@0..32
@@ -756,7 +735,7 @@ mod tests {
                               WHITESPACE@8..9 " "
                               IDENT@9..16 "HashMap"
                             GenericArgs@16..29
-                              LT@16..17 "<"
+                              L_PAREN@16..17 "("
                               PathType@17..23
                                 Path@17..23
                                   PathSegment@17..23
@@ -769,7 +748,7 @@ mod tests {
                                     NameRef@24..28
                                       WHITESPACE@24..25 " "
                                       IDENT@25..28 "i32"
-                              GT@28..29 ">"
+                              R_PAREN@28..29 ")"
                       SEMI@29..30 ";"
                     WHITESPACE@30..31 " "
                     R_BRACE@31..32 "}"
@@ -780,7 +759,7 @@ mod tests {
     #[test]
     fn generic_type_nested() {
         check_expr(
-            "{ let x: Option<Vec<i32>>; }",
+            "{ let x: Option(Vec(i32)); }",
             &expect![[r#"
                 BlockExpr@0..28
                   Block@0..28
@@ -800,21 +779,21 @@ mod tests {
                               WHITESPACE@8..9 " "
                               IDENT@9..15 "Option"
                             GenericArgs@15..25
-                              LT@15..16 "<"
+                              L_PAREN@15..16 "("
                               PathType@16..24
                                 Path@16..24
                                   PathSegment@16..24
                                     NameRef@16..19
                                       IDENT@16..19 "Vec"
                                     GenericArgs@19..24
-                                      LT@19..20 "<"
+                                      L_PAREN@19..20 "("
                                       PathType@20..23
                                         Path@20..23
                                           PathSegment@20..23
                                             NameRef@20..23
                                               IDENT@20..23 "i32"
-                                      GT@23..24 ">"
-                              GT@24..25 ">"
+                                      R_PAREN@23..24 ")"
+                              R_PAREN@24..25 ")"
                       SEMI@25..26 ";"
                     WHITESPACE@26..27 " "
                     R_BRACE@27..28 "}"
@@ -934,7 +913,7 @@ mod tests {
     #[test]
     fn path_type_with_generics() {
         check_expr(
-            "{ let x: std::vec::Vec<T>; }",
+            "{ let x: std::vec::Vec(T); }",
             &expect![[r#"
                 BlockExpr@0..28
                   Block@0..28
@@ -962,13 +941,13 @@ mod tests {
                             NameRef@19..22
                               IDENT@19..22 "Vec"
                             GenericArgs@22..25
-                              LT@22..23 "<"
+                              L_PAREN@22..23 "("
                               PathType@23..24
                                 Path@23..24
                                   PathSegment@23..24
                                     NameRef@23..24
                                       IDENT@23..24 "T"
-                              GT@24..25 ">"
+                              R_PAREN@24..25 ")"
                       SEMI@25..26 ";"
                     WHITESPACE@26..27 " "
                     R_BRACE@27..28 "}"
@@ -979,7 +958,7 @@ mod tests {
     #[test]
     fn ref_to_generic_type() {
         check_expr(
-            "{ let x: &Vec<i32>; }",
+            "{ let x: &Vec(i32); }",
             &expect![[r#"
                 BlockExpr@0..21
                   Block@0..21
@@ -1001,13 +980,13 @@ mod tests {
                               NameRef@10..13
                                 IDENT@10..13 "Vec"
                               GenericArgs@13..18
-                                LT@13..14 "<"
+                                L_PAREN@13..14 "("
                                 PathType@14..17
                                   Path@14..17
                                     PathSegment@14..17
                                       NameRef@14..17
                                         IDENT@14..17 "i32"
-                                GT@17..18 ">"
+                                R_PAREN@17..18 ")"
                       SEMI@18..19 ";"
                     WHITESPACE@19..20 " "
                     R_BRACE@20..21 "}"
@@ -1359,7 +1338,7 @@ mod tests {
     #[test]
     fn deeply_nested_generics_type() {
         check_expr(
-            "{ let x: Result<Option<Vec<T>>, Error>; }",
+            "{ let x: Result(Option(Vec(T)), Error); }",
             &expect![[r#"
                 BlockExpr@0..41
                   Block@0..41
@@ -1379,28 +1358,28 @@ mod tests {
                               WHITESPACE@8..9 " "
                               IDENT@9..15 "Result"
                             GenericArgs@15..38
-                              LT@15..16 "<"
+                              L_PAREN@15..16 "("
                               PathType@16..30
                                 Path@16..30
                                   PathSegment@16..30
                                     NameRef@16..22
                                       IDENT@16..22 "Option"
                                     GenericArgs@22..30
-                                      LT@22..23 "<"
+                                      L_PAREN@22..23 "("
                                       PathType@23..29
                                         Path@23..29
                                           PathSegment@23..29
                                             NameRef@23..26
                                               IDENT@23..26 "Vec"
                                             GenericArgs@26..29
-                                              LT@26..27 "<"
+                                              L_PAREN@26..27 "("
                                               PathType@27..28
                                                 Path@27..28
                                                   PathSegment@27..28
                                                     NameRef@27..28
                                                       IDENT@27..28 "T"
-                                              GT@28..29 ">"
-                                      GT@29..30 ">"
+                                              R_PAREN@28..29 ")"
+                                      R_PAREN@29..30 ")"
                               COMMA@30..31 ","
                               PathType@31..37
                                 Path@31..37
@@ -1408,7 +1387,7 @@ mod tests {
                                     NameRef@31..37
                                       WHITESPACE@31..32 " "
                                       IDENT@32..37 "Error"
-                              GT@37..38 ">"
+                              R_PAREN@37..38 ")"
                       SEMI@38..39 ";"
                     WHITESPACE@39..40 " "
                     R_BRACE@40..41 "}"

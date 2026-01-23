@@ -734,7 +734,7 @@ pub(crate) mod tests {
 
     #[test]
     fn deeply_nested_generics() {
-        let parse = parse("fn foo() { let x: A<B<C<D<E>>>>; }");
+        let parse = parse("fn foo() { let x: A(B(C(D(E)))); }");
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
@@ -826,7 +826,7 @@ pub(crate) mod tests {
             r#"
             struct Node(
                 value: T,
-                next: Option<Box<Node<T>>>
+                next: Option(Box(Node(T)))
             ) where T
         "#,
         );
@@ -837,7 +837,7 @@ pub(crate) mod tests {
     fn control_flow_in_method() {
         let parse = parse(
             r#"
-            fn process(items: Vec<i32>): i32 {
+            fn process(items: Vec(i32)): i32 {
                 let mut sum = 0;
                 for item in items {
                     if item > 0 {
@@ -884,7 +884,7 @@ pub(crate) mod tests {
         let parse = parse(
             r#"
             fn foo() {
-                let x: Vec<HashMap<String, Option<(i32, bool)>>>;
+                let x: Vec(HashMap(String, Option((i32, bool))));
             }
         "#,
         );
@@ -947,7 +947,7 @@ pub(crate) mod tests {
             type Pair = (i32, i32);
             type Buffer = [u8; 256];
             type Callback = fn(i32) -> i32;
-            type Nested = Option<Vec<String>>;
+            type Nested = Option(Vec(String));
         "#,
         );
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());

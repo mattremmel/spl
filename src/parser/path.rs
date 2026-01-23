@@ -31,18 +31,12 @@ pub fn path_no_generics(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseErro
     Ok(m.complete(p, SyntaxKind::Path))
 }
 
-/// Parse a single path segment: `ident [<T, ...>]` or `ident [(T, ...)]`
+/// Parse a single path segment: `ident [(T, ...)]`
 fn path_segment(p: &mut Parser<'_>, allow_generics: bool) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     name_ref(p)?;
-    if allow_generics {
-        if p.at(SyntaxKind::LT) {
-            // Old syntax: <T, U>
-            super::stmt::generic_args(p)?;
-        } else if p.at(SyntaxKind::L_PAREN) {
-            // New syntax: (T, U)
-            generic_args_paren(p)?;
-        }
+    if allow_generics && p.at(SyntaxKind::L_PAREN) {
+        generic_args_paren(p)?;
     }
     Ok(m.complete(p, SyntaxKind::PathSegment))
 }
@@ -181,7 +175,7 @@ mod tests {
     #[test]
     fn path_with_generics() {
         check_item(
-            "fn foo(x: Vec<i32>) {}",
+            "fn foo(x: Vec(i32)) {}",
             &expect![[r#"
                 FunctionDef@0..22
                   FN_KW@0..2 "fn"
@@ -201,13 +195,13 @@ mod tests {
                               WHITESPACE@9..10 " "
                               IDENT@10..13 "Vec"
                             GenericArgs@13..18
-                              LT@13..14 "<"
+                              L_PAREN@13..14 "("
                               PathType@14..17
                                 Path@14..17
                                   PathSegment@14..17
                                     NameRef@14..17
                                       IDENT@14..17 "i32"
-                              GT@17..18 ">"
+                              R_PAREN@17..18 ")"
                     R_PAREN@18..19 ")"
                   Block@19..22
                     WHITESPACE@19..20 " "
@@ -220,7 +214,7 @@ mod tests {
     #[test]
     fn path_nested_generics() {
         check_item(
-            "fn foo(x: Result<Vec<i32>, Error>) {}",
+            "fn foo(x: Result(Vec(i32), Error)) {}",
             &expect![[r#"
                 FunctionDef@0..37
                   FN_KW@0..2 "fn"
@@ -240,20 +234,20 @@ mod tests {
                               WHITESPACE@9..10 " "
                               IDENT@10..16 "Result"
                             GenericArgs@16..33
-                              LT@16..17 "<"
+                              L_PAREN@16..17 "("
                               PathType@17..25
                                 Path@17..25
                                   PathSegment@17..25
                                     NameRef@17..20
                                       IDENT@17..20 "Vec"
                                     GenericArgs@20..25
-                                      LT@20..21 "<"
+                                      L_PAREN@20..21 "("
                                       PathType@21..24
                                         Path@21..24
                                           PathSegment@21..24
                                             NameRef@21..24
                                               IDENT@21..24 "i32"
-                                      GT@24..25 ">"
+                                      R_PAREN@24..25 ")"
                               COMMA@25..26 ","
                               PathType@26..32
                                 Path@26..32
@@ -261,7 +255,7 @@ mod tests {
                                     NameRef@26..32
                                       WHITESPACE@26..27 " "
                                       IDENT@27..32 "Error"
-                              GT@32..33 ">"
+                              R_PAREN@32..33 ")"
                     R_PAREN@33..34 ")"
                   Block@34..37
                     WHITESPACE@34..35 " "

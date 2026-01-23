@@ -227,7 +227,7 @@ mod items {
     #[test]
     fn type_alias_with_generic_target() {
         check(
-            "type OptInt = Option<i32>;",
+            "type OptInt = Option(i32);",
             &expect![[r#"
                 SourceFile
                   TypeAlias "OptInt"
@@ -238,11 +238,11 @@ mod items {
         );
     }
 
-    /// Generic type alias: `type Result = Option<T> where T;`
+    /// Generic type alias: `type Result = Option(T) where T;`
     #[test]
     fn type_alias_generic_where() {
         check(
-            "type Result = Option<T> where T;",
+            "type Result = Option(T) where T;",
             &expect![[r#"
                 SourceFile
                   TypeAlias "Result"
@@ -1199,7 +1199,7 @@ mod types {
     #[test]
     fn type_path_generic_colon() {
         check(
-            "fn foo(): Vec<i32> {}",
+            "fn foo(): Vec(i32) {}",
             &expect![[r#"
                 SourceFile
                   FunctionDef "foo"

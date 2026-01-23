@@ -171,7 +171,7 @@ mod tests {
                 struct Wrapper(value: T) where T
 
                 fn test() {
-                    let w: Wrapper<i32> = Wrapper { value: 42 };
+                    let w: Wrapper(i32) = Wrapper { value: 42 };
                 }
             "#;
 
