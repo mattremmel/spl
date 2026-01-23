@@ -485,4 +485,260 @@ mod tests {
 
         assert_eq!(wrapper(), 42); // 6 * 7 = 42
     }
+
+    #[test]
+    fn call_external_function_no_params() {
+        use cranelift_module::Module;
+        use std::sync::atomic::{AtomicI32, Ordering};
+
+        static CALL_COUNT: AtomicI32 = AtomicI32::new(0);
+
+        extern "C" fn get_value() -> i32 {
+            CALL_COUNT.fetch_add(1, Ordering::SeqCst);
+            42
+        }
+
+        // Reset counter
+        CALL_COUNT.store(0, Ordering::SeqCst);
+
+        let mut runtime = Runtime::new();
+        let mut external_sig =
+            cranelift_codegen::ir::Signature::new(cranelift_codegen::isa::CallConv::SystemV);
+        external_sig.returns.push(AbiParam::new(types::I32));
+        runtime.register("get_value", get_value as *const u8, external_sig.clone());
+
+        let mut ctx = CodegenContext::new_jit_with_runtime(&runtime).unwrap();
+
+        let external_func_id = ctx
+            .module
+            .declare_function("get_value", Linkage::Import, &external_sig)
+            .unwrap();
+
+        let mut wrapper_sig = ctx.new_signature();
+        wrapper_sig.returns.push(AbiParam::new(types::I32));
+        let wrapper_id = ctx.declare_function("wrapper", &wrapper_sig).unwrap();
+
+        ctx.compilation_context().func.signature = wrapper_sig;
+
+        {
+            let (func, func_ctx, module) = ctx.builder_context_with_module();
+            let mut builder = FunctionBuilder::new(func, func_ctx);
+
+            let entry = builder.create_block();
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            let func_ref = module.declare_func_in_func(external_func_id, builder.func);
+            let call = builder.ins().call(func_ref, &[]);
+            let result = builder.inst_results(call)[0];
+
+            builder.ins().return_(&[result]);
+            builder.finalize();
+        }
+
+        ctx.define_function(wrapper_id).unwrap();
+        ctx.finalize();
+
+        let ptr = ctx.get_function_ptr(wrapper_id);
+        let wrapper: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+        assert_eq!(wrapper(), 42);
+        assert_eq!(CALL_COUNT.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn call_external_function_with_side_effect() {
+        use cranelift_module::Module;
+        use std::sync::atomic::{AtomicI32, Ordering};
+
+        static COUNTER: AtomicI32 = AtomicI32::new(0);
+
+        extern "C" fn increment_counter() -> i32 {
+            COUNTER.fetch_add(1, Ordering::SeqCst)
+        }
+
+        // Reset counter
+        COUNTER.store(0, Ordering::SeqCst);
+
+        let mut runtime = Runtime::new();
+        let mut external_sig =
+            cranelift_codegen::ir::Signature::new(cranelift_codegen::isa::CallConv::SystemV);
+        external_sig.returns.push(AbiParam::new(types::I32));
+        runtime.register(
+            "increment_counter",
+            increment_counter as *const u8,
+            external_sig.clone(),
+        );
+
+        let mut ctx = CodegenContext::new_jit_with_runtime(&runtime).unwrap();
+
+        let external_func_id = ctx
+            .module
+            .declare_function("increment_counter", Linkage::Import, &external_sig)
+            .unwrap();
+
+        let mut wrapper_sig = ctx.new_signature();
+        wrapper_sig.returns.push(AbiParam::new(types::I32));
+        let wrapper_id = ctx.declare_function("wrapper", &wrapper_sig).unwrap();
+
+        ctx.compilation_context().func.signature = wrapper_sig;
+
+        {
+            let (func, func_ctx, module) = ctx.builder_context_with_module();
+            let mut builder = FunctionBuilder::new(func, func_ctx);
+
+            let entry = builder.create_block();
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            let func_ref = module.declare_func_in_func(external_func_id, builder.func);
+            let call = builder.ins().call(func_ref, &[]);
+            let result = builder.inst_results(call)[0];
+
+            builder.ins().return_(&[result]);
+            builder.finalize();
+        }
+
+        ctx.define_function(wrapper_id).unwrap();
+        ctx.finalize();
+
+        let ptr = ctx.get_function_ptr(wrapper_id);
+        let wrapper: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+        // Each call should increment the counter
+        assert_eq!(wrapper(), 0); // Returns old value (0), counter becomes 1
+        assert_eq!(wrapper(), 1); // Returns old value (1), counter becomes 2
+        assert_eq!(wrapper(), 2); // Returns old value (2), counter becomes 3
+        assert_eq!(COUNTER.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn call_external_function_i64() {
+        use cranelift_module::Module;
+
+        extern "C" fn add_i64(a: i64, b: i64) -> i64 {
+            a + b
+        }
+
+        let mut runtime = Runtime::new();
+        let mut external_sig =
+            cranelift_codegen::ir::Signature::new(cranelift_codegen::isa::CallConv::SystemV);
+        external_sig.params.push(AbiParam::new(types::I64));
+        external_sig.params.push(AbiParam::new(types::I64));
+        external_sig.returns.push(AbiParam::new(types::I64));
+        runtime.register("add_i64", add_i64 as *const u8, external_sig.clone());
+
+        let mut ctx = CodegenContext::new_jit_with_runtime(&runtime).unwrap();
+
+        let external_func_id = ctx
+            .module
+            .declare_function("add_i64", Linkage::Import, &external_sig)
+            .unwrap();
+
+        let mut wrapper_sig = ctx.new_signature();
+        wrapper_sig.returns.push(AbiParam::new(types::I64));
+        let wrapper_id = ctx.declare_function("wrapper", &wrapper_sig).unwrap();
+
+        ctx.compilation_context().func.signature = wrapper_sig;
+
+        {
+            let (func, func_ctx, module) = ctx.builder_context_with_module();
+            let mut builder = FunctionBuilder::new(func, func_ctx);
+
+            let entry = builder.create_block();
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            let func_ref = module.declare_func_in_func(external_func_id, builder.func);
+            let arg1 = builder.ins().iconst(types::I64, 1_000_000_000_000i64);
+            let arg2 = builder.ins().iconst(types::I64, 2_000_000_000_000i64);
+            let call = builder.ins().call(func_ref, &[arg1, arg2]);
+            let result = builder.inst_results(call)[0];
+
+            builder.ins().return_(&[result]);
+            builder.finalize();
+        }
+
+        ctx.define_function(wrapper_id).unwrap();
+        ctx.finalize();
+
+        let ptr = ctx.get_function_ptr(wrapper_id);
+        let wrapper: fn() -> i64 = unsafe { mem::transmute(ptr) };
+
+        assert_eq!(wrapper(), 3_000_000_000_000i64);
+    }
+
+    #[test]
+    fn multiple_runtime_functions() {
+        use cranelift_module::Module;
+
+        extern "C" fn op_add(a: i32, b: i32) -> i32 {
+            a + b
+        }
+        extern "C" fn op_sub(a: i32, b: i32) -> i32 {
+            a - b
+        }
+
+        let mut runtime = Runtime::new();
+        let mut sig =
+            cranelift_codegen::ir::Signature::new(cranelift_codegen::isa::CallConv::SystemV);
+        sig.params.push(AbiParam::new(types::I32));
+        sig.params.push(AbiParam::new(types::I32));
+        sig.returns.push(AbiParam::new(types::I32));
+
+        runtime.register("op_add", op_add as *const u8, sig.clone());
+        runtime.register("op_sub", op_sub as *const u8, sig.clone());
+
+        let mut ctx = CodegenContext::new_jit_with_runtime(&runtime).unwrap();
+
+        let add_func_id = ctx
+            .module
+            .declare_function("op_add", Linkage::Import, &sig)
+            .unwrap();
+        let sub_func_id = ctx
+            .module
+            .declare_function("op_sub", Linkage::Import, &sig)
+            .unwrap();
+
+        // fn wrapper() -> i32 { op_add(10, 5) + op_sub(10, 5) } = 15 + 5 = 20
+        let mut wrapper_sig = ctx.new_signature();
+        wrapper_sig.returns.push(AbiParam::new(types::I32));
+        let wrapper_id = ctx.declare_function("wrapper", &wrapper_sig).unwrap();
+
+        ctx.compilation_context().func.signature = wrapper_sig;
+
+        {
+            let (func, func_ctx, module) = ctx.builder_context_with_module();
+            let mut builder = FunctionBuilder::new(func, func_ctx);
+
+            let entry = builder.create_block();
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            let add_ref = module.declare_func_in_func(add_func_id, builder.func);
+            let sub_ref = module.declare_func_in_func(sub_func_id, builder.func);
+
+            let ten = builder.ins().iconst(types::I32, 10);
+            let five = builder.ins().iconst(types::I32, 5);
+
+            let add_call = builder.ins().call(add_ref, &[ten, five]);
+            let add_result = builder.inst_results(add_call)[0];
+
+            let sub_call = builder.ins().call(sub_ref, &[ten, five]);
+            let sub_result = builder.inst_results(sub_call)[0];
+
+            let total = builder.ins().iadd(add_result, sub_result);
+
+            builder.ins().return_(&[total]);
+            builder.finalize();
+        }
+
+        ctx.define_function(wrapper_id).unwrap();
+        ctx.finalize();
+
+        let ptr = ctx.get_function_ptr(wrapper_id);
+        let wrapper: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+        assert_eq!(wrapper(), 20); // (10+5) + (10-5) = 15 + 5 = 20
+    }
 }

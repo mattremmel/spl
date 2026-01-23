@@ -166,4 +166,66 @@ mod tests {
         assert_ne!(TRAP_ASSERT_FAILED, TRAP_RESUME);
         assert_ne!(TRAP_UNREACHABLE, TRAP_RESUME);
     }
+
+    #[test]
+    fn runtime_error_trap_equality_same_code() {
+        let err1 = RuntimeError::Trap { code: Some(1) };
+        let err2 = RuntimeError::Trap { code: Some(1) };
+        assert_eq!(err1, err2);
+    }
+
+    #[test]
+    fn runtime_error_trap_equality_different_codes() {
+        let err1 = RuntimeError::Trap { code: Some(1) };
+        let err2 = RuntimeError::Trap { code: Some(2) };
+        assert_ne!(err1, err2);
+    }
+
+    #[test]
+    fn runtime_error_trap_equality_some_vs_none() {
+        let err1 = RuntimeError::Trap { code: Some(1) };
+        let err2 = RuntimeError::Trap { code: None };
+        assert_ne!(err1, err2);
+    }
+
+    #[test]
+    fn runtime_error_different_variants_not_equal() {
+        let err1 = RuntimeError::MainNotFound;
+        let err2 = RuntimeError::Trap { code: None };
+        assert_ne!(err1, err2);
+    }
+
+    #[test]
+    fn runtime_error_is_clone() {
+        let err = RuntimeError::Trap {
+            code: Some(TRAP_ASSERT_FAILED),
+        };
+        let cloned = err.clone();
+        assert_eq!(err, cloned);
+    }
+
+    #[test]
+    fn runtime_error_is_debug() {
+        let err = RuntimeError::MainNotFound;
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("MainNotFound"));
+
+        let err2 = RuntimeError::Trap { code: Some(1) };
+        let debug_str2 = format!("{:?}", err2);
+        assert!(debug_str2.contains("Trap"));
+        assert!(debug_str2.contains("1"));
+    }
+
+    #[test]
+    fn runtime_error_implements_error_trait() {
+        let err: &dyn std::error::Error = &RuntimeError::MainNotFound;
+        // Just verify it compiles and we can call methods
+        let _ = err.to_string();
+    }
+
+    #[test]
+    fn codegen_error_implements_error_trait() {
+        let err: &dyn std::error::Error = &CodegenError::Internal("test".to_string());
+        let _ = err.to_string();
+    }
 }

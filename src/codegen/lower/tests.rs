@@ -3676,3 +3676,287 @@ fn assert_expected_false_traps() {
     let result = std::panic::catch_unwind(func);
     assert!(result.is_err(), "assert(true, expected=false) should trap");
 }
+
+#[test]
+fn assert_with_integer_condition_nonzero() {
+    // fn() -> i32 { let x: i32 = 42; assert(x, expected=true); 100 }
+    // Non-zero integer should be truthy
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+
+    let mut body = Body::new(i32_ty);
+    let _cond_local = body.alloc_local(LocalDecl::new(i32_ty, true));
+    let entry = body.alloc_block();
+    let after_assert = body.alloc_block();
+
+    // entry: _1 = 42; assert(_1, expected=true) -> after_assert
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local(1)),
+        Rvalue::Use(Operand::Constant(Constant::Int(42))),
+        0..0,
+    ));
+    body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::Assert {
+            cond: Operand::Copy(Place::from_local(Local(1))),
+            expected: true,
+            target: after_assert,
+        },
+        0..0,
+    ));
+
+    body.block_mut(after_assert)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::Int(100))),
+            0..0,
+        ));
+    body.block_mut(after_assert)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "assert_with_integer_condition_nonzero");
+    let func: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(), 100);
+}
+
+#[test]
+fn assert_with_integer_condition_zero() {
+    // fn() -> i32 { let x: i32 = 0; assert(x, expected=false); 100 }
+    // Zero integer with expected=false should pass
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+
+    let mut body = Body::new(i32_ty);
+    let _cond_local = body.alloc_local(LocalDecl::new(i32_ty, true));
+    let entry = body.alloc_block();
+    let after_assert = body.alloc_block();
+
+    // entry: _1 = 0; assert(_1, expected=false) -> after_assert
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local(1)),
+        Rvalue::Use(Operand::Constant(Constant::Int(0))),
+        0..0,
+    ));
+    body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::Assert {
+            cond: Operand::Copy(Place::from_local(Local(1))),
+            expected: false,
+            target: after_assert,
+        },
+        0..0,
+    ));
+
+    body.block_mut(after_assert)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::Int(100))),
+            0..0,
+        ));
+    body.block_mut(after_assert)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "assert_with_integer_condition_zero");
+    let func: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(), 100);
+}
+
+#[test]
+fn assert_with_negative_integer() {
+    // fn() -> i32 { let x: i32 = -1; assert(x, expected=true); 100 }
+    // Negative integers are non-zero, so truthy
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+
+    let mut body = Body::new(i32_ty);
+    let _cond_local = body.alloc_local(LocalDecl::new(i32_ty, true));
+    let entry = body.alloc_block();
+    let after_assert = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local(1)),
+        Rvalue::Use(Operand::Constant(Constant::Int(-1))),
+        0..0,
+    ));
+    body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::Assert {
+            cond: Operand::Copy(Place::from_local(Local(1))),
+            expected: true,
+            target: after_assert,
+        },
+        0..0,
+    ));
+
+    body.block_mut(after_assert)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::Int(100))),
+            0..0,
+        ));
+    body.block_mut(after_assert)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "assert_with_negative_integer");
+    let func: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(), 100);
+}
+
+#[test]
+fn multiple_asserts_in_sequence_all_pass() {
+    // fn() -> i32 { assert(true, expected=true); assert(false, expected=false); 42 }
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+    let bool_ty = runner.types_mut().bool();
+
+    let mut body = Body::new(i32_ty);
+    let _cond1 = body.alloc_local(LocalDecl::new(bool_ty, true));
+    let _cond2 = body.alloc_local(LocalDecl::new(bool_ty, true));
+    let entry = body.alloc_block();
+    let after_first = body.alloc_block();
+    let after_second = body.alloc_block();
+
+    // entry: _1 = true; assert(_1, expected=true) -> after_first
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local(1)),
+        Rvalue::Use(Operand::Constant(Constant::Bool(true))),
+        0..0,
+    ));
+    body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::Assert {
+            cond: Operand::Copy(Place::from_local(Local(1))),
+            expected: true,
+            target: after_first,
+        },
+        0..0,
+    ));
+
+    // after_first: _2 = false; assert(_2, expected=false) -> after_second
+    body.block_mut(after_first)
+        .push_statement(Statement::assign(
+            Place::from_local(Local(2)),
+            Rvalue::Use(Operand::Constant(Constant::Bool(false))),
+            0..0,
+        ));
+    body.block_mut(after_first).set_terminator(Terminator::new(
+        TerminatorKind::Assert {
+            cond: Operand::Copy(Place::from_local(Local(2))),
+            expected: false,
+            target: after_second,
+        },
+        0..0,
+    ));
+
+    // after_second: _0 = 42; return
+    body.block_mut(after_second)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            0..0,
+        ));
+    body.block_mut(after_second)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "multiple_asserts_in_sequence_all_pass");
+    let func: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(), 42);
+}
+
+#[test]
+fn assert_with_computed_condition() {
+    // fn(x: i32) -> i32 { assert(x > 0, expected=true); 42 }
+    // Test with argument-derived condition
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+    let bool_ty = runner.types_mut().bool();
+
+    let mut body = Body::with_args(i32_ty, &[(i32_ty, false)]);
+    let _cmp_result = body.alloc_local(LocalDecl::new(bool_ty, true));
+    let entry = body.alloc_block();
+    let after_assert = body.alloc_block();
+
+    // entry: _2 = _1 > 0; assert(_2, expected=true) -> after_assert
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local(2)),
+        Rvalue::BinaryOp(
+            BinOp::Gt,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Constant(Constant::Int(0)),
+        ),
+        0..0,
+    ));
+    body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::Assert {
+            cond: Operand::Copy(Place::from_local(Local(2))),
+            expected: true,
+            target: after_assert,
+        },
+        0..0,
+    ));
+
+    body.block_mut(after_assert)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            0..0,
+        ));
+    body.block_mut(after_assert)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "assert_with_computed_condition");
+    let func: fn(i32) -> i32 = unsafe { mem::transmute(ptr) };
+
+    // Positive values should pass
+    assert_eq!(func(1), 42);
+    assert_eq!(func(100), 42);
+}
+
+#[test]
+fn assert_with_bool_from_comparison() {
+    // fn(a: i32, b: i32) -> i32 { assert(a == b, expected=true); 1 }
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+    let bool_ty = runner.types_mut().bool();
+
+    let mut body = Body::with_args(i32_ty, &[(i32_ty, false), (i32_ty, false)]);
+    let _cmp_result = body.alloc_local(LocalDecl::new(bool_ty, true));
+    let entry = body.alloc_block();
+    let after_assert = body.alloc_block();
+
+    // entry: _3 = _1 == _2; assert(_3, expected=true) -> after_assert
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local(3)),
+        Rvalue::BinaryOp(
+            BinOp::Eq,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+    body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::Assert {
+            cond: Operand::Copy(Place::from_local(Local(3))),
+            expected: true,
+            target: after_assert,
+        },
+        0..0,
+    ));
+
+    body.block_mut(after_assert)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::Int(1))),
+            0..0,
+        ));
+    body.block_mut(after_assert)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "assert_with_bool_from_comparison");
+    let func: fn(i32, i32) -> i32 = unsafe { mem::transmute(ptr) };
+
+    // Equal values should pass
+    assert_eq!(func(5, 5), 1);
+    assert_eq!(func(0, 0), 1);
+    assert_eq!(func(-10, -10), 1);
+}

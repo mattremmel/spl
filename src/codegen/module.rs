@@ -608,4 +608,175 @@ mod tests {
         module.set_main(DefId(42));
         assert_eq!(module.main_def_id(), Some(DefId(42)));
     }
+
+    #[test]
+    fn run_same_function_multiple_times() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(42)),
+            0..0,
+        ));
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        // Call multiple times
+        assert_eq!(module.run(DefId(1)).unwrap(), 42);
+        assert_eq!(module.run(DefId(1)).unwrap(), 42);
+        assert_eq!(module.run(DefId(1)).unwrap(), 42);
+    }
+
+    #[test]
+    fn run_different_functions_in_same_module() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn returns_1() -> i32 { 1 }
+        let mut body1 = Body::new(i32_ty);
+        let entry1 = body1.alloc_block();
+        body1.block_mut(entry1).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(1)),
+            0..0,
+        ));
+        body1
+            .block_mut(entry1)
+            .set_terminator(Terminator::return_(0..0));
+
+        // fn returns_2() -> i32 { 2 }
+        let mut body2 = Body::new(i32_ty);
+        let entry2 = body2.alloc_block();
+        body2.block_mut(entry2).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(2)),
+            0..0,
+        ));
+        body2
+            .block_mut(entry2)
+            .set_terminator(Terminator::return_(0..0));
+
+        // fn returns_3() -> i32 { 3 }
+        let mut body3 = Body::new(i32_ty);
+        let entry3 = body3.alloc_block();
+        body3.block_mut(entry3).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(3)),
+            0..0,
+        ));
+        body3
+            .block_mut(entry3)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [
+            FunctionDef::new(DefId(1), "returns_1", &body1),
+            FunctionDef::new(DefId(2), "returns_2", &body2),
+            FunctionDef::new(DefId(3), "returns_3", &body3),
+        ];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        assert_eq!(module.run(DefId(1)).unwrap(), 1);
+        assert_eq!(module.run(DefId(2)).unwrap(), 2);
+        assert_eq!(module.run(DefId(3)).unwrap(), 3);
+
+        // Run in different order
+        assert_eq!(module.run(DefId(3)).unwrap(), 3);
+        assert_eq!(module.run(DefId(1)).unwrap(), 1);
+        assert_eq!(module.run(DefId(2)).unwrap(), 2);
+    }
+
+    #[test]
+    fn set_main_can_be_changed() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        let mut body1 = Body::new(i32_ty);
+        let entry1 = body1.alloc_block();
+        body1.block_mut(entry1).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(100)),
+            0..0,
+        ));
+        body1
+            .block_mut(entry1)
+            .set_terminator(Terminator::return_(0..0));
+
+        let mut body2 = Body::new(i32_ty);
+        let entry2 = body2.alloc_block();
+        body2.block_mut(entry2).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(200)),
+            0..0,
+        ));
+        body2
+            .block_mut(entry2)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [
+            FunctionDef::new(DefId(1), "fn1", &body1),
+            FunctionDef::new(DefId(2), "fn2", &body2),
+        ];
+        let mut module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        // Set main to first function
+        module.set_main(DefId(1));
+        assert_eq!(module.run_main().unwrap(), 100);
+
+        // Change main to second function
+        module.set_main(DefId(2));
+        assert_eq!(module.run_main().unwrap(), 200);
+
+        // Change back
+        module.set_main(DefId(1));
+        assert_eq!(module.run_main().unwrap(), 100);
+    }
+
+    #[test]
+    fn run_returns_different_values() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        // fn(x: i32) -> i32 { x * 2 } - but we test with various i32-returning functions
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(0)),
+            0..0,
+        ));
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "returns_zero", &body)];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        assert_eq!(module.run(DefId(1)).unwrap(), 0);
+    }
+
+    #[test]
+    fn run_with_negative_return() {
+        let types = TypeInterner::new();
+        let i32_ty = types.i32();
+
+        let mut body = Body::new(i32_ty);
+        let entry = body.alloc_block();
+        body.block_mut(entry).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(-42)),
+            0..0,
+        ));
+        body.block_mut(entry)
+            .set_terminator(Terminator::return_(0..0));
+
+        let functions = [FunctionDef::new(DefId(1), "returns_negative", &body)];
+        let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
+
+        assert_eq!(module.run(DefId(1)).unwrap(), -42);
+    }
 }

@@ -191,4 +191,67 @@ mod tests {
         let func = runtime.get("spl_op").unwrap();
         assert_eq!(func.ptr, test_mul as *const u8);
     }
+
+    #[test]
+    fn runtime_function_signature_is_stored() {
+        let mut runtime = Runtime::new();
+        let mut sig = Signature::new(CallConv::SystemV);
+        sig.params.push(AbiParam::new(types::I64));
+        sig.returns.push(AbiParam::new(types::I64));
+
+        runtime.register("test_fn", test_add as *const u8, sig.clone());
+
+        let func = runtime.get("test_fn").unwrap();
+        assert_eq!(func.signature.params.len(), 1);
+        assert_eq!(func.signature.params[0].value_type, types::I64);
+        assert_eq!(func.signature.returns.len(), 1);
+        assert_eq!(func.signature.returns[0].value_type, types::I64);
+    }
+
+    #[test]
+    fn runtime_function_fields_accessible() {
+        let mut runtime = Runtime::new();
+        let sig = make_signature(CallConv::SystemV);
+        let ptr = test_add as *const u8;
+
+        runtime.register("my_func", ptr, sig.clone());
+
+        let func = runtime.get("my_func").unwrap();
+        // All fields are public and accessible
+        assert_eq!(func.name, "my_func");
+        assert_eq!(func.ptr, ptr);
+        assert_eq!(func.signature.params.len(), sig.params.len());
+    }
+
+    #[test]
+    fn runtime_contains_returns_false_for_nonexistent() {
+        let runtime = Runtime::new();
+        assert!(!runtime.contains("does_not_exist"));
+        assert!(!runtime.contains(""));
+    }
+
+    #[test]
+    fn runtime_get_with_empty_name() {
+        let runtime = Runtime::new();
+        assert!(runtime.get("").is_none());
+    }
+
+    #[test]
+    fn runtime_iter_empty() {
+        let runtime = Runtime::new();
+        let count = runtime.iter().count();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn runtime_signature_with_no_params_no_returns() {
+        let mut runtime = Runtime::new();
+        let sig = Signature::new(CallConv::SystemV);
+
+        runtime.register("void_fn", test_add as *const u8, sig);
+
+        let func = runtime.get("void_fn").unwrap();
+        assert!(func.signature.params.is_empty());
+        assert!(func.signature.returns.is_empty());
+    }
 }
