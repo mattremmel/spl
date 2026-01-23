@@ -578,4 +578,495 @@ mod tests {
             other => panic!("expected folded int constant 8, got {:?}", other),
         }
     }
+
+    // =========================================================================
+    // Additional Coverage: Edge Cases and Validation
+    // =========================================================================
+
+    #[test]
+    fn constant_folding_validates_after_optimization() {
+        use crate::mir::types::Local;
+        use crate::mir::validate::validate_mir;
+
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        builder = builder.with_return_ty(i32_ty);
+
+        let bb = builder.add_block();
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(100), Operand::const_int(200)),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        // Validate before
+        validate_mir(&body, &types);
+
+        // Optimize
+        let pass = ConstantFolding;
+        pass.run(&mut body, &types);
+
+        // Validate after - MIR should still be valid
+        validate_mir(&body, &types);
+    }
+
+    #[test]
+    fn constant_folding_integer_overflow_wrapping() {
+        // Test that integer operations use wrapping semantics
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let temp = builder.add_local(i32_ty, true);
+
+        let bb = builder.add_block();
+        // i128::MAX + 1 should wrap
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(temp),
+                Rvalue::BinaryOp(
+                    BinOp::Add,
+                    Operand::const_int(i128::MAX),
+                    Operand::const_int(1),
+                ),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = ConstantFolding;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+        // Should wrap to i128::MIN
+        match &body.block(bb).statements[0].kind {
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(v)))) => {
+                assert_eq!(*v, i128::MIN);
+            }
+            other => panic!("expected wrapped int constant, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn constant_folding_mod_by_zero_not_folded() {
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let temp = builder.add_local(i32_ty, true);
+
+        let bb = builder.add_block();
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(temp),
+                Rvalue::BinaryOp(BinOp::Rem, Operand::const_int(10), Operand::const_int(0)),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = ConstantFolding;
+        let result = pass.run(&mut body, &types);
+
+        // Modulo by zero should NOT be folded
+        assert!(!result.changed);
+    }
+
+    #[test]
+    fn constant_folding_shift_operations() {
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let temp1 = builder.add_local(i32_ty, true);
+        let temp2 = builder.add_local(i32_ty, true);
+
+        let bb = builder.add_block();
+
+        // 1 << 4 = 16
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(temp1),
+                Rvalue::BinaryOp(BinOp::Shl, Operand::const_int(1), Operand::const_int(4)),
+                0..0,
+            ),
+        );
+
+        // 64 >> 2 = 16
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(temp2),
+                Rvalue::BinaryOp(BinOp::Shr, Operand::const_int(64), Operand::const_int(2)),
+                0..0,
+            ),
+        );
+
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = ConstantFolding;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+
+        match &body.block(bb).statements[0].kind {
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(16)))) => {}
+            other => panic!("expected folded constant 16, got {:?}", other),
+        }
+
+        match &body.block(bb).statements[1].kind {
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(16)))) => {}
+            other => panic!("expected folded constant 16, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn constant_folding_all_comparison_ops() {
+        let mut builder = MirTestBuilder::new();
+        let bool_ty = builder.types.bool();
+        let t1 = builder.add_local(bool_ty, true);
+        let t2 = builder.add_local(bool_ty, true);
+        let t3 = builder.add_local(bool_ty, true);
+        let t4 = builder.add_local(bool_ty, true);
+        let t5 = builder.add_local(bool_ty, true);
+        let t6 = builder.add_local(bool_ty, true);
+
+        let bb = builder.add_block();
+
+        // 5 == 5 => true
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(t1),
+                Rvalue::BinaryOp(BinOp::Eq, Operand::const_int(5), Operand::const_int(5)),
+                0..0,
+            ),
+        );
+
+        // 5 != 3 => true
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(t2),
+                Rvalue::BinaryOp(BinOp::Ne, Operand::const_int(5), Operand::const_int(3)),
+                0..0,
+            ),
+        );
+
+        // 3 < 5 => true
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(t3),
+                Rvalue::BinaryOp(BinOp::Lt, Operand::const_int(3), Operand::const_int(5)),
+                0..0,
+            ),
+        );
+
+        // 5 <= 5 => true
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(t4),
+                Rvalue::BinaryOp(BinOp::Le, Operand::const_int(5), Operand::const_int(5)),
+                0..0,
+            ),
+        );
+
+        // 7 > 3 => true
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(t5),
+                Rvalue::BinaryOp(BinOp::Gt, Operand::const_int(7), Operand::const_int(3)),
+                0..0,
+            ),
+        );
+
+        // 5 >= 5 => true
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(t6),
+                Rvalue::BinaryOp(BinOp::Ge, Operand::const_int(5), Operand::const_int(5)),
+                0..0,
+            ),
+        );
+
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = ConstantFolding;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+
+        // All should fold to true
+        for i in 0..6 {
+            match &body.block(bb).statements[i].kind {
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Bool(true)))) => {}
+                other => panic!("expected folded bool true at stmt {}, got {:?}", i, other),
+            }
+        }
+    }
+
+    #[test]
+    fn constant_folding_bool_xor() {
+        let mut builder = MirTestBuilder::new();
+        let bool_ty = builder.types.bool();
+        let temp = builder.add_local(bool_ty, true);
+
+        let bb = builder.add_block();
+        // true ^ false => true
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(temp),
+                Rvalue::BinaryOp(
+                    BinOp::BitXor,
+                    Operand::const_bool(true),
+                    Operand::const_bool(false),
+                ),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = ConstantFolding;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+        match &body.block(bb).statements[0].kind {
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Bool(true)))) => {}
+            other => panic!("expected folded bool true, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn constant_folding_bool_equality() {
+        let mut builder = MirTestBuilder::new();
+        let bool_ty = builder.types.bool();
+        let t1 = builder.add_local(bool_ty, true);
+        let t2 = builder.add_local(bool_ty, true);
+
+        let bb = builder.add_block();
+
+        // true == true => true
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(t1),
+                Rvalue::BinaryOp(
+                    BinOp::Eq,
+                    Operand::const_bool(true),
+                    Operand::const_bool(true),
+                ),
+                0..0,
+            ),
+        );
+
+        // true != false => true
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(t2),
+                Rvalue::BinaryOp(
+                    BinOp::Ne,
+                    Operand::const_bool(true),
+                    Operand::const_bool(false),
+                ),
+                0..0,
+            ),
+        );
+
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = ConstantFolding;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+    }
+
+    #[test]
+    fn constant_folding_negative_numbers() {
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let temp = builder.add_local(i32_ty, true);
+
+        let bb = builder.add_block();
+        // -5 + 3 = -2
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(temp),
+                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(-5), Operand::const_int(3)),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = ConstantFolding;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+        match &body.block(bb).statements[0].kind {
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(-2)))) => {}
+            other => panic!("expected folded constant -2, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn constant_folding_preserves_non_binary_rvalues() {
+        use crate::mir::operand::BorrowKind;
+        use crate::mir::types::Local;
+
+        // Test that Ref, Len, Discriminant, etc. are not modified
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let temp = builder.add_local(i32_ty, true);
+        let ref_ty = builder.types.i32(); // placeholder
+
+        let bb = builder.add_block();
+
+        // _1 = &_0 - should not be folded
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(Local(2)),
+                Rvalue::Ref(BorrowKind::Shared, Place::from_local(temp)),
+                0..0,
+            ),
+        );
+
+        builder.add_local(ref_ty, false);
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = ConstantFolding;
+        let result = pass.run(&mut body, &types);
+
+        // Ref rvalue should not be changed
+        assert!(!result.changed);
+    }
+
+    #[test]
+    fn constant_folding_across_multiple_blocks() {
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let t1 = builder.add_local(i32_ty, true);
+        let t2 = builder.add_local(i32_ty, true);
+
+        let bb0 = builder.add_block();
+        let bb1 = builder.add_block();
+
+        // bb0: _1 = 1 + 2
+        builder.add_statement(
+            bb0,
+            Statement::assign(
+                Place::from_local(t1),
+                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(1), Operand::const_int(2)),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb0, Terminator::goto(bb1, 0..0));
+
+        // bb1: _2 = 3 * 4
+        builder.add_statement(
+            bb1,
+            Statement::assign(
+                Place::from_local(t2),
+                Rvalue::BinaryOp(BinOp::Mul, Operand::const_int(3), Operand::const_int(4)),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb1, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = ConstantFolding;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+
+        // Both blocks should have folded constants
+        match &body.block(bb0).statements[0].kind {
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(3)))) => {}
+            other => panic!("expected 3, got {:?}", other),
+        }
+        match &body.block(bb1).statements[0].kind {
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(12)))) => {}
+            other => panic!("expected 12, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn constant_folding_storage_live_dead_preserved() {
+        use crate::mir::types::Local;
+
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let temp = builder.add_local(i32_ty, true);
+
+        let bb = builder.add_block();
+
+        // StorageLive should not be affected
+        builder.add_statement(bb, Statement::storage_live(temp, 0..0));
+
+        // This should be folded
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(temp),
+                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(1), Operand::const_int(1)),
+                0..0,
+            ),
+        );
+
+        // StorageDead should not be affected
+        builder.add_statement(bb, Statement::storage_dead(temp, 0..0));
+
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = ConstantFolding;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+
+        // Check StorageLive preserved
+        match &body.block(bb).statements[0].kind {
+            StatementKind::StorageLive(l) => assert_eq!(*l, Local(1)),
+            other => panic!("expected StorageLive, got {:?}", other),
+        }
+
+        // Check assignment was folded
+        match &body.block(bb).statements[1].kind {
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2)))) => {}
+            other => panic!("expected folded 2, got {:?}", other),
+        }
+
+        // Check StorageDead preserved
+        match &body.block(bb).statements[2].kind {
+            StatementKind::StorageDead(l) => assert_eq!(*l, Local(1)),
+            other => panic!("expected StorageDead, got {:?}", other),
+        }
+    }
 }

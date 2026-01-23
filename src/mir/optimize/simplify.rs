@@ -280,4 +280,292 @@ mod tests {
 
         assert!(!result.changed);
     }
+
+    // =========================================================================
+    // Additional Coverage: Edge Cases and Validation
+    // =========================================================================
+
+    #[test]
+    fn simplify_cfg_validates_after_optimization() {
+        use crate::mir::validate::validate_mir;
+
+        // Build a chain: bb0 -> bb1 -> bb2 (return)
+        let mut builder = MirTestBuilder::new();
+        let bb0 = builder.add_block();
+        let bb1 = builder.add_block();
+        let bb2 = builder.add_block();
+
+        builder.set_terminator(bb0, Terminator::goto(bb1, 0..0));
+        builder.set_terminator(bb1, Terminator::goto(bb2, 0..0));
+        builder.set_terminator(bb2, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        // Validate before
+        validate_mir(&body, &types);
+
+        // Optimize
+        let pass = SimplifyCfg;
+        pass.run(&mut body, &types);
+        pass.run(&mut body, &types);
+
+        // Validate after - MIR should still be valid
+        validate_mir(&body, &types);
+    }
+
+    #[test]
+    fn simplify_cfg_with_call_terminator() {
+        use crate::mir::operand::Constant;
+        use crate::sema::symbol::DefId;
+
+        // bb0: goto -> bb1; bb1: call fn -> bb2
+        // Should simplify: bb0 gets bb1's call terminator
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        builder = builder.with_return_ty(i32_ty);
+
+        let bb0 = builder.add_block();
+        let bb1 = builder.add_block();
+        let bb2 = builder.add_block();
+
+        builder.set_terminator(bb0, Terminator::goto(bb1, 0..0));
+        builder.set_terminator(
+            bb1,
+            Terminator::new(
+                TerminatorKind::Call {
+                    func: Operand::Constant(Constant::FnDef(DefId(1))),
+                    args: vec![],
+                    destination: Place::from_local(Local::RETURN_PLACE),
+                    target: Some(bb2),
+                },
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb2, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = SimplifyCfg;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+        // bb0 should now have a Call terminator
+        assert!(matches!(
+            body.block(bb0).terminator.as_ref().unwrap().kind,
+            TerminatorKind::Call { .. }
+        ));
+    }
+
+    #[test]
+    fn simplify_cfg_with_drop_terminator() {
+        // bb0: goto -> bb1; bb1: drop _1 -> bb2
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let local = builder.add_local(i32_ty, true);
+
+        let bb0 = builder.add_block();
+        let bb1 = builder.add_block();
+        let bb2 = builder.add_block();
+
+        builder.set_terminator(bb0, Terminator::goto(bb1, 0..0));
+        builder.set_terminator(
+            bb1,
+            Terminator::new(
+                TerminatorKind::Drop {
+                    place: Place::from_local(local),
+                    target: bb2,
+                },
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb2, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = SimplifyCfg;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+        // bb0 should now have a Drop terminator
+        assert!(matches!(
+            body.block(bb0).terminator.as_ref().unwrap().kind,
+            TerminatorKind::Drop { .. }
+        ));
+    }
+
+    #[test]
+    fn simplify_cfg_with_assert_terminator() {
+        // bb0: goto -> bb1; bb1: assert cond -> bb2
+        let mut builder = MirTestBuilder::new();
+        let bool_ty = builder.types.bool();
+        let cond = builder.add_local(bool_ty, false);
+
+        let bb0 = builder.add_block();
+        let bb1 = builder.add_block();
+        let bb2 = builder.add_block();
+
+        builder.set_terminator(bb0, Terminator::goto(bb1, 0..0));
+        builder.set_terminator(
+            bb1,
+            Terminator::new(
+                TerminatorKind::Assert {
+                    cond: Operand::copy_local(cond),
+                    expected: true,
+                    target: bb2,
+                },
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb2, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = SimplifyCfg;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+        // bb0 should now have an Assert terminator
+        assert!(matches!(
+            body.block(bb0).terminator.as_ref().unwrap().kind,
+            TerminatorKind::Assert { .. }
+        ));
+    }
+
+    #[test]
+    fn simplify_cfg_with_unreachable_terminator() {
+        // bb0: goto -> bb1; bb1: unreachable
+        let mut builder = MirTestBuilder::new();
+
+        let bb0 = builder.add_block();
+        let bb1 = builder.add_block();
+
+        builder.set_terminator(bb0, Terminator::goto(bb1, 0..0));
+        builder.set_terminator(bb1, Terminator::unreachable(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = SimplifyCfg;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+        // bb0 should now have an Unreachable terminator
+        assert!(matches!(
+            body.block(bb0).terminator.as_ref().unwrap().kind,
+            TerminatorKind::Unreachable
+        ));
+    }
+
+    #[test]
+    fn simplify_cfg_diamond_pattern() {
+        // Diamond: bb0 -> switch -> bb1, bb2 -> bb3 (join) -> return
+        // bb1 and bb2 each have bb3 as successor, so bb3 has 2 predecessors
+        // No simplification should occur
+        let mut builder = MirTestBuilder::new();
+        let bool_ty = builder.types.bool();
+        let cond = builder.add_local(bool_ty, false);
+
+        let bb0 = builder.add_block();
+        let bb1 = builder.add_block();
+        let bb2 = builder.add_block();
+        let bb3 = builder.add_block();
+
+        builder.set_terminator(
+            bb0,
+            Terminator::new(
+                TerminatorKind::SwitchInt {
+                    discr: Operand::copy_local(cond),
+                    targets: SwitchTargets::new_bool(bb1, bb2),
+                },
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb1, Terminator::goto(bb3, 0..0));
+        builder.set_terminator(bb2, Terminator::goto(bb3, 0..0));
+        builder.set_terminator(bb3, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = SimplifyCfg;
+        let result = pass.run(&mut body, &types);
+
+        // No simplification - bb3 has multiple predecessors
+        assert!(!result.changed);
+    }
+
+    #[test]
+    fn simplify_cfg_loop_with_trivial_latch() {
+        // bb0 (entry) -> bb1 (header)
+        // bb1 -> switch -> bb2 (body), bb3 (exit)
+        // bb2 -> bb4 (latch: trivial goto)
+        // bb4 -> bb1 (back edge)
+        // bb3 -> return
+        let mut builder = MirTestBuilder::new();
+        let bool_ty = builder.types.bool();
+        let cond = builder.add_local(bool_ty, false);
+
+        let bb0 = builder.add_block();
+        let bb1 = builder.add_block();
+        let bb2 = builder.add_block();
+        let bb3 = builder.add_block();
+        let bb4 = builder.add_block();
+
+        builder.set_terminator(bb0, Terminator::goto(bb1, 0..0));
+        builder.set_terminator(
+            bb1,
+            Terminator::new(
+                TerminatorKind::SwitchInt {
+                    discr: Operand::copy_local(cond),
+                    targets: SwitchTargets::new_bool(bb2, bb3),
+                },
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb2, Terminator::goto(bb4, 0..0));
+        builder.set_terminator(bb3, Terminator::return_(0..0));
+        builder.set_terminator(bb4, Terminator::goto(bb1, 0..0));
+
+        let (mut body, types) = builder.build();
+
+        // bb1 has 2 preds (bb0, bb4), so bb2->bb4 shouldn't be simplified
+        // bb4 has 1 pred (bb2), and bb4->bb1 where bb1 has 2 preds
+        // So bb2->bb4 can be simplified since bb4 has single pred
+        let pass = SimplifyCfg;
+        let result = pass.run(&mut body, &types);
+
+        // bb2 should get bb4's terminator (goto bb1)
+        assert!(result.changed);
+
+        // Validate after optimization
+        use crate::mir::validate::validate_mir;
+        validate_mir(&body, &types);
+    }
+
+    #[test]
+    fn simplify_cfg_entry_block_optimization() {
+        // Entry block (bb0) is trivial: goto -> bb1
+        // This should be simplified
+        let mut builder = MirTestBuilder::new();
+
+        let bb0 = builder.add_block(); // Entry
+        let bb1 = builder.add_block();
+
+        builder.set_terminator(bb0, Terminator::goto(bb1, 0..0));
+        builder.set_terminator(bb1, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        let pass = SimplifyCfg;
+        let result = pass.run(&mut body, &types);
+
+        assert!(result.changed);
+        // Entry block should now return directly
+        assert!(matches!(
+            body.block(bb0).terminator.as_ref().unwrap().kind,
+            TerminatorKind::Return
+        ));
+
+        // Validate
+        use crate::mir::validate::validate_mir;
+        validate_mir(&body, &types);
+    }
 }

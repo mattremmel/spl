@@ -491,4 +491,292 @@ mod tests {
             other => panic!("expected folded constant 42, got {:?}", other),
         }
     }
+
+    // =========================================================================
+    // Additional Integration Tests
+    // =========================================================================
+
+    #[test]
+    fn optimize_mir_complex_cfg_validates() {
+        use crate::mir::operand::{BinOp, Operand, Rvalue};
+        use crate::mir::statement::Statement;
+        use crate::mir::terminator::{SwitchTargets, TerminatorKind};
+        use crate::mir::types::{Local, Place};
+        use crate::mir::validate::validate_mir;
+
+        // Build a complex CFG with branches and constants
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let bool_ty = builder.types.bool();
+        builder = builder.with_return_ty(i32_ty);
+
+        let cond = builder.add_local(bool_ty, false);
+        let temp = builder.add_local(i32_ty, true);
+
+        let bb_entry = builder.add_block();
+        let bb_then = builder.add_block();
+        let bb_else = builder.add_block();
+        let bb_join = builder.add_block();
+        let bb_exit = builder.add_block();
+
+        // entry: _1 = 1 + 1; switch on cond
+        builder.add_statement(
+            bb_entry,
+            Statement::assign(
+                Place::from_local(temp),
+                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(1), Operand::const_int(1)),
+                0..0,
+            ),
+        );
+        builder.set_terminator(
+            bb_entry,
+            Terminator::new(
+                TerminatorKind::SwitchInt {
+                    discr: Operand::copy_local(cond),
+                    targets: SwitchTargets::new_bool(bb_then, bb_else),
+                },
+                0..0,
+            ),
+        );
+
+        // then: _0 = 2 * 3; goto join
+        builder.add_statement(
+            bb_then,
+            Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::BinaryOp(BinOp::Mul, Operand::const_int(2), Operand::const_int(3)),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb_then, Terminator::goto(bb_join, 0..0));
+
+        // else: _0 = 4 + 5; goto join
+        builder.add_statement(
+            bb_else,
+            Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(4), Operand::const_int(5)),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb_else, Terminator::goto(bb_join, 0..0));
+
+        // join: goto exit (trivial)
+        builder.set_terminator(bb_join, Terminator::goto(bb_exit, 0..0));
+
+        // exit: return
+        builder.set_terminator(bb_exit, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        // Validate before
+        validate_mir(&body, &types);
+
+        // Optimize
+        optimize_mir(&mut body, &types);
+
+        // Validate after - critical check
+        validate_mir(&body, &types);
+
+        // Check constants were folded
+        match &body.block(bb_entry).statements[0].kind {
+            crate::mir::statement::StatementKind::Assign(
+                _,
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(2))),
+            ) => {}
+            other => panic!("expected 2, got {:?}", other),
+        }
+
+        match &body.block(bb_then).statements[0].kind {
+            crate::mir::statement::StatementKind::Assign(
+                _,
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(6))),
+            ) => {}
+            other => panic!("expected 6, got {:?}", other),
+        }
+
+        match &body.block(bb_else).statements[0].kind {
+            crate::mir::statement::StatementKind::Assign(
+                _,
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(9))),
+            ) => {}
+            other => panic!("expected 9, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn optimize_mir_loop_cfg_validates() {
+        use crate::mir::operand::{BinOp, Operand, Rvalue};
+        use crate::mir::statement::Statement;
+        use crate::mir::terminator::{SwitchTargets, TerminatorKind};
+        use crate::mir::types::{Local, Place};
+        use crate::mir::validate::validate_mir;
+
+        // Build a loop CFG
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let bool_ty = builder.types.bool();
+        builder = builder.with_return_ty(i32_ty);
+
+        let cond = builder.add_local(bool_ty, false);
+        let counter = builder.add_local(i32_ty, true);
+
+        let bb_entry = builder.add_block();
+        let bb_header = builder.add_block();
+        let bb_body = builder.add_block();
+        let bb_exit = builder.add_block();
+
+        // entry: _1 = 0 + 0; goto header
+        builder.add_statement(
+            bb_entry,
+            Statement::assign(
+                Place::from_local(counter),
+                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(0), Operand::const_int(0)),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb_entry, Terminator::goto(bb_header, 0..0));
+
+        // header: switch cond
+        builder.set_terminator(
+            bb_header,
+            Terminator::new(
+                TerminatorKind::SwitchInt {
+                    discr: Operand::copy_local(cond),
+                    targets: SwitchTargets::new_bool(bb_body, bb_exit),
+                },
+                0..0,
+            ),
+        );
+
+        // body: _1 = _1 + 1 (can't fold); goto header
+        builder.add_statement(
+            bb_body,
+            Statement::assign(
+                Place::from_local(counter),
+                Rvalue::BinaryOp(
+                    BinOp::Add,
+                    Operand::copy_local(counter),
+                    Operand::const_int(1),
+                ),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb_body, Terminator::goto(bb_header, 0..0));
+
+        // exit: _0 = _1; return
+        builder.add_statement(
+            bb_exit,
+            Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::Use(Operand::copy_local(counter)),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb_exit, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        // Validate before
+        validate_mir(&body, &types);
+
+        // Optimize
+        optimize_mir(&mut body, &types);
+
+        // Validate after - should still be valid loop
+        validate_mir(&body, &types);
+
+        // Check the foldable constant was folded
+        match &body.block(bb_entry).statements[0].kind {
+            crate::mir::statement::StatementKind::Assign(
+                _,
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(0))),
+            ) => {}
+            other => panic!("expected 0, got {:?}", other),
+        }
+
+        // Non-foldable should remain unchanged
+        match &body.block(bb_body).statements[0].kind {
+            crate::mir::statement::StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _)) => {
+            }
+            other => panic!("expected unfoldable add, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn optimize_mir_empty_function() {
+        use crate::mir::validate::validate_mir;
+
+        // fn foo() {}
+        let mut builder = MirTestBuilder::new();
+        let bb = builder.add_block();
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        validate_mir(&body, &types);
+        optimize_mir(&mut body, &types);
+        validate_mir(&body, &types);
+    }
+
+    #[test]
+    fn optimize_mir_unreachable_block() {
+        use crate::mir::validate::validate_mir;
+
+        let mut builder = MirTestBuilder::new();
+        let bb0 = builder.add_block();
+        let bb1 = builder.add_block(); // unreachable
+
+        builder.set_terminator(bb0, Terminator::return_(0..0));
+        builder.set_terminator(bb1, Terminator::unreachable(0..0));
+
+        let (mut body, types) = builder.build();
+
+        validate_mir(&body, &types);
+        optimize_mir(&mut body, &types);
+        validate_mir(&body, &types);
+    }
+
+    #[test]
+    fn optimize_mir_no_passes_empty_context() {
+        let mut builder = MirTestBuilder::new();
+        let bb = builder.add_block();
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        // Empty context should do nothing
+        let ctx = OptimizationContext::new(&types);
+        let changed = ctx.run_once(&mut body);
+        assert!(!changed);
+    }
+
+    #[test]
+    fn optimize_mir_preserves_terminators() {
+        use crate::mir::terminator::TerminatorKind;
+        use crate::mir::validate::validate_mir;
+
+        // Ensure various terminator types are preserved
+        let mut builder = MirTestBuilder::new();
+        let bb0 = builder.add_block();
+        let bb1 = builder.add_block();
+
+        builder.set_terminator(bb0, Terminator::goto(bb1, 0..0));
+        builder.set_terminator(bb1, Terminator::return_(0..0));
+
+        let (mut body, types) = builder.build();
+
+        validate_mir(&body, &types);
+
+        // After optimization bb0 should have return (simplified from goto->return)
+        optimize_mir(&mut body, &types);
+
+        validate_mir(&body, &types);
+
+        // bb0 should now return directly
+        assert!(matches!(
+            body.block(bb0).terminator.as_ref().unwrap().kind,
+            TerminatorKind::Return
+        ));
+    }
 }
