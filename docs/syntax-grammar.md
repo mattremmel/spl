@@ -558,7 +558,7 @@ StructPattern = TypePath "(" [ StructPatternFields ] ")" ;
 StructPatternFields = StructPatternField { "," StructPatternField } [ "," ] [ ".." ] ;
 
 (* Field with optional pattern binding *)
-StructPatternField = IDENTIFIER [ "=" Pattern ] ;
+StructPatternField = IDENTIFIER [ ":" Pattern ] ;
 
 (* Enum variant patterns *)
 EnumPattern = TypePath [ "(" [ Pattern { "," Pattern } [ "," ] ] ")" ] ;
@@ -586,7 +586,7 @@ ReferencePattern = "&" [ "mut" ] Pattern ;
 | `[.., last]`          | Match last element                   |
 | `[first, ..middle, last]` | Match first, last, bind middle   |
 | `Point(x, y)`         | Destructure struct (shorthand)       |
-| `Point(x = a, y = b)` | Destructure with rename              |
+| `Point(x: a, y: b)`   | Destructure with rename              |
 | `Point(x, ..)`        | Partial struct destructure           |
 | `Some(x)`             | Match enum variant with binding      |
 | `None`                | Match enum variant without payload   |
