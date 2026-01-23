@@ -62,9 +62,23 @@ impl<'a> FunctionLowerer<'a> {
                 self.lower_aggregate(dest, kind, operands)
             }
 
-            Rvalue::Discriminant(_) => Err(CodegenError::Internal(
-                "discriminant not yet supported".to_string(),
-            )),
+            Rvalue::Discriminant(place) => {
+                // Discriminant reads the tag field (field 0) from an enum
+                // Enums are represented as structs where the first field is the discriminant
+
+                // Get the address of the place
+                let (addr, _place_ty) = self.compute_place_address(place)?;
+
+                // Discriminant is always at offset 0 (first field)
+                // The discriminant type is isize (pointer-sized integer)
+                let disc_ty = self.type_mapper.pointer_type();
+
+                // Load the discriminant value from offset 0
+                let flags = MemFlags::trusted();
+                let disc_value = self.builder.ins().load(disc_ty, flags, addr, 0);
+
+                Ok(Some(disc_value))
+            }
 
             Rvalue::Repeat(operand, count) => self.lower_repeat(dest, operand, *count),
         }

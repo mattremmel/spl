@@ -3430,26 +3430,46 @@ fn lower_rvalue_aggregate_array() {
 }
 
 #[test]
-#[ignore = "discriminant not yet supported"]
 fn lower_rvalue_discriminant() {
+    // Enums are represented as structs where field 0 is the discriminant (isize)
+    // Create: struct FakeEnum { discriminant: isize, data: i32 }
+    // Test: fn get_disc(e: *const FakeEnum) -> isize { discriminant(*e) }
     let mut runner = JitTestRunner::new();
+    let isize_ty = runner.types_mut().primitive(PrimitiveKind::Isize);
     let i32_ty = runner.types_mut().i32();
 
-    let mut body = Body::new(i32_ty);
-    let _enum_local = body.alloc_local(LocalDecl::new(i32_ty, true));
+    // Create an enum-like struct: (isize, i32) - discriminant + data
+    let enum_ty = runner.types_mut().mk_tuple(vec![isize_ty, i32_ty]);
+
+    // fn get_discriminant(enum_val: *const FakeEnum) -> isize
+    // We pass a pointer since we need to read from memory
+    let enum_ptr_ty = runner.types_mut().mk_ref(Mutability::Shared, enum_ty);
+
+    let mut body = Body::with_args(isize_ty, &[(enum_ptr_ty, false)]);
     let entry = body.alloc_block();
 
-    // _0 = discriminant(_1)
+    // _0 = discriminant(*_1) - deref the pointer, then get discriminant
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Discriminant(Place::from_local(Local(1))),
+        Rvalue::Discriminant(Place::deref(Local(1))),
         0..0,
     ));
 
     body.block_mut(entry)
         .set_terminator(Terminator::return_(0..0));
 
-    let _ptr = runner.compile(&body, "rvalue_discriminant");
+    let ptr = runner.compile(&body, "get_discriminant");
+
+    // Test: create a fake enum on the stack and verify discriminant extraction
+    // Discriminant = 42, data = 100
+    let fake_enum: (isize, i32) = (42, 100);
+    let func: fn(*const (isize, i32)) -> isize = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(&fake_enum as *const _), 42);
+
+    // Test with different discriminant value
+    let fake_enum2: (isize, i32) = (1, 200);
+    assert_eq!(func(&fake_enum2 as *const _), 1);
 }
 
 #[test]
