@@ -2979,3 +2979,121 @@ fn block_expression_in_let_still_works() {
         "i32",
     );
 }
+
+#[test]
+#[ignore = "match expression inference not yet implemented"]
+fn implicit_return_single_match_expr() {
+    // Single match expression - implicit return allowed
+    check(
+        "fn f(x: i32): i32 { match x { 0 => 1, _ => 2 } } fn main() { let y = f(0); }",
+        "i32",
+    );
+}
+
+#[test]
+fn implicit_return_single_loop_with_break() {
+    // Single loop expression with break value - implicit return allowed
+    check(
+        "fn f(): i32 { loop { break 42; } } fn main() { let x = f(); }",
+        "i32",
+    );
+}
+
+#[test]
+fn implicit_return_single_block_expr() {
+    // Single block expression wrapping a value - implicit return allowed
+    check("fn f(): i32 { { 42 } } fn main() { let x = f(); }", "i32");
+}
+
+#[test]
+fn implicit_return_single_path() {
+    // Single path expression (parameter) - implicit return allowed
+    check(
+        "fn f(x: i32): i32 { x } fn main() { let y = f(42); }",
+        "i32",
+    );
+}
+
+#[test]
+fn implicit_return_single_call() {
+    // Single function call - implicit return allowed
+    check(
+        "fn g(): i32 { 42 } fn f(): i32 { g() } fn main() { let x = f(); }",
+        "i32",
+    );
+}
+
+#[test]
+fn explicit_return_as_tail_expr() {
+    // Return expression as tail (no semicolon) - allowed
+    check(
+        "fn f(x: i32): i32 { let y = x + 1; return y } fn main() { let z = f(5); }",
+        "i32",
+    );
+}
+
+#[test]
+fn error_while_statement_plus_implicit_return() {
+    // While statement followed by implicit return - ERROR
+    check_err(
+        "fn f(): i32 { while false {} 42 }",
+        &["implicit return not allowed when function body contains statements"],
+    );
+}
+
+#[test]
+fn error_for_statement_plus_implicit_return() {
+    // For statement followed by implicit return - ERROR
+    check_err(
+        "fn f(): i32 { for i in 0..1 {} 42 }",
+        &["implicit return not allowed when function body contains statements"],
+    );
+}
+
+#[test]
+fn error_if_no_else_statement_plus_implicit_return() {
+    // If without else as statement followed by implicit return - ERROR
+    check_err(
+        "fn f(b: bool): i32 { if b { let x = 1; } 42 }",
+        &["implicit return not allowed when function body contains statements"],
+    );
+}
+
+#[test]
+fn error_assignment_plus_implicit_return() {
+    // Assignment statement followed by implicit return - ERROR
+    check_err(
+        "fn f(x: i32): i32 { let mut y = x; y = y + 1; y }",
+        &["implicit return not allowed when function body contains statements"],
+    );
+}
+
+#[test]
+fn error_expr_statement_plus_implicit_return() {
+    // Expression statement (function call with semicolon) followed by implicit return - ERROR
+    check_err(
+        "fn g() {} fn f(): i32 { g(); 42 }",
+        &["implicit return not allowed when function body contains statements"],
+    );
+}
+
+#[test]
+fn error_method_with_statements_implicit_return() {
+    // Method with statements and implicit return - ERROR
+    check_err(
+        "struct S(x: i32) impl S { fn get(&self): i32 { let y = self.x; y } }",
+        &["implicit return not allowed when function body contains statements"],
+    );
+}
+
+#[test]
+fn unit_return_while_statement_allowed() {
+    // Unit return type with while statement - no error (unit doesn't need return)
+    check("fn f() { while false {} } fn main() { let x = f(); }", "()");
+}
+
+#[test]
+fn unit_return_with_trailing_semicolon() {
+    // Unit return with expression statement at end - allowed
+    check("fn f() { let x = 1; x; } fn main() { let y = f(); }", "()");
+}
