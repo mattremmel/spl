@@ -2540,14 +2540,15 @@ fn lower_zst_argument() {
 // #[ignore] and will fail with CodegenError until the features are implemented.
 
 #[test]
-#[ignore = "place projections not yet supported"]
 fn lower_place_field_projection() {
-    // Accessing a field of a struct: place.field
+    // Accessing a field of a tuple: place.field
+    // fn(tuple: (i32, i32)) -> i32 { tuple.0 }
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
+    let tuple_ty = runner.types_mut().mk_tuple(vec![i32_ty, i32_ty]);
 
-    let mut body = Body::new(i32_ty);
-    let _struct_local = body.alloc_local(LocalDecl::new(i32_ty, true));
+    // Function takes a tuple as argument and returns its first field
+    let mut body = Body::with_args(i32_ty, &[(tuple_ty, false)]);
     let entry = body.alloc_block();
 
     // _0 = (_1).0 - field projection
@@ -2562,17 +2563,19 @@ fn lower_place_field_projection() {
         .set_terminator(Terminator::return_(0..0));
 
     let _ptr = runner.compile(&body, "place_field_projection");
+    // Note: Can't easily call this function because tuples are passed by pointer on the ABI level
 }
 
 #[test]
-#[ignore = "place projections not yet supported"]
 fn lower_place_deref_projection() {
     // Dereferencing a pointer: *place
+    // fn(ptr: &i32) -> i32 { *ptr }
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
+    let ref_ty = runner.types_mut().mk_ref(Mutability::Shared, i32_ty);
 
-    let mut body = Body::new(i32_ty);
-    let _ptr_local = body.alloc_local(LocalDecl::new(i32_ty, true));
+    // Function takes a pointer as argument and dereferences it
+    let mut body = Body::with_args(i32_ty, &[(ref_ty, false)]);
     let entry = body.alloc_block();
 
     // _0 = *_1 - deref projection
@@ -2586,7 +2589,12 @@ fn lower_place_deref_projection() {
     body.block_mut(entry)
         .set_terminator(Terminator::return_(0..0));
 
-    let _ptr = runner.compile(&body, "place_deref_projection");
+    let ptr = runner.compile(&body, "place_deref_projection");
+
+    // Test it: create an i32 on the stack and pass its address
+    let value: i32 = 42;
+    let func: fn(*const i32) -> i32 = unsafe { mem::transmute(ptr) };
+    assert_eq!(func(&value as *const i32), 42);
 }
 
 #[test]
@@ -2634,15 +2642,15 @@ fn lower_fn_def_constant() {
 }
 
 #[test]
-#[ignore = "zeroed constants not yet supported"]
 fn lower_zeroed_constant() {
+    // fn() -> i32 { zeroed::<i32>() } // returns 0
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
 
     let mut body = Body::new(i32_ty);
     let entry = body.alloc_block();
 
-    // Use a zeroed constant (should error)
+    // _0 = zeroed::<i32>()
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
         Rvalue::Use(Operand::Constant(Constant::Zeroed(i32_ty))),
@@ -2652,7 +2660,9 @@ fn lower_zeroed_constant() {
     body.block_mut(entry)
         .set_terminator(Terminator::return_(0..0));
 
-    let _ptr = runner.compile(&body, "zeroed_constant");
+    let ptr = runner.compile(&body, "zeroed_constant");
+    let func: fn() -> i32 = unsafe { mem::transmute(ptr) };
+    assert_eq!(func(), 0);
 }
 
 // =============================================================================
@@ -3309,13 +3319,15 @@ fn lower_rvalue_address_of() {
 }
 
 #[test]
-#[ignore = "len not yet supported"]
 fn lower_rvalue_len() {
+    // fn() -> usize { let arr: [i32; 5]; len(arr) } // returns 5
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
+    let i64_ty = runner.types_mut().i64(); // usize on 64-bit
+    let array_ty = runner.types_mut().mk_array(i32_ty, 5);
 
-    let mut body = Body::new(i32_ty);
-    let _array_local = body.alloc_local(LocalDecl::new(i32_ty, true));
+    let mut body = Body::new(i64_ty); // Return usize
+    let _array_local = body.alloc_local(LocalDecl::new(array_ty, true));
     let entry = body.alloc_block();
 
     // _0 = len(_1)
@@ -3328,7 +3340,9 @@ fn lower_rvalue_len() {
     body.block_mut(entry)
         .set_terminator(Terminator::return_(0..0));
 
-    let _ptr = runner.compile(&body, "rvalue_len");
+    let ptr = runner.compile(&body, "rvalue_len");
+    let func: fn() -> i64 = unsafe { mem::transmute(ptr) };
+    assert_eq!(func(), 5);
 }
 
 #[test]

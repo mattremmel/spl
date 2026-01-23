@@ -81,12 +81,38 @@ impl<'a> FunctionLowerer<'a> {
         &mut self,
         place: &Place,
     ) -> Result<(Value, TypeId), CodegenError> {
-        // Start with the base local's address
         let mut current_ty = self.local_spl_type(place.local);
-        let mut addr = self.get_local_address(place.local)?;
+        let mut projections = place.projection.iter().peekable();
 
-        // Apply each projection
-        for proj in &place.projection {
+        // Special case: if the base local is an SSA variable and the first projection
+        // is Deref, we use the variable's value directly as the pointer (no load needed).
+        // This handles patterns like *ptr where ptr is a pointer passed as an argument.
+        let mut addr = if matches!(projections.peek(), Some(PlaceElem::Deref))
+            && matches!(
+                self.local_storage(place.local),
+                Some(LocalStorage::Variable(_))
+            )
+        {
+            // Get the pointer value directly from the SSA variable
+            let ptr = self.use_var(place.local).ok_or_else(|| {
+                CodegenError::Internal("SSA variable not found".to_string())
+            })?;
+
+            // Consume the Deref projection
+            projections.next();
+
+            // Update current_ty to the pointee type
+            current_ty = self.layout.pointee_type(current_ty).ok_or_else(|| {
+                CodegenError::Internal("deref on non-pointer type".to_string())
+            })?;
+
+            ptr
+        } else {
+            self.get_local_address(place.local)?
+        };
+
+        // Apply remaining projections
+        for proj in projections {
             match proj {
                 PlaceElem::Deref => {
                     // Load the pointer value, then use it as the new address
@@ -254,9 +280,29 @@ impl<'a> FunctionLowerer<'a> {
             Constant::FnDef(_) => Err(CodegenError::Internal(
                 "function references not yet supported".to_string(),
             )),
-            Constant::Zeroed(_) => Err(CodegenError::Internal(
-                "zeroed constants not yet supported".to_string(),
-            )),
+            Constant::Zeroed(ty) => {
+                if let Some(clif_ty) = self.type_mapper.map_type(*ty, self.types) {
+                    // Scalar type: emit zero constant
+                    let val = if clif_ty.is_float() {
+                        if clif_ty == types::F32 {
+                            self.builder.ins().f32const(0.0)
+                        } else {
+                            self.builder.ins().f64const(0.0)
+                        }
+                    } else {
+                        self.builder.ins().iconst(clif_ty, 0)
+                    };
+                    Ok(Some(val))
+                } else if self.type_mapper.is_zst(*ty, self.types) {
+                    // ZST - no value needed
+                    Ok(None)
+                } else {
+                    // Compound types need special handling (memset to 0)
+                    Err(CodegenError::Internal(
+                        "zeroed compound types not yet supported".to_string(),
+                    ))
+                }
+            }
         }
     }
 

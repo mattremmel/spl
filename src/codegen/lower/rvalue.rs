@@ -41,7 +41,21 @@ impl<'a> FunctionLowerer<'a> {
                 self.lower_address_of(place)
             }
 
-            Rvalue::Len(_) => Err(CodegenError::Internal("len not yet supported".to_string())),
+            Rvalue::Len(place) => {
+                // Get the type of the place (should be an array)
+                let place_ty = self.local_spl_type(place.local);
+                let ty_data = self.types.get(place_ty);
+                match ty_data {
+                    crate::sema::types::Type::Array(_, count) => {
+                        // Return the static array length as a pointer-sized constant
+                        let ptr_ty = self.type_mapper.pointer_type();
+                        Ok(Some(self.builder.ins().iconst(ptr_ty, *count as i64)))
+                    }
+                    _ => Err(CodegenError::Internal(
+                        "len on non-array type".to_string(),
+                    )),
+                }
+            }
 
             Rvalue::Aggregate(kind, operands) => {
                 // Aggregates write directly to the destination
