@@ -258,7 +258,7 @@ fn create_literal_function(
 
 #[test]
 fn test_lower_function_returning_constant() {
-    // fn answer() -> i32 { 42 }
+    // fn answer(): i32 { 42 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let func = create_literal_function(&mut hir_db, "answer", i32_ty, Literal::Int(42));
@@ -424,7 +424,7 @@ fn test_lower_multiple_functions() {
 
 #[test]
 fn test_lower_function_with_unused_params() {
-    // fn ignore(x: i32) -> i32 { 0 }
+    // fn ignore(x: i32): i32 { 0 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
 
@@ -620,7 +620,7 @@ fn test_hir_unop_deref_returns_none() {
 
 #[test]
 fn test_lower_var_reference() {
-    // fn identity(x: i32) -> i32 { x }
+    // fn identity(x: i32): i32 { x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let param_def_id = DefId(1);
@@ -719,7 +719,7 @@ fn test_lower_var_as_operand() {
 
 #[test]
 fn test_lower_binary_add_literals() {
-    // fn add() -> i32 { 1 + 2 }
+    // fn add(): i32 { 1 + 2 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
 
@@ -917,7 +917,7 @@ fn test_lower_binary_comparison_lt() {
 
 #[test]
 fn test_lower_binary_with_vars() {
-    // fn add(a: i32, b: i32) -> i32 { a + b }
+    // fn add(a: i32, b: i32): i32 { a + b }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let a_def_id = DefId(1);
@@ -1007,7 +1007,7 @@ fn test_lower_binary_with_vars() {
 
 #[test]
 fn test_lower_nested_binary() {
-    // fn nested() -> i32 { (1 + 2) * 3 }
+    // fn nested(): i32 { (1 + 2) * 3 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
 
@@ -1089,7 +1089,7 @@ fn test_lower_nested_binary() {
 
 #[test]
 fn test_lower_unary_neg() {
-    // fn neg(x: i32) -> i32 { -x }
+    // fn neg(x: i32): i32 { -x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let x_def_id = DefId(1);
@@ -1149,7 +1149,7 @@ fn test_lower_unary_neg() {
 
 #[test]
 fn test_lower_unary_not() {
-    // fn flip(b: bool) -> bool { !b }
+    // fn flip(b: bool): bool { !b }
     let mut hir_db = HirDatabase::new();
     let bool_ty = hir_db.types.bool();
     let b_def_id = DefId(1);
@@ -1205,7 +1205,7 @@ fn test_lower_unary_not() {
 
 #[test]
 fn test_lower_nested_unary() {
-    // fn double_neg(x: i32) -> i32 { --x } (which is -(-x))
+    // fn double_neg(x: i32): i32 { --x } (which is -(-x))
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let x_def_id = DefId(1);
@@ -1288,7 +1288,7 @@ fn test_lower_nested_unary() {
 
 #[test]
 fn test_lower_complex_expression() {
-    // fn complex(a: i32, b: i32) -> i32 { -(a + b) * 2 }
+    // fn complex(a: i32, b: i32): i32 { -(a + b) * 2 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let a_def_id = DefId(1);
@@ -1406,7 +1406,7 @@ fn test_lower_complex_expression() {
 
 #[test]
 fn lower_let_binding_simple() {
-    // fn foo() -> i32 { let x = 42; x }
+    // fn foo(): i32 { let x = 42; x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let x_def_id = DefId(1);
@@ -1504,7 +1504,7 @@ fn lower_let_binding_simple() {
 
 #[test]
 fn lower_let_binding_mutable() {
-    // fn foo() -> i32 { let mut x = 10; x }
+    // fn foo(): i32 { let mut x = 10; x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let x_def_id = DefId(1);
@@ -1570,7 +1570,7 @@ fn lower_let_binding_mutable() {
 
 #[test]
 fn lower_let_wildcard() {
-    // fn foo() -> i32 { let _ = 42; 0 }
+    // fn foo(): i32 { let _ = 42; 0 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
 
@@ -1660,7 +1660,7 @@ fn lower_let_wildcard() {
 
 #[test]
 fn lower_block_multiple_stmts() {
-    // fn foo() -> i32 { let a = 1; let b = 2; a + b }
+    // fn foo(): i32 { let a = 1; let b = 2; a + b }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let a_def_id = DefId(1);
@@ -1863,7 +1863,7 @@ fn lower_block_no_tail() {
 
 #[test]
 fn lower_nested_blocks() {
-    // fn foo() -> i32 { let a = 1; { let b = 2; a + b } }
+    // fn foo(): i32 { let a = 1; { let b = 2; a + b } }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let a_def_id = DefId(1);
@@ -2045,7 +2045,7 @@ fn lower_empty_block() {
 
 #[test]
 fn lower_expr_stmt_with_semi() {
-    // fn foo() -> i32 { 1 + 2; 42 }
+    // fn foo(): i32 { 1 + 2; 42 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
 
@@ -2134,7 +2134,7 @@ fn lower_expr_stmt_with_semi() {
 
 #[test]
 fn lower_storage_live_on_let() {
-    // fn foo() -> i32 { let x = 1; x }
+    // fn foo(): i32 { let x = 1; x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let x_def_id = DefId(1);
@@ -2213,7 +2213,7 @@ fn lower_storage_live_on_let() {
 
 #[test]
 fn lower_storage_dead_at_block_end() {
-    // fn foo() -> i32 { let a = 1; { let b = 2; a + b } }
+    // fn foo(): i32 { let a = 1; { let b = 2; a + b } }
     // Inner block's `b` should have StorageDead
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
@@ -2335,7 +2335,7 @@ fn lower_storage_dead_at_block_end() {
 
 #[test]
 fn lower_shadowing() {
-    // fn foo() -> i32 { let x = 1; let x = 2; x }
+    // fn foo(): i32 { let x = 1; let x = 2; x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let x1_def_id = DefId(1);
@@ -2459,7 +2459,7 @@ fn lower_shadowing() {
 
 #[test]
 fn lower_block_as_operand() {
-    // fn foo() -> i32 { { let x = 1; x } + { let y = 2; y } }
+    // fn foo(): i32 { { let x = 1; x } + { let y = 2; y } }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let x_def_id = DefId(1);
@@ -2592,7 +2592,7 @@ fn lower_block_as_operand() {
 
 #[test]
 fn lower_block_tail_only() {
-    // fn foo() -> i32 { 42 }
+    // fn foo(): i32 { 42 }
     // Block with just a tail expression, no statements
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
@@ -2646,7 +2646,7 @@ fn lower_block_tail_only() {
 
 #[test]
 fn lower_let_without_init() {
-    // fn foo() -> i32 { let x: i32; 0 }
+    // fn foo(): i32 { let x: i32; 0 }
     // Let without initializer - should allocate local but not assign
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
@@ -2727,7 +2727,7 @@ fn lower_let_without_init() {
 
 #[test]
 fn lower_storage_dead_excludes_result() {
-    // fn foo() -> i32 { let x = 1; x }
+    // fn foo(): i32 { let x = 1; x }
     // The result (x) should NOT have StorageDead since it's the block result
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
@@ -2800,7 +2800,7 @@ fn lower_storage_dead_excludes_result() {
 
 #[test]
 fn lower_let_uses_previous_binding() {
-    // fn foo() -> i32 { let a = 1; let b = a + 1; b }
+    // fn foo(): i32 { let a = 1; let b = a + 1; b }
     // Tests that a binding can be used in subsequent statement's init
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
@@ -2914,7 +2914,7 @@ fn lower_let_uses_previous_binding() {
 
 #[test]
 fn lower_storage_dead_ordering() {
-    // fn foo() -> i32 { let a = 1; { let b = 2; a } }
+    // fn foo(): i32 { let a = 1; { let b = 2; a } }
     // Inner block returns `a` (from outer), so b should have StorageDead
     // and it should come AFTER a is copied to result
     let mut hir_db = HirDatabase::new();
@@ -3071,7 +3071,7 @@ fn lower_return_unit() {
 
 #[test]
 fn lower_return_literal() {
-    // fn foo() -> i32 { return 42; }
+    // fn foo(): i32 { return 42; }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
 
@@ -3135,7 +3135,7 @@ fn lower_return_literal() {
 
 #[test]
 fn lower_return_expression() {
-    // fn foo(a: i32, b: i32) -> i32 { return a + b; }
+    // fn foo(a: i32, b: i32): i32 { return a + b; }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let a_def_id = DefId(1);
@@ -3463,7 +3463,7 @@ fn lower_if_no_else_var() {
 
 #[test]
 fn lower_if_else_literals() {
-    // fn foo(cond: bool) -> i32 { if cond { 1 } else { 2 } }
+    // fn foo(cond: bool): i32 { if cond { 1 } else { 2 } }
     let mut hir_db = HirDatabase::new();
     let bool_ty = hir_db.types.bool();
     let i32_ty = hir_db.types.i32();
@@ -3595,7 +3595,7 @@ fn lower_if_else_literals() {
 
 #[test]
 fn lower_if_else_expressions() {
-    // fn foo(c: bool, a: i32, b: i32) -> i32 { if c { a + 1 } else { b + 2 } }
+    // fn foo(c: bool, a: i32, b: i32): i32 { if c { a + 1 } else { b + 2 } }
     let mut hir_db = HirDatabase::new();
     let bool_ty = hir_db.types.bool();
     let i32_ty = hir_db.types.i32();
@@ -3769,7 +3769,7 @@ fn lower_if_else_expressions() {
 
 #[test]
 fn lower_loop_with_break() {
-    // fn foo() -> i32 { loop { break 42; } }
+    // fn foo(): i32 { loop { break 42; } }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
 
@@ -3988,7 +3988,7 @@ fn lower_continue_simple() {
 
 #[test]
 fn lower_conditional_break() {
-    // fn foo(cond: bool) -> i32 { loop { if cond { break 1; } } }
+    // fn foo(cond: bool): i32 { loop { if cond { break 1; } } }
     let mut hir_db = HirDatabase::new();
     let bool_ty = hir_db.types.bool();
     let i32_ty = hir_db.types.i32();
@@ -4124,7 +4124,7 @@ fn lower_conditional_break() {
 
 #[test]
 fn lower_nested_break_inner() {
-    // fn foo() -> i32 { loop { loop { break; } break 1; } }
+    // fn foo(): i32 { loop { loop { break; } break 1; } }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let unit_ty = hir_db.types.unit();
@@ -4239,7 +4239,7 @@ fn lower_nested_break_inner() {
 
 #[test]
 fn lower_nested_loop_values() {
-    // fn foo() -> i32 { loop { let x = loop { break 10; }; break x + 1; } }
+    // fn foo(): i32 { loop { let x = loop { break 10; }; break x + 1; } }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let x_def_id = DefId(1);
@@ -4394,7 +4394,7 @@ fn lower_nested_loop_values() {
 
 #[test]
 fn lower_return_in_loop() {
-    // fn foo() -> i32 { loop { return 42; } }
+    // fn foo(): i32 { loop { return 42; } }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
 
@@ -4476,7 +4476,7 @@ fn lower_return_in_loop() {
 
 #[test]
 fn lower_if_else_breaks() {
-    // fn foo(c: bool) -> i32 { loop { if c { break 1; } else { break 2; } } }
+    // fn foo(c: bool): i32 { loop { if c { break 1; } else { break 2; } } }
     let mut hir_db = HirDatabase::new();
     let bool_ty = hir_db.types.bool();
     let i32_ty = hir_db.types.i32();
@@ -4639,8 +4639,8 @@ fn lower_if_else_breaks() {
 
 #[test]
 fn test_lower_call_no_args() {
-    // fn bar() -> i32 { 42 }
-    // fn foo() -> i32 { bar() }
+    // fn bar(): i32 { 42 }
+    // fn foo(): i32 { bar() }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let bar_def_id = DefId(1);
@@ -4726,8 +4726,8 @@ fn test_lower_call_no_args() {
 
 #[test]
 fn test_lower_call_with_args() {
-    // fn add(a: i32, b: i32) -> i32 { a + b }
-    // fn foo() -> i32 { add(1, 2) }
+    // fn add(a: i32, b: i32): i32 { a + b }
+    // fn foo(): i32 { add(1, 2) }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let add_def_id = DefId(1);
@@ -4861,9 +4861,9 @@ fn test_lower_call_with_args() {
 
 #[test]
 fn test_lower_call_nested() {
-    // fn bar() -> i32 { 1 }
-    // fn baz(x: i32) -> i32 { x }
-    // fn foo() -> i32 { baz(bar()) }
+    // fn bar(): i32 { 1 }
+    // fn baz(x: i32): i32 { x }
+    // fn foo(): i32 { baz(bar()) }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let bar_def_id = DefId(1);
@@ -5176,7 +5176,7 @@ fn test_lower_method_call_with_args() {
 
 #[test]
 fn test_lower_binary_div() {
-    // fn foo() -> i32 { 10 / 3 }
+    // fn foo(): i32 { 10 / 3 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
 
@@ -5225,7 +5225,7 @@ fn test_lower_binary_div() {
 
 #[test]
 fn test_lower_binary_rem() {
-    // fn foo() -> i32 { 10 % 3 }
+    // fn foo(): i32 { 10 % 3 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
 
@@ -5274,7 +5274,7 @@ fn test_lower_binary_rem() {
 
 #[test]
 fn test_lower_binary_le() {
-    // fn foo(a: i32, b: i32) -> bool { a <= b }
+    // fn foo(a: i32, b: i32): bool { a <= b }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let bool_ty = hir_db.types.bool();
@@ -5354,7 +5354,7 @@ fn test_lower_binary_le() {
 
 #[test]
 fn test_lower_binary_ge() {
-    // fn foo() -> bool { 5 >= 3 }
+    // fn foo(): bool { 5 >= 3 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let bool_ty = hir_db.types.bool();
@@ -5404,7 +5404,7 @@ fn test_lower_binary_ge() {
 
 #[test]
 fn test_lower_binary_gt() {
-    // fn foo() -> bool { 5 > 3 }
+    // fn foo(): bool { 5 > 3 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let bool_ty = hir_db.types.bool();
@@ -5454,7 +5454,7 @@ fn test_lower_binary_gt() {
 
 #[test]
 fn test_lower_binary_ne() {
-    // fn foo() -> bool { 5 != 3 }
+    // fn foo(): bool { 5 != 3 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let bool_ty = hir_db.types.bool();
@@ -5506,7 +5506,7 @@ fn test_lower_binary_ne() {
 
 #[test]
 fn test_lower_binary_and_placeholder() {
-    // fn foo() -> bool { true && false }
+    // fn foo(): bool { true && false }
     // Note: And is not yet properly lowered (returns None from hir_binop_to_mir)
     // This test documents current placeholder behavior
     let mut hir_db = HirDatabase::new();
@@ -5586,7 +5586,7 @@ fn test_lower_binary_and_placeholder() {
 
 #[test]
 fn test_lower_binary_or_placeholder() {
-    // fn foo() -> bool { true || false }
+    // fn foo(): bool { true || false }
     // Note: Or is not yet properly lowered (returns None from hir_binop_to_mir)
     let mut hir_db = HirDatabase::new();
     let bool_ty = hir_db.types.bool();
@@ -6096,8 +6096,8 @@ fn test_lower_array_repeat_complex_value() {
 
 #[test]
 fn test_lower_field_placeholder() {
-    // struct Point { x: i32 }
-    // fn foo(p: Point) -> i32 { p.x }
+    // struct Point(x: i32)
+    // fn foo(p: Point): i32 { p.x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let span = Span::from(0..10);
@@ -6396,7 +6396,7 @@ fn test_lower_cast_placeholder() {
 
 #[test]
 fn test_lower_deeply_nested_blocks() {
-    // fn foo() -> i32 { { { { 42 } } } }
+    // fn foo(): i32 { { { { 42 } } } }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
 
@@ -6458,7 +6458,7 @@ fn test_lower_deeply_nested_blocks() {
 
 #[test]
 fn test_lower_multiple_sequential_lets() {
-    // fn foo() -> i32 { let a = 1; let b = 2; let c = 3; a + b + c }
+    // fn foo(): i32 { let a = 1; let b = 2; let c = 3; a + b + c }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let a_def_id = DefId(1);
@@ -6619,7 +6619,7 @@ fn test_lower_multiple_sequential_lets() {
 
 #[test]
 fn test_lower_if_in_loop() {
-    // fn foo(n: i32) -> i32 { let mut i = 0; loop { if i >= n { break i; } i = i + 1; } }
+    // fn foo(n: i32): i32 { let mut i = 0; loop { if i >= n { break i; } i = i + 1; } }
     // Simplified: loop { if cond { break 1; } break 2; }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
@@ -6767,8 +6767,8 @@ fn test_lower_if_in_loop() {
 
 #[test]
 fn test_lower_call_with_binary_arg() {
-    // fn bar(x: i32) -> i32 { x }
-    // fn foo() -> i32 { bar(1 + 2) }
+    // fn bar(x: i32): i32 { x }
+    // fn foo(): i32 { bar(1 + 2) }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let bar_def_id = DefId(1);
@@ -6884,7 +6884,7 @@ fn test_lower_call_with_binary_arg() {
 
 #[test]
 fn test_lower_return_in_if_branch() {
-    // fn foo(c: bool) -> i32 { if c { return 1; } 2 }
+    // fn foo(c: bool): i32 { if c { return 1; } 2 }
     let mut hir_db = HirDatabase::new();
     let bool_ty = hir_db.types.bool();
     let i32_ty = hir_db.types.i32();
@@ -7135,8 +7135,8 @@ fn test_lower_continue_in_nested_if() {
 
 #[test]
 fn test_lower_field_access_first_field() {
-    // struct Point { x: i32, y: i32 }
-    // fn foo(p: Point) -> i32 { p.x }
+    // struct Point(x: i32, y: i32)
+    // fn foo(p: Point): i32 { p.x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let span = Span::from(0..10);
@@ -7233,8 +7233,8 @@ fn test_lower_field_access_first_field() {
 
 #[test]
 fn test_lower_field_access_second_field() {
-    // struct Point { x: i32, y: i32 }
-    // fn foo(p: Point) -> i32 { p.y }
+    // struct Point(x: i32, y: i32)
+    // fn foo(p: Point): i32 { p.y }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let span = Span::from(0..10);
@@ -7331,9 +7331,9 @@ fn test_lower_field_access_second_field() {
 
 #[test]
 fn test_lower_nested_field_access() {
-    // struct Inner { val: i32 }
-    // struct Outer { inner: Inner }
-    // fn foo(o: Outer) -> i32 { o.inner.val }
+    // struct Inner(val: i32)
+    // struct Outer(inner: Inner)
+    // fn foo(o: Outer): i32 { o.inner.val }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let span = Span::from(0..10);
@@ -7451,7 +7451,7 @@ fn test_lower_nested_field_access() {
 
 #[test]
 fn test_lower_deref_basic() {
-    // fn foo(r: &i32) -> i32 { *r }
+    // fn foo(r: &i32): i32 { *r }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let ref_i32_ty = hir_db.types.mk_ref(Mutability::Shared, i32_ty);
@@ -7609,8 +7609,8 @@ fn test_lower_deref_as_lvalue() {
 
 #[test]
 fn test_lower_deref_then_field() {
-    // struct Point { x: i32 }
-    // fn foo(r: &Point) -> i32 { (*r).x }
+    // struct Point(x: i32)
+    // fn foo(r: &Point): i32 { (*r).x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let span = Span::from(0..10);
@@ -7711,7 +7711,7 @@ fn test_lower_deref_then_field() {
 
 #[test]
 fn test_lower_double_deref() {
-    // fn foo(r: &&i32) -> i32 { **r }
+    // fn foo(r: &&i32): i32 { **r }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let ref_i32_ty = hir_db.types.mk_ref(Mutability::Shared, i32_ty);
@@ -7932,7 +7932,7 @@ fn test_lower_cast_int_to_float() {
 
 #[test]
 fn test_lower_cast_float_to_int() {
-    // fn foo(x: f64) -> i32 { x as i32 }
+    // fn foo(x: f64): i32 { x as i32 }
     let mut hir_db = HirDatabase::new();
     let f64_ty = hir_db.types.f64();
     let i32_ty = hir_db.types.i32();
@@ -8000,7 +8000,7 @@ fn test_lower_cast_float_to_int() {
 
 #[test]
 fn test_lower_index_with_variable() {
-    // fn foo(arr: [i32; 5], i: usize) -> i32 { arr[i] }
+    // fn foo(arr: [i32; 5], i: usize): i32 { arr[i] }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let usize_ty = hir_db.types.primitive(PrimitiveKind::Usize);
@@ -8092,7 +8092,7 @@ fn test_lower_index_with_variable() {
 
 #[test]
 fn test_lower_nested_index() {
-    // fn foo(arr: [[i32; 3]; 3], i: usize, j: usize) -> i32 { arr[i][j] }
+    // fn foo(arr: [[i32; 3]; 3], i: usize, j: usize): i32 { arr[i][j] }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let usize_ty = hir_db.types.primitive(PrimitiveKind::Usize);
@@ -8220,8 +8220,8 @@ fn test_lower_nested_index() {
 
 #[test]
 fn test_lower_deref_index_field_chain() {
-    // struct Item { value: i32 }
-    // fn foo(arr: &[Item; 3], i: usize) -> i32 { (*arr)[i].value }
+    // struct Item(value: i32)
+    // fn foo(arr: &[Item; 3], i: usize): i32 { (*arr)[i].value }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let usize_ty = hir_db.types.primitive(PrimitiveKind::Usize);
@@ -8359,8 +8359,8 @@ fn test_lower_deref_index_field_chain() {
 
 #[test]
 fn test_lower_field_then_index() {
-    // struct Container { items: [i32; 5] }
-    // fn foo(c: Container, i: usize) -> i32 { c.items[i] }
+    // struct Container(items: [i32; 5])
+    // fn foo(c: Container, i: usize): i32 { c.items[i] }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let usize_ty = hir_db.types.primitive(PrimitiveKind::Usize);
@@ -8490,8 +8490,8 @@ fn test_lower_field_then_index() {
 
 #[test]
 fn test_e2e_simple_function() {
-    // fn main() -> i32 { 42 }
-    let bodies = lower_source("fn main() -> i32 { 42 }");
+    // fn main(): i32 { 42 }
+    let bodies = lower_source("fn main(): i32 { 42 }");
 
     assert_eq!(bodies.len(), 1);
     let body = &bodies[0];
@@ -8510,8 +8510,8 @@ fn test_e2e_simple_function() {
 #[test]
 fn test_e2e_arithmetic() {
     // Use variables to prevent constant folding
-    // fn add(a: i32, b: i32) -> i32 { a + b }
-    let bodies = lower_source("fn add(a: i32, b: i32) -> i32 { a + b }");
+    // fn add(a: i32, b: i32): i32 { a + b }
+    let bodies = lower_source("fn add(a: i32, b: i32): i32 { a + b }");
 
     assert_eq!(bodies.len(), 1);
     let body = &bodies[0];
@@ -8530,8 +8530,8 @@ fn test_e2e_arithmetic() {
 
 #[test]
 fn test_e2e_control_flow() {
-    // fn test() -> i32 { if true { 1 } else { 2 } }
-    let bodies = lower_source("fn test() -> i32 { if true { 1 } else { 2 } }");
+    // fn test(): i32 { if true { 1 } else { 2 } }
+    let bodies = lower_source("fn test(): i32 { if true { 1 } else { 2 } }");
 
     assert_eq!(bodies.len(), 1);
     let body = &bodies[0];
@@ -8556,8 +8556,8 @@ fn test_e2e_control_flow() {
 
 #[test]
 fn test_lower_let_tuple_pattern() {
-    // fn main() -> i32 { let (a, b) = (1, 2); a }
-    let bodies = lower_source("fn main() -> i32 { let (a, b) = (1, 2); a }");
+    // fn main(): i32 { let (a, b) = (1, 2); a }
+    let bodies = lower_source("fn main(): i32 { let (a, b) = (1, 2); a }");
 
     assert_eq!(bodies.len(), 1);
     let body = &bodies[0];
@@ -8583,8 +8583,8 @@ fn test_lower_let_tuple_pattern() {
 
 #[test]
 fn test_lower_let_tuple_pattern_nested() {
-    // fn main() -> i32 { let ((a, b), c) = ((1, 2), 3); a }
-    let bodies = lower_source("fn main() -> i32 { let ((a, b), c) = ((1, 2), 3); a }");
+    // fn main(): i32 { let ((a, b), c) = ((1, 2), 3); a }
+    let bodies = lower_source("fn main(): i32 { let ((a, b), c) = ((1, 2), 3); a }");
 
     assert_eq!(bodies.len(), 1);
     // Should compile without panic - nested tuple patterns
@@ -8595,8 +8595,8 @@ fn test_lower_let_tuple_pattern_nested() {
 #[test]
 fn test_lower_let_struct_pattern() {
     let source = r#"
-        struct Point { x: i32, y: i32 }
-        fn main() -> i32 { let Point { x, y } = Point { x: 1, y: 2 }; x }
+        struct Point(x: i32, y: i32)
+        fn main(): i32 { let Point { x, y } = Point { x: 1, y: 2 }; x }
     "#;
     let bodies = lower_source(source);
 
@@ -8627,8 +8627,8 @@ fn test_lower_let_struct_pattern() {
 #[test]
 fn test_lower_let_struct_pattern_with_rest() {
     let source = r#"
-        struct Point { x: i32, y: i32, z: i32 }
-        fn main() -> i32 { let Point { x, .. } = Point { x: 1, y: 2, z: 3 }; x }
+        struct Point(x: i32, y: i32, z: i32)
+        fn main(): i32 { let Point { x, .. } = Point { x: 1, y: 2, z: 3 }; x }
     "#;
     let bodies = lower_source(source);
 
@@ -8640,8 +8640,8 @@ fn test_lower_let_struct_pattern_with_rest() {
 
 #[test]
 fn test_lower_let_ref_pattern() {
-    // fn main() -> i32 { let x = &42; let &y = x; y }
-    let bodies = lower_source("fn main() -> i32 { let x = &42; let &y = x; y }");
+    // fn main(): i32 { let x = &42; let &y = x; y }
+    let bodies = lower_source("fn main(): i32 { let x = &42; let &y = x; y }");
 
     assert_eq!(bodies.len(), 1);
     let body = &bodies[0];
@@ -8667,8 +8667,8 @@ fn test_lower_let_ref_pattern() {
 
 #[test]
 fn test_lower_let_ref_pattern_nested() {
-    // fn main() -> i32 { let x = &(1, 2); let &(a, b) = x; a }
-    let bodies = lower_source("fn main() -> i32 { let x = &(1, 2); let &(a, b) = x; a }");
+    // fn main(): i32 { let x = &(1, 2); let &(a, b) = x; a }
+    let bodies = lower_source("fn main(): i32 { let x = &(1, 2); let &(a, b) = x; a }");
 
     assert_eq!(bodies.len(), 1);
     // Should compile without panic - nested patterns under ref
@@ -8726,7 +8726,7 @@ fn test_lower_missing_expr_produces_zeroed() {
 
 #[test]
 fn lower_function_preserves_def_id() {
-    let bodies = lower_source("fn main() -> i32 { 42 }");
+    let bodies = lower_source("fn main(): i32 { 42 }");
     assert_eq!(bodies.len(), 1);
     assert!(
         bodies[0].def_id.is_some(),
@@ -8769,7 +8769,7 @@ fn lower_function_def_id_is_unique() {
 
 #[test]
 fn lower_function_metadata_for_function_with_params() {
-    let bodies = lower_source("fn add(a: i32, b: i32) -> i32 { a + b }");
+    let bodies = lower_source("fn add(a: i32, b: i32): i32 { a + b }");
     assert_eq!(bodies.len(), 1);
     let body = &bodies[0];
 

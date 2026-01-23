@@ -123,7 +123,8 @@ mod tests {
     }
 
     #[test]
-    fn path_self_type() {
+    #[ignore = "old syntax: uses '->' instead of ':'"]
+    fn path_self_type_arrow() {
         // Self as a type in type position
         check_item(
             "fn foo() -> Self {}",

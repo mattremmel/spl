@@ -23,7 +23,8 @@ fn function_minimal() {
 }
 
 #[test]
-fn function_with_return_type() {
+#[ignore = "old syntax: use ':' instead of '->'"]
+fn function_with_return_type_arrow() {
     check_item(
         "fn foo() -> i32 {}",
         &expect![[r#"
@@ -52,7 +53,8 @@ fn function_with_return_type() {
 }
 
 #[test]
-fn function_with_params() {
+#[ignore = "old syntax: use ':' instead of '->'"]
+fn function_with_params_arrow() {
     check_item(
         "fn add(x: i32, y: i32) -> i32 {}",
         &expect![[r#"
@@ -103,7 +105,8 @@ fn function_with_params() {
 }
 
 #[test]
-fn function_with_body() {
+#[ignore = "old syntax: use ':' instead of '->'"]
+fn function_with_body_arrow() {
     check_item(
         "fn answer() -> i32 { 42 }",
         &expect![[r#"
@@ -277,7 +280,8 @@ fn visibility_pub_in_path() {
 }
 
 #[test]
-fn struct_pub_crate() {
+#[ignore = "old syntax: use '()' instead of '{}'"]
+fn struct_pub_crate_brace() {
     check_item(
         "pub(crate) struct Foo {}",
         &expect![[r#"
@@ -301,7 +305,8 @@ fn struct_pub_crate() {
 }
 
 #[test]
-fn field_pub_crate() {
+#[ignore = "old syntax: use '()' instead of '{}'"]
+fn field_pub_crate_brace() {
     check_item(
         "struct Foo { pub(crate) x: i32 }",
         &expect![[r#"
@@ -423,7 +428,8 @@ fn function_with_self_and_params() {
 }
 
 #[test]
-fn function_with_generics() {
+#[ignore = "old syntax: use 'where T' instead of '<T>' and ':' instead of '->'"]
+fn function_with_generics_angle() {
     check_item(
         "fn identity<T>(x: T) -> T {}",
         &expect![[r#"
@@ -468,7 +474,8 @@ fn function_with_generics() {
 }
 
 #[test]
-fn function_with_multiple_generics() {
+#[ignore = "old syntax: use 'where T, U' instead of '<T, U>'"]
+fn function_with_multiple_generics_angle() {
     check_item(
         "fn pair<T, U>(a: T, b: U) {}",
         &expect![[r#"
@@ -544,10 +551,11 @@ fn function_owned_self() {
     );
 }
 
-// === Struct tests ===
+// === Struct tests (old brace syntax) ===
 
 #[test]
-fn struct_empty() {
+#[ignore = "old syntax: use '()' instead of '{}'"]
+fn struct_empty_brace() {
     check_item(
         "struct Point {}",
         &expect![[r#"
@@ -565,7 +573,8 @@ fn struct_empty() {
 }
 
 #[test]
-fn struct_with_fields() {
+#[ignore = "old syntax: use '()' instead of '{}'"]
+fn struct_with_fields_brace() {
     check_item(
         "struct Point { x: i32, y: i32 }",
         &expect![[r#"
@@ -607,7 +616,8 @@ fn struct_with_fields() {
 }
 
 #[test]
-fn struct_pub() {
+#[ignore = "old syntax: use '()' instead of '{}'"]
+fn struct_pub_brace() {
     check_item(
         "pub struct Foo {}",
         &expect![[r#"
@@ -628,7 +638,8 @@ fn struct_pub() {
 }
 
 #[test]
-fn struct_with_pub_field() {
+#[ignore = "old syntax: use '()' instead of '{}'"]
+fn struct_with_pub_field_brace() {
     check_item(
         "struct Foo { pub x: i32 }",
         &expect![[r#"
@@ -661,7 +672,8 @@ fn struct_with_pub_field() {
 }
 
 #[test]
-fn struct_with_generics() {
+#[ignore = "old syntax: use 'where T, U' instead of '<T, U>' and '()' instead of '{}'"]
+fn struct_with_generics_angle_brace() {
     check_item(
         "struct Pair<T, U> { first: T, second: U }",
         &expect![[r#"
@@ -739,7 +751,8 @@ fn type_alias_simple() {
 }
 
 #[test]
-fn type_alias_pub() {
+fn type_alias_pub_arrow() {
+    // Note: fn pointer types still use -> syntax
     check_item(
         "pub type Callback = fn(i32) -> bool;",
         &expect![[r#"
@@ -799,7 +812,8 @@ fn impl_empty() {
 }
 
 #[test]
-fn impl_with_method() {
+#[ignore = "old syntax: use ':' instead of '->'"]
+fn impl_with_method_arrow() {
     check_item(
         "impl Point { fn new() -> Point {} }",
         &expect![[r#"
@@ -841,7 +855,8 @@ fn impl_with_method() {
 }
 
 #[test]
-fn impl_with_generics() {
+#[ignore = "old syntax: use 'where T' instead of '<T>'"]
+fn impl_with_generics_angle() {
     check_item(
         "impl<T> Vec<T> {}",
         &expect![[r#"
@@ -911,7 +926,8 @@ fn source_file_single_function() {
 }
 
 #[test]
-fn source_file_multiple_items() {
+#[ignore = "old syntax: use '()' instead of '{}'"]
+fn source_file_multiple_items_brace() {
     use crate::parser::tests::check_source_file;
     check_source_file(
         "struct Point { x: i32 }\nfn main() {}",
@@ -956,7 +972,8 @@ fn source_file_multiple_items() {
 }
 
 #[test]
-fn source_file_with_impl() {
+#[ignore = "old syntax: use '()' instead of '{}'"]
+fn source_file_with_impl_brace() {
     use crate::parser::tests::check_source_file;
     check_source_file(
         "struct Foo {}\nimpl Foo { fn bar(&self) {} }",
@@ -1007,7 +1024,8 @@ fn source_file_with_impl() {
 // === Phase 6: Item Edge Cases ===
 
 #[test]
-fn fn_many_generics() {
+#[ignore = "old syntax: use 'where T, U, V' instead of '<T, U, V>' and ':' instead of '->'"]
+fn fn_many_generics_angle_arrow() {
     check_item(
         "fn foo<T, U, V>(a: T, b: U) -> V {}",
         &expect![[r#"
@@ -1074,7 +1092,8 @@ fn fn_many_generics() {
 }
 
 #[test]
-fn fn_taking_fn_arg() {
+#[ignore = "old syntax: use ':' instead of '->' for function return type"]
+fn fn_taking_fn_arg_arrow() {
     check_item(
         "fn apply(f: fn(i32) -> i32, x: i32) -> i32 {}",
         &expect![[r#"
@@ -1137,7 +1156,8 @@ fn fn_taking_fn_arg() {
 }
 
 #[test]
-fn struct_many_fields() {
+#[ignore = "old syntax: use '()' instead of '{}'"]
+fn struct_many_fields_brace() {
     check_item(
         "struct S { a: A, b: B, c: C, d: D }",
         &expect![[r#"
@@ -1203,7 +1223,8 @@ fn struct_many_fields() {
 }
 
 #[test]
-fn struct_mixed_visibility() {
+#[ignore = "old syntax: use '()' instead of '{}'"]
+fn struct_mixed_visibility_brace() {
     check_item(
         "struct S { pub a: i32, pub(crate) b: i32, c: i32 }",
         &expect![[r#"
@@ -1439,7 +1460,8 @@ fn impl_mixed_visibility() {
 }
 
 #[test]
-fn struct_trailing_comma() {
+#[ignore = "old syntax: use '()' instead of '{}'"]
+fn struct_trailing_comma_brace() {
     check_item(
         "struct S { a: i32, b: i32, }",
         &expect![[r#"
@@ -1698,7 +1720,8 @@ fn struct_tuple_with_visibility() {
 }
 
 #[test]
-fn struct_tuple_generic() {
+#[ignore = "old syntax: use 'where T' instead of '<T>'"]
+fn struct_tuple_generic_angle() {
     check_item(
         "struct Wrapper<T>(T);",
         &expect![[r#"
@@ -2036,6 +2059,177 @@ fn struct_parenthesized_with_where() {
                   Name@26..28
                     WHITESPACE@26..27 " "
                     IDENT@27..28 "T"
+        "#]],
+    );
+}
+
+// === New Syntax Tests: Where Clause with Type Bounds ===
+
+#[test]
+fn function_with_where_clause_and_bound() {
+    check_item(
+        "fn foo(x: T): T where T: Clone {}",
+        &expect![[r#"
+            FunctionDef@0..33
+              FN_KW@0..2 "fn"
+              Name@2..6
+                WHITESPACE@2..3 " "
+                IDENT@3..6 "foo"
+              ParamList@6..12
+                L_PAREN@6..7 "("
+                Param@7..11
+                  Name@7..8
+                    IDENT@7..8 "x"
+                  COLON@8..9 ":"
+                  PathType@9..11
+                    Path@9..11
+                      PathSegment@9..11
+                        NameRef@9..11
+                          WHITESPACE@9..10 " "
+                          IDENT@10..11 "T"
+                R_PAREN@11..12 ")"
+              COLON@12..13 ":"
+              PathType@13..15
+                Path@13..15
+                  PathSegment@13..15
+                    NameRef@13..15
+                      WHITESPACE@13..14 " "
+                      IDENT@14..15 "T"
+              WhereClause@15..30
+                WHITESPACE@15..16 " "
+                WHERE_KW@16..21 "where"
+                GenericParam@21..30
+                  Name@21..23
+                    WHITESPACE@21..22 " "
+                    IDENT@22..23 "T"
+                  COLON@23..24 ":"
+                  TypeBound@24..30
+                    Path@24..30
+                      PathSegment@24..30
+                        NameRef@24..30
+                          WHITESPACE@24..25 " "
+                          IDENT@25..30 "Clone"
+              Block@30..33
+                WHITESPACE@30..31 " "
+                L_BRACE@31..32 "{"
+                R_BRACE@32..33 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn function_with_where_clause_multiple_bounds() {
+    check_item(
+        "fn foo(x: T) where T: Clone + Debug {}",
+        &expect![[r#"
+            FunctionDef@0..38
+              FN_KW@0..2 "fn"
+              Name@2..6
+                WHITESPACE@2..3 " "
+                IDENT@3..6 "foo"
+              ParamList@6..12
+                L_PAREN@6..7 "("
+                Param@7..11
+                  Name@7..8
+                    IDENT@7..8 "x"
+                  COLON@8..9 ":"
+                  PathType@9..11
+                    Path@9..11
+                      PathSegment@9..11
+                        NameRef@9..11
+                          WHITESPACE@9..10 " "
+                          IDENT@10..11 "T"
+                R_PAREN@11..12 ")"
+              WhereClause@12..35
+                WHITESPACE@12..13 " "
+                WHERE_KW@13..18 "where"
+                GenericParam@18..35
+                  Name@18..20
+                    WHITESPACE@18..19 " "
+                    IDENT@19..20 "T"
+                  COLON@20..21 ":"
+                  TypeBound@21..27
+                    Path@21..27
+                      PathSegment@21..27
+                        NameRef@21..27
+                          WHITESPACE@21..22 " "
+                          IDENT@22..27 "Clone"
+                  WHITESPACE@27..28 " "
+                  PLUS@28..29 "+"
+                  TypeBound@29..35
+                    Path@29..35
+                      PathSegment@29..35
+                        NameRef@29..35
+                          WHITESPACE@29..30 " "
+                          IDENT@30..35 "Debug"
+              Block@35..38
+                WHITESPACE@35..36 " "
+                L_BRACE@36..37 "{"
+                R_BRACE@37..38 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn impl_with_where_clause() {
+    check_item(
+        "impl Box where T {}",
+        &expect![[r#"
+            ImplBlock@0..19
+              IMPL_KW@0..4 "impl"
+              PathType@4..8
+                Path@4..8
+                  PathSegment@4..8
+                    NameRef@4..8
+                      WHITESPACE@4..5 " "
+                      IDENT@5..8 "Box"
+              WhereClause@8..16
+                WHITESPACE@8..9 " "
+                WHERE_KW@9..14 "where"
+                GenericParam@14..16
+                  Name@14..16
+                    WHITESPACE@14..15 " "
+                    IDENT@15..16 "T"
+              WHITESPACE@16..17 " "
+              L_BRACE@17..18 "{"
+              R_BRACE@18..19 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn type_alias_with_where_clause() {
+    check_item(
+        "type Callback = T where T: Fn;",
+        &expect![[r#"
+            TypeAlias@0..30
+              TYPE_KW@0..4 "type"
+              Name@4..13
+                WHITESPACE@4..5 " "
+                IDENT@5..13 "Callback"
+              WHITESPACE@13..14 " "
+              EQ@14..15 "="
+              PathType@15..17
+                Path@15..17
+                  PathSegment@15..17
+                    NameRef@15..17
+                      WHITESPACE@15..16 " "
+                      IDENT@16..17 "T"
+              WhereClause@17..29
+                WHITESPACE@17..18 " "
+                WHERE_KW@18..23 "where"
+                GenericParam@23..29
+                  Name@23..25
+                    WHITESPACE@23..24 " "
+                    IDENT@24..25 "T"
+                  COLON@25..26 ":"
+                  TypeBound@26..29
+                    Path@26..29
+                      PathSegment@26..29
+                        NameRef@26..29
+                          WHITESPACE@26..27 " "
+                          IDENT@27..29 "Fn"
+              SEMI@29..30 ";"
         "#]],
     );
 }

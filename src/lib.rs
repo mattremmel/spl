@@ -263,7 +263,7 @@ impl From<codegen::RuntimeError> for JitError {
 /// ```
 /// use spl::jit_execute;
 ///
-/// let result = jit_execute("fn main() -> i32 { 42 }");
+/// let result = jit_execute("fn main(): i32 { 42 }");
 /// assert_eq!(result.unwrap(), 42);
 /// ```
 ///
@@ -391,7 +391,7 @@ impl From<std::io::Error> for AotError {
 /// ```
 /// use spl::compile_to_object;
 ///
-/// let object_bytes = compile_to_object("fn main() -> i32 { 42 }").unwrap();
+/// let object_bytes = compile_to_object("fn main(): i32 { 42 }").unwrap();
 /// // object_bytes can be written to a .o file or linked into an executable
 /// ```
 ///
@@ -447,7 +447,7 @@ pub fn compile_to_object(source: &str) -> Result<Vec<u8>, AotError> {
 /// use spl::compile_and_link;
 /// use std::path::Path;
 ///
-/// compile_and_link("fn main() -> i32 { 42 }", Path::new("/tmp/my_program")).unwrap();
+/// compile_and_link("fn main(): i32 { 42 }", Path::new("/tmp/my_program")).unwrap();
 /// // /tmp/my_program is now an executable that returns 42
 /// ```
 ///
@@ -479,7 +479,7 @@ pub fn compile_and_link(source: &str, output: &Path) -> Result<(), AotError> {
 ///     .library_path("/usr/local/lib");
 ///
 /// compile_and_link_with_options(
-///     "fn main() -> i32 { 42 }",
+///     "fn main(): i32 { 42 }",
 ///     Path::new("/tmp/my_program"),
 ///     &options,
 /// ).unwrap();
@@ -500,7 +500,7 @@ mod jit_tests {
 
     #[test]
     fn jit_execute_returns_42() {
-        let result = jit_execute("fn main() -> i32 { 42 }");
+        let result = jit_execute("fn main(): i32 { 42 }");
         assert_eq!(result.unwrap(), 42);
     }
 
@@ -520,8 +520,8 @@ mod jit_tests {
     fn jit_execute_function_call() {
         let result = jit_execute(
             r#"
-            fn add(a: i32, b: i32) -> i32 { a + b }
-            fn main() -> i32 { add(10, 32) }
+            fn add(a: i32, b: i32): i32 { a + b }
+            fn main(): i32 { add(10, 32) }
         "#,
         );
         assert_eq!(result.unwrap(), 42);
@@ -529,13 +529,13 @@ mod jit_tests {
 
     #[test]
     fn jit_execute_arithmetic() {
-        let result = jit_execute("fn main() -> i32 { 1 + 2 * 3 }");
+        let result = jit_execute("fn main(): i32 { 1 + 2 * 3 }");
         assert_eq!(result.unwrap(), 7);
     }
 
     #[test]
     fn jit_execute_locals() {
-        let result = jit_execute("fn main() -> i32 { let x = 10; let y = 32; x + y }");
+        let result = jit_execute("fn main(): i32 { let x = 10; let y = 32; x + y }");
         assert_eq!(result.unwrap(), 42);
     }
 
@@ -543,7 +543,7 @@ mod jit_tests {
     fn jit_execute_control_flow() {
         let result = jit_execute(
             r#"
-            fn main() -> i32 {
+            fn main(): i32 {
                 let x = 5;
                 if x > 3 { 1 } else { 0 }
             }
@@ -556,7 +556,7 @@ mod jit_tests {
     fn jit_execute_loop() {
         let result = jit_execute(
             r#"
-            fn main() -> i32 {
+            fn main(): i32 {
                 let mut sum = 0;
                 let mut i = 1;
                 while i <= 10 {
@@ -683,7 +683,7 @@ mod aot_tests {
 
     #[test]
     fn compile_to_object_simple() {
-        let result = compile_to_object("fn main() -> i32 { 42 }");
+        let result = compile_to_object("fn main(): i32 { 42 }");
         assert!(result.is_ok(), "failed to compile: {:?}", result.err());
         let bytes = result.unwrap();
         assert!(!bytes.is_empty());
@@ -693,8 +693,8 @@ mod aot_tests {
     fn compile_to_object_multiple_functions() {
         let result = compile_to_object(
             r#"
-            fn add(a: i32, b: i32) -> i32 { a + b }
-            fn main() -> i32 { add(10, 32) }
+            fn add(a: i32, b: i32): i32 { a + b }
+            fn main(): i32 { add(10, 32) }
         "#,
         );
         assert!(result.is_ok(), "failed to compile: {:?}", result.err());
@@ -749,7 +749,7 @@ mod aot_tests {
         let _ = fs::remove_file(&exe_path);
 
         // Compile and link
-        let result = compile_and_link("fn main() -> i32 { 42 }", &exe_path);
+        let result = compile_and_link("fn main(): i32 { 42 }", &exe_path);
         assert!(
             result.is_ok(),
             "failed to compile and link: {:?}",
@@ -786,7 +786,7 @@ mod aot_tests {
 
         let result = compile_and_link(
             r#"
-            fn main() -> i32 {
+            fn main(): i32 {
                 let x = 10;
                 let y = 3;
                 x * y + 2
@@ -816,8 +816,8 @@ mod aot_tests {
 
         let result = compile_and_link(
             r#"
-            fn double(x: i32) -> i32 { x * 2 }
-            fn main() -> i32 { double(21) }
+            fn double(x: i32): i32 { x * 2 }
+            fn main(): i32 { double(21) }
         "#,
             &exe_path,
         );
@@ -843,7 +843,7 @@ mod aot_tests {
 
         let result = compile_and_link(
             r#"
-            fn main() -> i32 {
+            fn main(): i32 {
                 let x = 5;
                 if x > 3 { 100 } else { 0 }
             }
@@ -868,10 +868,10 @@ mod aot_tests {
         use std::fs;
 
         let source = r#"
-            fn factorial(n: i32) -> i32 {
+            fn factorial(n: i32): i32 {
                 if n <= 1 { 1 } else { n * factorial(n - 1) }
             }
-            fn main() -> i32 { factorial(5) }
+            fn main(): i32 { factorial(5) }
         "#;
 
         // JIT result
@@ -905,7 +905,7 @@ mod aot_tests {
 
         let result = compile_and_link(
             r#"
-            fn main() -> i32 {
+            fn main(): i32 {
                 let mut sum = 0;
                 let mut i = 1;
                 while i <= 10 {
@@ -936,7 +936,7 @@ mod aot_tests {
         let exe_path = unique_temp_exe("neg");
         let _ = fs::remove_file(&exe_path);
 
-        let result = compile_and_link("fn main() -> i32 { -1 }", &exe_path);
+        let result = compile_and_link("fn main(): i32 { -1 }", &exe_path);
         assert!(result.is_ok(), "failed: {:?}", result.err());
 
         let output = Command::new(&exe_path)
@@ -956,7 +956,7 @@ mod aot_tests {
         let exe_path = unique_temp_exe("zero");
         let _ = fs::remove_file(&exe_path);
 
-        let result = compile_and_link("fn main() -> i32 { 0 }", &exe_path);
+        let result = compile_and_link("fn main(): i32 { 0 }", &exe_path);
         assert!(result.is_ok(), "failed: {:?}", result.err());
 
         let output = Command::new(&exe_path)
@@ -976,7 +976,7 @@ mod aot_tests {
         let _ = fs::remove_file(&exe_path);
 
         // 300 should wrap to 300 % 256 = 44
-        let result = compile_and_link("fn main() -> i32 { 300 }", &exe_path);
+        let result = compile_and_link("fn main(): i32 { 300 }", &exe_path);
         assert!(result.is_ok(), "failed: {:?}", result.err());
 
         let output = Command::new(&exe_path)
@@ -997,9 +997,9 @@ mod aot_tests {
 
         let result = compile_and_link(
             r#"
-            fn add(a: i32, b: i32) -> i32 { a + b }
-            fn mul(a: i32, b: i32) -> i32 { a * b }
-            fn main() -> i32 { add(mul(3, 4), mul(2, 3)) }
+            fn add(a: i32, b: i32): i32 { a + b }
+            fn mul(a: i32, b: i32): i32 { a * b }
+            fn main(): i32 { add(mul(3, 4), mul(2, 3)) }
         "#,
             &exe_path,
         );

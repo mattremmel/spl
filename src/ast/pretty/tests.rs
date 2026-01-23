@@ -26,7 +26,8 @@ mod items {
     }
 
     #[test]
-    fn function_with_params() {
+    #[ignore = "old syntax: uses '->' for return type"]
+    fn function_with_params_arrow() {
         check(
             "fn add(x: i32, y: i32) -> i32 { x + y }",
             &expect![[r#"
@@ -77,7 +78,8 @@ mod items {
     }
 
     #[test]
-    fn function_generic() {
+    #[ignore = "old syntax: uses '<T>' generics and '->' for return type"]
+    fn function_generic_angle_arrow() {
         check(
             "fn id<T>(x: T) -> T { x }",
             &expect![[r#"
@@ -111,7 +113,8 @@ mod items {
     }
 
     #[test]
-    fn struct_empty_braces() {
+    #[ignore = "old syntax: uses '{}' instead of '()'"]
+    fn struct_empty_braces_old_syntax() {
         check(
             "struct Empty {}",
             &expect![[r#"
@@ -135,7 +138,8 @@ mod items {
     }
 
     #[test]
-    fn struct_with_fields() {
+    #[ignore = "old syntax: uses '{}' instead of '()'"]
+    fn struct_with_fields_brace() {
         check(
             "struct Point { x: i32, y: i32 }",
             &expect![[r#"
@@ -168,7 +172,8 @@ mod items {
     }
 
     #[test]
-    fn struct_generic() {
+    #[ignore = "old syntax: uses '<T>' and '{}' instead of 'where T' and '()'"]
+    fn struct_generic_angle_brace() {
         check(
             "struct Box<T> { value: T }",
             &expect![[r#"
@@ -244,7 +249,8 @@ mod items {
 
     /// Generic type alias: `type Result<T> = Option<T>;`
     #[test]
-    fn type_alias_generic() {
+    #[ignore = "old syntax: uses '<T>' instead of 'where T'"]
+    fn type_alias_generic_angle() {
         check(
             "type Result<T> = Option<T>;",
             &expect![[r#"
@@ -1188,7 +1194,8 @@ mod types {
     use super::*;
 
     #[test]
-    fn type_path() {
+    #[ignore = "old syntax: uses '->' instead of ':'"]
+    fn type_path_arrow() {
         check(
             "fn foo() -> i32 {}",
             &expect![[r#"
@@ -1203,7 +1210,8 @@ mod types {
     }
 
     #[test]
-    fn type_path_generic() {
+    #[ignore = "old syntax: uses '->' instead of ':'"]
+    fn type_path_generic_arrow() {
         check(
             "fn foo() -> Vec<i32> {}",
             &expect![[r#"
@@ -1324,7 +1332,8 @@ mod types {
     }
 
     #[test]
-    fn type_never() {
+    #[ignore = "old syntax: uses '->' instead of ':'"]
+    fn type_never_arrow() {
         check(
             "fn foo() -> ! {}",
             &expect![[r#"
@@ -1493,7 +1502,8 @@ mod integration {
     use super::*;
 
     #[test]
-    fn complete_program() {
+    #[ignore = "old syntax: uses '{}' for struct and '->' for return type"]
+    fn complete_program_old_syntax() {
         check(
             r#"
 struct Point { x: i32, y: i32 }
@@ -1599,7 +1609,8 @@ p.distance();
     }
 
     #[test]
-    fn complex_function() {
+    #[ignore = "old syntax: uses '<T>' generics and '->' for return type"]
+    fn complex_function_old_syntax() {
         check(
             r#"
 fn process<T>(items: &[T], filter: fn(T) -> bool) -> i32 {
