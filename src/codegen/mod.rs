@@ -69,7 +69,9 @@ pub use layout::{LayoutComputer, TypeLayout};
 pub use link::{CcLinker, LinkError, LinkOptions, Linker, link_object_to_executable};
 pub use locals::{LocalMap, LocalStorage};
 pub use lower::FunctionLowerer;
-pub use module::{AotModuleCompiler, CompiledModule, CompiledObjectFile, FunctionDef, ModuleCompiler};
+pub use module::{
+    AotModuleCompiler, CompiledModule, CompiledObjectFile, FunctionDef, ModuleCompiler,
+};
 pub use registry::{FunctionInfo, FunctionRegistry};
 pub use runtime::{Runtime, RuntimeFunction};
 pub use target::TargetConfig;

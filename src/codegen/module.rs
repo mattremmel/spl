@@ -1002,10 +1002,7 @@ mod tests {
 
         // Verify the object file is valid
         let parsed = object::File::parse(obj.bytes()).expect("failed to parse object file");
-        let symbol_names: Vec<_> = parsed
-            .symbols()
-            .filter_map(|s| s.name().ok())
-            .collect();
+        let symbol_names: Vec<_> = parsed.symbols().filter_map(|s| s.name().ok()).collect();
         assert!(
             symbol_names.iter().any(|n| n.contains("returns_42")),
             "expected 'returns_42' symbol"
@@ -1064,22 +1061,20 @@ mod tests {
         ));
 
         // Then: _0 = 1
-        body.block_mut(then_block)
-            .push_statement(Statement::assign(
-                Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(1)),
-                0..0,
-            ));
+        body.block_mut(then_block).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(1)),
+            0..0,
+        ));
         body.block_mut(then_block)
             .set_terminator(Terminator::new(TerminatorKind::Goto(exit_block), 0..0));
 
         // Else: _0 = 0
-        body.block_mut(else_block)
-            .push_statement(Statement::assign(
-                Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(0)),
-                0..0,
-            ));
+        body.block_mut(else_block).push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::const_int(0)),
+            0..0,
+        ));
         body.block_mut(else_block)
             .set_terminator(Terminator::new(TerminatorKind::Goto(exit_block), 0..0));
 
@@ -1135,10 +1130,7 @@ mod tests {
 
         // Verify both symbols exist in the object file
         let parsed = object::File::parse(obj.bytes()).expect("failed to parse");
-        let symbol_names: Vec<_> = parsed
-            .symbols()
-            .filter_map(|s| s.name().ok())
-            .collect();
+        let symbol_names: Vec<_> = parsed.symbols().filter_map(|s| s.name().ok()).collect();
         assert!(symbol_names.iter().any(|n| n.contains("returns_1")));
         assert!(symbol_names.iter().any(|n| n.contains("returns_2")));
     }
@@ -1191,10 +1183,7 @@ mod tests {
 
         // Verify object file has both symbols
         let parsed = object::File::parse(obj.bytes()).expect("failed to parse");
-        let symbol_names: Vec<_> = parsed
-            .symbols()
-            .filter_map(|s| s.name().ok())
-            .collect();
+        let symbol_names: Vec<_> = parsed.symbols().filter_map(|s| s.name().ok()).collect();
         assert!(symbol_names.iter().any(|n| n.contains("callee")));
         assert!(symbol_names.iter().any(|n| n.contains("caller")));
     }
@@ -1228,10 +1217,7 @@ mod tests {
         let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         let parsed = object::File::parse(obj.bytes()).expect("failed to parse");
-        let symbol_names: Vec<_> = parsed
-            .symbols()
-            .filter_map(|s| s.name().ok())
-            .collect();
+        let symbol_names: Vec<_> = parsed.symbols().filter_map(|s| s.name().ok()).collect();
 
         // Verify all three symbols exist
         assert!(symbol_names.iter().any(|n| n.contains("fn_0")));

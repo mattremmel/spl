@@ -70,11 +70,7 @@ impl std::fmt::Display for LinkError {
         match self {
             LinkError::WriteObjectFile(e) => write!(f, "failed to write object file: {}", e),
             LinkError::SpawnLinker(e) => write!(f, "failed to spawn linker: {}", e),
-            LinkError::LinkerFailed {
-                status,
-                stderr,
-                ..
-            } => {
+            LinkError::LinkerFailed { status, stderr, .. } => {
                 if let Some(code) = status {
                     write!(f, "linker failed with exit code {}: {}", code, stderr)
                 } else {
@@ -165,12 +161,7 @@ impl CcLinker {
     }
 
     /// Build the command-line arguments for linking.
-    fn build_args(
-        &self,
-        objects: &[&Path],
-        output: &Path,
-        options: &LinkOptions,
-    ) -> Vec<String> {
+    fn build_args(&self, objects: &[&Path], output: &Path, options: &LinkOptions) -> Vec<String> {
         let mut args = Vec::new();
 
         // Output file
@@ -315,9 +306,7 @@ mod tests {
         let obj2 = Path::new("/tmp/b.o");
         let output = Path::new("/tmp/out");
 
-        let opts = LinkOptions::new()
-            .library("m")
-            .library_path("/usr/lib");
+        let opts = LinkOptions::new().library("m").library_path("/usr/lib");
 
         let args = linker.build_args(&[obj1, obj2], output, &opts);
 

@@ -173,7 +173,11 @@ mod tests {
         assert!(target.is_ok());
 
         let ctx = AotContext::with_target(target.unwrap());
-        assert!(ctx.is_ok(), "failed to create cross AOT context: {:?}", ctx.err());
+        assert!(
+            ctx.is_ok(),
+            "failed to create cross AOT context: {:?}",
+            ctx.err()
+        );
     }
 
     #[test]
@@ -183,7 +187,11 @@ mod tests {
         sig.returns.push(AbiParam::new(types::I32));
 
         let result = ctx.declare_function("test_fn", &sig);
-        assert!(result.is_ok(), "failed to declare function: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "failed to declare function: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -264,13 +272,12 @@ mod tests {
         // Parse the object file and check for the symbol
         let obj = object::File::parse(&*object_bytes).expect("failed to parse object file");
 
-        let symbol_names: Vec<_> = obj
-            .symbols()
-            .filter_map(|s| s.name().ok())
-            .collect();
+        let symbol_names: Vec<_> = obj.symbols().filter_map(|s| s.name().ok()).collect();
 
         // Symbol might have platform-specific prefix (e.g., "_" on macOS)
-        let has_symbol = symbol_names.iter().any(|name| name.contains("my_exported_fn"));
+        let has_symbol = symbol_names
+            .iter()
+            .any(|name| name.contains("my_exported_fn"));
         assert!(
             has_symbol,
             "expected symbol 'my_exported_fn' in object file, found: {:?}",
@@ -308,7 +315,11 @@ mod tests {
 
         // Verify it's a valid object file
         let obj = object::File::parse(&*object_bytes);
-        assert!(obj.is_ok(), "object file should be parseable: {:?}", obj.err());
+        assert!(
+            obj.is_ok(),
+            "object file should be parseable: {:?}",
+            obj.err()
+        );
 
         let obj = obj.unwrap();
 
@@ -369,10 +380,7 @@ mod tests {
 
         // Parse and verify both symbols exist
         let obj = object::File::parse(&*object_bytes).expect("failed to parse object file");
-        let symbol_names: Vec<_> = obj
-            .symbols()
-            .filter_map(|s| s.name().ok())
-            .collect();
+        let symbol_names: Vec<_> = obj.symbols().filter_map(|s| s.name().ok()).collect();
 
         let has_func_one = symbol_names.iter().any(|name| name.contains("func_one"));
         let has_func_two = symbol_names.iter().any(|name| name.contains("func_two"));
@@ -578,7 +586,9 @@ mod tests {
         // Verify all 10 functions exist
         for i in 0..10 {
             assert!(
-                symbol_names.iter().any(|n| n.contains(&format!("fn_{}", i))),
+                symbol_names
+                    .iter()
+                    .any(|n| n.contains(&format!("fn_{}", i))),
                 "missing fn_{} in {:?}",
                 i,
                 symbol_names
@@ -601,7 +611,10 @@ mod tests {
 
         // Test func_mut() accessor
         let func_mut_ref = ctx.func_mut();
-        func_mut_ref.signature.params.push(AbiParam::new(types::I32));
+        func_mut_ref
+            .signature
+            .params
+            .push(AbiParam::new(types::I32));
         assert_eq!(ctx.func().signature.params.len(), 1);
     }
 }

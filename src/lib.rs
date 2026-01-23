@@ -734,7 +734,10 @@ mod aot_tests {
             .as_nanos();
         let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
         let pid = std::process::id();
-        temp_dir.join(format!("spl_test_{}_{}_{}_{}",name, pid, unique_id, counter))
+        temp_dir.join(format!(
+            "spl_test_{}_{}_{}_{}",
+            name, pid, unique_id, counter
+        ))
     }
 
     // Integration test: compile, link, and run a real executable
@@ -796,9 +799,7 @@ mod aot_tests {
         );
         assert!(result.is_ok(), "failed: {:?}", result.err());
 
-        let output = Command::new(&exe_path)
-            .output()
-            .expect("failed to execute");
+        let output = Command::new(&exe_path).output().expect("failed to execute");
 
         // 10 * 3 + 2 = 32
         assert_eq!(output.status.code(), Some(32));
@@ -823,9 +824,7 @@ mod aot_tests {
         );
         assert!(result.is_ok(), "failed: {:?}", result.err());
 
-        let output = Command::new(&exe_path)
-            .output()
-            .expect("failed to execute");
+        let output = Command::new(&exe_path).output().expect("failed to execute");
 
         // double(21) = 42
         assert_eq!(output.status.code(), Some(42));
@@ -852,9 +851,7 @@ mod aot_tests {
         );
         assert!(result.is_ok(), "failed: {:?}", result.err());
 
-        let output = Command::new(&exe_path)
-            .output()
-            .expect("failed to execute");
+        let output = Command::new(&exe_path).output().expect("failed to execute");
 
         // x > 3, so returns 100
         assert_eq!(output.status.code(), Some(100));
@@ -883,14 +880,15 @@ mod aot_tests {
 
         compile_and_link(source, &exe_path).expect("AOT failed");
 
-        let output = Command::new(&exe_path)
-            .output()
-            .expect("failed to execute");
+        let output = Command::new(&exe_path).output().expect("failed to execute");
 
         let aot_result = output.status.code().unwrap();
 
         // 5! = 120, but exit codes are mod 256, so both should be 120
-        assert_eq!(jit_result, aot_result, "JIT and AOT produced different results");
+        assert_eq!(
+            jit_result, aot_result,
+            "JIT and AOT produced different results"
+        );
         assert_eq!(jit_result, 120);
 
         let _ = fs::remove_file(&exe_path);
@@ -919,9 +917,7 @@ mod aot_tests {
         );
         assert!(result.is_ok(), "failed: {:?}", result.err());
 
-        let output = Command::new(&exe_path)
-            .output()
-            .expect("failed to execute");
+        let output = Command::new(&exe_path).output().expect("failed to execute");
 
         // Sum 1..10 = 55
         assert_eq!(output.status.code(), Some(55));
@@ -939,9 +935,7 @@ mod aot_tests {
         let result = compile_and_link("fn main(): i32 { -1 }", &exe_path);
         assert!(result.is_ok(), "failed: {:?}", result.err());
 
-        let output = Command::new(&exe_path)
-            .output()
-            .expect("failed to execute");
+        let output = Command::new(&exe_path).output().expect("failed to execute");
 
         // -1 as unsigned 8-bit is 255
         assert_eq!(output.status.code(), Some(255));
@@ -959,9 +953,7 @@ mod aot_tests {
         let result = compile_and_link("fn main(): i32 { 0 }", &exe_path);
         assert!(result.is_ok(), "failed: {:?}", result.err());
 
-        let output = Command::new(&exe_path)
-            .output()
-            .expect("failed to execute");
+        let output = Command::new(&exe_path).output().expect("failed to execute");
 
         assert_eq!(output.status.code(), Some(0));
 
@@ -979,9 +971,7 @@ mod aot_tests {
         let result = compile_and_link("fn main(): i32 { 300 }", &exe_path);
         assert!(result.is_ok(), "failed: {:?}", result.err());
 
-        let output = Command::new(&exe_path)
-            .output()
-            .expect("failed to execute");
+        let output = Command::new(&exe_path).output().expect("failed to execute");
 
         assert_eq!(output.status.code(), Some(44)); // 300 % 256
 
@@ -1005,9 +995,7 @@ mod aot_tests {
         );
         assert!(result.is_ok(), "failed: {:?}", result.err());
 
-        let output = Command::new(&exe_path)
-            .output()
-            .expect("failed to execute");
+        let output = Command::new(&exe_path).output().expect("failed to execute");
 
         // 3*4 + 2*3 = 12 + 6 = 18
         assert_eq!(output.status.code(), Some(18));
@@ -1025,7 +1013,10 @@ mod aot_tests {
     #[test]
     fn aot_error_source_io() {
         use std::error::Error;
-        let err = AotError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "not found"));
+        let err = AotError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "not found",
+        ));
         assert!(err.source().is_some());
     }
 
@@ -1038,7 +1029,8 @@ mod aot_tests {
 
     #[test]
     fn aot_error_display_all_variants() {
-        let err1 = AotError::CompileError(vec![Diagnostic::error("test"), Diagnostic::error("test2")]);
+        let err1 =
+            AotError::CompileError(vec![Diagnostic::error("test"), Diagnostic::error("test2")]);
         assert!(err1.to_string().contains("2 error"));
 
         let err2 = AotError::CodegenError(codegen::CodegenError::Internal("internal".to_string()));
