@@ -31,14 +31,39 @@ pub fn path_no_generics(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseErro
     Ok(m.complete(p, SyntaxKind::Path))
 }
 
-/// Parse a single path segment: `ident [<T, ...>]`
+/// Parse a single path segment: `ident [<T, ...>]` or `ident [(T, ...)]`
 fn path_segment(p: &mut Parser<'_>, allow_generics: bool) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     name_ref(p)?;
-    if allow_generics && p.at(SyntaxKind::LT) {
-        super::stmt::generic_args(p)?;
+    if allow_generics {
+        if p.at(SyntaxKind::LT) {
+            // Old syntax: <T, U>
+            super::stmt::generic_args(p)?;
+        } else if p.at(SyntaxKind::L_PAREN) {
+            // New syntax: (T, U)
+            generic_args_paren(p)?;
+        }
     }
     Ok(m.complete(p, SyntaxKind::PathSegment))
+}
+
+/// Parse generic arguments with parentheses: `(T, U, ...)`
+fn generic_args_paren(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+    let m = p.start();
+    p.expect(SyntaxKind::L_PAREN)?;
+
+    if !p.at(SyntaxKind::R_PAREN) {
+        super::stmt::type_annotation(p)?;
+        while p.eat(SyntaxKind::COMMA) {
+            if p.at(SyntaxKind::R_PAREN) {
+                break;
+            }
+            super::stmt::type_annotation(p)?;
+        }
+    }
+
+    p.expect(SyntaxKind::R_PAREN)?;
+    Ok(m.complete(p, SyntaxKind::GenericArgs))
 }
 
 /// Parse a name reference (identifier, self, Self, crate, or super).

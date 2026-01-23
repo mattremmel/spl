@@ -1736,7 +1736,7 @@ fn generic_struct_multiple_fields() {
 #[ignore = "needs semantic support for where clause generics"]
 fn generic_struct_method_returns_param() {
     check(
-        "struct Wrapper(value: T) where T impl Wrapper<T> where T { fn get(&self): T { self.value } } fn main() { let w = Wrapper { value: 42 }; let x = w.get(); }",
+        "struct Wrapper(value: T) where T impl Wrapper(T) where T { fn get(&self): T { self.value } } fn main() { let w = Wrapper { value: 42 }; let x = w.get(); }",
         "i32",
     );
 }
@@ -1781,7 +1781,7 @@ fn generic_method_with_own_type_param() {
     check(
         r#"
         struct Wrapper(value: T) where T
-        impl Wrapper<T> where T {
+        impl Wrapper(T) where T {
             fn transform(&self, other: U): U where U { other }
         }
         fn main() {
@@ -1800,7 +1800,7 @@ fn generic_method_uses_both_impl_and_own_type_param() {
     check(
         r#"
         struct Wrapper(value: T) where T
-        impl Wrapper<T> where T {
+        impl Wrapper(T) where T {
             fn with_other(&self, _other: U): T where U { self.value }
         }
         fn main() {
@@ -1820,7 +1820,7 @@ fn generic_fn_returns_generic_struct() {
     check(
         r#"
         struct Wrapper(value: T) where T
-        fn wrap(x: T): Wrapper<T> where T { Wrapper { value: x } }
+        fn wrap(x: T): Wrapper(T) where T { Wrapper { value: x } }
         fn main() {
             let w = wrap(42);
             let x = w.value;
@@ -1836,9 +1836,9 @@ fn generic_fn_returns_generic_struct_inferred_from_context() {
     check(
         r#"
         struct Wrapper(value: T) where T
-        fn wrap(x: T): Wrapper<T> where T { Wrapper { value: x } }
+        fn wrap(x: T): Wrapper(T) where T { Wrapper { value: x } }
         fn main() {
-            let w: Wrapper<i64> = wrap(42);
+            let w: Wrapper(i64) = wrap(42);
             let x = w.value;
         }
         "#,
@@ -1854,7 +1854,7 @@ fn nested_generic_struct() {
     check(
         r#"
         struct Inner(value: T) where T
-        struct Outer(inner: Inner<T>) where T
+        struct Outer(inner: Inner(T)) where T
         fn main() {
             let o = Outer { inner: Inner { value: 42 } };
             let x = o.inner.value;

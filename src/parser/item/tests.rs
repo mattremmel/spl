@@ -827,7 +827,7 @@ fn impl_with_method_colon() {
 #[test]
 fn impl_with_generics_where() {
     check_item(
-        "impl Vec<T> where T {}",
+        "impl Vec(T) where T {}",
         &expect![[r#"
             ImplBlock@0..22
               IMPL_KW@0..4 "impl"
@@ -838,13 +838,13 @@ fn impl_with_generics_where() {
                       WHITESPACE@4..5 " "
                       IDENT@5..8 "Vec"
                     GenericArgs@8..11
-                      LT@8..9 "<"
+                      L_PAREN@8..9 "("
                       PathType@9..10
                         Path@9..10
                           PathSegment@9..10
                             NameRef@9..10
                               IDENT@9..10 "T"
-                      GT@10..11 ">"
+                      R_PAREN@10..11 ")"
               WhereClause@11..19
                 WHITESPACE@11..12 " "
                 WHERE_KW@12..17 "where"

@@ -34,9 +34,9 @@
 
 use crate::DefId;
 use crate::ast::{
-    Block, Expr, FieldDef, FunctionDef, GenericParam, GenericParams, ImplBlock, Item, LetStmt,
-    Name, NameRef, Param, ParamList, Pat, Path, PathSegment, SelfParam, SourceFile, Stmt,
-    StructDef, StructExpr, StructExprField, StructPat, StructPatField, Type, TypeAlias,
+    Block, Expr, FieldDef, FunctionDef, GenericParam, ImplBlock, Item, LetStmt, Name, NameRef,
+    Param, ParamList, Pat, Path, PathSegment, SelfParam, SourceFile, Stmt, StructDef, StructExpr,
+    StructExprField, StructPat, StructPatField, Type, TypeAlias, WhereClause,
 };
 use crate::diagnostic::Diagnostic;
 use crate::lexer::Span;
@@ -292,9 +292,9 @@ impl<'ctx> Resolver<'ctx> {
     fn resolve_function(&mut self, func: &FunctionDef) {
         self.ctx.enter_scope(ScopeKind::Function);
 
-        // Define generic parameters
-        if let Some(generics) = func.generic_params() {
-            self.define_generic_params(&generics);
+        // Define generic parameters from where clause
+        if let Some(where_clause) = func.where_clause() {
+            self.define_where_clause(&where_clause);
         }
 
         // Define parameters
@@ -319,9 +319,9 @@ impl<'ctx> Resolver<'ctx> {
         // Enter a scope for the struct's generic parameters and fields
         self.ctx.enter_scope(ScopeKind::Block);
 
-        // Define generic parameters
-        if let Some(generics) = struct_def.generic_params() {
-            self.define_generic_params(&generics);
+        // Define generic parameters from where clause
+        if let Some(where_clause) = struct_def.where_clause() {
+            self.define_where_clause(&where_clause);
         }
 
         // Define and resolve fields
@@ -351,9 +351,9 @@ impl<'ctx> Resolver<'ctx> {
         // Enter scope for generic parameters
         self.ctx.enter_scope(ScopeKind::Block);
 
-        // Define generic parameters
-        if let Some(generics) = type_alias.generic_params() {
-            self.define_generic_params(&generics);
+        // Define generic parameters from where clause
+        if let Some(where_clause) = type_alias.where_clause() {
+            self.define_where_clause(&where_clause);
         }
 
         // Resolve the aliased type
@@ -368,9 +368,9 @@ impl<'ctx> Resolver<'ctx> {
     fn resolve_impl_block(&mut self, impl_block: &ImplBlock) {
         self.ctx.enter_scope(ScopeKind::Impl);
 
-        // Define generic parameters
-        if let Some(generics) = impl_block.generic_params() {
-            self.define_generic_params(&generics);
+        // Define generic parameters from where clause
+        if let Some(where_clause) = impl_block.where_clause() {
+            self.define_where_clause(&where_clause);
         }
 
         // Resolve self type
@@ -386,8 +386,8 @@ impl<'ctx> Resolver<'ctx> {
         self.ctx.exit_scope();
     }
 
-    fn define_generic_params(&mut self, generics: &GenericParams) {
-        for param in generics.params() {
+    fn define_where_clause(&mut self, where_clause: &WhereClause) {
+        for param in where_clause.type_params() {
             self.define_generic_param(&param);
         }
     }
@@ -1230,7 +1230,7 @@ mod tests {
     #[test]
     #[ignore = "needs semantic support for where clause generics"]
     fn resolve_generic_impl_block() {
-        check_ok("struct Foo(v: T) where T impl Foo<T> where T { fn get(&self): T {} }");
+        check_ok("struct Foo(v: T) where T impl Foo(T) where T { fn get(&self): T {} }");
     }
 
     #[test]
@@ -1461,7 +1461,7 @@ mod tests {
     #[test]
     #[ignore = "needs semantic support for where clause generics"]
     fn resolve_nested_generic_type() {
-        check_ok("struct Box(v: T) where T fn foo(x: Box<Box<i32>>) {}");
+        check_ok("struct Box(v: T) where T fn foo(x: Box(Box(i32))) {}");
     }
 
     #[test]
