@@ -272,9 +272,21 @@ mod tests {
 
         assert_eq!(map.len(), 4);
 
-        assert!(matches!(map.get(Local::RETURN_PLACE), Some(LocalStorage::Zst)));
-        assert!(matches!(map.get(Local::new(1)), Some(LocalStorage::Variable(_))));
-        assert!(matches!(map.get(Local::new(2)), Some(LocalStorage::Variable(_))));
-        assert!(matches!(map.get(Local::new(3)), Some(LocalStorage::StackSlot(_))));
+        assert!(matches!(
+            map.get(Local::RETURN_PLACE),
+            Some(LocalStorage::Zst)
+        ));
+        assert!(matches!(
+            map.get(Local::new(1)),
+            Some(LocalStorage::Variable(_))
+        ));
+        assert!(matches!(
+            map.get(Local::new(2)),
+            Some(LocalStorage::Variable(_))
+        ));
+        assert!(matches!(
+            map.get(Local::new(3)),
+            Some(LocalStorage::StackSlot(_))
+        ));
     }
 }

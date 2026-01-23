@@ -166,11 +166,26 @@ mod tests {
         let mapper = mapper_64();
         let mut interner = TypeInterner::new();
 
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::I8), &interner), Some(types::I8));
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::I16), &interner), Some(types::I16));
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::I32), &interner), Some(types::I32));
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::I64), &interner), Some(types::I64));
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::I128), &interner), Some(types::I128));
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::I8), &interner),
+            Some(types::I8)
+        );
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::I16), &interner),
+            Some(types::I16)
+        );
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::I32), &interner),
+            Some(types::I32)
+        );
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::I64), &interner),
+            Some(types::I64)
+        );
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::I128), &interner),
+            Some(types::I128)
+        );
     }
 
     #[test]
@@ -178,11 +193,26 @@ mod tests {
         let mapper = mapper_64();
         let mut interner = TypeInterner::new();
 
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::U8), &interner), Some(types::I8));
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::U16), &interner), Some(types::I16));
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::U32), &interner), Some(types::I32));
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::U64), &interner), Some(types::I64));
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::U128), &interner), Some(types::I128));
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::U8), &interner),
+            Some(types::I8)
+        );
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::U16), &interner),
+            Some(types::I16)
+        );
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::U32), &interner),
+            Some(types::I32)
+        );
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::U64), &interner),
+            Some(types::I64)
+        );
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::U128), &interner),
+            Some(types::I128)
+        );
     }
 
     #[test]
@@ -190,8 +220,14 @@ mod tests {
         let mapper = mapper_64();
         let mut interner = TypeInterner::new();
 
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::Isize), &interner), Some(types::I64));
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::Usize), &interner), Some(types::I64));
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::Isize), &interner),
+            Some(types::I64)
+        );
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::Usize), &interner),
+            Some(types::I64)
+        );
     }
 
     #[test]
@@ -199,8 +235,14 @@ mod tests {
         let mapper = mapper_32();
         let mut interner = TypeInterner::new();
 
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::Isize), &interner), Some(types::I32));
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::Usize), &interner), Some(types::I32));
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::Isize), &interner),
+            Some(types::I32)
+        );
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::Usize), &interner),
+            Some(types::I32)
+        );
     }
 
     #[test]
@@ -208,8 +250,14 @@ mod tests {
         let mapper = mapper_64();
         let mut interner = TypeInterner::new();
 
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::F32), &interner), Some(types::F32));
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::F64), &interner), Some(types::F64));
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::F32), &interner),
+            Some(types::F32)
+        );
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::F64), &interner),
+            Some(types::F64)
+        );
     }
 
     #[test]
@@ -217,7 +265,10 @@ mod tests {
         let mapper = mapper_64();
         let mut interner = TypeInterner::new();
 
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::Bool), &interner), Some(types::I8));
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::Bool), &interner),
+            Some(types::I8)
+        );
     }
 
     #[test]
@@ -225,7 +276,10 @@ mod tests {
         let mapper = mapper_64();
         let mut interner = TypeInterner::new();
 
-        assert_eq!(mapper.map_type(interner.primitive(PrimitiveKind::Char), &interner), Some(types::I32));
+        assert_eq!(
+            mapper.map_type(interner.primitive(PrimitiveKind::Char), &interner),
+            Some(types::I32)
+        );
     }
 
     #[test]

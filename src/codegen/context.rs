@@ -3,8 +3,8 @@
 //! This module provides the main compilation context that manages the JIT module,
 //! Cranelift compilation context, and function builder context.
 
-use cranelift_codegen::ir::Function;
 use cranelift_codegen::Context as ClifContext;
+use cranelift_codegen::ir::Function;
 use cranelift_frontend::FunctionBuilderContext;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{FuncId, Linkage, Module};
@@ -58,7 +58,11 @@ impl CodegenContext {
     ///
     /// Returns the function ID that can be used to define the function
     /// or get a function pointer after finalization.
-    pub fn declare_function(&mut self, name: &str, signature: &cranelift_codegen::ir::Signature) -> Result<FuncId, CodegenError> {
+    pub fn declare_function(
+        &mut self,
+        name: &str,
+        signature: &cranelift_codegen::ir::Signature,
+    ) -> Result<FuncId, CodegenError> {
         self.module
             .declare_function(name, Linkage::Export, signature)
             .map_err(|e| CodegenError::ModuleError(e.to_string()))
@@ -147,9 +151,9 @@ mod tests {
     use std::mem;
 
     use super::*;
-    use cranelift_codegen::ir::types;
     use cranelift_codegen::ir::AbiParam;
     use cranelift_codegen::ir::InstBuilder;
+    use cranelift_codegen::ir::types;
     use cranelift_frontend::FunctionBuilder;
 
     #[test]
@@ -184,7 +188,11 @@ mod tests {
         sig.returns.push(AbiParam::new(types::I32));
 
         let result = ctx.declare_function("test_fn", &sig);
-        assert!(result.is_ok(), "failed to declare function: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "failed to declare function: {:?}",
+            result.err()
+        );
     }
 
     #[test]

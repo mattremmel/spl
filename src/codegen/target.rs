@@ -109,7 +109,11 @@ mod tests {
     #[test]
     fn native_target_creates() {
         let config = TargetConfig::native();
-        assert!(config.is_ok(), "failed to create native target: {:?}", config.err());
+        assert!(
+            config.is_ok(),
+            "failed to create native target: {:?}",
+            config.err()
+        );
     }
 
     #[test]
@@ -154,7 +158,11 @@ mod tests {
     fn for_target_aarch64() {
         let triple: Triple = "aarch64-unknown-linux-gnu".parse().unwrap();
         let config = TargetConfig::for_target(triple.clone());
-        assert!(config.is_ok(), "failed to create aarch64 target: {:?}", config.err());
+        assert!(
+            config.is_ok(),
+            "failed to create aarch64 target: {:?}",
+            config.err()
+        );
 
         let config = config.unwrap();
         assert_eq!(config.triple().architecture, triple.architecture);

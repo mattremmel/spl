@@ -1,0 +1,240 @@
+//! MIR to Cranelift IR lowering.
+//!
+//! This module translates MIR bodies into Cranelift IR for JIT compilation.
+
+mod operand;
+mod rvalue;
+mod statement;
+mod terminator;
+
+#[cfg(test)]
+mod tests;
+
+use cranelift_codegen::ir::types;
+use cranelift_codegen::ir::{AbiParam, Block, Value};
+use cranelift_frontend::{FunctionBuilder, Variable};
+use rustc_hash::FxHashMap;
+
+use crate::codegen::error::CodegenError;
+use crate::codegen::{CodegenContext, LocalMap, LocalStorage, TypeMapper};
+use crate::mir::body::Body;
+use crate::mir::terminator::BasicBlock;
+use crate::mir::types::Local;
+use crate::sema::types::TypeInterner;
+
+/// Lowers MIR to Cranelift IR.
+pub struct FunctionLowerer<'a> {
+    /// The function builder for creating Cranelift IR.
+    builder: FunctionBuilder<'a>,
+    /// Maps MIR locals to Cranelift storage.
+    local_map: LocalMap,
+    /// Maps SPL types to Cranelift types.
+    type_mapper: TypeMapper,
+    /// Maps MIR basic blocks to Cranelift blocks.
+    block_map: FxHashMap<BasicBlock, Block>,
+    /// Reference to the type interner for type lookups.
+    types: &'a TypeInterner,
+    /// The MIR body being lowered.
+    body: &'a Body,
+}
+
+impl<'a> FunctionLowerer<'a> {
+    /// Compile a MIR body to native code via JIT.
+    ///
+    /// Returns a pointer to the compiled function.
+    pub fn compile(
+        ctx: &mut CodegenContext,
+        body: &Body,
+        types: &TypeInterner,
+        name: &str,
+    ) -> Result<*const u8, CodegenError> {
+        // Build signature
+        let type_mapper = ctx.type_mapper();
+        let mut sig = ctx.new_signature();
+
+        // Add return type (if not ZST)
+        let return_ty = body.return_ty();
+        if let Some(clif_ty) = type_mapper.map_type(return_ty, types) {
+            sig.returns.push(AbiParam::new(clif_ty));
+        }
+
+        // Add parameter types
+        for arg in body.args() {
+            let arg_ty = body.local_decl(arg).ty;
+            if let Some(clif_ty) = type_mapper.map_type(arg_ty, types) {
+                sig.params.push(AbiParam::new(clif_ty));
+            }
+        }
+
+        // Declare the function
+        let func_id = ctx.declare_function(name, &sig)?;
+
+        // Set up the function
+        ctx.compilation_context().func.signature = sig;
+
+        // Build the function body
+        {
+            let (func, func_ctx) = ctx.builder_context();
+            let builder = FunctionBuilder::new(func, func_ctx);
+            let lowerer = FunctionLowerer::new(builder, type_mapper, types, body);
+            lowerer.lower_body()?;
+        }
+
+        // Define and finalize
+        ctx.define_function(func_id)?;
+        ctx.finalize();
+
+        Ok(ctx.get_function_ptr(func_id))
+    }
+
+    /// Create a new function lowerer.
+    fn new(
+        builder: FunctionBuilder<'a>,
+        type_mapper: TypeMapper,
+        types: &'a TypeInterner,
+        body: &'a Body,
+    ) -> Self {
+        FunctionLowerer {
+            builder,
+            local_map: LocalMap::new(),
+            type_mapper,
+            block_map: FxHashMap::default(),
+            types,
+            body,
+        }
+    }
+
+    /// Lower the entire MIR body to Cranelift IR.
+    fn lower_body(mut self) -> Result<(), CodegenError> {
+        // Create Cranelift blocks for each MIR block
+        for i in 0..self.body.num_blocks() {
+            let mir_bb = BasicBlock::new(i as u32);
+            let clif_block = self.builder.create_block();
+            self.block_map.insert(mir_bb, clif_block);
+        }
+
+        // Set up the entry block with function parameters
+        let entry_block = self.block_map[&BasicBlock::ENTRY];
+        self.builder
+            .append_block_params_for_function_params(entry_block);
+        self.builder.switch_to_block(entry_block);
+
+        // Declare locals as Cranelift variables
+        self.declare_locals()?;
+
+        // Initialize arguments from block params
+        self.init_arguments(entry_block)?;
+
+        // Seal the entry block (all predecessors known - none for entry)
+        self.builder.seal_block(entry_block);
+
+        // Lower each basic block
+        for bb_idx in 0..self.body.num_blocks() {
+            let mir_bb = BasicBlock::new(bb_idx as u32);
+            if bb_idx > 0 {
+                let clif_block = self.block_map[&mir_bb];
+                self.builder.switch_to_block(clif_block);
+            }
+            self.lower_block(mir_bb)?;
+        }
+
+        // Seal all non-entry blocks (entry was sealed earlier)
+        for (&mir_bb, &clif_block) in &self.block_map {
+            if mir_bb != BasicBlock::ENTRY {
+                self.builder.seal_block(clif_block);
+            }
+        }
+
+        self.builder.finalize();
+        Ok(())
+    }
+
+    /// Declare Cranelift variables for all MIR locals.
+    fn declare_locals(&mut self) -> Result<(), CodegenError> {
+        for i in 0..self.body.num_locals() {
+            let local = Local::new(i as u32);
+            let decl = self.body.local_decl(local);
+
+            if let Some(clif_ty) = self.type_mapper.map_type(decl.ty, self.types) {
+                let var = self.local_map.alloc_variable(local);
+                self.builder.declare_var(var, clif_ty);
+            } else {
+                // ZST - no storage needed
+                self.local_map.set_zst(local);
+            }
+        }
+        Ok(())
+    }
+
+    /// Initialize function arguments from entry block parameters.
+    fn init_arguments(&mut self, entry_block: Block) -> Result<(), CodegenError> {
+        let block_params = self.builder.block_params(entry_block).to_vec();
+        let mut param_idx = 0;
+
+        for arg in self.body.args() {
+            let decl = self.body.local_decl(arg);
+            if self.type_mapper.map_type(decl.ty, self.types).is_some()
+                && let Some(LocalStorage::Variable(var)) = self.local_map.get(arg)
+            {
+                let val = block_params[param_idx];
+                self.builder.def_var(var, val);
+                param_idx += 1;
+            }
+        }
+        Ok(())
+    }
+
+    /// Lower a single MIR basic block.
+    fn lower_block(&mut self, bb: BasicBlock) -> Result<(), CodegenError> {
+        let block_data = self.body.block(bb);
+
+        // Lower all statements
+        for stmt in &block_data.statements {
+            self.lower_statement(stmt)?;
+        }
+
+        // Lower the terminator
+        if let Some(ref term) = block_data.terminator {
+            self.lower_terminator(term)?;
+        }
+
+        Ok(())
+    }
+
+    /// Get the Cranelift block for a MIR basic block.
+    fn get_block(&self, bb: BasicBlock) -> Block {
+        self.block_map[&bb]
+    }
+
+    /// Get the Cranelift variable for a MIR local.
+    fn get_variable(&self, local: Local) -> Option<Variable> {
+        match self.local_map.get(local) {
+            Some(LocalStorage::Variable(var)) => Some(var),
+            _ => None,
+        }
+    }
+
+    /// Read a value from a local.
+    fn use_var(&mut self, local: Local) -> Option<Value> {
+        self.get_variable(local)
+            .map(|var| self.builder.use_var(var))
+    }
+
+    /// Write a value to a local.
+    fn def_var(&mut self, local: Local, val: Value) {
+        if let Some(var) = self.get_variable(local) {
+            self.builder.def_var(var, val);
+        }
+    }
+
+    /// Get the Cranelift type for a MIR local.
+    fn local_type(&self, local: Local) -> Option<types::Type> {
+        let decl = self.body.local_decl(local);
+        self.type_mapper.map_type(decl.ty, self.types)
+    }
+
+    /// Check if a type is a float type.
+    fn is_float_type(&self, ty: types::Type) -> bool {
+        ty == types::F32 || ty == types::F64
+    }
+}

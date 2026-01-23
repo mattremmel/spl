@@ -31,12 +31,14 @@
 pub mod context;
 pub mod error;
 pub mod locals;
+pub mod lower;
 pub mod target;
 pub mod types;
 
 pub use context::CodegenContext;
 pub use error::CodegenError;
 pub use locals::{LocalMap, LocalStorage};
+pub use lower::FunctionLowerer;
 pub use target::TargetConfig;
 pub use types::TypeMapper;
 
@@ -44,11 +46,15 @@ use crate::mir::Body;
 
 /// JIT compile MIR bodies and return a function pointer to the entry point.
 ///
-/// This is a stub for NATIVE-2 implementation. Currently returns an error
-/// indicating that MIR→CLIF translation is not yet implemented.
+/// Note: For single-function JIT compilation with full control, use
+/// `FunctionLowerer::compile()` directly. This function is intended for
+/// compiling multiple MIR bodies as a complete program.
+///
+/// Currently returns an error as multi-function compilation requires
+/// additional infrastructure (function linking, etc.).
 pub fn codegen_jit(_bodies: &[Body]) -> Result<*const u8, CodegenError> {
     Err(CodegenError::Internal(
-        "MIR to Cranelift translation not yet implemented (see NATIVE-2)".to_string(),
+        "Multi-function compilation not yet implemented. Use FunctionLowerer::compile() for single functions.".to_string(),
     ))
 }
 
@@ -59,7 +65,11 @@ mod tests {
     #[test]
     fn codegen_context_creates() {
         let ctx = CodegenContext::new_jit();
-        assert!(ctx.is_ok(), "failed to create codegen context: {:?}", ctx.err());
+        assert!(
+            ctx.is_ok(),
+            "failed to create codegen context: {:?}",
+            ctx.err()
+        );
     }
 
     #[test]
@@ -67,6 +77,6 @@ mod tests {
         let result = codegen_jit(&[]);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.to_string().contains("not yet implemented"));
+        assert!(err.to_string().contains("Multi-function"));
     }
 }
