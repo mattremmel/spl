@@ -17,17 +17,16 @@
 //!
 //! # String Formatting
 //!
-//! - `__int_to_string`: Format integer as decimal string
-//! - `__float_to_string`: Format float as string
-//! - `__bool_to_string`: Format boolean as "true"/"false"
+//! - `__float_to_string`: Format float as string (complex algorithm, kept as intrinsic)
 //!
-//! # Memory Ownership
+//! Caller owns the returned string and must call `__free(result.ptr)` when done.
 //!
-//! String formatting functions use malloc-based allocation via `__alloc`.
+//! # Future Stdlib Candidates
 //!
-//! - `__int_to_string` and `__float_to_string`: Caller owns the returned
-//!   string and must call `__free(result.ptr)` when done.
-//! - `__bool_to_string`: Returns pointer to static memory - do NOT free.
+//! The following can be implemented in SPL with basic arithmetic/string ops:
+//!
+//! - `int_to_string`: Division/modulo loop with char arithmetic
+//! - `bool_to_string`: Simple `if b { "true" } else { "false" }`
 
 use cranelift_codegen::ir::types;
 
@@ -97,28 +96,14 @@ pub fn register(runtime: &mut Runtime) {
         make_signature(call_conv, &[types::I64, types::I64], &[types::F64]),
     );
 
-    // ==================== String formatting (stubs) ====================
-
-    // __int_to_string: (I64) -> (*const u8, I64)
-    // Returns (ptr, len) as two I64 values
-    runtime.register(
-        "__int_to_string",
-        __int_to_string as *const u8,
-        make_signature(call_conv, &[types::I64], &[types::I64, types::I64]),
-    );
+    // ==================== String formatting ====================
 
     // __float_to_string: (F64) -> (*const u8, I64)
+    // Float formatting is complex (Grisu/Ryu algorithms), so kept as intrinsic
     runtime.register(
         "__float_to_string",
         __float_to_string as *const u8,
         make_signature(call_conv, &[types::F64], &[types::I64, types::I64]),
-    );
-
-    // __bool_to_string: (I8) -> (*const u8, I64)
-    runtime.register(
-        "__bool_to_string",
-        __bool_to_string as *const u8,
-        make_signature(call_conv, &[types::I8], &[types::I64, types::I64]),
     );
 }
 
@@ -208,32 +193,7 @@ pub extern "C" fn __str_to_float(ptr: *const u8, len: i64) -> f64 {
     }
 }
 
-// ==================== String formatting (stubs) ====================
-
-/// Convert an integer to a string.
-///
-/// Allocates a new string containing the decimal representation of the value.
-///
-/// # Ownership
-///
-/// Caller owns the returned string and must call `__free(result.ptr)` when done.
-pub extern "C" fn __int_to_string(value: i64) -> StringResult {
-    use super::memory::{__alloc, __memcpy};
-
-    let s = value.to_string();
-    let len = s.len() as i64;
-    let ptr = __alloc(len);
-
-    if ptr.is_null() {
-        return StringResult {
-            ptr: std::ptr::null(),
-            len: 0,
-        };
-    }
-
-    __memcpy(ptr, s.as_ptr() as *mut u8, len);
-    StringResult { ptr, len }
-}
+// ==================== String formatting ====================
 
 /// Convert a float to a string.
 ///
@@ -259,30 +219,6 @@ pub extern "C" fn __float_to_string(value: f64) -> StringResult {
 
     __memcpy(ptr, s.as_ptr() as *mut u8, len);
     StringResult { ptr, len }
-}
-
-/// Convert a boolean to a string.
-///
-/// Returns "true" for non-zero values, "false" for zero.
-///
-/// # Ownership
-///
-/// Returns a pointer to static memory. Do NOT free the returned pointer.
-pub extern "C" fn __bool_to_string(value: i8) -> StringResult {
-    static TRUE_STR: &[u8] = b"true";
-    static FALSE_STR: &[u8] = b"false";
-
-    if value != 0 {
-        StringResult {
-            ptr: TRUE_STR.as_ptr(),
-            len: 4,
-        }
-    } else {
-        StringResult {
-            ptr: FALSE_STR.as_ptr(),
-            len: 5,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -424,48 +360,7 @@ mod tests {
         assert!(__str_to_float(std::ptr::null(), 10).is_nan());
     }
 
-    // ==================== String formatting stub tests ====================
-
-    #[test]
-    fn int_to_string_positive() {
-        let result = __int_to_string(42);
-        assert!(!result.ptr.is_null());
-        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(s, b"42");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn int_to_string_negative() {
-        let result = __int_to_string(-123);
-        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(s, b"-123");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn int_to_string_zero() {
-        let result = __int_to_string(0);
-        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(s, b"0");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn int_to_string_min() {
-        let result = __int_to_string(i64::MIN);
-        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(std::str::from_utf8(s).unwrap(), i64::MIN.to_string());
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn int_to_string_max() {
-        let result = __int_to_string(i64::MAX);
-        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(std::str::from_utf8(s).unwrap(), i64::MAX.to_string());
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
+    // ==================== String formatting tests ====================
 
     #[test]
     fn float_to_string_positive() {
@@ -520,34 +415,6 @@ mod tests {
         super::super::memory::__free(result.ptr as *mut u8);
     }
 
-    #[test]
-    fn bool_to_string_true() {
-        let result = __bool_to_string(1);
-        assert!(!result.ptr.is_null());
-        assert_eq!(result.len, 4);
-        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(s, b"true");
-        // Note: Do NOT free - static string
-    }
-
-    #[test]
-    fn bool_to_string_false() {
-        let result = __bool_to_string(0);
-        assert!(!result.ptr.is_null());
-        assert_eq!(result.len, 5);
-        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(s, b"false");
-    }
-
-    #[test]
-    fn bool_to_string_nonzero_is_true() {
-        // Any non-zero value should be treated as true
-        let result = __bool_to_string(42);
-        assert_eq!(result.len, 4);
-        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(s, b"true");
-    }
-
     // ==================== Registration tests ====================
 
     #[test]
@@ -566,10 +433,8 @@ mod tests {
         assert!(runtime.contains("__str_to_int"));
         assert!(runtime.contains("__str_to_float"));
 
-        // String formatting (stubs)
-        assert!(runtime.contains("__int_to_string"));
+        // String formatting
         assert!(runtime.contains("__float_to_string"));
-        assert!(runtime.contains("__bool_to_string"));
     }
 
     // ==================== Signature tests ====================
@@ -622,20 +487,6 @@ mod tests {
         assert_eq!(func.signature.params[1].value_type, types::I64); // len
         assert_eq!(func.signature.returns.len(), 1);
         assert_eq!(func.signature.returns[0].value_type, types::F64);
-    }
-
-    #[test]
-    fn int_to_string_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__int_to_string").unwrap();
-        assert_eq!(func.signature.params.len(), 1);
-        assert_eq!(func.signature.params[0].value_type, types::I64);
-        // Returns (ptr, len) as two I64 values
-        assert_eq!(func.signature.returns.len(), 2);
-        assert_eq!(func.signature.returns[0].value_type, types::I64); // ptr
-        assert_eq!(func.signature.returns[1].value_type, types::I64); // len
     }
 
     #[test]
