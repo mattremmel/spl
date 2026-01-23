@@ -12,7 +12,6 @@ ast_node!(TypeAlias);
 ast_node!(ParamList);
 ast_node!(Param);
 ast_node!(SelfParam);
-ast_node!(GenericParams);
 ast_node!(GenericParam);
 ast_node!(GenericArgs);
 ast_node!(FieldList);
@@ -86,10 +85,6 @@ impl FunctionDef {
         child(&self.0)
     }
 
-    pub fn generic_params(&self) -> Option<GenericParams> {
-        child(&self.0)
-    }
-
     pub fn param_list(&self) -> Option<ParamList> {
         child(&self.0)
     }
@@ -116,10 +111,6 @@ impl StructDef {
         child(&self.0)
     }
 
-    pub fn generic_params(&self) -> Option<GenericParams> {
-        child(&self.0)
-    }
-
     pub fn field_list(&self) -> Option<FieldList> {
         child(&self.0)
     }
@@ -130,10 +121,6 @@ impl StructDef {
 }
 
 impl ImplBlock {
-    pub fn generic_params(&self) -> Option<GenericParams> {
-        child(&self.0)
-    }
-
     pub fn self_ty(&self) -> Option<Type> {
         child(&self.0)
     }
@@ -153,10 +140,6 @@ impl TypeAlias {
     }
 
     pub fn name(&self) -> Option<Name> {
-        child(&self.0)
-    }
-
-    pub fn generic_params(&self) -> Option<GenericParams> {
         child(&self.0)
     }
 
@@ -220,12 +203,6 @@ impl SelfParam {
 
     pub fn self_kw(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::SELF_VALUE_KW)
-    }
-}
-
-impl GenericParams {
-    pub fn params(&self) -> impl Iterator<Item = GenericParam> {
-        children(&self.0)
     }
 }
 

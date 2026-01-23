@@ -67,9 +67,6 @@ impl AstPrinter {
         self.line(&format!("{vis}FunctionDef \"{name}\""));
 
         self.indented(|p| {
-            if let Some(generics) = func.generic_params() {
-                p.print_generic_params(&generics);
-            }
             if let Some(params) = func.param_list() {
                 p.print_param_list(&params);
             }
@@ -94,9 +91,6 @@ impl AstPrinter {
         self.line(&format!("{vis}StructDef \"{name}\""));
 
         self.indented(|p| {
-            if let Some(generics) = s.generic_params() {
-                p.print_generic_params(&generics);
-            }
             if let Some(fields) = s.field_list() {
                 p.print_field_list(&fields);
             }
@@ -106,9 +100,6 @@ impl AstPrinter {
     fn print_impl(&mut self, imp: &ImplBlock) {
         self.line("ImplBlock");
         self.indented(|p| {
-            if let Some(generics) = imp.generic_params() {
-                p.print_generic_params(&generics);
-            }
             if let Some(ty) = imp.self_ty() {
                 p.line("SelfType");
                 p.indented(|p| p.print_type(&ty));
@@ -134,25 +125,8 @@ impl AstPrinter {
         self.line(&format!("{vis}TypeAlias \"{name}\""));
 
         self.indented(|p| {
-            if let Some(generics) = alias.generic_params() {
-                p.print_generic_params(&generics);
-            }
             if let Some(ty) = alias.ty() {
                 p.print_type(&ty);
-            }
-        });
-    }
-
-    fn print_generic_params(&mut self, params: &GenericParams) {
-        self.line("GenericParams");
-        self.indented(|p| {
-            for param in params.params() {
-                let name = param
-                    .name()
-                    .and_then(|n| n.ident_token())
-                    .map(|t| t.text().to_string())
-                    .unwrap_or_else(|| "?".to_string());
-                p.line(&format!("GenericParam \"{name}\""));
             }
         });
     }

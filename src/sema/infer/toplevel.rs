@@ -1,6 +1,6 @@
 //! Top-level type inference for source files and functions.
 
-use crate::ast::{FunctionDef, Item, SourceFile};
+use crate::ast::{FunctionDef, Item, SourceFile, WhereClause};
 use crate::diagnostic::Diagnostic;
 use crate::sema::symbol::DefId;
 use crate::sema::types::{Mutability, PrimitiveKind, Type, TypeId};
@@ -27,19 +27,10 @@ impl InferEngine {
                     // Get the struct this impl is for
                     let struct_def_id = self.get_impl_struct_def_id(impl_block);
 
-                    // Collect impl block type parameters
+                    // Collect impl block type parameters from where clause
                     let mut impl_type_params = Vec::new();
-                    if let Some(generics) = impl_block.generic_params() {
-                        for param in generics.params() {
-                            if let Some(name) = param.name()
-                                && let Some(token) = name.ident_token()
-                            {
-                                let span = text_range_to_span(token.text_range());
-                                if let Some(&param_def_id) = self.resolutions.get(&span) {
-                                    impl_type_params.push(param_def_id);
-                                }
-                            }
-                        }
+                    if let Some(where_clause) = impl_block.where_clause() {
+                        self.collect_type_params_from_where(&where_clause, &mut impl_type_params);
                     }
 
                     // Create type args from impl type params (as Type::Param)
@@ -142,19 +133,10 @@ impl InferEngine {
             None => return,
         };
 
-        // Collect type parameters
+        // Collect type parameters from where clause
         let mut type_params = Vec::new();
-        if let Some(generics) = func.generic_params() {
-            for param in generics.params() {
-                if let Some(name) = param.name()
-                    && let Some(token) = name.ident_token()
-                {
-                    let span = text_range_to_span(token.text_range());
-                    if let Some(&param_def_id) = self.resolutions.get(&span) {
-                        type_params.push(param_def_id);
-                    }
-                }
-            }
+        if let Some(where_clause) = func.where_clause() {
+            self.collect_type_params_from_where(&where_clause, &mut type_params);
         }
 
         // Collect parameters
@@ -421,19 +403,10 @@ impl InferEngine {
             None => return,
         };
 
-        // Collect type parameters
+        // Collect type parameters from where clause
         let mut type_params = Vec::new();
-        if let Some(generics) = struct_def.generic_params() {
-            for param in generics.params() {
-                if let Some(name) = param.name()
-                    && let Some(token) = name.ident_token()
-                {
-                    let span = text_range_to_span(token.text_range());
-                    if let Some(&param_def_id) = self.resolutions.get(&span) {
-                        type_params.push(param_def_id);
-                    }
-                }
-            }
+        if let Some(where_clause) = struct_def.where_clause() {
+            self.collect_type_params_from_where(&where_clause, &mut type_params);
         }
         self.struct_type_params.insert(def_id, type_params);
 
@@ -478,6 +451,24 @@ impl InferEngine {
         let token = name.ident_token()?;
         let span = text_range_to_span(token.text_range());
         self.resolutions.get(&span).copied()
+    }
+
+    /// Collect type parameters from a where clause.
+    fn collect_type_params_from_where(
+        &self,
+        where_clause: &WhereClause,
+        type_params: &mut Vec<DefId>,
+    ) {
+        for param in where_clause.type_params() {
+            if let Some(name) = param.name()
+                && let Some(token) = name.ident_token()
+            {
+                let span = text_range_to_span(token.text_range());
+                if let Some(&param_def_id) = self.resolutions.get(&span) {
+                    type_params.push(param_def_id);
+                }
+            }
+        }
     }
 
     fn infer_function(&mut self, func: &FunctionDef) {

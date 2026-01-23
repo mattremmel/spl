@@ -162,7 +162,7 @@ impl Container(T) where T: Clone {
 ### Type Aliases
 
 ```ebnf
-TypeAlias = "type" IDENTIFIER [ GenericParams ] "=" Type ";" ;
+TypeAlias = "type" IDENTIFIER [ WhereClause ] "=" Type ";" ;
 ```
 
 ### Use Declarations
