@@ -3,6 +3,8 @@
 //! This module provides the `Runtime` struct for registering external functions
 //! that can be called from JIT-compiled code.
 
+pub mod intrinsics;
+
 use cranelift_codegen::ir::Signature;
 use rustc_hash::FxHashMap;
 
