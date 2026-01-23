@@ -24,6 +24,7 @@
 pub mod body;
 pub mod lower;
 pub mod operand;
+pub mod optimize;
 pub mod pretty;
 pub mod statement;
 pub mod terminator;
@@ -37,6 +38,7 @@ pub use lower::{
     lower_hir_to_mir, lower_literal,
 };
 pub use operand::{AggregateKind, BinOp, BorrowKind, CastKind, Constant, Operand, Rvalue, UnOp};
+pub use optimize::{OptimizationContext, OptimizationPass, PassResult, optimize_mir};
 pub use pretty::{MirPrinter, pretty_print};
 pub use statement::{Statement, StatementKind};
 pub use terminator::{BasicBlock, SwitchTargets, Terminator, TerminatorKind};

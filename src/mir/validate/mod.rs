@@ -10,7 +10,7 @@ mod terminators;
 mod types;
 
 #[cfg(test)]
-mod test_helpers;
+pub(crate) mod test_helpers;
 
 use crate::sema::types::TypeInterner;
 
