@@ -1,34 +1,46 @@
-//! Path parsing: `segment (:: segment)*`
+//! Path parsing: `segment (. segment)*`
 //!
 //! Produces structured Path nodes with PathSegment and NameRef children.
 
 use crate::parser::{CompletedMarker, ParseError, Parser};
 use crate::syntax::SyntaxKind;
 
-/// Parse a path with optional generic arguments: `ident (:: ident)* [<T, ...>]`
+/// Parse a path with optional generic arguments: `ident (. ident)* [(T, ...)]`
 ///
 /// Used for type annotations where generic args are allowed.
 pub fn path(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     path_segment(p, true)?;
-    while p.at(SyntaxKind::COLON_COLON) {
+    while p.at(SyntaxKind::DOT) && is_path_segment_start(p.peek(1)) {
         p.bump();
         path_segment(p, true)?;
     }
     Ok(m.complete(p, SyntaxKind::Path))
 }
 
-/// Parse a path without generic arguments: `ident (:: ident)*`
+/// Parse a path without generic arguments: `ident (. ident)*`
 ///
 /// Used for expressions and patterns where generics are handled separately.
 pub fn path_no_generics(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     path_segment(p, false)?;
-    while p.at(SyntaxKind::COLON_COLON) {
+    while p.at(SyntaxKind::DOT) && is_path_segment_start(p.peek(1)) {
         p.bump();
         path_segment(p, false)?;
     }
     Ok(m.complete(p, SyntaxKind::Path))
+}
+
+/// Check if a token can start a path segment.
+fn is_path_segment_start(token: Option<SyntaxKind>) -> bool {
+    matches!(
+        token,
+        Some(SyntaxKind::IDENT)
+            | Some(SyntaxKind::SELF_VALUE_KW)
+            | Some(SyntaxKind::SELF_TYPE_KW)
+            | Some(SyntaxKind::CRATE_KW)
+            | Some(SyntaxKind::SUPER_KW)
+    )
 }
 
 /// Parse a single path segment: `ident [(T, ...)]`
@@ -101,21 +113,21 @@ mod tests {
     #[test]
     fn path_qualified() {
         check_expr(
-            "foo::bar::baz",
+            "foo.bar.baz",
             &expect![[r#"
-                PathExpr@0..13
-                  Path@0..13
+                PathExpr@0..11
+                  Path@0..11
                     PathSegment@0..3
                       NameRef@0..3
                         IDENT@0..3 "foo"
-                    COLON_COLON@3..5 "::"
-                    PathSegment@5..8
-                      NameRef@5..8
-                        IDENT@5..8 "bar"
-                    COLON_COLON@8..10 "::"
-                    PathSegment@10..13
-                      NameRef@10..13
-                        IDENT@10..13 "baz"
+                    DOT@3..4 "."
+                    PathSegment@4..7
+                      NameRef@4..7
+                        IDENT@4..7 "bar"
+                    DOT@7..8 "."
+                    PathSegment@8..11
+                      NameRef@8..11
+                        IDENT@8..11 "baz"
             "#]],
         );
     }
@@ -126,17 +138,17 @@ mod tests {
     #[test]
     fn path_self_value() {
         check_expr(
-            "self::item",
+            "self.item",
             &expect![[r#"
-                PathExpr@0..10
-                  Path@0..10
+                PathExpr@0..9
+                  Path@0..9
                     PathSegment@0..4
                       NameRef@0..4
                         SELF_VALUE_KW@0..4 "self"
-                    COLON_COLON@4..6 "::"
-                    PathSegment@6..10
-                      NameRef@6..10
-                        IDENT@6..10 "item"
+                    DOT@4..5 "."
+                    PathSegment@5..9
+                      NameRef@5..9
+                        IDENT@5..9 "item"
             "#]],
         );
     }
@@ -267,21 +279,21 @@ mod tests {
 
     #[test]
     fn path_associated_function() {
-        // Associated function call like Vec::new()
+        // Associated function call like Vec.new()
         check_expr(
-            "Vec::new()",
+            "Vec.new()",
             &expect![[r#"
-                ApplyExpr@0..10
-                  Path@0..8
+                ApplyExpr@0..9
+                  Path@0..7
                     PathSegment@0..3
                       NameRef@0..3
                         IDENT@0..3 "Vec"
-                    COLON_COLON@3..5 "::"
-                    PathSegment@5..8
-                      NameRef@5..8
-                        IDENT@5..8 "new"
-                  L_PAREN@8..9 "("
-                  R_PAREN@9..10 ")"
+                    DOT@3..4 "."
+                    PathSegment@4..7
+                      NameRef@4..7
+                        IDENT@4..7 "new"
+                  L_PAREN@7..8 "("
+                  R_PAREN@8..9 ")"
             "#]],
         );
     }
@@ -335,33 +347,33 @@ mod tests {
     #[test]
     fn path_deeply_qualified() {
         check_expr(
-            "a::b::c::d::e::f",
+            "a.b.c.d.e.f",
             &expect![[r#"
-                PathExpr@0..16
-                  Path@0..16
+                PathExpr@0..11
+                  Path@0..11
                     PathSegment@0..1
                       NameRef@0..1
                         IDENT@0..1 "a"
-                    COLON_COLON@1..3 "::"
-                    PathSegment@3..4
-                      NameRef@3..4
-                        IDENT@3..4 "b"
-                    COLON_COLON@4..6 "::"
+                    DOT@1..2 "."
+                    PathSegment@2..3
+                      NameRef@2..3
+                        IDENT@2..3 "b"
+                    DOT@3..4 "."
+                    PathSegment@4..5
+                      NameRef@4..5
+                        IDENT@4..5 "c"
+                    DOT@5..6 "."
                     PathSegment@6..7
                       NameRef@6..7
-                        IDENT@6..7 "c"
-                    COLON_COLON@7..9 "::"
-                    PathSegment@9..10
-                      NameRef@9..10
-                        IDENT@9..10 "d"
-                    COLON_COLON@10..12 "::"
-                    PathSegment@12..13
-                      NameRef@12..13
-                        IDENT@12..13 "e"
-                    COLON_COLON@13..15 "::"
-                    PathSegment@15..16
-                      NameRef@15..16
-                        IDENT@15..16 "f"
+                        IDENT@6..7 "d"
+                    DOT@7..8 "."
+                    PathSegment@8..9
+                      NameRef@8..9
+                        IDENT@8..9 "e"
+                    DOT@9..10 "."
+                    PathSegment@10..11
+                      NameRef@10..11
+                        IDENT@10..11 "f"
             "#]],
         );
     }

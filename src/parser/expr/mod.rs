@@ -209,7 +209,6 @@ fn postfix_bp(op: SyntaxKind) -> Option<(u8, ())> {
         SyntaxKind::L_PAREN     // call
         | SyntaxKind::L_BRACKET // index/slice
         | SyntaxKind::DOT       // field/method
-        | SyntaxKind::COLON_COLON // path
         => Some((BP_POSTFIX, ())),
         _ => None,
     }
@@ -911,17 +910,17 @@ mod tests {
             &expect![[r#"
                 PrefixExpr@0..10
                   MINUS@0..1 "-"
-                  MethodCallExpr@1..10
-                    PathExpr@1..4
-                      Path@1..4
-                        PathSegment@1..4
-                          NameRef@1..4
-                            IDENT@1..4 "foo"
-                    DOT@4..5 "."
-                    IDENT@5..8 "bar"
-                    ArgList@8..10
-                      L_PAREN@8..9 "("
-                      R_PAREN@9..10 ")"
+                  ApplyExpr@1..10
+                    Path@1..8
+                      PathSegment@1..4
+                        NameRef@1..4
+                          IDENT@1..4 "foo"
+                      DOT@4..5 "."
+                      PathSegment@5..8
+                        NameRef@5..8
+                          IDENT@5..8 "bar"
+                    L_PAREN@8..9 "("
+                    R_PAREN@9..10 ")"
             "#]],
         );
     }

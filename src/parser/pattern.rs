@@ -71,9 +71,8 @@ fn ident_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
 /// - `Point(x, y)` (struct pattern shorthand OR enum pattern)
 /// - `Some(x)` (enum pattern)
 fn ident_or_struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
-    // Check if this is a path (has :: or . after identifier)
-    let is_path = p.peek(1) == Some(SyntaxKind::COLON_COLON)
-        || p.peek(1) == Some(SyntaxKind::DOT);
+    // Check if this is a path (has . after identifier for qualified paths)
+    let is_path = p.peek(1) == Some(SyntaxKind::DOT);
     // Check if this is a pattern with parentheses (struct or enum)
     let has_parens = p.peek(1) == Some(SyntaxKind::L_PAREN);
     // Check if it looks like a struct pattern: Path(IDENT = ...)
@@ -1055,45 +1054,45 @@ mod tests {
     #[test]
     fn struct_pattern_qualified_path() {
         check_expr(
-            "{ let module::Point(x: x) = p; }",
+            "{ let module.Point(x: x) = p; }",
             &expect![[r#"
-                BlockExpr@0..32
-                  Block@0..32
+                BlockExpr@0..31
+                  Block@0..31
                     L_BRACE@0..1 "{"
-                    LetStmt@1..30
+                    LetStmt@1..29
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
-                      StructPat@5..25
-                        Path@5..19
+                      StructPat@5..24
+                        Path@5..18
                           PathSegment@5..12
                             NameRef@5..12
                               WHITESPACE@5..6 " "
                               IDENT@6..12 "module"
-                          COLON_COLON@12..14 "::"
-                          PathSegment@14..19
-                            NameRef@14..19
-                              IDENT@14..19 "Point"
-                        L_PAREN@19..20 "("
-                        StructPatField@20..24
-                          NameRef@20..21
-                            IDENT@20..21 "x"
-                          COLON@21..22 ":"
-                          IdentPat@22..24
-                            Name@22..24
-                              WHITESPACE@22..23 " "
-                              IDENT@23..24 "x"
-                        R_PAREN@24..25 ")"
-                      WHITESPACE@25..26 " "
-                      EQ@26..27 "="
-                      PathExpr@27..29
-                        Path@27..29
-                          PathSegment@27..29
-                            NameRef@27..29
-                              WHITESPACE@27..28 " "
-                              IDENT@28..29 "p"
-                      SEMI@29..30 ";"
-                    WHITESPACE@30..31 " "
-                    R_BRACE@31..32 "}"
+                          DOT@12..13 "."
+                          PathSegment@13..18
+                            NameRef@13..18
+                              IDENT@13..18 "Point"
+                        L_PAREN@18..19 "("
+                        StructPatField@19..23
+                          NameRef@19..20
+                            IDENT@19..20 "x"
+                          COLON@20..21 ":"
+                          IdentPat@21..23
+                            Name@21..23
+                              WHITESPACE@21..22 " "
+                              IDENT@22..23 "x"
+                        R_PAREN@23..24 ")"
+                      WHITESPACE@24..25 " "
+                      EQ@25..26 "="
+                      PathExpr@26..28
+                        Path@26..28
+                          PathSegment@26..28
+                            NameRef@26..28
+                              WHITESPACE@26..27 " "
+                              IDENT@27..28 "p"
+                      SEMI@28..29 ";"
+                    WHITESPACE@29..30 " "
+                    R_BRACE@30..31 "}"
             "#]],
         );
     }

@@ -1150,8 +1150,7 @@ fn lower_struct_expr() {
 
 #[test]
 fn lower_field_access() {
-    let db =
-        lower("struct Point(x: i32, y: i32) fn main() { let p = Point(x: 1, y: 2); p.x; }");
+    let db = lower("struct Point(x: i32, y: i32) fn main() { let p = Point(x: 1, y: 2); p.x; }");
 
     for (_, expr) in db.exprs.iter() {
         if let HirExprKind::Field { field, .. } = &expr.kind {

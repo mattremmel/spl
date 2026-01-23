@@ -907,12 +907,12 @@ mod tests {
     #[test]
     fn path_type_with_generics() {
         check_expr(
-            "{ let x: std::vec::Vec(T); }",
+            "{ let x: std.vec.Vec(T); }",
             &expect![[r#"
-                BlockExpr@0..28
-                  Block@0..28
+                BlockExpr@0..26
+                  Block@0..26
                     L_BRACE@0..1 "{"
-                    LetStmt@1..26
+                    LetStmt@1..24
                       WHITESPACE@1..2 " "
                       LET_KW@2..5 "let"
                       IdentPat@5..7
@@ -920,31 +920,31 @@ mod tests {
                           WHITESPACE@5..6 " "
                           IDENT@6..7 "x"
                       COLON@7..8 ":"
-                      PathType@8..25
-                        Path@8..25
+                      PathType@8..23
+                        Path@8..23
                           PathSegment@8..12
                             NameRef@8..12
                               WHITESPACE@8..9 " "
                               IDENT@9..12 "std"
-                          COLON_COLON@12..14 "::"
-                          PathSegment@14..17
-                            NameRef@14..17
-                              IDENT@14..17 "vec"
-                          COLON_COLON@17..19 "::"
-                          PathSegment@19..25
-                            NameRef@19..22
-                              IDENT@19..22 "Vec"
-                            GenericArgs@22..25
-                              L_PAREN@22..23 "("
-                              PathType@23..24
-                                Path@23..24
-                                  PathSegment@23..24
-                                    NameRef@23..24
-                                      IDENT@23..24 "T"
-                              R_PAREN@24..25 ")"
-                      SEMI@25..26 ";"
-                    WHITESPACE@26..27 " "
-                    R_BRACE@27..28 "}"
+                          DOT@12..13 "."
+                          PathSegment@13..16
+                            NameRef@13..16
+                              IDENT@13..16 "vec"
+                          DOT@16..17 "."
+                          PathSegment@17..23
+                            NameRef@17..20
+                              IDENT@17..20 "Vec"
+                            GenericArgs@20..23
+                              L_PAREN@20..21 "("
+                              PathType@21..22
+                                Path@21..22
+                                  PathSegment@21..22
+                                    NameRef@21..22
+                                      IDENT@21..22 "T"
+                              R_PAREN@22..23 ")"
+                      SEMI@23..24 ";"
+                    WHITESPACE@24..25 " "
+                    R_BRACE@25..26 "}"
             "#]],
         );
     }

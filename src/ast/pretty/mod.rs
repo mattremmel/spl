@@ -278,7 +278,11 @@ impl AstPrinter {
     }
 
     fn print_is_expr(&mut self, is_expr: &IsExpr) {
-        self.line(if is_expr.is_negated() { "IsNotExpr" } else { "IsExpr" });
+        self.line(if is_expr.is_negated() {
+            "IsNotExpr"
+        } else {
+            "IsExpr"
+        });
         self.indented(|p| {
             if let Some(lhs) = is_expr.lhs() {
                 p.print_expr(&lhs);
@@ -338,7 +342,7 @@ impl AstPrinter {
                     .map(|t| t.text().to_string())
             })
             .collect();
-        let path_str = segments.join("::");
+        let path_str = segments.join(".");
         // Check if there are generic args
         let has_generics = path.segments().any(|s| s.generic_args().is_some());
         if has_generics {
@@ -402,7 +406,7 @@ impl AstPrinter {
                             .map(|t| t.text().to_string())
                     })
                     .collect::<Vec<_>>()
-                    .join("::")
+                    .join(".")
             })
             .unwrap_or_else(|| "?".to_string());
         self.line(&format!("StructExpr \"{path_str}\""));
@@ -447,20 +451,17 @@ impl AstPrinter {
                             .map(|t| t.text().to_string())
                     })
                     .collect::<Vec<_>>()
-                    .join("::")
+                    .join(".")
             })
             .unwrap_or_else(|| "?".to_string());
         self.line(&format!("ApplyExpr \"{path_str}\""));
         self.indented(|p| {
             for arg in a.args() {
-                let name = arg
-                    .name_token()
-                    .map(|t| t.text().to_string())
-                    .or_else(|| {
-                        arg.name()
-                            .and_then(|n| n.token())
-                            .map(|t| t.text().to_string())
-                    });
+                let name = arg.name_token().map(|t| t.text().to_string()).or_else(|| {
+                    arg.name()
+                        .and_then(|n| n.token())
+                        .map(|t| t.text().to_string())
+                });
                 if let Some(name) = name {
                     p.line(&format!("NamedArg \"{name}\""));
                 } else {
@@ -889,7 +890,7 @@ impl AstPrinter {
                             .map(|t| t.text().to_string())
                     })
                     .collect::<Vec<_>>()
-                    .join("::")
+                    .join(".")
             })
             .unwrap_or_else(|| "?".to_string());
         self.line(&format!("StructPat \"{name}\""));

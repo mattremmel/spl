@@ -33,10 +33,14 @@ impl InferEngine {
                 let Some(path) = path_expr.path() else {
                     return Some("invalid assignment target".to_string());
                 };
-                let Some(segment) = path.segments().next() else {
+                let segments: Vec<_> = path.segments().collect();
+                if segments.is_empty() {
                     return Some("invalid assignment target".to_string());
-                };
-                let Some(name_ref) = segment.name() else {
+                }
+
+                // Get the first segment
+                let first_segment = &segments[0];
+                let Some(name_ref) = first_segment.name() else {
                     return Some("invalid assignment target".to_string());
                 };
                 let Some(token) = name_ref.token() else {
@@ -46,6 +50,30 @@ impl InferEngine {
 
                 if let Some(&def_id) = self.resolutions.get(&span) {
                     let symbol = self.ctx.get_symbol(def_id);
+
+                    // For single-segment paths, check if the variable is mutable
+                    if segments.len() == 1 {
+                        if !symbol.is_mutable {
+                            let name = self.ctx.resolve(symbol.name);
+                            return Some(format!("cannot assign to immutable variable `{name}`"));
+                        }
+                        return None;
+                    }
+
+                    // Multi-segment path (like self.a) - treat as field assignment
+                    // Check if base is mutable or is a mutable reference
+                    if let Some(&base_ty) = self.binding_types.get(&def_id) {
+                        let resolved = self.resolve_type(base_ty);
+                        let ty = self.ctx.types.get(resolved);
+                        if let Type::Ref(mutability, _) = ty {
+                            return if *mutability == Mutability::Mutable {
+                                None // OK - mutable reference
+                            } else {
+                                Some("cannot assign to field of immutable reference".to_string())
+                            };
+                        }
+                    }
+                    // Not a reference - check if the base variable is mutable
                     if !symbol.is_mutable {
                         let name = self.ctx.resolve(symbol.name);
                         return Some(format!("cannot assign to immutable variable `{name}`"));
@@ -114,10 +142,13 @@ impl InferEngine {
                 let Some(path) = path_expr.path() else {
                     return Some("cannot take mutable reference of a temporary value".to_string());
                 };
-                let Some(segment) = path.segments().next() else {
+                let segments: Vec<_> = path.segments().collect();
+                if segments.is_empty() {
                     return Some("cannot take mutable reference of a temporary value".to_string());
-                };
-                let Some(name_ref) = segment.name() else {
+                }
+
+                let first_segment = &segments[0];
+                let Some(name_ref) = first_segment.name() else {
                     return Some("cannot take mutable reference of a temporary value".to_string());
                 };
                 let Some(token) = name_ref.token() else {
@@ -127,6 +158,35 @@ impl InferEngine {
 
                 if let Some(&def_id) = self.resolutions.get(&span) {
                     let symbol = self.ctx.get_symbol(def_id);
+
+                    // For single-segment paths, check if variable is mutable
+                    if segments.len() == 1 {
+                        if !symbol.is_mutable {
+                            let name = self.ctx.resolve(symbol.name);
+                            return Some(format!(
+                                "cannot borrow `{name}` as mutable, as it is not declared as mutable"
+                            ));
+                        }
+                        return None;
+                    }
+
+                    // Multi-segment path (like self.a) - treat as field borrow
+                    // Check if base is mutable or is a mutable reference
+                    if let Some(&base_ty) = self.binding_types.get(&def_id) {
+                        let resolved = self.resolve_type(base_ty);
+                        let ty = self.ctx.types.get(resolved);
+                        if let Type::Ref(mutability, _) = ty {
+                            return if *mutability == Mutability::Mutable {
+                                None // OK - mutable reference
+                            } else {
+                                Some(
+                                    "cannot borrow field of immutable reference as mutable"
+                                        .to_string(),
+                                )
+                            };
+                        }
+                    }
+                    // Not a reference - check if the base variable is mutable
                     if !symbol.is_mutable {
                         let name = self.ctx.resolve(symbol.name);
                         return Some(format!(
@@ -343,13 +403,14 @@ impl InferEngine {
             None => return self.ctx.types.error(),
         };
 
-        // Get the span of the first segment to look up the resolution
-        let segment = match path.segments().next() {
-            Some(s) => s,
-            None => return self.ctx.types.error(),
-        };
+        let segments: Vec<_> = path.segments().collect();
+        if segments.is_empty() {
+            return self.ctx.types.error();
+        }
 
-        let name_ref = match segment.name() {
+        // Get the type of the first segment (base variable)
+        let first_segment = &segments[0];
+        let name_ref = match first_segment.name() {
             Some(n) => n,
             None => return self.ctx.types.error(),
         };
@@ -368,19 +429,111 @@ impl InferEngine {
             None => return self.ctx.types.error(),
         };
 
-        // Get the type from binding_types
-        if let Some(&type_id) = self.binding_types.get(&def_id) {
-            return type_id;
-        }
-
-        // Check if it's a function
-        if let Some(sig) = self.fn_signatures.get(&def_id).cloned() {
-            // Instantiate generic functions with fresh type variables
+        // Get the type of the first segment
+        let mut current_type = if let Some(&type_id) = self.binding_types.get(&def_id) {
+            type_id
+        } else if let Some(sig) = self.fn_signatures.get(&def_id).cloned() {
+            // It's a function - for multi-segment paths this might be a qualified function call
             let (param_types, ret_ty) = self.instantiate_signature(&sig);
-            return self.ctx.types.mk_fn_ptr(param_types, ret_ty);
+            self.ctx.types.mk_fn_ptr(param_types, ret_ty)
+        } else {
+            return self.ctx.types.error();
+        };
+
+        // If there's only one segment, we're done
+        if segments.len() == 1 {
+            return current_type;
         }
 
-        // Unknown binding - return error
+        // Multi-segment path: treat as field accesses
+        for segment in segments.iter().skip(1) {
+            let field_name = match segment.name() {
+                Some(n) => match n.token() {
+                    Some(t) => t.text().to_string(),
+                    None => return self.ctx.types.error(),
+                },
+                None => return self.ctx.types.error(),
+            };
+
+            // Look up the field in the current type
+            current_type = self.synth_field_access(current_type, &field_name, segment);
+        }
+
+        current_type
+    }
+
+    /// Synthesize the type of a field access on a given base type.
+    fn synth_field_access(
+        &mut self,
+        base_type: TypeId,
+        field_name: &str,
+        segment: &crate::ast::PathSegment,
+    ) -> TypeId {
+        // Resolve and auto-deref references for field access
+        let resolved = self.resolve_type(base_type);
+        let mut base_type_val = self.ctx.types.get(resolved).clone();
+
+        const MAX_DEREF: usize = 100;
+        #[cfg(debug_assertions)]
+        let mut deref_count = 0;
+
+        while let Type::Ref(_, inner) = &base_type_val {
+            #[cfg(debug_assertions)]
+            {
+                deref_count += 1;
+                debug_assert!(
+                    deref_count < MAX_DEREF,
+                    "invariant: auto-deref must terminate (hit {} derefs)",
+                    MAX_DEREF
+                );
+            }
+            let inner_resolved = self.resolve_type(*inner);
+            base_type_val = self.ctx.types.get(inner_resolved).clone();
+        }
+
+        // Handle struct field access
+        if let Type::Struct(def_id, type_args) = &base_type_val {
+            let def_id = *def_id;
+            let type_args = type_args.clone();
+
+            // Build substitution map from struct's type params to type args
+            let type_params = self
+                .struct_type_params
+                .get(&def_id)
+                .cloned()
+                .unwrap_or_default();
+            let mut subst: FxHashMap<_, _> = FxHashMap::default();
+            for (param_def_id, type_arg) in type_params.iter().zip(type_args.iter()) {
+                subst.insert(*param_def_id, *type_arg);
+            }
+
+            if let Some(fields) = self.struct_fields.get(&def_id).cloned() {
+                for (name, ty) in fields {
+                    if name == field_name {
+                        // Substitute type parameters in field type
+                        let result_ty = self.substitute_type_params(ty, &subst);
+                        // Record the type for this field access
+                        let seg_span = text_range_to_span(segment.syntax().text_range());
+                        self.expr_types.insert(seg_span, result_ty);
+                        return result_ty;
+                    }
+                }
+            }
+
+            // Field not found
+            let span = text_range_to_span(segment.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error(format!("no field `{}` on struct", field_name))
+                    .with_label(span, "unknown field"),
+            );
+            return self.ctx.types.error();
+        }
+
+        // Not a struct type
+        let span = text_range_to_span(segment.syntax().text_range());
+        self.diagnostics.push(
+            Diagnostic::error("field access on non-struct type").with_label(span, "not a struct"),
+        );
         self.ctx.types.error()
     }
 
@@ -657,13 +810,13 @@ impl InferEngine {
         self.ctx.types.error()
     }
 
-    /// Handle qualified paths like `S::new()` - associated function calls
+    /// Handle qualified paths like `S.new()` or `instance.method()`
     fn synth_apply_qualified_path(
         &mut self,
         apply_expr: &ApplyExpr,
         segments: &[crate::ast::PathSegment],
     ) -> TypeId {
-        // Get the first segment which should resolve to a type (struct)
+        // Get the first segment
         let first_segment = &segments[0];
         let first_name_ref = match first_segment.name() {
             Some(n) => n,
@@ -681,7 +834,12 @@ impl InferEngine {
             None => return self.ctx.types.error(),
         };
 
-        // Get the struct def_id (handle type aliases too)
+        // Check if the first segment is a variable (instance method call like `p.distance()`)
+        if let Some(&binding_type) = self.binding_types.get(&first_def_id) {
+            return self.synth_instance_method_call(apply_expr, segments, binding_type);
+        }
+
+        // Otherwise, try to resolve as a type (associated function call like `S.new()`)
         let struct_def_id = if self.struct_fields.contains_key(&first_def_id) {
             first_def_id
         } else if let Some(&target_ty) = self.type_alias_targets.get(&first_def_id) {
@@ -697,8 +855,7 @@ impl InferEngine {
             }
         } else {
             self.diagnostics.push(
-                Diagnostic::error("not a struct type")
-                    .with_label(first_span, "expected struct"),
+                Diagnostic::error("not a struct type").with_label(first_span, "expected struct"),
             );
             return self.ctx.types.error();
         };
@@ -745,6 +902,129 @@ impl InferEngine {
                 .with_label(method_span, "unknown method"),
         );
         self.ctx.types.error()
+    }
+
+    /// Handle instance method calls like `instance.method()`
+    fn synth_instance_method_call(
+        &mut self,
+        apply_expr: &ApplyExpr,
+        segments: &[crate::ast::PathSegment],
+        receiver_type: TypeId,
+    ) -> TypeId {
+        // Resolve receiver type and auto-deref references
+        let resolved = self.resolve_type(receiver_type);
+        let mut receiver_type_val = self.ctx.types.get(resolved).clone();
+
+        const MAX_DEREF: usize = 100;
+        #[cfg(debug_assertions)]
+        let mut deref_count = 0;
+
+        while let Type::Ref(_, inner) = &receiver_type_val {
+            #[cfg(debug_assertions)]
+            {
+                deref_count += 1;
+                debug_assert!(
+                    deref_count < MAX_DEREF,
+                    "invariant: auto-deref must terminate (hit {} derefs)",
+                    MAX_DEREF
+                );
+            }
+            let inner_resolved = self.resolve_type(*inner);
+            receiver_type_val = self.ctx.types.get(inner_resolved).clone();
+        }
+
+        // Get the struct def_id from the receiver type
+        let struct_def_id = match &receiver_type_val {
+            Type::Struct(def_id, _) => *def_id,
+            _ => {
+                let span = text_range_to_span(apply_expr.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("method call on non-struct type")
+                        .with_label(span, "not a struct"),
+                );
+                return self.ctx.types.error();
+            }
+        };
+
+        // Get the method name from the last segment
+        let last_segment = &segments[segments.len() - 1];
+        let method_name_ref = match last_segment.name() {
+            Some(n) => n,
+            None => return self.ctx.types.error(),
+        };
+
+        let method_token = match method_name_ref.token() {
+            Some(t) => t,
+            None => return self.ctx.types.error(),
+        };
+
+        let method_name = method_token.text().to_string();
+
+        // Look up the method in the struct's impl
+        let method_def_ids = self
+            .struct_methods
+            .get(&struct_def_id)
+            .cloned()
+            .unwrap_or_default();
+
+        for method_def_id in method_def_ids {
+            let symbol = self.ctx.get_symbol(method_def_id);
+            let fn_name = self.ctx.resolve(symbol.name);
+            if fn_name == method_name
+                && let Some(sig) = self.fn_signatures.get(&method_def_id).cloned()
+            {
+                // Store the resolution for the method
+                let method_span = text_range_to_span(method_token.text_range());
+                self.method_resolutions.insert(method_span, method_def_id);
+
+                // Call the method with adjusted argument handling for self parameter
+                return self.synth_method_call_with_receiver(apply_expr, &sig, receiver_type);
+            }
+        }
+
+        // Method not found
+        let method_span = text_range_to_span(method_token.text_range());
+        self.diagnostics.push(
+            Diagnostic::error(format!("method `{}` not found", method_name))
+                .with_label(method_span, "unknown method"),
+        );
+        self.ctx.types.error()
+    }
+
+    /// Synthesize type for an instance method call with a receiver
+    fn synth_method_call_with_receiver(
+        &mut self,
+        apply_expr: &ApplyExpr,
+        sig: &super::engine::FnSignature,
+        _receiver_type: TypeId,
+    ) -> TypeId {
+        // sig.params already excludes self (self is handled separately in method signatures)
+        let (param_types, ret_ty) = self.instantiate_signature(sig);
+
+        // Check argument count
+        let args: Vec<_> = apply_expr.args().collect();
+        if args.len() != param_types.len() {
+            let span = text_range_to_span(apply_expr.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error(format!(
+                    "expected {} argument{}, found {}",
+                    param_types.len(),
+                    if param_types.len() == 1 { "" } else { "s" },
+                    args.len()
+                ))
+                .with_label(span, "wrong number of arguments"),
+            );
+            return ret_ty;
+        }
+
+        // Check each argument using check_expr which handles coercion
+        for (arg, &expected_ty) in args.iter().zip(param_types.iter()) {
+            if let Some(expr) = arg.value() {
+                self.check_expr(&expr, expected_ty);
+            }
+        }
+
+        ret_ty
     }
 
     /// Synthesize type for an apply expression being used as a function call

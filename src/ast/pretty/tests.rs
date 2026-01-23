@@ -463,7 +463,7 @@ mod expressions {
                     ParamList
                     Block
                       TailExpr
-                        Path "foo::bar::baz"
+                        Path "foo"
             "#]],
         );
     }
@@ -720,8 +720,7 @@ mod expressions {
                     ParamList
                     Block
                       TailExpr
-                        FieldExpr ".x"
-                          Path "point"
+                        Path "point.x"
             "#]],
         );
     }
@@ -752,10 +751,7 @@ mod expressions {
                     ParamList
                     Block
                       TailExpr
-                        MethodCallExpr ".foo()"
-                          Receiver
-                            Path "x"
-                          ArgList
+                        ApplyExpr "x.foo"
             "#]],
         );
     }
@@ -770,11 +766,10 @@ mod expressions {
                     ParamList
                     Block
                       TailExpr
-                        MethodCallExpr ".foo()"
-                          Receiver
-                            Path "x"
-                          ArgList
+                        ApplyExpr "x.foo"
+                          PositionalArg
                             Literal 1
+                          PositionalArg
                             Literal 2
             "#]],
         );
@@ -1499,7 +1494,7 @@ fn distance(&self): i32 {
 }
 
 fn main() {
-let p = Point::new(3, 4);
+let p = Point.new(3, 4);
 p.distance();
 }
 "#,
@@ -1537,26 +1532,21 @@ p.distance();
                       Block
                         TailExpr
                           BinaryExpr "+"
-                            FieldExpr ".x"
-                              Path "self"
-                            FieldExpr ".y"
-                              Path "self"
+                            Path "self.x"
+                            Path "self.y"
                   FunctionDef "main"
                     ParamList
                     Block
                       LetStmt
                         IdentPat "p"
                         Initializer
-                          ApplyExpr "Point::new"
+                          ApplyExpr "Point.new"
                             PositionalArg
                               Literal 3
                             PositionalArg
                               Literal 4
                       ExprStmt
-                        MethodCallExpr ".distance()"
-                          Receiver
-                            Path "p"
-                          ArgList
+                        ApplyExpr "p.distance"
             "#]],
         );
     }

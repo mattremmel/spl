@@ -705,27 +705,94 @@ impl LoweringContext {
     }
 
     fn lower_path_expr(&mut self, path_expr: &PathExpr, span: Span, ty: TypeId) -> ExprId {
-        // Get the DefId from the path using the token's range to match resolver
-        let path_span = path_expr
-            .path()
-            .and_then(|p| p.segments().next())
-            .and_then(|seg| seg.name())
+        let path = match path_expr.path() {
+            Some(p) => p,
+            None => return self.lower_missing(span),
+        };
+
+        let segments: Vec<_> = path.segments().collect();
+
+        if segments.is_empty() {
+            return self.lower_missing(span);
+        }
+
+        // Single-segment path: just a variable reference
+        if segments.len() == 1 {
+            let first_segment = &segments[0];
+            let first_span = first_segment
+                .name()
+                .and_then(|n| n.token())
+                .map(|t| Self::text_range_to_span(t.text_range()))
+                .unwrap_or_else(|| span.clone());
+
+            let def_id = self
+                .resolutions
+                .get(&first_span)
+                .copied()
+                .unwrap_or(DefId(0));
+
+            return self.db.alloc_expr(HirExpr {
+                kind: HirExprKind::Var(def_id),
+                ty,
+                span,
+            });
+        }
+
+        // Multi-segment path: base variable + field accesses
+        // Get the DefId from the first segment
+        let first_segment = &segments[0];
+        let first_span = first_segment
+            .name()
             .and_then(|n| n.token())
             .map(|t| Self::text_range_to_span(t.text_range()))
             .unwrap_or_else(|| span.clone());
 
         let def_id = self
             .resolutions
-            .get(&path_span)
+            .get(&first_span)
             .copied()
             .unwrap_or(DefId(0));
 
-        let expr = HirExpr {
+        // Start with the first segment as a Var expression
+        let first_ty = self.get_binding_type(def_id);
+        let mut current = self.db.alloc_expr(HirExpr {
             kind: HirExprKind::Var(def_id),
-            ty,
-            span,
-        };
-        self.db.alloc_expr(expr)
+            ty: first_ty,
+            span: first_span.clone(),
+        });
+
+        // Chain field accesses for remaining segments
+        // For intermediate fields, we don't have type info readily available,
+        // so we use the final type for the last field and unknown for intermediates
+        let last_idx = segments.len() - 1;
+        for (idx, segment) in segments.iter().enumerate().skip(1) {
+            let field_name = segment
+                .name()
+                .and_then(|n| n.token())
+                .map(|t| t.text().to_string())
+                .unwrap_or_default();
+
+            let field_span = segment.syntax().text_range();
+            let field_span = Self::text_range_to_span(field_span);
+
+            // Use the provided type for the final field, error type for intermediates
+            let field_ty = if idx == last_idx {
+                ty
+            } else {
+                self.db.types.error()
+            };
+
+            current = self.db.alloc_expr(HirExpr {
+                kind: HirExprKind::Field {
+                    base: current,
+                    field: field_name,
+                },
+                ty: field_ty,
+                span: field_span,
+            });
+        }
+
+        current
     }
 
     fn lower_paren_expr(&mut self, paren: &ParenExpr) -> ExprId {
@@ -871,7 +938,8 @@ impl LoweringContext {
             .filter_map(|arg| {
                 // Get field name from named argument
                 let name = arg.name_token().map(|t| t.text().to_string()).or_else(|| {
-                    arg.name().and_then(|n| n.token().map(|t| t.text().to_string()))
+                    arg.name()
+                        .and_then(|n| n.token().map(|t| t.text().to_string()))
                 })?;
                 let value = arg.value().map(|e| self.lower_expr(&e))?;
                 Some((name, value))
@@ -892,32 +960,58 @@ impl LoweringContext {
         span: Span,
         ty: TypeId,
     ) -> ExprId {
+        let path = match apply_expr.path() {
+            Some(p) => p,
+            None => return self.lower_missing(span),
+        };
+
+        let segments: Vec<_> = path.segments().collect();
+        if segments.is_empty() {
+            return self.lower_missing(span);
+        }
+
+        // Check if this is a method call (multi-segment path where first segment is a variable)
+        if segments.len() >= 2 {
+            let first_segment = &segments[0];
+            let first_span = first_segment
+                .name()
+                .and_then(|n| n.token())
+                .map(|t| Self::text_range_to_span(t.text_range()));
+
+            if let Some(ref first_span) = first_span
+                && let Some(&first_def_id) = self.resolutions.get(first_span)
+                // Check if first segment resolves to a binding (variable)
+                && self.binding_types.contains_key(&first_def_id)
+            {
+                // This is a method call like p.distance()
+                return self.lower_apply_as_method_call(apply_expr, &segments, span, ty);
+            }
+        }
+
+        // Regular function call
         // Build a synthetic callee expression from the path
-        let callee = apply_expr
-            .path()
-            .map(|path| {
-                // Get the DefId for the path
-                let def_id = path
-                    .segments()
-                    .next()
-                    .and_then(|seg| seg.name())
-                    .and_then(|n| n.token())
-                    .map(|t| Self::text_range_to_span(t.text_range()))
-                    .and_then(|span| self.resolutions.get(&span).copied())
-                    .unwrap_or(DefId(0));
+        let callee = {
+            // Get the DefId for the path
+            let def_id = path
+                .segments()
+                .next()
+                .and_then(|seg| seg.name())
+                .and_then(|n| n.token())
+                .map(|t| Self::text_range_to_span(t.text_range()))
+                .and_then(|span| self.resolutions.get(&span).copied())
+                .unwrap_or(DefId(0));
 
-                // Get the type for the path (function type)
-                let path_span = Self::text_range_to_span(path.syntax().text_range());
-                let path_ty = self.get_type(&path_span);
+            // Get the type for the path (function type)
+            let path_span = Self::text_range_to_span(path.syntax().text_range());
+            let path_ty = self.get_type(&path_span);
 
-                let expr = HirExpr {
-                    kind: HirExprKind::Var(def_id),
-                    ty: path_ty,
-                    span: path_span,
-                };
-                self.db.alloc_expr(expr)
-            })
-            .unwrap_or_else(|| self.lower_missing(span.clone()));
+            let expr = HirExpr {
+                kind: HirExprKind::Var(def_id),
+                ty: path_ty,
+                span: path_span,
+            };
+            self.db.alloc_expr(expr)
+        };
 
         // Lower arguments
         let args: Vec<_> = apply_expr
@@ -931,6 +1025,74 @@ impl LoweringContext {
             span,
         };
         self.db.alloc_expr(expr)
+    }
+
+    fn lower_apply_as_method_call(
+        &mut self,
+        apply_expr: &crate::ast::ApplyExpr,
+        segments: &[crate::ast::PathSegment],
+        span: Span,
+        ty: TypeId,
+    ) -> ExprId {
+        // Get the receiver (first segment)
+        let first_segment = &segments[0];
+        let first_span = first_segment
+            .name()
+            .and_then(|n| n.token())
+            .map(|t| Self::text_range_to_span(t.text_range()))
+            .unwrap_or_else(|| span.clone());
+
+        let first_def_id = self
+            .resolutions
+            .get(&first_span)
+            .copied()
+            .unwrap_or(DefId(0));
+
+        let receiver_ty = self.get_binding_type(first_def_id);
+        let receiver = self.db.alloc_expr(HirExpr {
+            kind: HirExprKind::Var(first_def_id),
+            ty: receiver_ty,
+            span: first_span,
+        });
+
+        // Get the method name (last segment)
+        let last_segment = &segments[segments.len() - 1];
+        let method = last_segment
+            .name()
+            .and_then(|n| n.token())
+            .map(|t| t.text().to_string())
+            .unwrap_or_default();
+
+        // Get method span for resolution lookup
+        let method_span = last_segment
+            .name()
+            .and_then(|n| n.token())
+            .map(|t| Self::text_range_to_span(t.text_range()))
+            .unwrap_or_else(|| span.clone());
+
+        // Lower arguments
+        let args: Vec<_> = apply_expr
+            .args()
+            .filter_map(|arg| arg.value().map(|e| self.lower_expr(&e)))
+            .collect();
+
+        let expr = HirExpr {
+            kind: HirExprKind::MethodCall {
+                receiver,
+                method,
+                args,
+            },
+            ty,
+            span: span.clone(),
+        };
+        let expr_id = self.db.alloc_expr(expr);
+
+        // Store the resolved method DefId for MIR lowering
+        if let Some(&method_def_id) = self.method_resolutions.get(&method_span) {
+            self.db.method_resolutions.insert(expr_id, method_def_id);
+        }
+
+        expr_id
     }
 
     fn lower_binary_expr(&mut self, bin: &BinExpr, span: Span, ty: TypeId) -> ExprId {

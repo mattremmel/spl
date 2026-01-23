@@ -592,10 +592,7 @@ fn call_nested() {
 
 #[test]
 fn call_in_binary() {
-    check(
-        "fn f(): i32 { 1 } fn main() { let x = f() + f(); }",
-        "i32",
-    );
+    check("fn f(): i32 { 1 } fn main() { let x = f() + f(); }", "i32");
 }
 
 #[test]
@@ -1007,10 +1004,7 @@ fn struct_construct_empty() {
 
 #[test]
 fn struct_construct_one_field() {
-    check(
-        "struct S(a: i32) fn main() { let x = S(a: 42); }",
-        "S",
-    );
+    check("struct S(a: i32) fn main() { let x = S(a: 42); }", "S");
 }
 
 #[test]
@@ -1039,10 +1033,7 @@ fn struct_field_type() {
 
 #[test]
 fn struct_field_infers_literal() {
-    check(
-        "struct S(a: i64) fn main() { let x = S(a: 42); }",
-        "S",
-    );
+    check("struct S(a: i64) fn main() { let x = S(a: 42); }", "S");
 }
 
 #[test]
@@ -1096,7 +1087,7 @@ fn struct_multiple_impls() {
 #[test]
 fn struct_self_type() {
     check(
-        "struct S(a: i32) impl S { fn new(): Self { S(a: 0) } } fn main() { let x = S::new(); }",
+        "struct S(a: i32) impl S { fn new(): Self { S(a: 0) } } fn main() { let x = S.new(); }",
         "S",
     );
 }

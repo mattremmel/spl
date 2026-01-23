@@ -25,7 +25,6 @@
 //! - `(args)`: function/method call
 //! - `[index]`: array/slice indexing
 //! - `.field` or `.method()`: field access or method call
-//! - `::path`: qualified path continuation
 
 use crate::parser::{CompletedMarker, Parser};
 use crate::syntax::SyntaxKind;
@@ -129,7 +128,6 @@ pub(super) fn postfix_expr(
         SyntaxKind::L_PAREN => call_expr(p, lhs),
         SyntaxKind::L_BRACKET => index_or_slice_expr(p, lhs),
         SyntaxKind::DOT => field_or_method_expr(p, lhs),
-        SyntaxKind::COLON_COLON => path_expr(p, lhs),
         _ => unreachable!("unexpected postfix operator: {:?}", op),
     }
 }
@@ -218,29 +216,6 @@ fn field_or_method_expr(
         Ok(m.complete(p, SyntaxKind::FieldExpr))
     } else {
         Err(p.error_at_current("expected identifier or integer after '.'".to_string()))
-    }
-}
-
-/// Parse path continuation: expr::name or expr::name(args)
-fn path_expr(
-    p: &mut Parser<'_>,
-    lhs: CompletedMarker,
-) -> Result<CompletedMarker, crate::parser::ParseError> {
-    let m = lhs.precede(p);
-    p.expect(SyntaxKind::COLON_COLON)?;
-
-    // Expect identifier
-    if !p.at(SyntaxKind::IDENT) {
-        return Err(p.error_at_current("expected identifier after '::'".to_string()));
-    }
-    p.bump();
-
-    // Check for call
-    if p.at(SyntaxKind::L_PAREN) {
-        arg_list(p)?;
-        Ok(m.complete(p, SyntaxKind::CallExpr))
-    } else {
-        Ok(m.complete(p, SyntaxKind::PathExpr))
     }
 }
 
@@ -406,14 +381,15 @@ mod tests {
             &expect![[r#"
                 RefExpr@0..10
                   AMP@0..1 "&"
-                  FieldExpr@1..10
-                    PathExpr@1..4
-                      Path@1..4
-                        PathSegment@1..4
-                          NameRef@1..4
-                            IDENT@1..4 "obj"
-                    DOT@4..5 "."
-                    IDENT@5..10 "field"
+                  PathExpr@1..10
+                    Path@1..10
+                      PathSegment@1..4
+                        NameRef@1..4
+                          IDENT@1..4 "obj"
+                      DOT@4..5 "."
+                      PathSegment@5..10
+                        NameRef@5..10
+                          IDENT@5..10 "field"
             "#]],
         );
     }
@@ -538,14 +514,15 @@ mod tests {
         check_expr(
             "point.x",
             &expect![[r#"
-                FieldExpr@0..7
-                  PathExpr@0..5
-                    Path@0..5
-                      PathSegment@0..5
-                        NameRef@0..5
-                          IDENT@0..5 "point"
-                  DOT@5..6 "."
-                  IDENT@6..7 "x"
+                PathExpr@0..7
+                  Path@0..7
+                    PathSegment@0..5
+                      NameRef@0..5
+                        IDENT@0..5 "point"
+                    DOT@5..6 "."
+                    PathSegment@6..7
+                      NameRef@6..7
+                        IDENT@6..7 "x"
             "#]],
         );
     }
@@ -555,17 +532,17 @@ mod tests {
         check_expr(
             "point.distance()",
             &expect![[r#"
-                MethodCallExpr@0..16
-                  PathExpr@0..5
-                    Path@0..5
-                      PathSegment@0..5
-                        NameRef@0..5
-                          IDENT@0..5 "point"
-                  DOT@5..6 "."
-                  IDENT@6..14 "distance"
-                  ArgList@14..16
-                    L_PAREN@14..15 "("
-                    R_PAREN@15..16 ")"
+                ApplyExpr@0..16
+                  Path@0..14
+                    PathSegment@0..5
+                      NameRef@0..5
+                        IDENT@0..5 "point"
+                    DOT@5..6 "."
+                    PathSegment@6..14
+                      NameRef@6..14
+                        IDENT@6..14 "distance"
+                  L_PAREN@14..15 "("
+                  R_PAREN@15..16 ")"
             "#]],
         );
     }
@@ -575,20 +552,23 @@ mod tests {
         check_expr(
             "obj.a.b.c",
             &expect![[r#"
-                FieldExpr@0..9
-                  FieldExpr@0..7
-                    FieldExpr@0..5
-                      PathExpr@0..3
-                        Path@0..3
-                          PathSegment@0..3
-                            NameRef@0..3
-                              IDENT@0..3 "obj"
-                      DOT@3..4 "."
-                      IDENT@4..5 "a"
+                PathExpr@0..9
+                  Path@0..9
+                    PathSegment@0..3
+                      NameRef@0..3
+                        IDENT@0..3 "obj"
+                    DOT@3..4 "."
+                    PathSegment@4..5
+                      NameRef@4..5
+                        IDENT@4..5 "a"
                     DOT@5..6 "."
-                    IDENT@6..7 "b"
-                  DOT@7..8 "."
-                  IDENT@8..9 "c"
+                    PathSegment@6..7
+                      NameRef@6..7
+                        IDENT@6..7 "b"
+                    DOT@7..8 "."
+                    PathSegment@8..9
+                      NameRef@8..9
+                        IDENT@8..9 "c"
             "#]],
         );
     }
@@ -619,17 +599,17 @@ mod tests {
             &expect![[r#"
                 MethodCallExpr@0..15
                   MethodCallExpr@0..11
-                    MethodCallExpr@0..7
-                      PathExpr@0..3
-                        Path@0..3
-                          PathSegment@0..3
-                            NameRef@0..3
-                              IDENT@0..3 "obj"
-                      DOT@3..4 "."
-                      IDENT@4..5 "a"
-                      ArgList@5..7
-                        L_PAREN@5..6 "("
-                        R_PAREN@6..7 ")"
+                    ApplyExpr@0..7
+                      Path@0..5
+                        PathSegment@0..3
+                          NameRef@0..3
+                            IDENT@0..3 "obj"
+                        DOT@3..4 "."
+                        PathSegment@4..5
+                          NameRef@4..5
+                            IDENT@4..5 "a"
+                      L_PAREN@5..6 "("
+                      R_PAREN@6..7 ")"
                     DOT@7..8 "."
                     IDENT@8..9 "b"
                     ArgList@9..11
@@ -721,14 +701,15 @@ mod tests {
             "obj.arr[0]",
             &expect![[r#"
                 IndexExpr@0..10
-                  FieldExpr@0..7
-                    PathExpr@0..3
-                      Path@0..3
-                        PathSegment@0..3
-                          NameRef@0..3
-                            IDENT@0..3 "obj"
-                    DOT@3..4 "."
-                    IDENT@4..7 "arr"
+                  PathExpr@0..7
+                    Path@0..7
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "obj"
+                      DOT@3..4 "."
+                      PathSegment@4..7
+                        NameRef@4..7
+                          IDENT@4..7 "arr"
                   L_BRACKET@7..8 "["
                   LiteralExpr@8..9
                     INT_LITERAL@8..9 "0"
@@ -870,21 +851,21 @@ mod tests {
     #[test]
     fn path_expr() {
         check_expr(
-            "std::vec::Vec",
+            "std.vec.Vec",
             &expect![[r#"
-                PathExpr@0..13
-                  Path@0..13
+                PathExpr@0..11
+                  Path@0..11
                     PathSegment@0..3
                       NameRef@0..3
                         IDENT@0..3 "std"
-                    COLON_COLON@3..5 "::"
-                    PathSegment@5..8
-                      NameRef@5..8
-                        IDENT@5..8 "vec"
-                    COLON_COLON@8..10 "::"
-                    PathSegment@10..13
-                      NameRef@10..13
-                        IDENT@10..13 "Vec"
+                    DOT@3..4 "."
+                    PathSegment@4..7
+                      NameRef@4..7
+                        IDENT@4..7 "vec"
+                    DOT@7..8 "."
+                    PathSegment@8..11
+                      NameRef@8..11
+                        IDENT@8..11 "Vec"
             "#]],
         );
     }

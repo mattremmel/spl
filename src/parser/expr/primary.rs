@@ -838,18 +838,18 @@ mod tests {
     #[test]
     fn struct_with_path() {
         check_expr(
-            "module::Point { x: 1 }",
+            "module.Point { x: 1 }",
             &expect![[r#"
-                PathExpr@0..14
-                  Path@0..13
+                PathExpr@0..13
+                  Path@0..12
                     PathSegment@0..6
                       NameRef@0..6
                         IDENT@0..6 "module"
-                    COLON_COLON@6..8 "::"
-                    PathSegment@8..13
-                      NameRef@8..13
-                        IDENT@8..13 "Point"
-                  WHITESPACE@13..14 " "
+                    DOT@6..7 "."
+                    PathSegment@7..12
+                      NameRef@7..12
+                        IDENT@7..12 "Point"
+                  WHITESPACE@12..13 " "
             "#]],
         );
     }
@@ -873,14 +873,15 @@ mod tests {
         check_expr(
             "self.x",
             &expect![[r#"
-                FieldExpr@0..6
-                  PathExpr@0..4
-                    Path@0..4
-                      PathSegment@0..4
-                        NameRef@0..4
-                          SELF_VALUE_KW@0..4 "self"
-                  DOT@4..5 "."
-                  IDENT@5..6 "x"
+                PathExpr@0..6
+                  Path@0..6
+                    PathSegment@0..4
+                      NameRef@0..4
+                        SELF_VALUE_KW@0..4 "self"
+                    DOT@4..5 "."
+                    PathSegment@5..6
+                      NameRef@5..6
+                        IDENT@5..6 "x"
             "#]],
         );
     }

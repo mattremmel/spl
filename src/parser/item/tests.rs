@@ -240,35 +240,35 @@ fn visibility_pub_self() {
 #[test]
 fn visibility_pub_in_path() {
     check_item(
-        "pub(in crate::foo) fn bar() {}",
+        "pub(in crate.foo) fn bar() {}",
         &expect![[r#"
-            FunctionDef@0..30
-              Visibility@0..18
+            FunctionDef@0..29
+              Visibility@0..17
                 PUB_KW@0..3 "pub"
                 L_PAREN@3..4 "("
                 IN_KW@4..6 "in"
-                Path@6..17
+                Path@6..16
                   PathSegment@6..12
                     NameRef@6..12
                       WHITESPACE@6..7 " "
                       CRATE_KW@7..12 "crate"
-                  COLON_COLON@12..14 "::"
-                  PathSegment@14..17
-                    NameRef@14..17
-                      IDENT@14..17 "foo"
-                R_PAREN@17..18 ")"
-              WHITESPACE@18..19 " "
-              FN_KW@19..21 "fn"
-              Name@21..25
-                WHITESPACE@21..22 " "
-                IDENT@22..25 "bar"
-              ParamList@25..27
-                L_PAREN@25..26 "("
-                R_PAREN@26..27 ")"
-              Block@27..30
-                WHITESPACE@27..28 " "
-                L_BRACE@28..29 "{"
-                R_BRACE@29..30 "}"
+                  DOT@12..13 "."
+                  PathSegment@13..16
+                    NameRef@13..16
+                      IDENT@13..16 "foo"
+                R_PAREN@16..17 ")"
+              WHITESPACE@17..18 " "
+              FN_KW@18..20 "fn"
+              Name@20..24
+                WHITESPACE@20..21 " "
+                IDENT@21..24 "bar"
+              ParamList@24..26
+                L_PAREN@24..25 "("
+                R_PAREN@25..26 ")"
+              Block@26..29
+                WHITESPACE@26..27 " "
+                L_BRACE@27..28 "{"
+                R_BRACE@28..29 "}"
         "#]],
     );
 }
