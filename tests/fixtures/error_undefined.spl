@@ -1,0 +1,4 @@
+// Error case: undefined variable
+fn main() {
+    undefined_variable;
+}
