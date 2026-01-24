@@ -399,6 +399,39 @@ impl<'src> Parser<'src> {
         consumed
     }
 
+    /// Skip tokens until next comma or matching close delimiter.
+    ///
+    /// Tracks nesting depth for the given delimiter pair.
+    /// Does NOT consume the comma or close delimiter.
+    /// Returns the number of tokens consumed.
+    fn recover_to_comma_or_close(&mut self, open: SyntaxKind, close: SyntaxKind) -> usize {
+        let mut depth = 1;
+        let mut consumed = 0;
+
+        while self.current().is_some() && consumed < MAX_RECOVERY_TOKENS {
+            match self.current() {
+                Some(SyntaxKind::COMMA) if depth == 1 => return consumed, // Found comma at our level
+                Some(k) if k == open => {
+                    depth += 1;
+                    self.bump();
+                }
+                Some(k) if k == close => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return consumed; // Found matching close
+                    }
+                    self.bump();
+                }
+                _ => {
+                    self.bump();
+                }
+            }
+            consumed += 1;
+        }
+
+        consumed
+    }
+
     // ===== Delimited List Parsing =====
 
     /// Parse comma-separated items until reaching the close delimiter.
@@ -436,6 +469,45 @@ impl<'src> Parser<'src> {
             parse_item(self)?;
         }
         Ok(true)
+    }
+
+    /// Parse comma-separated items with error recovery.
+    ///
+    /// When `parse_item` fails, skips tokens to the next comma or close delimiter,
+    /// wrapping skipped tokens in an ERROR node, then continues parsing.
+    ///
+    /// Does NOT consume the close delimiter - caller must handle that.
+    pub(crate) fn parse_delimited_with_recovery<F>(
+        &mut self,
+        open: SyntaxKind,
+        close: SyntaxKind,
+        mut parse_item: F,
+    ) where
+        F: FnMut(&mut Self) -> Result<(), ParseError>,
+    {
+        if self.at(close) {
+            return;
+        }
+
+        loop {
+            match parse_item(self) {
+                Ok(()) => {}
+                Err(err) => {
+                    // Wrap error tokens in ERROR node
+                    let m = self.start();
+                    self.error(err);
+                    self.recover_to_comma_or_close(open, close);
+                    m.complete(self, SyntaxKind::ERROR);
+                }
+            }
+
+            if !self.eat(SyntaxKind::COMMA) {
+                break;
+            }
+            if self.at(close) {
+                break; // trailing comma
+            }
+        }
     }
 
     // ===== Contract Helpers =====
@@ -1273,5 +1345,38 @@ pub(crate) mod tests {
         let parse = parse(&input);
         // Should complete without hanging, may have errors
         assert!(parse.debug_tree().contains("FunctionDef"));
+    }
+
+    // === parse_delimited_with_recovery tests (spl-3bb) ===
+
+    #[test]
+    fn parse_delimited_recovery_skips_bad_item() {
+        // Error in one item should not break entire list
+        // "(a: i32, @, b: i32)" - @ is invalid, should recover and parse b
+        let parse = parse("fn f(a: i32, @, b: i32) {}");
+        assert!(!parse.ok()); // Has errors
+        let tree = parse.debug_tree();
+        // Both 'a' and 'b' params should be present (use "Param@" to avoid matching ParamList)
+        assert_eq!(tree.matches("Param@").count(), 2, "tree:\n{}", tree);
+    }
+
+    #[test]
+    fn parse_delimited_recovery_nested_delimiters() {
+        // Recovery should handle nested parens correctly
+        // "fn f(a: i32, (@@), b: i32) {}" - error tokens in place of a param
+        // Recovery should skip (@@) and continue to parse b
+        let parse = parse("fn f(a: i32, (@@), b: i32) {}");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        // Should still have 2 params (a and b)
+        assert_eq!(tree.matches("Param@").count(), 2, "tree:\n{}", tree);
+    }
+
+    #[test]
+    fn parse_delimited_recovery_emits_error_node() {
+        // Recovered errors should be wrapped in ERROR nodes
+        let parse = parse("fn f(a: i32, @@@, b: i32) {}");
+        let tree = parse.debug_tree();
+        assert!(tree.contains("ERROR"), "tree:\n{}", tree);
     }
 }

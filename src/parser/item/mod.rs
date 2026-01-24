@@ -160,22 +160,17 @@ fn param_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Pars
         if let Err(err) = self_param(p) {
             p.recover_with_error(err, PARAM_RECOVERY_SET);
         }
-        if !p.at(SyntaxKind::R_PAREN) && !p.eat(SyntaxKind::COMMA) {
-            let err = p.error_at_current("expected ',' after self parameter".to_string());
-            p.error(err);
+        // Eat comma after self param if present (or we're at close paren)
+        if !p.at(SyntaxKind::R_PAREN) {
+            p.eat(SyntaxKind::COMMA);
         }
     }
 
-    // Regular parameters
-    while !p.at(SyntaxKind::R_PAREN) && p.current().is_some() {
-        if let Err(err) = param(p) {
-            p.recover_with_error(err, PARAM_RECOVERY_SET);
-        }
-        if !p.at(SyntaxKind::R_PAREN) && !p.eat(SyntaxKind::COMMA) {
-            let err = p.error_at_current("expected ',' after parameter".to_string());
-            p.error(err);
-        }
-    }
+    // Regular parameters with recovery
+    p.parse_delimited_with_recovery(SyntaxKind::L_PAREN, SyntaxKind::R_PAREN, |p| {
+        param(p)?;
+        Ok(())
+    });
 
     p.expect(SyntaxKind::R_PAREN)?;
     Ok(m.complete(p, SyntaxKind::ParamList))
@@ -222,11 +217,20 @@ fn param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseErro
     opt_label_spec(p);
 
     // Parameter name
-    name(p)?;
+    if let Err(err) = name(p) {
+        m.abandon(p);
+        return Err(err);
+    }
 
     // Type annotation
-    p.expect(SyntaxKind::COLON)?;
-    stmt::type_annotation(p)?;
+    if let Err(err) = p.expect(SyntaxKind::COLON) {
+        m.abandon(p);
+        return Err(err);
+    }
+    if let Err(err) = stmt::type_annotation(p) {
+        m.abandon(p);
+        return Err(err);
+    }
 
     Ok(m.complete(p, SyntaxKind::Param))
 }
@@ -281,23 +285,18 @@ pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
 /// Parse a parenthesized field list: `([pub] name: Type, ...)`
 /// Supports both new named fields `(x: i32)` and old tuple fields `(i32)`
 fn paren_field_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    use std::cell::Cell;
+
     let m = p.start();
     p.expect(SyntaxKind::L_PAREN)?;
 
-    let mut index = 0u32;
-    while !p.at(SyntaxKind::R_PAREN) && p.current().is_some() {
-        // Check if this is a named field (new syntax) or tuple field (old syntax)
-        // Named field: [pub] name: Type
-        // Tuple field: [pub] Type
-        if let Err(err) = paren_field_def(p, index) {
-            p.recover_with_error(err, PAREN_FIELD_RECOVERY_SET);
-        }
-        index += 1;
-        if !p.eat(SyntaxKind::COMMA) && !p.at(SyntaxKind::R_PAREN) {
-            let err = p.error_at_current("expected ',' or ')'".to_string());
-            p.error(err);
-        }
-    }
+    let index = Cell::new(0u32);
+    p.parse_delimited_with_recovery(SyntaxKind::L_PAREN, SyntaxKind::R_PAREN, |p| {
+        let i = index.get();
+        paren_field_def(p, i)?;
+        index.set(i + 1);
+        Ok(())
+    });
 
     p.expect(SyntaxKind::R_PAREN)?;
     Ok(m.complete(p, SyntaxKind::FieldList))
@@ -333,18 +332,6 @@ fn paren_field_def(
 
     Ok(m.complete(p, SyntaxKind::FieldDef))
 }
-
-/// Recovery set for parenthesized field list (type start or list end).
-const PAREN_FIELD_RECOVERY_SET: &[SyntaxKind] = &[
-    SyntaxKind::IDENT,
-    SyntaxKind::PUB_KW,
-    SyntaxKind::COMMA,
-    SyntaxKind::R_PAREN,
-    SyntaxKind::AMP,
-    SyntaxKind::L_PAREN,
-    SyntaxKind::L_BRACKET,
-    SyntaxKind::FN_KW,
-];
 
 /// Parse a type alias: `[pub] type Name = Type [where ...];`
 pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
