@@ -98,6 +98,28 @@ pub use network::Client;
 - `pub mod name;` declares and exports a submodule
 - `pub use path::item;` re-exports items
 - Files without corresponding `mod` declarations are ignored
+- **Scope**: `_module.spl` only affects the current directory, not children
+
+### Mode Inheritance
+
+`_module.spl` does **not** propagate to subdirectories. Each directory independently chooses its mode:
+
+```
+myproject/
+├── _module.spl       # Explicit mode for root
+├── main.spl
+├── utils.spl         # Must be declared in _module.spl
+└── network/          # No _module.spl here
+    ├── client.spl    # Auto-included (default mode)
+    └── server.spl    # Auto-included (default mode)
+```
+
+In this example:
+- Root uses explicit mode (has `_module.spl`)
+- `network/` uses default mode (no `_module.spl`)
+- All files in `network/` are automatically part of the `network` module
+
+This prevents the "cascade problem" where adding `_module.spl` to one directory forces you to add it to all children.
 
 ### Module Resolution
 
