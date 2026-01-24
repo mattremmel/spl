@@ -92,6 +92,7 @@
 mod contract_tests;
 
 pub mod infer;
+pub mod module;
 pub mod resolver;
 pub mod scope;
 pub mod symbol;

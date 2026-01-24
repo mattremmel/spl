@@ -1,0 +1,4 @@
+// Helper function exported from utils package
+pub fn helper(): i32 {
+    42
+}

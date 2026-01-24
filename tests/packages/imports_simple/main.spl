@@ -1,0 +1,6 @@
+// Test: Simple import from subpackage
+// use utils.helper;
+
+fn main() {
+    // helper();  // Should work after import resolution is implemented
+}

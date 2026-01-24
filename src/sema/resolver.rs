@@ -55,11 +55,28 @@ pub struct ResolveResult {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+/// A pending import from a use declaration.
+#[derive(Debug)]
+struct PendingImport {
+    /// The path segments (e.g., ["utils", "helper"]).
+    path: Vec<String>,
+    /// The local name (may differ if `as` was used).
+    local_name: String,
+    /// Whether this is a public re-export (`pub use`).
+    is_pub: bool,
+    /// Whether this is a glob import (`*`).
+    is_glob: bool,
+    /// The span of the import declaration.
+    span: Span,
+}
+
 /// Name resolver for SPL programs.
 pub struct Resolver<'ctx> {
     ctx: &'ctx mut SemanticContext,
     resolutions: FxHashMap<Span, DefId>,
     diagnostics: Vec<Diagnostic>,
+    /// Pending imports from use declarations.
+    pending_imports: Vec<PendingImport>,
 }
 
 impl<'ctx> Resolver<'ctx> {
@@ -69,6 +86,7 @@ impl<'ctx> Resolver<'ctx> {
             ctx,
             resolutions: FxHashMap::default(),
             diagnostics: Vec::new(),
+            pending_imports: Vec::new(),
         }
     }
 
@@ -79,8 +97,11 @@ impl<'ctx> Resolver<'ctx> {
         mut self,
         source_file: &SourceFile,
     ) -> (FxHashMap<Span, DefId>, Vec<Diagnostic>) {
-        // Pass 1: Collect top-level definitions
+        // Pass 1: Collect top-level definitions and use declarations
         self.collect_source_file(source_file);
+
+        // Pass 1.5: Resolve imports (now that all top-level names are known)
+        self.resolve_imports();
 
         let resolutions_after_pass1 = self.resolutions.len();
 
@@ -214,8 +235,135 @@ impl<'ctx> Resolver<'ctx> {
             Item::TypeAlias(type_alias) => self.collect_type_alias(type_alias),
             Item::Impl(impl_block) => self.collect_impl_block(impl_block),
             Item::Extern(extern_block) => self.collect_extern_block(extern_block),
-            Item::Use(_) => {
-                // Use declarations are handled during import resolution (future)
+            Item::Use(use_decl) => self.collect_use_decl(use_decl),
+        }
+    }
+
+    fn collect_use_decl(&mut self, use_decl: &crate::ast::UseDecl) {
+        let is_pub = use_decl.visibility().is_some();
+        let span = Self::text_range_to_span(use_decl.syntax().text_range());
+
+        if let Some(tree) = use_decl.use_tree() {
+            self.collect_use_tree(&tree, Vec::new(), is_pub, span);
+        }
+    }
+
+    fn collect_use_tree(
+        &mut self,
+        tree: &crate::ast::UseTree,
+        base_path: Vec<String>,
+        is_pub: bool,
+        span: Span,
+    ) {
+        // Handle grouped imports: `use foo.{bar, baz}`
+        if let Some(list) = tree.use_tree_list() {
+            for subtree in list.use_trees() {
+                self.collect_use_tree(&subtree, base_path.clone(), is_pub, span.clone());
+            }
+            return;
+        }
+
+        // Handle glob imports: `use foo.*`
+        if tree.is_glob() {
+            let mut path = base_path;
+            for segment in tree.path_segments() {
+                path.push(segment.text().to_string());
+            }
+            self.pending_imports.push(PendingImport {
+                path,
+                local_name: "*".to_string(),
+                is_pub,
+                is_glob: true,
+                span,
+            });
+            return;
+        }
+
+        // Handle simple imports: `use foo.bar` or `use foo.bar as baz`
+        let mut path = base_path;
+        for segment in tree.path_segments() {
+            path.push(segment.text().to_string());
+        }
+
+        if path.is_empty() {
+            return;
+        }
+
+        // Determine local name (last segment or rename)
+        let local_name = if let Some(rename) = tree.rename() {
+            rename
+                .ident_token()
+                .map(|t| t.text().to_string())
+                .unwrap_or_else(|| path.last().cloned().unwrap_or_default())
+        } else {
+            path.last().cloned().unwrap_or_default()
+        };
+
+        self.pending_imports.push(PendingImport {
+            path,
+            local_name,
+            is_pub,
+            is_glob: false,
+            span,
+        });
+    }
+
+    /// Resolve pending imports after pass 1.
+    ///
+    /// For now, this only handles same-package imports (items visible in current scope).
+    /// Cross-package imports will be added when package tree integration is complete.
+    fn resolve_imports(&mut self) {
+        let imports = std::mem::take(&mut self.pending_imports);
+
+        for import in imports {
+            if import.is_glob {
+                // Glob imports are handled separately (Phase 4)
+                continue;
+            }
+
+            // For now, we only handle single-segment paths (same-package items)
+            // Multi-segment paths require package tree integration
+            if import.path.len() == 1 {
+                let name = &import.path[0];
+                let interned = self.ctx.intern(name);
+
+                if let Some(def_id) = self.ctx.lookup(interned) {
+                    // Create alias if import name differs from original
+                    if import.local_name != *name {
+                        let alias_interned = self.ctx.intern(&import.local_name);
+                        // Add alias to current scope
+                        let _ = self.ctx.define(
+                            alias_interned,
+                            SymbolKind::Function, // Will be overwritten with correct kind
+                            if import.is_pub {
+                                Visibility::Public
+                            } else {
+                                Visibility::Private
+                            },
+                            import.span.clone(),
+                            false,
+                        );
+                        self.resolutions.insert(import.span.clone(), def_id);
+                    }
+                    // If names match, the item is already in scope
+                } else {
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("cannot find `{}` in this scope", name))
+                            .with_label(import.span, "not found"),
+                    );
+                }
+            } else if import.path.len() > 1 {
+                // Multi-segment path: `utils.helper` or `module.utils.helper`
+                // For now, report as unimplemented
+                // This will be implemented when package tree is integrated
+                let path_str = import.path.join(".");
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "cross-package imports not yet implemented: `{}`",
+                        path_str
+                    ))
+                    .with_label(import.span, "cross-package import"),
+                );
             }
         }
     }
@@ -1875,5 +2023,31 @@ mod tests {
     #[test]
     fn type_alias_where_clause_bound_resolves() {
         check_ok("type Alias = T where T: Clone;");
+    }
+
+    // ===== Use Declaration Tests =====
+
+    #[test]
+    fn use_undefined_single_segment_error() {
+        check_err(
+            "use nonexistent; fn main() {}",
+            &["cannot find `nonexistent`"],
+        );
+    }
+
+    #[test]
+    fn use_cross_package_not_yet_implemented() {
+        check_err(
+            "use utils.helper; fn main() {}",
+            &["cross-package imports not yet implemented"],
+        );
+    }
+
+    #[test]
+    fn use_module_prefix_not_yet_implemented() {
+        check_err(
+            "use module.utils.helper; fn main() {}",
+            &["cross-package imports not yet implemented"],
+        );
     }
 }
