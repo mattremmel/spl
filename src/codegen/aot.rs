@@ -2,6 +2,53 @@
 //!
 //! This module provides `AotContext` for compiling SPL programs to object files
 //! that can be linked into standalone executables.
+//!
+//! # Intrinsics Strategy
+//!
+//! JIT and AOT handle intrinsics differently:
+//!
+//! - **JIT**: Calls Rust function pointers registered in `Runtime`
+//! - **AOT**: Emits calls to libc/libm symbols, resolved at link time
+//!
+//! This means AOT binaries have no SPL runtime dependency - just standard `-lc -lm`.
+//!
+//! ## Intrinsic to libc Mapping
+//!
+//! | Intrinsic | libc/libm | Header |
+//! |-----------|-----------|--------|
+//! | `__alloc` | `malloc` | `<stdlib.h>` |
+//! | `__realloc` | `realloc` | `<stdlib.h>` |
+//! | `__free` | `free` | `<stdlib.h>` |
+//! | `__memcpy` | `memcpy` | `<string.h>` |
+//! | `__memset` | `memset` | `<string.h>` |
+//! | `__memcmp` | `memcmp` | `<string.h>` |
+//! | `__print_str` | `write(1, ptr, len)` | `<unistd.h>` |
+//! | `__eprint_str` | `write(2, ptr, len)` | `<unistd.h>` |
+//! | `__exit` | `_exit` | `<unistd.h>` |
+//! | `__abort` | `abort` | `<stdlib.h>` |
+//! | `__getenv` | `getenv` | `<stdlib.h>` |
+//! | `__clock_ns` | `clock_gettime` | `<time.h>` |
+//! | `__str_to_float` | `strtod` | `<stdlib.h>` |
+//! | `__float_to_string` | `snprintf` | `<stdio.h>` |
+//! | `__sin`, `__cos`, etc. | `sin`, `cos`, etc. | `<math.h>` (libm) |
+//! | `__pow`, `__exp`, `__log` | `pow`, `exp`, `log` | `<math.h>` (libm) |
+//!
+//! ## Special Cases
+//!
+//! - **`__argc`/`__argv`**: Passed from `main(argc, argv)` or captured to globals
+//! - **`__breakpoint`**: Emitted as inline assembly (`int3` on x86, `brk` on ARM)
+//!
+//! ## Linking
+//!
+//! AOT executables link with:
+//! ```text
+//! cc program.o -o program -lc -lm
+//! ```
+//!
+//! The `LinkOptions` builder supports this:
+//! ```ignore
+//! LinkOptions::new().library("c").library("m")
+//! ```
 
 use cranelift_codegen::Context as ClifContext;
 use cranelift_codegen::ir::Function;
