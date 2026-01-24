@@ -3695,7 +3695,10 @@ fn strref_ptr_method() {
 #[test]
 fn strref_len_method() {
     // Returns usize - test with explicit type to ensure type is correct
-    check(r#"fn main() { let s: str = "hello"; let n = s.len(); }"#, "usize");
+    check(
+        r#"fn main() { let s: str = "hello"; let n = s.len(); }"#,
+        "usize",
+    );
 }
 
 #[test]
@@ -3705,18 +3708,27 @@ fn strref_method_on_literal() {
 
 #[test]
 fn strref_unknown_method() {
-    check_err(r#"fn main() { "hello".foo(); }"#, &["method `foo` not found"]);
+    check_err(
+        r#"fn main() { "hello".foo(); }"#,
+        &["method `foo` not found"],
+    );
 }
 
 #[test]
 fn strref_unknown_method_on_variable() {
     // This should give the same error as strref_unknown_method
-    check_err(r#"fn main() { let s = "hello"; s.foo(); }"#, &["method `foo` not found"]);
+    check_err(
+        r#"fn main() { let s = "hello"; s.foo(); }"#,
+        &["method `foo` not found"],
+    );
 }
 
 #[test]
 fn strref_method_wrong_args() {
-    check_err(r#"fn main() { "hello".len(42); }"#, &["expected 0 argument"]);
+    check_err(
+        r#"fn main() { "hello".len(42); }"#,
+        &["expected 0 argument"],
+    );
 }
 
 // -----------------------------------------------------------------------------

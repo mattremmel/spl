@@ -26,7 +26,7 @@ use rustc_hash::FxHashMap;
 
 use engine::InferEngine;
 
-pub use engine::OpaqueMethodLowering;
+pub use engine::IntrinsicKind;
 
 /// Result of type inference.
 pub struct InferResult {
@@ -43,9 +43,9 @@ pub struct InferResult {
     /// Map from type annotation spans to their resolved TypeIds.
     /// Includes return type annotations (-> i32), parameter types (x: bool), etc.
     pub type_annotation_types: FxHashMap<Span, TypeId>,
-    /// Resolved opaque method calls (e.g., str.ptr(), str.len()).
-    /// Maps call span to how to lower the call.
-    pub opaque_method_resolutions: FxHashMap<Span, OpaqueMethodLowering>,
+    /// Intrinsic methods that need special lowering during HIR lowering.
+    /// Maps method DefId to how it should be lowered (e.g., str.ptr() -> field 0).
+    pub intrinsic_methods: FxHashMap<DefId, IntrinsicKind>,
     /// Diagnostics produced during inference.
     pub diagnostics: Vec<Diagnostic>,
 }

@@ -45,27 +45,11 @@ use rustc_hash::FxHashMap;
 
 use super::{InferResult, SelfParam};
 
-/// Method on an opaque primitive type (like StrRef).
+/// How to lower an intrinsic method during HIR lowering.
 #[derive(Clone, Debug)]
-pub(super) struct OpaqueMethod {
-    /// Method name (e.g., "ptr", "len")
-    pub name: String,
-    /// Parameter types (excluding self)
-    pub params: Vec<TypeId>,
-    /// Return type
-    pub ret: TypeId,
-    /// How to lower this method call
-    pub lowering: OpaqueMethodLowering,
-}
-
-/// How to lower an opaque method call during HIR lowering.
-#[derive(Clone, Debug)]
-pub enum OpaqueMethodLowering {
-    /// Lower to field projection (e.g., .ptr() -> field 0)
+pub enum IntrinsicKind {
+    /// Lower to tuple field access (e.g., str.ptr() -> field 0)
     FieldAccess(u32),
-    /// Lower to intrinsic call (future use)
-    #[allow(dead_code)]
-    IntrinsicCall(String),
 }
 
 /// The kind of loop for break/continue validation.
@@ -179,14 +163,18 @@ pub(super) struct InferEngine {
     /// These are separate from `expr_types` because type annotations are not expressions.
     pub(super) type_annotation_types: FxHashMap<Span, TypeId>,
 
-    // === Opaque Primitive Methods ===
-    /// Methods on opaque primitive types (e.g., StrRef has .ptr() and .len()).
-    /// Maps TypeId to available methods for that type.
-    pub(super) opaque_methods: FxHashMap<TypeId, Vec<OpaqueMethod>>,
+    // === Primitive Type Methods ===
+    /// Methods on primitive types (TypeId → method DefIds).
+    /// Similar to struct_methods but keyed by TypeId for primitives like str.
+    pub(super) primitive_methods: FxHashMap<TypeId, Vec<DefId>>,
 
-    /// Resolved opaque method calls: maps call span to the resolved OpaqueMethod.
-    /// Used during HIR lowering to convert method calls to field accesses.
-    pub opaque_method_resolutions: FxHashMap<Span, OpaqueMethodLowering>,
+    /// Intrinsic methods that need special lowering during HIR lowering.
+    /// Maps method DefId to how it should be lowered.
+    pub intrinsic_methods: FxHashMap<DefId, IntrinsicKind>,
+
+    /// Names of builtin methods (DefId → name).
+    /// Used during method resolution since builtins aren't in the symbol table.
+    pub(super) builtin_method_names: FxHashMap<DefId, String>,
 }
 
 impl InferEngine {
@@ -210,37 +198,83 @@ impl InferEngine {
             current_loop_kind: None,
             method_resolutions: FxHashMap::default(),
             type_annotation_types: FxHashMap::default(),
-            opaque_methods: FxHashMap::default(),
-            opaque_method_resolutions: FxHashMap::default(),
+            primitive_methods: FxHashMap::default(),
+            intrinsic_methods: FxHashMap::default(),
+            builtin_method_names: FxHashMap::default(),
         };
-        engine.register_opaque_methods();
+        engine.register_builtin_primitive_methods();
         engine
     }
 
-    /// Register methods on opaque primitive types (StrRef, etc.).
-    fn register_opaque_methods(&mut self) {
-        let str_ref_ty = self.ctx.types.str_ref();
+    /// Register methods on primitive types (str, etc.).
+    ///
+    /// This creates synthetic DefIds for builtin methods and registers them
+    /// in the same structures used for struct methods, enabling unified
+    /// method resolution.
+    fn register_builtin_primitive_methods(&mut self) {
+        let str_ty = self.ctx.types.str_ref();
         let usize_ty = self.ctx.types.primitive(PrimitiveKind::Usize);
         let u8_ty = self.ctx.types.primitive(PrimitiveKind::U8);
         let ptr_u8 = self.ctx.types.mk_raw_ptr(Mutability::Shared, u8_ty);
 
-        self.opaque_methods.insert(
-            str_ref_ty,
-            vec![
-                OpaqueMethod {
-                    name: "ptr".into(),
-                    params: vec![],
-                    ret: ptr_u8,
-                    lowering: OpaqueMethodLowering::FieldAccess(0),
-                },
-                OpaqueMethod {
-                    name: "len".into(),
-                    params: vec![],
-                    ret: usize_ty,
-                    lowering: OpaqueMethodLowering::FieldAccess(1),
-                },
-            ],
+        // Create synthetic DefIds for ptr() and len() methods
+        let ptr_def_id = self.create_builtin_method("ptr", str_ty, vec![], ptr_u8);
+        let len_def_id = self.create_builtin_method("len", str_ty, vec![], usize_ty);
+
+        // Register methods for str type
+        self.primitive_methods
+            .insert(str_ty, vec![ptr_def_id, len_def_id]);
+
+        // Mark these as intrinsic methods that lower to field access
+        self.intrinsic_methods
+            .insert(ptr_def_id, IntrinsicKind::FieldAccess(0));
+        self.intrinsic_methods
+            .insert(len_def_id, IntrinsicKind::FieldAccess(1));
+    }
+
+    /// Create a builtin method with a synthetic DefId and register its signature.
+    ///
+    /// Returns a DefId for the builtin method. The DefId uses a high range
+    /// (starting at u32::MAX / 2) to avoid conflicts with user-defined symbols.
+    fn create_builtin_method(
+        &mut self,
+        name: &str,
+        self_ty: TypeId,
+        params: Vec<TypeId>,
+        ret: TypeId,
+    ) -> DefId {
+        use super::SelfParamKind;
+
+        // Use a high range for builtin DefIds to avoid conflicts
+        // Start at u32::MAX / 2 and count up based on how many builtins we have
+        let builtin_base = u32::MAX / 2;
+        let def_id = DefId(builtin_base + self.builtin_method_names.len() as u32);
+
+        // Store the method name for later lookup during resolution
+        self.builtin_method_names.insert(def_id, name.to_string());
+
+        // Register the function signature
+        self.fn_signatures.insert(
+            def_id,
+            FnSignature {
+                self_param: Some(SelfParam {
+                    kind: SelfParamKind::Owned,
+                    self_ty,
+                }),
+                type_params: vec![],
+                params: params
+                    .into_iter()
+                    .map(|ty| ParamInfo {
+                        label: None,
+                        name: String::new(),
+                        ty,
+                    })
+                    .collect(),
+                ret,
+            },
         );
+
+        def_id
     }
 
     pub(super) fn into_result(self) -> InferResult {
@@ -251,7 +285,7 @@ impl InferEngine {
             resolutions: self.resolutions,
             method_resolutions: self.method_resolutions,
             type_annotation_types: self.type_annotation_types,
-            opaque_method_resolutions: self.opaque_method_resolutions,
+            intrinsic_methods: self.intrinsic_methods,
             diagnostics: self.diagnostics,
         }
     }

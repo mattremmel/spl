@@ -945,19 +945,27 @@ impl InferEngine {
 
         let method_name = method_token.text().to_string();
 
-        // Check opaque primitive methods first (e.g., StrRef.ptr(), StrRef.len())
-        if let Some(methods) = self.opaque_methods.get(&current_resolved).cloned() {
-            for opaque_method in &methods {
-                if opaque_method.name == method_name {
+        // Check primitive type methods first (e.g., str.ptr(), str.len())
+        if let Some(method_def_ids) = self.primitive_methods.get(&current_resolved).cloned() {
+            for method_def_id in &method_def_ids {
+                // Look up method name from builtin_method_names
+                let fn_name = match self.builtin_method_names.get(method_def_id) {
+                    Some(name) => name.as_str(),
+                    None => continue,
+                };
+
+                if fn_name == method_name
+                    && let Some(sig) = self.fn_signatures.get(method_def_id).cloned()
+                {
                     // Check argument count
                     let args: Vec<_> = apply_expr.args().collect();
-                    if args.len() != opaque_method.params.len() {
+                    if args.len() != sig.params.len() {
                         let span = text_range_to_span(apply_expr.syntax().text_range());
                         self.diagnostics.push(
                             Diagnostic::error(format!(
                                 "expected {} argument{}, found {}",
-                                opaque_method.params.len(),
-                                if opaque_method.params.len() == 1 { "" } else { "s" },
+                                sig.params.len(),
+                                if sig.params.len() == 1 { "" } else { "s" },
                                 args.len()
                             ))
                             .with_label(span, "wrong number of arguments"),
@@ -965,19 +973,18 @@ impl InferEngine {
                         return self.ctx.types.error();
                     }
                     // Type check arguments
-                    for (arg, expected) in args.iter().zip(&opaque_method.params) {
+                    for (arg, param) in args.iter().zip(&sig.params) {
                         if let Some(value) = arg.value() {
-                            self.check_expr(&value, *expected);
+                            self.check_expr(&value, param.ty);
                         }
                     }
-                    // Store resolution for HIR lowering
+                    // Store resolution for HIR lowering (same as struct methods)
                     let call_span = text_range_to_span(apply_expr.syntax().text_range());
-                    self.opaque_method_resolutions
-                        .insert(call_span, opaque_method.lowering.clone());
-                    return opaque_method.ret;
+                    self.method_resolutions.insert(call_span, *method_def_id);
+                    return sig.ret;
                 }
             }
-            // Method not found on opaque type
+            // Method not found on primitive type
             let span = text_range_to_span(apply_expr.syntax().text_range());
             self.diagnostics.push(
                 Diagnostic::error(format!("method `{}` not found on type `str`", method_name))
@@ -1646,22 +1653,30 @@ impl InferEngine {
         let resolved = self.resolve_type(receiver_ty);
         let receiver_type = self.ctx.types.get(resolved).clone();
 
-        // Check opaque primitive methods first (e.g., StrRef.ptr(), StrRef.len())
-        if let Some(methods) = self.opaque_methods.get(&resolved).cloned() {
-            for opaque_method in &methods {
-                if opaque_method.name == method_name {
+        // Check primitive type methods first (e.g., str.ptr(), str.len())
+        if let Some(method_def_ids) = self.primitive_methods.get(&resolved).cloned() {
+            for method_def_id in &method_def_ids {
+                // Look up method name from builtin_method_names
+                let fn_name = match self.builtin_method_names.get(method_def_id) {
+                    Some(name) => name.as_str(),
+                    None => continue,
+                };
+
+                if fn_name == method_name
+                    && let Some(sig) = self.fn_signatures.get(method_def_id).cloned()
+                {
                     // Check argument count
                     let args: Vec<_> = method
                         .arg_list()
                         .map(|a| a.args().collect())
                         .unwrap_or_default();
-                    if args.len() != opaque_method.params.len() {
+                    if args.len() != sig.params.len() {
                         let span = text_range_to_span(method.syntax().text_range());
                         self.diagnostics.push(
                             Diagnostic::error(format!(
                                 "expected {} argument{}, found {}",
-                                opaque_method.params.len(),
-                                if opaque_method.params.len() == 1 { "" } else { "s" },
+                                sig.params.len(),
+                                if sig.params.len() == 1 { "" } else { "s" },
                                 args.len()
                             ))
                             .with_label(span, "wrong number of arguments"),
@@ -1669,17 +1684,16 @@ impl InferEngine {
                         return self.ctx.types.error();
                     }
                     // Type check arguments
-                    for (arg, expected) in args.iter().zip(&opaque_method.params) {
-                        self.check_expr(arg, *expected);
+                    for (arg, param) in args.iter().zip(&sig.params) {
+                        self.check_expr(arg, param.ty);
                     }
-                    // Store resolution for HIR lowering
+                    // Store resolution for HIR lowering (same as struct methods)
                     let call_span = text_range_to_span(method.syntax().text_range());
-                    self.opaque_method_resolutions
-                        .insert(call_span, opaque_method.lowering.clone());
-                    return opaque_method.ret;
+                    self.method_resolutions.insert(call_span, *method_def_id);
+                    return sig.ret;
                 }
             }
-            // Method not found on opaque type
+            // Method not found on primitive type
             let span = text_range_to_span(method.syntax().text_range());
             self.diagnostics.push(
                 Diagnostic::error(format!("method `{}` not found on type `str`", method_name))
