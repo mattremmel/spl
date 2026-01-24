@@ -1013,7 +1013,36 @@ pub fn resolve(source_file: &SourceFile) -> ResolveResult {
         let _ = ctx.define(name, SymbolKind::Struct, Visibility::Public, 0..0, false);
     }
 
-    // Pre-define built-in traits
+    // Pre-define built-in traits.
+    //
+    // These are hardcoded here as a temporary measure. In a complete implementation:
+    //
+    // 1. **Standard Library**: These traits would be defined in SPL's standard library
+    //    (like Rust's `core` crate), e.g.:
+    //    ```
+    //    // In std/clone.spl
+    //    #[lang = "clone"]
+    //    pub trait Clone {
+    //        fn clone(&self): Self;
+    //    }
+    //    ```
+    //
+    // 2. **Lang Items**: The compiler would recognize `#[lang = "..."]` attributes
+    //    and maintain a `LangItems` table mapping lang item names to DefIds:
+    //    ```
+    //    enum LangItem { Copy, Clone, Add, Drop, ... }
+    //    struct LangItems { items: HashMap<LangItem, DefId> }
+    //    ```
+    //
+    // 3. **Special Handling**: Later compiler phases would query lang items for
+    //    special behavior:
+    //    - `Copy`: move vs copy semantics
+    //    - `Drop`: destructor insertion
+    //    - `Add`, `Sub`, etc.: operator overloading desugaring
+    //    - `Index`: `a[i]` desugaring
+    //    - `Deref`: auto-deref coercions
+    //
+    // For now, we just make these names resolve so bound validation works.
     for builtin_trait in &[
         "Clone",
         "Copy",
