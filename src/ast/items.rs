@@ -313,6 +313,18 @@ impl Name {
     pub fn ident_token(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::IDENT).or_else(|| token(&self.0, SyntaxKind::INT_LITERAL))
     }
+
+    /// Get the span to use for resolution lookups.
+    ///
+    /// Returns the IDENT token's text range, which is what the resolver stores.
+    /// Using `syntax().text_range()` would return the Name node's range, which
+    /// may differ from the token range and cause resolution lookups to fail.
+    pub fn resolution_span(&self) -> Option<crate::lexer::Span> {
+        self.ident_token().map(|t| {
+            let range = t.text_range();
+            range.start().into()..range.end().into()
+        })
+    }
 }
 
 impl NameRef {

@@ -1799,6 +1799,50 @@ fn variable_references_have_valid_def_ids() {
 }
 
 #[test]
+fn struct_definition_has_valid_def_id() {
+    let db = lower("struct Point(x: i32, y: i32) fn main() {}");
+    for item in &db.items {
+        if let HirItem::Struct(s) = item {
+            assert!(
+                s.def_id.is_valid(),
+                "Struct '{}' should have valid DefId",
+                s.name
+            );
+        }
+    }
+}
+
+#[test]
+fn struct_fields_have_valid_def_ids() {
+    let db = lower("struct Point(x: i32, y: i32) fn main() {}");
+    for item in &db.items {
+        if let HirItem::Struct(s) = item {
+            for field in &s.fields {
+                assert!(
+                    field.def_id.is_valid(),
+                    "Field '{}' should have valid DefId",
+                    field.name
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn type_alias_has_valid_def_id() {
+    let db = lower("type MyInt = i32; fn main() {}");
+    for item in &db.items {
+        if let HirItem::TypeAlias(ta) = item {
+            assert!(
+                ta.def_id.is_valid(),
+                "Type alias '{}' should have valid DefId",
+                ta.name
+            );
+        }
+    }
+}
+
+#[test]
 fn binding_patterns_have_valid_def_ids() {
     let db = lower("fn main() { let x = 1; let mut y = 2; }");
     for (_, pat) in db.pats.iter() {

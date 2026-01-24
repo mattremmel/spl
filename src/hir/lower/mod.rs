@@ -340,7 +340,7 @@ impl LoweringContext {
 
         let name_span = struct_def
             .name()
-            .map(|n| Self::text_range_to_span(n.syntax().text_range()))
+            .and_then(|n| n.resolution_span())
             .unwrap_or_else(|| span.clone());
         let def_id = self
             .resolutions
@@ -374,7 +374,7 @@ impl LoweringContext {
 
         let name_span = field
             .name()
-            .map(|n| Self::text_range_to_span(n.syntax().text_range()))
+            .and_then(|n| n.resolution_span())
             .unwrap_or_else(|| span.clone());
         let def_id = self
             .resolutions
@@ -397,7 +397,7 @@ impl LoweringContext {
 
         let name_span = type_alias
             .name()
-            .map(|n| Self::text_range_to_span(n.syntax().text_range()))
+            .and_then(|n| n.resolution_span())
             .unwrap_or_else(|| span.clone());
         let def_id = self
             .resolutions
@@ -586,9 +586,14 @@ impl LoweringContext {
                 self.db.alloc_pat(hir_pat)
             }
             Pat::Struct(struct_pat) => {
+                // Use the first segment's name token span for resolution lookup,
+                // since that's what the resolver stores
                 let path_span = struct_pat
                     .path()
-                    .map(|p| Self::text_range_to_span(p.syntax().text_range()))
+                    .and_then(|p| p.segments().next())
+                    .and_then(|seg| seg.name())
+                    .and_then(|n| n.token())
+                    .map(|t| Self::text_range_to_span(t.text_range()))
                     .unwrap_or_else(|| span.clone());
                 let def_id = self
                     .resolutions
