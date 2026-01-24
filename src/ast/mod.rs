@@ -49,6 +49,57 @@ macro_rules! ast_node {
 }
 pub(crate) use ast_node;
 
+/// Macro to define AST enum wrappers implementing AstNode.
+///
+/// Generates an enum where each variant wraps a typed AST node struct,
+/// with automatic AstNode implementation that dispatches to variants.
+///
+/// # Syntax
+/// ```ignore
+/// ast_enum!(EnumName {
+///     VariantName(StructType),
+///     ...
+/// });
+/// ```
+///
+/// The SyntaxKind is derived from the struct type name (e.g., `BinExpr` -> `SyntaxKind::BinExpr`).
+macro_rules! ast_enum {
+    (
+        $(#[$meta:meta])*
+        $enum_name:ident {
+            $($variant:ident($struct_ty:ident)),* $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+        pub enum $enum_name {
+            $($variant($struct_ty),)*
+        }
+
+        impl rowan::ast::AstNode for $enum_name {
+            type Language = crate::syntax::Lang;
+
+            fn can_cast(kind: SyntaxKind) -> bool {
+                matches!(kind, $(SyntaxKind::$struct_ty)|*)
+            }
+
+            fn cast(node: SyntaxNode) -> Option<Self> {
+                match node.kind() {
+                    $(SyntaxKind::$struct_ty => Some($enum_name::$variant($struct_ty(node))),)*
+                    _ => None,
+                }
+            }
+
+            fn syntax(&self) -> &SyntaxNode {
+                match self {
+                    $($enum_name::$variant(it) => it.syntax(),)*
+                }
+            }
+        }
+    };
+}
+pub(crate) use ast_enum;
+
 // === Support functions ===
 
 /// Get the first child node of type N.
@@ -69,4 +120,54 @@ pub fn token(parent: &SyntaxNode, kind: SyntaxKind) -> Option<SyntaxToken> {
         .children_with_tokens()
         .filter_map(|it| it.into_token())
         .find(|it| it.kind() == kind)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse;
+    use rowan::ast::AstNode;
+
+    #[test]
+    fn ast_enum_can_cast() {
+        // Verify can_cast works for all Stmt variants
+        assert!(Stmt::can_cast(SyntaxKind::LetStmt));
+        assert!(Stmt::can_cast(SyntaxKind::ExprStmt));
+        assert!(!Stmt::can_cast(SyntaxKind::Block));
+    }
+
+    #[test]
+    fn ast_enum_cast_roundtrip() {
+        let source = "fn main() { let x = 1; }";
+        let parsed = parse(source);
+        let root = parsed.syntax();
+
+        // Find a LetStmt node
+        let let_node = root
+            .descendants()
+            .find(|n| n.kind() == SyntaxKind::LetStmt)
+            .unwrap();
+
+        // Cast to Stmt enum
+        let stmt = Stmt::cast(let_node.clone()).unwrap();
+
+        // Verify syntax() returns the same node
+        assert_eq!(stmt.syntax(), &let_node);
+    }
+
+    #[test]
+    fn ast_enum_cast_wrong_kind_returns_none() {
+        let source = "fn main() {}";
+        let parsed = parse(source);
+        let root = parsed.syntax();
+
+        // Find a Block node (not a Stmt)
+        let block_node = root
+            .descendants()
+            .find(|n| n.kind() == SyntaxKind::Block)
+            .unwrap();
+
+        // Stmt::cast should return None
+        assert!(Stmt::cast(block_node).is_none());
+    }
 }

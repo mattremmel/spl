@@ -1,8 +1,7 @@
 //! Pattern AST nodes.
 
-use crate::ast::{Name, NameRef, Path, ast_node, child, children, token};
+use crate::ast::{Name, NameRef, Path, ast_enum, ast_node, child, children, token};
 use crate::syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
-use rowan::ast::AstNode;
 
 ast_node!(IdentPat);
 ast_node!(WildcardPat);
@@ -15,67 +14,20 @@ ast_node!(RefPat);
 ast_node!(RestPat);
 ast_node!(StructPatField);
 
-/// Pattern enum - all pattern variants.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Pat {
-    Ident(IdentPat),
-    Wildcard(WildcardPat),
-    Literal(LiteralPat),
-    Range(RangePat),
-    Tuple(TuplePat),
-    Slice(SlicePat),
-    Struct(StructPat),
-    Ref(RefPat),
-    Rest(RestPat),
-}
-
-impl AstNode for Pat {
-    type Language = crate::syntax::Lang;
-
-    fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(
-            kind,
-            SyntaxKind::IdentPat
-                | SyntaxKind::WildcardPat
-                | SyntaxKind::LiteralPat
-                | SyntaxKind::RangePat
-                | SyntaxKind::TuplePat
-                | SyntaxKind::SlicePat
-                | SyntaxKind::StructPat
-                | SyntaxKind::RefPat
-                | SyntaxKind::RestPat
-        )
+ast_enum!(
+    /// Pattern enum - all pattern variants.
+    Pat {
+        Ident(IdentPat),
+        Wildcard(WildcardPat),
+        Literal(LiteralPat),
+        Range(RangePat),
+        Tuple(TuplePat),
+        Slice(SlicePat),
+        Struct(StructPat),
+        Ref(RefPat),
+        Rest(RestPat),
     }
-
-    fn cast(node: SyntaxNode) -> Option<Self> {
-        match node.kind() {
-            SyntaxKind::IdentPat => Some(Pat::Ident(IdentPat(node))),
-            SyntaxKind::WildcardPat => Some(Pat::Wildcard(WildcardPat(node))),
-            SyntaxKind::LiteralPat => Some(Pat::Literal(LiteralPat(node))),
-            SyntaxKind::RangePat => Some(Pat::Range(RangePat(node))),
-            SyntaxKind::TuplePat => Some(Pat::Tuple(TuplePat(node))),
-            SyntaxKind::SlicePat => Some(Pat::Slice(SlicePat(node))),
-            SyntaxKind::StructPat => Some(Pat::Struct(StructPat(node))),
-            SyntaxKind::RefPat => Some(Pat::Ref(RefPat(node))),
-            SyntaxKind::RestPat => Some(Pat::Rest(RestPat(node))),
-            _ => None,
-        }
-    }
-
-    fn syntax(&self) -> &SyntaxNode {
-        match self {
-            Pat::Ident(it) => it.syntax(),
-            Pat::Wildcard(it) => it.syntax(),
-            Pat::Literal(it) => it.syntax(),
-            Pat::Range(it) => it.syntax(),
-            Pat::Tuple(it) => it.syntax(),
-            Pat::Slice(it) => it.syntax(),
-            Pat::Struct(it) => it.syntax(),
-            Pat::Ref(it) => it.syntax(),
-            Pat::Rest(it) => it.syntax(),
-        }
-    }
-}
+);
 
 // === Typed accessors ===
 

@@ -1,6 +1,6 @@
 //! Statement AST nodes.
 
-use crate::ast::{Expr, Pat, Type, ast_node, child, children, token};
+use crate::ast::{Expr, Pat, Type, ast_enum, ast_node, child, children, token};
 use crate::syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::ast::AstNode;
 
@@ -8,35 +8,13 @@ ast_node!(Block);
 ast_node!(LetStmt);
 ast_node!(ExprStmt);
 
-/// Statement enum - all statement variants.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Stmt {
-    Let(LetStmt),
-    Expr(ExprStmt),
-}
-
-impl AstNode for Stmt {
-    type Language = crate::syntax::Lang;
-
-    fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(kind, SyntaxKind::LetStmt | SyntaxKind::ExprStmt)
+ast_enum!(
+    /// Statement enum - all statement variants.
+    Stmt {
+        Let(LetStmt),
+        Expr(ExprStmt),
     }
-
-    fn cast(node: SyntaxNode) -> Option<Self> {
-        match node.kind() {
-            SyntaxKind::LetStmt => Some(Stmt::Let(LetStmt(node))),
-            SyntaxKind::ExprStmt => Some(Stmt::Expr(ExprStmt(node))),
-            _ => None,
-        }
-    }
-
-    fn syntax(&self) -> &SyntaxNode {
-        match self {
-            Stmt::Let(it) => it.syntax(),
-            Stmt::Expr(it) => it.syntax(),
-        }
-    }
-}
+);
 
 // === Typed accessors ===
 

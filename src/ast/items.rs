@@ -1,8 +1,7 @@
 //! Item AST nodes: functions, structs, impls, type aliases.
 
-use crate::ast::{Block, Path, Type, ast_node, child, children, token};
+use crate::ast::{Block, Path, Type, ast_enum, ast_node, child, children, token};
 use crate::syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
-use rowan::ast::AstNode;
 
 ast_node!(SourceFile);
 ast_node!(FunctionDef);
@@ -33,51 +32,16 @@ impl SourceFile {
     }
 }
 
-/// Top-level item (function, struct, impl, type alias, extern block).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Item {
-    Function(FunctionDef),
-    Struct(StructDef),
-    Impl(ImplBlock),
-    TypeAlias(TypeAlias),
-    Extern(ExternBlock),
-}
-
-impl AstNode for Item {
-    type Language = crate::syntax::Lang;
-
-    fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(
-            kind,
-            SyntaxKind::FunctionDef
-                | SyntaxKind::StructDef
-                | SyntaxKind::ImplBlock
-                | SyntaxKind::TypeAlias
-                | SyntaxKind::ExternBlock
-        )
+ast_enum!(
+    /// Top-level item (function, struct, impl, type alias, extern block).
+    Item {
+        Function(FunctionDef),
+        Struct(StructDef),
+        Impl(ImplBlock),
+        TypeAlias(TypeAlias),
+        Extern(ExternBlock),
     }
-
-    fn cast(node: SyntaxNode) -> Option<Self> {
-        match node.kind() {
-            SyntaxKind::FunctionDef => Some(Item::Function(FunctionDef(node))),
-            SyntaxKind::StructDef => Some(Item::Struct(StructDef(node))),
-            SyntaxKind::ImplBlock => Some(Item::Impl(ImplBlock(node))),
-            SyntaxKind::TypeAlias => Some(Item::TypeAlias(TypeAlias(node))),
-            SyntaxKind::ExternBlock => Some(Item::Extern(ExternBlock(node))),
-            _ => None,
-        }
-    }
-
-    fn syntax(&self) -> &SyntaxNode {
-        match self {
-            Item::Function(it) => it.syntax(),
-            Item::Struct(it) => it.syntax(),
-            Item::Impl(it) => it.syntax(),
-            Item::TypeAlias(it) => it.syntax(),
-            Item::Extern(it) => it.syntax(),
-        }
-    }
-}
+);
 
 impl FunctionDef {
     pub fn visibility(&self) -> Option<Visibility> {

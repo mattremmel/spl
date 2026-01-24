@@ -1,6 +1,6 @@
 //! Expression AST nodes.
 
-use crate::ast::{Block, NameRef, Pat, Type, ast_node, child, children, token};
+use crate::ast::{Block, NameRef, Pat, Type, ast_enum, ast_node, child, children, token};
 use crate::syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::ast::AstNode;
 
@@ -38,139 +38,38 @@ ast_node!(ArgList);
 ast_node!(Path);
 ast_node!(PathSegment);
 
-/// Expression enum - all expression variants.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Expr {
-    Literal(LiteralExpr),
-    Path(PathExpr),
-    Paren(ParenExpr),
-    Tuple(TupleExpr),
-    Array(ArrayExpr),
-    Struct(StructExpr),
-    Apply(ApplyExpr),
-    Binary(BinExpr),
-    Prefix(PrefixExpr),
-    Ref(RefExpr),
-    Field(FieldExpr),
-    MethodCall(MethodCallExpr),
-    Call(CallExpr),
-    Index(IndexExpr),
-    Slice(SliceExpr),
-    If(IfExpr),
-    While(WhileExpr),
-    For(ForExpr),
-    Loop(LoopExpr),
-    Break(BreakExpr),
-    Continue(ContinueExpr),
-    Return(ReturnExpr),
-    Block(BlockExpr),
-    Cast(CastExpr),
-    Range(RangeExpr),
-    Is(IsExpr),
-    Match(MatchExpr),
-}
-
-impl AstNode for Expr {
-    type Language = crate::syntax::Lang;
-
-    fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(
-            kind,
-            SyntaxKind::LiteralExpr
-                | SyntaxKind::PathExpr
-                | SyntaxKind::ParenExpr
-                | SyntaxKind::TupleExpr
-                | SyntaxKind::ArrayExpr
-                | SyntaxKind::StructExpr
-                | SyntaxKind::ApplyExpr
-                | SyntaxKind::BinExpr
-                | SyntaxKind::PrefixExpr
-                | SyntaxKind::RefExpr
-                | SyntaxKind::FieldExpr
-                | SyntaxKind::MethodCallExpr
-                | SyntaxKind::CallExpr
-                | SyntaxKind::IndexExpr
-                | SyntaxKind::SliceExpr
-                | SyntaxKind::IfExpr
-                | SyntaxKind::WhileExpr
-                | SyntaxKind::ForExpr
-                | SyntaxKind::LoopExpr
-                | SyntaxKind::BreakExpr
-                | SyntaxKind::ContinueExpr
-                | SyntaxKind::ReturnExpr
-                | SyntaxKind::BlockExpr
-                | SyntaxKind::CastExpr
-                | SyntaxKind::RangeExpr
-                | SyntaxKind::IsExpr
-                | SyntaxKind::MatchExpr
-        )
+ast_enum!(
+    /// Expression enum - all expression variants.
+    Expr {
+        Literal(LiteralExpr),
+        Path(PathExpr),
+        Paren(ParenExpr),
+        Tuple(TupleExpr),
+        Array(ArrayExpr),
+        Struct(StructExpr),
+        Apply(ApplyExpr),
+        Binary(BinExpr),
+        Prefix(PrefixExpr),
+        Ref(RefExpr),
+        Field(FieldExpr),
+        MethodCall(MethodCallExpr),
+        Call(CallExpr),
+        Index(IndexExpr),
+        Slice(SliceExpr),
+        If(IfExpr),
+        While(WhileExpr),
+        For(ForExpr),
+        Loop(LoopExpr),
+        Break(BreakExpr),
+        Continue(ContinueExpr),
+        Return(ReturnExpr),
+        Block(BlockExpr),
+        Cast(CastExpr),
+        Range(RangeExpr),
+        Is(IsExpr),
+        Match(MatchExpr),
     }
-
-    fn cast(node: SyntaxNode) -> Option<Self> {
-        match node.kind() {
-            SyntaxKind::LiteralExpr => Some(Expr::Literal(LiteralExpr(node))),
-            SyntaxKind::PathExpr => Some(Expr::Path(PathExpr(node))),
-            SyntaxKind::ParenExpr => Some(Expr::Paren(ParenExpr(node))),
-            SyntaxKind::TupleExpr => Some(Expr::Tuple(TupleExpr(node))),
-            SyntaxKind::ArrayExpr => Some(Expr::Array(ArrayExpr(node))),
-            SyntaxKind::StructExpr => Some(Expr::Struct(StructExpr(node))),
-            SyntaxKind::ApplyExpr => Some(Expr::Apply(ApplyExpr(node))),
-            SyntaxKind::BinExpr => Some(Expr::Binary(BinExpr(node))),
-            SyntaxKind::PrefixExpr => Some(Expr::Prefix(PrefixExpr(node))),
-            SyntaxKind::RefExpr => Some(Expr::Ref(RefExpr(node))),
-            SyntaxKind::FieldExpr => Some(Expr::Field(FieldExpr(node))),
-            SyntaxKind::MethodCallExpr => Some(Expr::MethodCall(MethodCallExpr(node))),
-            SyntaxKind::CallExpr => Some(Expr::Call(CallExpr(node))),
-            SyntaxKind::IndexExpr => Some(Expr::Index(IndexExpr(node))),
-            SyntaxKind::SliceExpr => Some(Expr::Slice(SliceExpr(node))),
-            SyntaxKind::IfExpr => Some(Expr::If(IfExpr(node))),
-            SyntaxKind::WhileExpr => Some(Expr::While(WhileExpr(node))),
-            SyntaxKind::ForExpr => Some(Expr::For(ForExpr(node))),
-            SyntaxKind::LoopExpr => Some(Expr::Loop(LoopExpr(node))),
-            SyntaxKind::BreakExpr => Some(Expr::Break(BreakExpr(node))),
-            SyntaxKind::ContinueExpr => Some(Expr::Continue(ContinueExpr(node))),
-            SyntaxKind::ReturnExpr => Some(Expr::Return(ReturnExpr(node))),
-            SyntaxKind::BlockExpr => Some(Expr::Block(BlockExpr(node))),
-            SyntaxKind::CastExpr => Some(Expr::Cast(CastExpr(node))),
-            SyntaxKind::RangeExpr => Some(Expr::Range(RangeExpr(node))),
-            SyntaxKind::IsExpr => Some(Expr::Is(IsExpr(node))),
-            SyntaxKind::MatchExpr => Some(Expr::Match(MatchExpr(node))),
-            _ => None,
-        }
-    }
-
-    fn syntax(&self) -> &SyntaxNode {
-        match self {
-            Expr::Literal(it) => it.syntax(),
-            Expr::Path(it) => it.syntax(),
-            Expr::Paren(it) => it.syntax(),
-            Expr::Tuple(it) => it.syntax(),
-            Expr::Array(it) => it.syntax(),
-            Expr::Struct(it) => it.syntax(),
-            Expr::Apply(it) => it.syntax(),
-            Expr::Binary(it) => it.syntax(),
-            Expr::Prefix(it) => it.syntax(),
-            Expr::Ref(it) => it.syntax(),
-            Expr::Field(it) => it.syntax(),
-            Expr::MethodCall(it) => it.syntax(),
-            Expr::Call(it) => it.syntax(),
-            Expr::Index(it) => it.syntax(),
-            Expr::Slice(it) => it.syntax(),
-            Expr::If(it) => it.syntax(),
-            Expr::While(it) => it.syntax(),
-            Expr::For(it) => it.syntax(),
-            Expr::Loop(it) => it.syntax(),
-            Expr::Break(it) => it.syntax(),
-            Expr::Continue(it) => it.syntax(),
-            Expr::Return(it) => it.syntax(),
-            Expr::Block(it) => it.syntax(),
-            Expr::Cast(it) => it.syntax(),
-            Expr::Range(it) => it.syntax(),
-            Expr::Is(it) => it.syntax(),
-            Expr::Match(it) => it.syntax(),
-        }
-    }
-}
+);
 
 // === Typed accessors ===
 
