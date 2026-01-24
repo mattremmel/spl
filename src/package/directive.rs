@@ -187,8 +187,17 @@ fn get_single_string_arg(attr: &InnerAttribute, directive: &str) -> Result<Strin
     })?;
 
     let text = value.text();
-    // Strip quotes from string literal
-    Ok(unquote_string(text))
+    let unquoted = unquote_string(text);
+
+    // Validate non-empty
+    if unquoted.is_empty() {
+        return Err(DirectiveError::MalformedDirective {
+            directive: directive.to_string(),
+            reason: "empty string not allowed".to_string(),
+        });
+    }
+
+    Ok(unquoted)
 }
 
 /// Extract conditional arguments from `#![include_if(condition, "file")]`.
@@ -225,7 +234,17 @@ fn get_conditional_args(
         reason: "expected file string".to_string(),
     })?;
 
-    Ok((condition, unquote_string(file_value.text())))
+    let file = unquote_string(file_value.text());
+
+    // Validate non-empty
+    if file.is_empty() {
+        return Err(DirectiveError::MalformedDirective {
+            directive: directive.to_string(),
+            reason: "empty string not allowed".to_string(),
+        });
+    }
+
+    Ok((condition, file))
 }
 
 /// Remove surrounding quotes from a string literal.
@@ -458,5 +477,97 @@ mod tests {
         assert_eq!(directives.package_includes, vec!["utils"]);
         assert_eq!(directives.package_excludes, vec!["benchmarks"]);
         assert!(directives.no_auto_include_packages);
+    }
+
+    // --- Empty string validation tests ---
+
+    #[test]
+    fn parse_include_empty_string_errors() {
+        let source = r#"#![include("")]"#;
+        let result = parse_package_directives(source);
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            DirectiveError::MalformedDirective { directive, reason } => {
+                assert_eq!(directive, "include");
+                assert!(reason.contains("empty"));
+            }
+            e => panic!("expected MalformedDirective, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn parse_exclude_empty_string_errors() {
+        let source = r#"#![exclude("")]"#;
+        let result = parse_package_directives(source);
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            DirectiveError::MalformedDirective { directive, reason } => {
+                assert_eq!(directive, "exclude");
+                assert!(reason.contains("empty"));
+            }
+            e => panic!("expected MalformedDirective, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn parse_name_empty_string_errors() {
+        let source = r#"#![name("")]"#;
+        let result = parse_package_directives(source);
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            DirectiveError::MalformedDirective { directive, reason } => {
+                assert_eq!(directive, "name");
+                assert!(reason.contains("empty"));
+            }
+            e => panic!("expected MalformedDirective, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn parse_include_package_empty_string_errors() {
+        let source = r#"#![include_package("")]"#;
+        let result = parse_package_directives(source);
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            DirectiveError::MalformedDirective { directive, reason } => {
+                assert_eq!(directive, "include_package");
+                assert!(reason.contains("empty"));
+            }
+            e => panic!("expected MalformedDirective, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn parse_exclude_package_empty_string_errors() {
+        let source = r#"#![exclude_package("")]"#;
+        let result = parse_package_directives(source);
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            DirectiveError::MalformedDirective { directive, reason } => {
+                assert_eq!(directive, "exclude_package");
+                assert!(reason.contains("empty"));
+            }
+            e => panic!("expected MalformedDirective, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn parse_include_if_empty_file_errors() {
+        let source = r#"#![include_if(debug, "")]"#;
+        let result = parse_package_directives(source);
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            DirectiveError::MalformedDirective { directive, reason } => {
+                assert_eq!(directive, "include_if");
+                assert!(reason.contains("empty"));
+            }
+            e => panic!("expected MalformedDirective, got {:?}", e),
+        }
     }
 }

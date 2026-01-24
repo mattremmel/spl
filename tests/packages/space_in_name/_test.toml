@@ -1,0 +1,2 @@
+mode = "load-pass"
+expect_files = 2

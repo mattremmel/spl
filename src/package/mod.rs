@@ -50,9 +50,11 @@ pub enum PackageError {
     /// Error parsing _package.spl directives.
     DirectiveError(DirectiveError),
     /// Parse errors in source files.
+    ///
+    /// Contains a list of (file_path, errors) for each file with parse errors.
+    /// All files with errors are included, not just the first one.
     ParseErrors {
-        file: PathBuf,
-        errors: Vec<ParseError>,
+        errors: Vec<(PathBuf, Vec<ParseError>)>,
     },
     /// Error resolving file inclusions.
     ResolveError(ResolveError),
@@ -69,12 +71,13 @@ impl fmt::Display for PackageError {
                 write!(f, "no source files found in: {}", p.display())
             }
             PackageError::DirectiveError(e) => write!(f, "directive error: {}", e),
-            PackageError::ParseErrors { file, errors } => {
+            PackageError::ParseErrors { errors } => {
+                let total_errors: usize = errors.iter().map(|(_, errs)| errs.len()).sum();
+                let file_count = errors.len();
                 write!(
                     f,
-                    "parse errors in {}: {}",
-                    file.display(),
-                    errors.len()
+                    "parse errors in {} file(s): {} total error(s)",
+                    file_count, total_errors
                 )
             }
             PackageError::ResolveError(e) => write!(f, "resolve error: {}", e),
@@ -119,6 +122,31 @@ impl From<ScanError> for PackageError {
     }
 }
 
+/// Warnings that can occur when loading a package.
+///
+/// Warnings indicate non-fatal issues that did not prevent package loading
+/// but may require attention.
+#[derive(Debug, Clone)]
+pub enum PackageWarning {
+    /// A subpackage failed to load.
+    SubpackageLoadFailed {
+        /// Name of the failed subpackage.
+        name: String,
+        /// Error message describing the failure.
+        error: String,
+    },
+}
+
+impl fmt::Display for PackageWarning {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PackageWarning::SubpackageLoadFailed { name, error } => {
+                write!(f, "failed to load subpackage '{}': {}", name, error)
+            }
+        }
+    }
+}
+
 /// A loaded SPL package.
 ///
 /// A package represents a directory of SPL source files that have been parsed
@@ -132,6 +160,8 @@ pub struct Package {
     compilation_unit: CompilationUnit,
     /// Subpackages (subdirectories with .spl files).
     subpackages: Vec<Package>,
+    /// Warnings encountered during loading.
+    warnings: Vec<PackageWarning>,
 }
 
 impl Package {
@@ -218,27 +248,36 @@ impl Package {
         // Create compilation unit
         let compilation_unit = CompilationUnit::parse(source_map, &file_ids);
 
-        // Check for parse errors
+        // Check for parse errors - collect from all files
         if compilation_unit.has_errors() {
-            // Report first file with errors
-            if let Some((file_id, _)) = compilation_unit.errors().next() {
-                let file_path = compilation_unit
-                    .source_map()
-                    .get_path(file_id)
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| root.join("unknown"));
+            // Group errors by file
+            let mut errors_by_file: std::collections::HashMap<FileId, Vec<ParseError>> =
+                std::collections::HashMap::new();
 
-                let errors: Vec<_> = compilation_unit
-                    .errors()
-                    .filter(|(id, _)| *id == file_id)
-                    .map(|(_, e)| e.clone())
-                    .collect();
-
-                return Err(PackageError::ParseErrors {
-                    file: file_path,
-                    errors,
-                });
+            for (file_id, error) in compilation_unit.errors() {
+                errors_by_file
+                    .entry(file_id)
+                    .or_default()
+                    .push(error.clone());
             }
+
+            // Convert to Vec<(PathBuf, Vec<ParseError>)> with sorted file paths for determinism
+            let mut all_errors: Vec<(PathBuf, Vec<ParseError>)> = errors_by_file
+                .into_iter()
+                .map(|(file_id, errs)| {
+                    let path = compilation_unit
+                        .source_map()
+                        .get_path(file_id)
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| root.join("unknown"));
+                    (path, errs)
+                })
+                .collect();
+
+            // Sort by file path for deterministic output
+            all_errors.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+            return Err(PackageError::ParseErrors { errors: all_errors });
         }
 
         // Find and load subpackages
@@ -261,11 +300,19 @@ impl Package {
         let included_packages = try_resolve_packages(&available_packages, &directives, conditions)?;
 
         let mut subpackages = Vec::new();
+        let mut warnings = Vec::new();
+
         for pkg_name in &included_packages {
             let subdir = root.join(pkg_name);
             // Attempt to load, but don't fail the parent if subpackage fails
-            if let Ok(subpkg) = Self::load_with_conditions(&subdir, conditions) {
-                subpackages.push(subpkg);
+            match Self::load_with_conditions(&subdir, conditions) {
+                Ok(subpkg) => subpackages.push(subpkg),
+                Err(e) => {
+                    warnings.push(PackageWarning::SubpackageLoadFailed {
+                        name: pkg_name.clone(),
+                        error: e.to_string(),
+                    });
+                }
             }
         }
 
@@ -274,6 +321,7 @@ impl Package {
             root,
             compilation_unit,
             subpackages,
+            warnings,
         })
     }
 
@@ -305,6 +353,18 @@ impl Package {
     /// Returns the number of source files in this package.
     pub fn file_count(&self) -> usize {
         self.compilation_unit.file_count()
+    }
+
+    /// Returns warnings encountered during loading.
+    ///
+    /// Warnings indicate non-fatal issues such as subpackages that failed to load.
+    pub fn warnings(&self) -> &[PackageWarning] {
+        &self.warnings
+    }
+
+    /// Returns true if there are any warnings.
+    pub fn has_warnings(&self) -> bool {
+        !self.warnings.is_empty()
     }
 }
 
@@ -395,5 +455,92 @@ mod tests {
 
         let err = PackageError::NoSourceFiles(PathBuf::from("/empty"));
         assert!(err.to_string().contains("/empty"));
+
+        // Test ParseErrors display with multiple files
+        let err = PackageError::ParseErrors {
+            errors: vec![
+                (PathBuf::from("file1.spl"), vec![]),
+                (
+                    PathBuf::from("file2.spl"),
+                    vec![crate::parser::ParseError {
+                        message: "test error".to_string(),
+                        range: 0..1,
+                    }],
+                ),
+            ],
+        };
+        let display = err.to_string();
+        assert!(display.contains("2 file(s)"));
+        assert!(display.contains("1 total error"));
+    }
+
+    #[test]
+    fn subpackage_respects_own_config() {
+        let path = test_packages_path("subpackage_with_config");
+        let pkg = Package::load(&path).unwrap();
+
+        let child = pkg.subpackages().next().expect("expected a subpackage");
+        // Child has its own _package.spl with #![name("custom_child")]
+        assert_eq!(child.name(), "custom_child");
+    }
+
+    #[test]
+    fn deep_subpackage_nesting() {
+        let path = test_packages_path("deep_nesting");
+        let pkg = Package::load(&path).unwrap();
+
+        let l1 = pkg
+            .subpackages()
+            .next()
+            .expect("expected level1 subpackage");
+        assert_eq!(l1.name(), "level1");
+
+        let l2 = l1
+            .subpackages()
+            .next()
+            .expect("expected level2 subpackage");
+        assert_eq!(l2.name(), "level2");
+
+        let l3 = l2
+            .subpackages()
+            .next()
+            .expect("expected level3 subpackage");
+        assert_eq!(l3.name(), "level3");
+    }
+
+    #[test]
+    fn subpackage_load_failure_produces_warning() {
+        let path = test_packages_path("subpackage_error");
+        let pkg = Package::load(&path).unwrap();
+
+        // Parent should load successfully
+        assert_eq!(pkg.name(), "subpackage_error");
+        assert_eq!(pkg.file_count(), 1);
+
+        // No subpackages loaded (broken_child failed)
+        assert_eq!(pkg.subpackages().count(), 0);
+
+        // But we should have a warning about the failure
+        assert!(pkg.has_warnings());
+        assert_eq!(pkg.warnings().len(), 1);
+
+        match &pkg.warnings()[0] {
+            PackageWarning::SubpackageLoadFailed { name, error } => {
+                assert_eq!(name, "broken_child");
+                // Error is from missing include file
+                assert!(error.contains("not found"));
+            }
+        }
+    }
+
+    #[test]
+    fn package_warning_display() {
+        let warning = PackageWarning::SubpackageLoadFailed {
+            name: "child".to_string(),
+            error: "parse error".to_string(),
+        };
+        let display = warning.to_string();
+        assert!(display.contains("child"));
+        assert!(display.contains("parse error"));
     }
 }

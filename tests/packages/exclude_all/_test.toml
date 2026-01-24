@@ -1,0 +1,2 @@
+mode = "load-fail"
+expect_error = "nosourcefiles"

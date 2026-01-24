@@ -30,6 +30,41 @@ impl fmt::Display for ResolveError {
 
 impl std::error::Error for ResolveError {}
 
+/// Validates that all explicit includes exist in the available set.
+fn validate_explicit_includes<E>(
+    includes: &[String],
+    available_set: &HashSet<&str>,
+    make_error: E,
+) -> Result<(), ResolveError>
+where
+    E: Fn(&String) -> ResolveError,
+{
+    for inc in includes {
+        if !available_set.contains(inc.as_str()) {
+            return Err(make_error(inc));
+        }
+    }
+    Ok(())
+}
+
+/// Validates that all conditional includes exist when their condition is enabled.
+fn validate_conditional_includes<E>(
+    conditional_includes: &[(String, String)],
+    available_set: &HashSet<&str>,
+    enabled_set: &HashSet<&str>,
+    make_error: E,
+) -> Result<(), ResolveError>
+where
+    E: Fn(&String) -> ResolveError,
+{
+    for (condition, item) in conditional_includes {
+        if enabled_set.contains(condition.as_str()) && !available_set.contains(item.as_str()) {
+            return Err(make_error(item));
+        }
+    }
+    Ok(())
+}
+
 /// Resolve which files to include based on directives.
 ///
 /// This is a non-failing version that ignores missing files.
@@ -117,19 +152,16 @@ pub fn try_resolve_includes<S1: AsRef<str>, S2: AsRef<str>>(
     let available_set: HashSet<&str> = available.iter().map(|s| s.as_ref()).collect();
     let enabled_set: HashSet<&str> = enabled_conditions.iter().map(|s| s.as_ref()).collect();
 
-    // Validate explicit includes exist
-    for inc in &directives.includes {
-        if !available_set.contains(inc.as_str()) {
-            return Err(ResolveError::FileNotFound(inc.clone()));
-        }
-    }
+    validate_explicit_includes(&directives.includes, &available_set, |f| {
+        ResolveError::FileNotFound(f.clone())
+    })?;
 
-    // Validate conditional includes exist (when condition is enabled)
-    for (condition, file) in &directives.conditional_includes {
-        if enabled_set.contains(condition.as_str()) && !available_set.contains(file.as_str()) {
-            return Err(ResolveError::FileNotFound(file.clone()));
-        }
-    }
+    validate_conditional_includes(
+        &directives.conditional_includes,
+        &available_set,
+        &enabled_set,
+        |f| ResolveError::FileNotFound(f.clone()),
+    )?;
 
     Ok(resolve_includes(available, directives, enabled_conditions))
 }
@@ -217,19 +249,16 @@ pub fn try_resolve_packages<S1: AsRef<str>, S2: AsRef<str>>(
     let available_set: HashSet<&str> = available.iter().map(|s| s.as_ref()).collect();
     let enabled_set: HashSet<&str> = enabled_conditions.iter().map(|s| s.as_ref()).collect();
 
-    // Validate explicit package includes exist
-    for inc in &directives.package_includes {
-        if !available_set.contains(inc.as_str()) {
-            return Err(ResolveError::PackageNotFound(inc.clone()));
-        }
-    }
+    validate_explicit_includes(&directives.package_includes, &available_set, |p| {
+        ResolveError::PackageNotFound(p.clone())
+    })?;
 
-    // Validate conditional package includes exist (when condition is enabled)
-    for (condition, pkg) in &directives.conditional_package_includes {
-        if enabled_set.contains(condition.as_str()) && !available_set.contains(pkg.as_str()) {
-            return Err(ResolveError::PackageNotFound(pkg.clone()));
-        }
-    }
+    validate_conditional_includes(
+        &directives.conditional_package_includes,
+        &available_set,
+        &enabled_set,
+        |p| ResolveError::PackageNotFound(p.clone()),
+    )?;
 
     Ok(resolve_packages(available, directives, enabled_conditions))
 }
@@ -564,5 +593,93 @@ mod tests {
         let result = resolve_packages(&available, &directives, &[] as &[&str]);
 
         assert_eq!(result, vec!["alpha", "middle", "zebra"]);
+    }
+
+    // --- Conflict resolution tests (exclude wins over include) ---
+
+    #[test]
+    fn include_and_exclude_same_file_exclude_wins() {
+        let available = vec!["main.spl", "conflict.spl"];
+        let directives = PackageDirectives {
+            includes: vec!["conflict.spl".to_string()],
+            excludes: vec!["conflict.spl".to_string()],
+            ..Default::default()
+        };
+
+        let result = resolve_includes(&available, &directives, &[] as &[&str]);
+
+        // Exclude should win - conflict.spl NOT included
+        assert!(!result.contains(&"conflict.spl".to_string()));
+        assert!(result.contains(&"main.spl".to_string()));
+    }
+
+    #[test]
+    fn include_and_exclude_same_package_exclude_wins() {
+        let available = vec!["core", "conflict"];
+        let directives = PackageDirectives {
+            package_includes: vec!["conflict".to_string()],
+            package_excludes: vec!["conflict".to_string()],
+            ..Default::default()
+        };
+
+        let result = resolve_packages(&available, &directives, &[] as &[&str]);
+
+        // Exclude should win - conflict NOT included
+        assert!(!result.contains(&"conflict".to_string()));
+        assert!(result.contains(&"core".to_string()));
+    }
+
+    #[test]
+    fn conditional_include_and_exclude_same_file_exclude_wins() {
+        let available = vec!["main.spl", "conflict.spl"];
+        let directives = PackageDirectives {
+            conditional_includes: vec![("test".to_string(), "conflict.spl".to_string())],
+            conditional_excludes: vec![("test".to_string(), "conflict.spl".to_string())],
+            no_auto_include: true,
+            includes: vec!["main.spl".to_string()],
+            ..Default::default()
+        };
+
+        // Both conditions enabled - exclude should win
+        let result = resolve_includes(&available, &directives, &["test"]);
+
+        assert!(!result.contains(&"conflict.spl".to_string()));
+        assert!(result.contains(&"main.spl".to_string()));
+    }
+
+    #[test]
+    fn multiple_conditions_interact_correctly() {
+        let available = vec!["main.spl", "debug.spl", "test.spl", "prod.spl"];
+        let directives = PackageDirectives {
+            conditional_includes: vec![
+                ("debug".to_string(), "debug.spl".to_string()),
+                ("test".to_string(), "test.spl".to_string()),
+            ],
+            conditional_excludes: vec![("prod".to_string(), "test.spl".to_string())],
+            no_auto_include: true,
+            includes: vec!["main.spl".to_string()],
+            ..Default::default()
+        };
+
+        // debug + test + prod all enabled
+        let result = resolve_includes(&available, &directives, &["debug", "test", "prod"]);
+
+        assert!(result.contains(&"main.spl".to_string()));
+        assert!(result.contains(&"debug.spl".to_string()));
+        // test.spl included by test condition, but excluded by prod condition - exclude wins
+        assert!(!result.contains(&"test.spl".to_string()));
+    }
+
+    #[test]
+    fn exclude_all_files_returns_empty() {
+        let available = vec!["main.spl", "lib.spl"];
+        let directives = PackageDirectives {
+            excludes: vec!["main.spl".to_string(), "lib.spl".to_string()],
+            ..Default::default()
+        };
+
+        let result = resolve_includes(&available, &directives, &[] as &[&str]);
+
+        assert!(result.is_empty());
     }
 }

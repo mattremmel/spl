@@ -150,4 +150,25 @@ mod tests {
         let map = SourceMap::default();
         assert!(map.is_empty());
     }
+
+    #[test]
+    fn source_map_out_of_bounds_returns_none() {
+        let mut map = SourceMap::new();
+        map.add_file("only.spl", "fn only() {}".to_string());
+
+        // Valid ID works
+        let valid_id = FileId(0);
+        assert!(map.get_content(valid_id).is_some());
+        assert!(map.get_path(valid_id).is_some());
+
+        // ID just past the end returns None
+        let just_past = FileId(1);
+        assert!(map.get_content(just_past).is_none());
+        assert!(map.get_path(just_past).is_none());
+
+        // Large out-of-bounds ID returns None
+        let large_id = FileId(u32::MAX);
+        assert!(map.get_content(large_id).is_none());
+        assert!(map.get_path(large_id).is_none());
+    }
 }
