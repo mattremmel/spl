@@ -75,6 +75,7 @@ pub use event::ParseError;
 
 /// Tokens that can start a new top-level item.
 const ITEM_RECOVERY_SET: &[SyntaxKind] = &[
+    SyntaxKind::HASH, // Attributes
     SyntaxKind::FN_KW,
     SyntaxKind::STRUCT_KW,
     SyntaxKind::TYPE_KW,
@@ -329,6 +330,10 @@ impl<'src> Parser<'src> {
     ///
     /// This function is bounded to prevent infinite loops on malformed input.
     /// At most MAX_RECOVERY_TOKENS tokens will be skipped.
+    ///
+    /// IMPORTANT: Always consumes at least one token to ensure progress.
+    /// This prevents infinite loops when we're already at a recovery token
+    /// but the item parse still failed.
     fn recover_with_error(
         &mut self,
         error: ParseError,
@@ -337,8 +342,15 @@ impl<'src> Parser<'src> {
         let m = self.start();
         self.error(error);
 
+        // Always consume at least one token to ensure progress
+        // This handles the case where we're at a recovery token (like #)
+        // but the parse still failed (e.g., malformed attribute #test)
+        if self.current().is_some() {
+            self.bump();
+        }
+
         // Skip tokens until we hit a recovery point, EOF, or token limit
-        let mut consumed = 0;
+        let mut consumed = 1;
         while !self.at_set(recovery_set)
             && self.current().is_some()
             && consumed < MAX_RECOVERY_TOKENS

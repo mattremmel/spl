@@ -68,6 +68,7 @@ pub enum SyntaxKind {
     DOT,
     AMP,
     DOLLAR,
+    HASH,
 
     // Delimiters
     L_PAREN,
@@ -184,6 +185,13 @@ pub enum SyntaxKind {
     PathSegment,
     Visibility,
 
+    // Attributes
+    Attribute,
+    InnerAttribute,
+    AttrPath,
+    AttrInput,
+    AttrArg,
+
     #[doc(hidden)]
     __LAST,
 }
@@ -259,6 +267,7 @@ impl From<Token> for SyntaxKind {
             Token::Dot => Self::DOT,
             Token::Amp => Self::AMP,
             Token::Dollar => Self::DOLLAR,
+            Token::Hash => Self::HASH,
             Token::LParen => Self::L_PAREN,
             Token::RParen => Self::R_PAREN,
             Token::LBrace => Self::L_BRACE,

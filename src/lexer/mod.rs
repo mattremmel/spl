@@ -153,6 +153,8 @@ pub enum Token {
     Amp,
     #[token("$")]
     Dollar,
+    #[token("#")]
+    Hash,
 
     // === Delimiters ===
     #[token("(")]

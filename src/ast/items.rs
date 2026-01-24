@@ -27,9 +27,21 @@ ast_node!(WhereClause);
 ast_node!(TypeBound);
 ast_node!(LabelSpec);
 
+// === Attribute nodes ===
+ast_node!(Attribute);
+ast_node!(InnerAttribute);
+ast_node!(AttrPath);
+ast_node!(AttrInput);
+ast_node!(AttrArg);
+
 // === Typed accessors ===
 
 impl SourceFile {
+    /// Get inner attributes at the start of the file.
+    pub fn inner_attributes(&self) -> impl Iterator<Item = InnerAttribute> {
+        children(&self.0)
+    }
+
     pub fn items(&self) -> impl Iterator<Item = Item> {
         children(&self.0)
     }
@@ -48,6 +60,11 @@ ast_enum!(
 );
 
 impl FunctionDef {
+    /// Get outer attributes on this function.
+    pub fn attributes(&self) -> impl Iterator<Item = Attribute> {
+        children(&self.0)
+    }
+
     pub fn visibility(&self) -> Option<Visibility> {
         child(&self.0)
     }
@@ -78,6 +95,11 @@ impl FunctionDef {
 }
 
 impl StructDef {
+    /// Get outer attributes on this struct.
+    pub fn attributes(&self) -> impl Iterator<Item = Attribute> {
+        children(&self.0)
+    }
+
     pub fn visibility(&self) -> Option<Visibility> {
         child(&self.0)
     }
@@ -96,6 +118,11 @@ impl StructDef {
 }
 
 impl ImplBlock {
+    /// Get outer attributes on this impl block.
+    pub fn attributes(&self) -> impl Iterator<Item = Attribute> {
+        children(&self.0)
+    }
+
     pub fn self_ty(&self) -> Option<Type> {
         child(&self.0)
     }
@@ -110,6 +137,11 @@ impl ImplBlock {
 }
 
 impl TypeAlias {
+    /// Get outer attributes on this type alias.
+    pub fn attributes(&self) -> impl Iterator<Item = Attribute> {
+        children(&self.0)
+    }
+
     pub fn visibility(&self) -> Option<Visibility> {
         child(&self.0)
     }
@@ -144,6 +176,11 @@ impl ExternBlock {
 }
 
 impl ExternFn {
+    /// Get outer attributes on this extern function.
+    pub fn attributes(&self) -> impl Iterator<Item = Attribute> {
+        children(&self.0)
+    }
+
     pub fn visibility(&self) -> Option<Visibility> {
         child(&self.0)
     }
@@ -166,6 +203,11 @@ impl ExternFn {
 }
 
 impl UseDecl {
+    /// Get outer attributes on this use declaration.
+    pub fn attributes(&self) -> impl Iterator<Item = Attribute> {
+        children(&self.0)
+    }
+
     pub fn visibility(&self) -> Option<Visibility> {
         child(&self.0)
     }
@@ -406,6 +448,110 @@ impl WhereClause {
 impl TypeBound {
     /// Get the path of the trait bound.
     pub fn path(&self) -> Option<Path> {
+        child(&self.0)
+    }
+}
+
+// === Attribute implementations ===
+
+impl Attribute {
+    /// Get the attribute path (e.g., `test` in `#[test]`, `foo.bar` in `#[foo.bar]`).
+    pub fn path(&self) -> Option<AttrPath> {
+        child(&self.0)
+    }
+
+    /// Get the attribute input (parenthesized args or `= value`).
+    pub fn input(&self) -> Option<AttrInput> {
+        child(&self.0)
+    }
+}
+
+impl InnerAttribute {
+    /// Get the attribute path.
+    pub fn path(&self) -> Option<AttrPath> {
+        child(&self.0)
+    }
+
+    /// Get the attribute input.
+    pub fn input(&self) -> Option<AttrInput> {
+        child(&self.0)
+    }
+}
+
+impl AttrPath {
+    /// Get all path segments as tokens.
+    pub fn segments(&self) -> impl Iterator<Item = SyntaxToken> {
+        self.0
+            .children_with_tokens()
+            .filter_map(|c| c.into_token())
+            .filter(|t| t.kind() == SyntaxKind::IDENT)
+    }
+
+    /// Get the path as a dotted string (e.g., "foo.bar.baz").
+    pub fn path_string(&self) -> String {
+        self.segments()
+            .map(|t| t.text().to_string())
+            .collect::<Vec<_>>()
+            .join(".")
+    }
+}
+
+impl AttrInput {
+    /// Get attribute arguments (for parenthesized input).
+    pub fn args(&self) -> impl Iterator<Item = AttrArg> {
+        children(&self.0)
+    }
+
+    /// Get the literal value (for `= value` input).
+    pub fn literal(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::STRING_LITERAL)
+            .or_else(|| token(&self.0, SyntaxKind::INT_LITERAL))
+            .or_else(|| token(&self.0, SyntaxKind::TRUE_KW))
+            .or_else(|| token(&self.0, SyntaxKind::FALSE_KW))
+    }
+}
+
+impl AttrArg {
+    /// Get the key identifier (for `key = value` args).
+    pub fn key(&self) -> Option<SyntaxToken> {
+        // First IDENT token followed by EQ
+        let mut iter = self.0.children_with_tokens();
+        loop {
+            match iter.next()? {
+                rowan::NodeOrToken::Token(t) if t.kind() == SyntaxKind::IDENT => {
+                    // Check if next non-trivia is EQ
+                    for next in iter {
+                        match next {
+                            rowan::NodeOrToken::Token(t2) if t2.kind().is_trivia() => continue,
+                            rowan::NodeOrToken::Token(t2) if t2.kind() == SyntaxKind::EQ => {
+                                return Some(t);
+                            }
+                            _ => return None,
+                        }
+                    }
+                    return None;
+                }
+                rowan::NodeOrToken::Token(t) if t.kind().is_trivia() => continue,
+                _ => return None,
+            }
+        }
+    }
+
+    /// Get the value (literal token or nested content).
+    pub fn value(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::STRING_LITERAL)
+            .or_else(|| token(&self.0, SyntaxKind::INT_LITERAL))
+            .or_else(|| token(&self.0, SyntaxKind::TRUE_KW))
+            .or_else(|| token(&self.0, SyntaxKind::FALSE_KW))
+    }
+
+    /// Get nested attribute path (for `name(args)` pattern).
+    pub fn nested_path(&self) -> Option<AttrPath> {
+        child(&self.0)
+    }
+
+    /// Get nested attribute input (for `name(args)` pattern).
+    pub fn nested_input(&self) -> Option<AttrInput> {
         child(&self.0)
     }
 }

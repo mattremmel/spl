@@ -2603,3 +2603,626 @@ fn use_group_trailing_comma() {
         "#]],
     );
 }
+
+// === Attribute Tests ===
+
+#[test]
+fn attribute_simple() {
+    check_item(
+        "#[test]\nfn foo() {}",
+        &expect![[r##"
+            FunctionDef@0..19
+              Attribute@0..7
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..6
+                  IDENT@2..6 "test"
+                R_BRACKET@6..7 "]"
+              WHITESPACE@7..8 "\n"
+              FN_KW@8..10 "fn"
+              Name@10..14
+                WHITESPACE@10..11 " "
+                IDENT@11..14 "foo"
+              ParamList@14..16
+                L_PAREN@14..15 "("
+                R_PAREN@15..16 ")"
+              Block@16..19
+                WHITESPACE@16..17 " "
+                L_BRACE@17..18 "{"
+                R_BRACE@18..19 "}"
+        "##]],
+    );
+}
+
+#[test]
+fn attribute_dotted_path() {
+    check_item(
+        "#[foo.bar.baz]\nfn foo() {}",
+        &expect![[r##"
+            FunctionDef@0..26
+              Attribute@0..14
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..13
+                  IDENT@2..5 "foo"
+                  DOT@5..6 "."
+                  IDENT@6..9 "bar"
+                  DOT@9..10 "."
+                  IDENT@10..13 "baz"
+                R_BRACKET@13..14 "]"
+              WHITESPACE@14..15 "\n"
+              FN_KW@15..17 "fn"
+              Name@17..21
+                WHITESPACE@17..18 " "
+                IDENT@18..21 "foo"
+              ParamList@21..23
+                L_PAREN@21..22 "("
+                R_PAREN@22..23 ")"
+              Block@23..26
+                WHITESPACE@23..24 " "
+                L_BRACE@24..25 "{"
+                R_BRACE@25..26 "}"
+        "##]],
+    );
+}
+
+#[test]
+fn multiple_attributes() {
+    check_item(
+        "#[test]\n#[ignore]\nfn foo() {}",
+        &expect![[r##"
+            FunctionDef@0..29
+              Attribute@0..7
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..6
+                  IDENT@2..6 "test"
+                R_BRACKET@6..7 "]"
+              Attribute@7..17
+                WHITESPACE@7..8 "\n"
+                HASH@8..9 "#"
+                L_BRACKET@9..10 "["
+                AttrPath@10..16
+                  IDENT@10..16 "ignore"
+                R_BRACKET@16..17 "]"
+              WHITESPACE@17..18 "\n"
+              FN_KW@18..20 "fn"
+              Name@20..24
+                WHITESPACE@20..21 " "
+                IDENT@21..24 "foo"
+              ParamList@24..26
+                L_PAREN@24..25 "("
+                R_PAREN@25..26 ")"
+              Block@26..29
+                WHITESPACE@26..27 " "
+                L_BRACE@27..28 "{"
+                R_BRACE@28..29 "}"
+        "##]],
+    );
+}
+
+#[test]
+fn attribute_with_visibility() {
+    check_item(
+        "#[test]\npub fn foo() {}",
+        &expect![[r##"
+            FunctionDef@0..23
+              Attribute@0..7
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..6
+                  IDENT@2..6 "test"
+                R_BRACKET@6..7 "]"
+              Visibility@7..11
+                WHITESPACE@7..8 "\n"
+                PUB_KW@8..11 "pub"
+              WHITESPACE@11..12 " "
+              FN_KW@12..14 "fn"
+              Name@14..18
+                WHITESPACE@14..15 " "
+                IDENT@15..18 "foo"
+              ParamList@18..20
+                L_PAREN@18..19 "("
+                R_PAREN@19..20 ")"
+              Block@20..23
+                WHITESPACE@20..21 " "
+                L_BRACE@21..22 "{"
+                R_BRACE@22..23 "}"
+        "##]],
+    );
+}
+
+#[test]
+fn attribute_on_struct() {
+    check_item(
+        "#[derive(Clone)]\nstruct Point(x: i32)",
+        &expect![[r##"
+            StructDef@0..37
+              Attribute@0..16
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..8
+                  IDENT@2..8 "derive"
+                AttrInput@8..15
+                  L_PAREN@8..9 "("
+                  AttrArg@9..14
+                    AttrPath@9..14
+                      IDENT@9..14 "Clone"
+                  R_PAREN@14..15 ")"
+                R_BRACKET@15..16 "]"
+              WHITESPACE@16..17 "\n"
+              STRUCT_KW@17..23 "struct"
+              Name@23..29
+                WHITESPACE@23..24 " "
+                IDENT@24..29 "Point"
+              FieldList@29..37
+                L_PAREN@29..30 "("
+                FieldDef@30..36
+                  Name@30..31
+                    IDENT@30..31 "x"
+                  COLON@31..32 ":"
+                  PathType@32..36
+                    Path@32..36
+                      PathSegment@32..36
+                        NameRef@32..36
+                          WHITESPACE@32..33 " "
+                          IDENT@33..36 "i32"
+                R_PAREN@36..37 ")"
+        "##]],
+    );
+}
+
+#[test]
+fn attribute_with_key_value_arg() {
+    check_item(
+        r#"#[cfg(os = "linux")]
+fn foo() {}"#,
+        &expect![[r##"
+            FunctionDef@0..32
+              Attribute@0..20
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..5
+                  IDENT@2..5 "cfg"
+                AttrInput@5..19
+                  L_PAREN@5..6 "("
+                  AttrArg@6..18
+                    IDENT@6..8 "os"
+                    WHITESPACE@8..9 " "
+                    EQ@9..10 "="
+                    WHITESPACE@10..11 " "
+                    STRING_LITERAL@11..18 "\"linux\""
+                  R_PAREN@18..19 ")"
+                R_BRACKET@19..20 "]"
+              WHITESPACE@20..21 "\n"
+              FN_KW@21..23 "fn"
+              Name@23..27
+                WHITESPACE@23..24 " "
+                IDENT@24..27 "foo"
+              ParamList@27..29
+                L_PAREN@27..28 "("
+                R_PAREN@28..29 ")"
+              Block@29..32
+                WHITESPACE@29..30 " "
+                L_BRACE@30..31 "{"
+                R_BRACE@31..32 "}"
+        "##]],
+    );
+}
+
+#[test]
+fn attribute_with_multiple_args() {
+    check_item(
+        r#"#[cfg(os = "linux", arch = "x86")]
+fn foo() {}"#,
+        &expect![[r##"
+            FunctionDef@0..46
+              Attribute@0..34
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..5
+                  IDENT@2..5 "cfg"
+                AttrInput@5..33
+                  L_PAREN@5..6 "("
+                  AttrArg@6..18
+                    IDENT@6..8 "os"
+                    WHITESPACE@8..9 " "
+                    EQ@9..10 "="
+                    WHITESPACE@10..11 " "
+                    STRING_LITERAL@11..18 "\"linux\""
+                  COMMA@18..19 ","
+                  AttrArg@19..32
+                    WHITESPACE@19..20 " "
+                    IDENT@20..24 "arch"
+                    WHITESPACE@24..25 " "
+                    EQ@25..26 "="
+                    WHITESPACE@26..27 " "
+                    STRING_LITERAL@27..32 "\"x86\""
+                  R_PAREN@32..33 ")"
+                R_BRACKET@33..34 "]"
+              WHITESPACE@34..35 "\n"
+              FN_KW@35..37 "fn"
+              Name@37..41
+                WHITESPACE@37..38 " "
+                IDENT@38..41 "foo"
+              ParamList@41..43
+                L_PAREN@41..42 "("
+                R_PAREN@42..43 ")"
+              Block@43..46
+                WHITESPACE@43..44 " "
+                L_BRACE@44..45 "{"
+                R_BRACE@45..46 "}"
+        "##]],
+    );
+}
+
+#[test]
+fn attribute_with_trailing_comma() {
+    check_item(
+        "#[allow(unused, deprecated,)]\nfn foo() {}",
+        &expect![[r##"
+            FunctionDef@0..41
+              Attribute@0..29
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..7
+                  IDENT@2..7 "allow"
+                AttrInput@7..28
+                  L_PAREN@7..8 "("
+                  AttrArg@8..14
+                    AttrPath@8..14
+                      IDENT@8..14 "unused"
+                  COMMA@14..15 ","
+                  AttrArg@15..26
+                    AttrPath@15..26
+                      WHITESPACE@15..16 " "
+                      IDENT@16..26 "deprecated"
+                  COMMA@26..27 ","
+                  R_PAREN@27..28 ")"
+                R_BRACKET@28..29 "]"
+              WHITESPACE@29..30 "\n"
+              FN_KW@30..32 "fn"
+              Name@32..36
+                WHITESPACE@32..33 " "
+                IDENT@33..36 "foo"
+              ParamList@36..38
+                L_PAREN@36..37 "("
+                R_PAREN@37..38 ")"
+              Block@38..41
+                WHITESPACE@38..39 " "
+                L_BRACE@39..40 "{"
+                R_BRACE@40..41 "}"
+        "##]],
+    );
+}
+
+#[test]
+fn attribute_nested() {
+    check_item(
+        r#"#[cfg(any(os = "linux", os = "macos"))]
+fn foo() {}"#,
+        &expect![[r##"
+            FunctionDef@0..51
+              Attribute@0..39
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..5
+                  IDENT@2..5 "cfg"
+                AttrInput@5..38
+                  L_PAREN@5..6 "("
+                  AttrArg@6..37
+                    AttrPath@6..9
+                      IDENT@6..9 "any"
+                    AttrInput@9..37
+                      L_PAREN@9..10 "("
+                      AttrArg@10..22
+                        IDENT@10..12 "os"
+                        WHITESPACE@12..13 " "
+                        EQ@13..14 "="
+                        WHITESPACE@14..15 " "
+                        STRING_LITERAL@15..22 "\"linux\""
+                      COMMA@22..23 ","
+                      AttrArg@23..36
+                        WHITESPACE@23..24 " "
+                        IDENT@24..26 "os"
+                        WHITESPACE@26..27 " "
+                        EQ@27..28 "="
+                        WHITESPACE@28..29 " "
+                        STRING_LITERAL@29..36 "\"macos\""
+                      R_PAREN@36..37 ")"
+                  R_PAREN@37..38 ")"
+                R_BRACKET@38..39 "]"
+              WHITESPACE@39..40 "\n"
+              FN_KW@40..42 "fn"
+              Name@42..46
+                WHITESPACE@42..43 " "
+                IDENT@43..46 "foo"
+              ParamList@46..48
+                L_PAREN@46..47 "("
+                R_PAREN@47..48 ")"
+              Block@48..51
+                WHITESPACE@48..49 " "
+                L_BRACE@49..50 "{"
+                R_BRACE@50..51 "}"
+        "##]],
+    );
+}
+
+// === Inner Attribute Tests ===
+
+use crate::parser::tests::check_source_file;
+
+#[test]
+fn inner_attribute_simple() {
+    check_source_file(
+        r#"#![feature(async)]
+fn foo() {}"#,
+        &expect![[r##"
+            SourceFile@0..30
+              InnerAttribute@0..18
+                HASH@0..1 "#"
+                BANG@1..2 "!"
+                L_BRACKET@2..3 "["
+                AttrPath@3..10
+                  IDENT@3..10 "feature"
+                AttrInput@10..17
+                  L_PAREN@10..11 "("
+                  AttrArg@11..16
+                    AttrPath@11..16
+                      IDENT@11..16 "async"
+                  R_PAREN@16..17 ")"
+                R_BRACKET@17..18 "]"
+              FunctionDef@18..30
+                WHITESPACE@18..19 "\n"
+                FN_KW@19..21 "fn"
+                Name@21..25
+                  WHITESPACE@21..22 " "
+                  IDENT@22..25 "foo"
+                ParamList@25..27
+                  L_PAREN@25..26 "("
+                  R_PAREN@26..27 ")"
+                Block@27..30
+                  WHITESPACE@27..28 " "
+                  L_BRACE@28..29 "{"
+                  R_BRACE@29..30 "}"
+        "##]],
+    );
+}
+
+#[test]
+fn multiple_inner_attributes() {
+    check_source_file(
+        r#"#![name("mylib")]
+#![allow(unused)]
+fn main() {}"#,
+        &expect![[r##"
+            SourceFile@0..48
+              InnerAttribute@0..17
+                HASH@0..1 "#"
+                BANG@1..2 "!"
+                L_BRACKET@2..3 "["
+                AttrPath@3..7
+                  IDENT@3..7 "name"
+                AttrInput@7..16
+                  L_PAREN@7..8 "("
+                  AttrArg@8..15
+                    STRING_LITERAL@8..15 "\"mylib\""
+                  R_PAREN@15..16 ")"
+                R_BRACKET@16..17 "]"
+              InnerAttribute@17..35
+                WHITESPACE@17..18 "\n"
+                HASH@18..19 "#"
+                BANG@19..20 "!"
+                L_BRACKET@20..21 "["
+                AttrPath@21..26
+                  IDENT@21..26 "allow"
+                AttrInput@26..34
+                  L_PAREN@26..27 "("
+                  AttrArg@27..33
+                    AttrPath@27..33
+                      IDENT@27..33 "unused"
+                  R_PAREN@33..34 ")"
+                R_BRACKET@34..35 "]"
+              FunctionDef@35..48
+                WHITESPACE@35..36 "\n"
+                FN_KW@36..38 "fn"
+                Name@38..43
+                  WHITESPACE@38..39 " "
+                  IDENT@39..43 "main"
+                ParamList@43..45
+                  L_PAREN@43..44 "("
+                  R_PAREN@44..45 ")"
+                Block@45..48
+                  WHITESPACE@45..46 " "
+                  L_BRACE@46..47 "{"
+                  R_BRACE@47..48 "}"
+        "##]],
+    );
+}
+
+#[test]
+fn attribute_key_value() {
+    check_item(
+        r##"#[doc = "Documentation"]
+fn foo() {}"##,
+        &expect![[r##"
+            FunctionDef@0..36
+              Attribute@0..24
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..5
+                  IDENT@2..5 "doc"
+                AttrInput@5..23
+                  WHITESPACE@5..6 " "
+                  EQ@6..7 "="
+                  WHITESPACE@7..8 " "
+                  STRING_LITERAL@8..23 "\"Documentation\""
+                R_BRACKET@23..24 "]"
+              WHITESPACE@24..25 "\n"
+              FN_KW@25..27 "fn"
+              Name@27..31
+                WHITESPACE@27..28 " "
+                IDENT@28..31 "foo"
+              ParamList@31..33
+                L_PAREN@31..32 "("
+                R_PAREN@32..33 ")"
+              Block@33..36
+                WHITESPACE@33..34 " "
+                L_BRACE@34..35 "{"
+                R_BRACE@35..36 "}"
+        "##]],
+    );
+}
+
+#[test]
+fn attribute_on_impl_block() {
+    check_item(
+        "#[cfg(test)]\nimpl Foo { fn bar() {} }",
+        &expect![[r##"
+            ImplBlock@0..37
+              Attribute@0..12
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..5
+                  IDENT@2..5 "cfg"
+                AttrInput@5..11
+                  L_PAREN@5..6 "("
+                  AttrArg@6..10
+                    AttrPath@6..10
+                      IDENT@6..10 "test"
+                  R_PAREN@10..11 ")"
+                R_BRACKET@11..12 "]"
+              WHITESPACE@12..13 "\n"
+              IMPL_KW@13..17 "impl"
+              PathType@17..21
+                Path@17..21
+                  PathSegment@17..21
+                    NameRef@17..21
+                      WHITESPACE@17..18 " "
+                      IDENT@18..21 "Foo"
+              WHITESPACE@21..22 " "
+              L_BRACE@22..23 "{"
+              FunctionDef@23..35
+                WHITESPACE@23..24 " "
+                FN_KW@24..26 "fn"
+                Name@26..30
+                  WHITESPACE@26..27 " "
+                  IDENT@27..30 "bar"
+                ParamList@30..32
+                  L_PAREN@30..31 "("
+                  R_PAREN@31..32 ")"
+                Block@32..35
+                  WHITESPACE@32..33 " "
+                  L_BRACE@33..34 "{"
+                  R_BRACE@34..35 "}"
+              WHITESPACE@35..36 " "
+              R_BRACE@36..37 "}"
+        "##]],
+    );
+}
+
+#[test]
+fn attribute_on_impl_method() {
+    check_item(
+        "impl Foo {\n  #[test]\n  fn bar() {}\n}",
+        &expect![[r##"
+            ImplBlock@0..36
+              IMPL_KW@0..4 "impl"
+              PathType@4..8
+                Path@4..8
+                  PathSegment@4..8
+                    NameRef@4..8
+                      WHITESPACE@4..5 " "
+                      IDENT@5..8 "Foo"
+              WHITESPACE@8..9 " "
+              L_BRACE@9..10 "{"
+              FunctionDef@10..34
+                Attribute@10..20
+                  WHITESPACE@10..13 "\n  "
+                  HASH@13..14 "#"
+                  L_BRACKET@14..15 "["
+                  AttrPath@15..19
+                    IDENT@15..19 "test"
+                  R_BRACKET@19..20 "]"
+                WHITESPACE@20..23 "\n  "
+                FN_KW@23..25 "fn"
+                Name@25..29
+                  WHITESPACE@25..26 " "
+                  IDENT@26..29 "bar"
+                ParamList@29..31
+                  L_PAREN@29..30 "("
+                  R_PAREN@30..31 ")"
+                Block@31..34
+                  WHITESPACE@31..32 " "
+                  L_BRACE@32..33 "{"
+                  R_BRACE@33..34 "}"
+              WHITESPACE@34..35 "\n"
+              R_BRACE@35..36 "}"
+        "##]],
+    );
+}
+
+// === Attribute Error Handling Tests ===
+
+use crate::parser::parse;
+
+#[test]
+fn attribute_error_empty() {
+    // Empty #[]
+    let result = parse("#[]\nfn foo() {}");
+    assert!(!result.ok());
+    // The function should still be parsed
+    let tree = result.debug_tree();
+    assert!(tree.contains("FunctionDef"));
+}
+
+#[test]
+fn attribute_error_unclosed_paren() {
+    // Unclosed ( in attribute args - missing )
+    let result = parse("#[cfg(debug]\nfn foo() {}");
+    assert!(!result.ok());
+    let tree = result.debug_tree();
+    // Should have the attribute and function
+    assert!(tree.contains("Attribute"));
+    assert!(tree.contains("FunctionDef"));
+}
+
+#[test]
+fn attribute_recovery_between_items() {
+    // Error between valid items with attributes
+    let result = parse("#[test]\nfn a() {} @@@ #[test]\nfn b() {}");
+    assert!(!result.ok());
+    let tree = result.debug_tree();
+    // Both functions should be parsed
+    assert_eq!(tree.matches("FunctionDef").count(), 2);
+}
+
+#[test]
+fn attribute_error_missing_bracket() {
+    // Missing [ after # - the # is consumed, then parsing continues
+    let result = parse("#test\nfn foo() {}");
+    assert!(!result.ok());
+    // Should still have some structure
+    let tree = result.debug_tree();
+    assert!(tree.contains("Attribute") || tree.contains("FN_KW"));
+}
+
+#[test]
+fn attribute_error_unclosed_bracket() {
+    // Unclosed [ - should recover and still parse the function
+    let result = parse("#[test\nfn foo() {}");
+    assert!(!result.ok());
+    let tree = result.debug_tree();
+    // Should have parsed the function after recovery
+    assert!(tree.contains("FunctionDef"));
+}
+
+#[test]
+fn attribute_error_nested_unclosed() {
+    // Nested attribute with unclosed paren
+    let result = parse("#[cfg(any(a, b)]\nfn foo() {}");
+    assert!(!result.ok());
+    let tree = result.debug_tree();
+    // Should still parse something
+    assert!(tree.contains("Attribute"));
+}

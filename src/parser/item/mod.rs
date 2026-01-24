@@ -11,6 +11,254 @@ use crate::syntax::SyntaxKind;
 use super::expr;
 use super::stmt;
 
+// === Attribute Parsing ===
+
+/// Parse zero or more outer attributes: `#[name]`, `#[name(args)]`, `#[name = value]`
+fn opt_attributes(p: &mut Parser<'_>) {
+    while p.at(SyntaxKind::HASH) && !p.peek_at(1, SyntaxKind::BANG) {
+        if attribute(p).is_err() {
+            break;
+        }
+    }
+}
+
+/// Parse zero or more inner attributes: `#![name]`, etc.
+fn opt_inner_attributes(p: &mut Parser<'_>) {
+    while p.at(SyntaxKind::HASH) && p.peek_at(1, SyntaxKind::BANG) {
+        if inner_attribute(p).is_err() {
+            break;
+        }
+    }
+}
+
+/// Parse a single inner attribute: `#![...]`
+fn inner_attribute(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    if let Err(err) = p.expect(SyntaxKind::HASH) {
+        m.abandon(p);
+        return Err(err);
+    }
+
+    if let Err(err) = p.expect(SyntaxKind::BANG) {
+        m.abandon(p);
+        return Err(err);
+    }
+
+    if let Err(err) = p.expect(SyntaxKind::L_BRACKET) {
+        p.error(err.clone());
+        return Ok(m.complete(p, SyntaxKind::InnerAttribute));
+    }
+
+    // Tolerate missing content but emit error
+    if !p.at(SyntaxKind::R_BRACKET) {
+        if let Err(err) = attr_content(p) {
+            p.error(err);
+            // Skip to closing bracket or item-starting token (with limit)
+            let mut skip_count = 0;
+            while p.current().is_some()
+                && !p.at(SyntaxKind::R_BRACKET)
+                && !p.current().is_some_and(is_item_start)
+                && skip_count < 100
+            {
+                p.bump();
+                skip_count += 1;
+            }
+        }
+    } else {
+        p.error(p.error_at_current("expected attribute name".to_string()));
+    }
+
+    // Consume ] if present
+    if p.at(SyntaxKind::R_BRACKET) {
+        p.bump();
+    }
+    Ok(m.complete(p, SyntaxKind::InnerAttribute))
+}
+
+/// Check if we're at a token that could start an item (for recovery).
+fn is_item_start(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::FN_KW
+            | SyntaxKind::STRUCT_KW
+            | SyntaxKind::TYPE_KW
+            | SyntaxKind::IMPL_KW
+            | SyntaxKind::PUB_KW
+            | SyntaxKind::USE_KW
+            | SyntaxKind::EXTERN_KW
+    )
+}
+
+/// Parse a single outer attribute: `#[...]`
+fn attribute(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    if let Err(err) = p.expect(SyntaxKind::HASH) {
+        m.abandon(p);
+        return Err(err);
+    }
+
+    if let Err(err) = p.expect(SyntaxKind::L_BRACKET) {
+        p.error(err.clone());
+        return Ok(m.complete(p, SyntaxKind::Attribute));
+    }
+
+    // Tolerate missing content but emit error
+    if !p.at(SyntaxKind::R_BRACKET) {
+        if let Err(err) = attr_content(p) {
+            p.error(err);
+            // Skip to closing bracket or item-starting token
+            while p.current().is_some()
+                && !p.at(SyntaxKind::R_BRACKET)
+                && !p.current().is_some_and(is_item_start)
+            {
+                p.bump();
+            }
+        }
+    } else {
+        p.error(p.error_at_current("expected attribute name".to_string()));
+    }
+
+    // Consume ] if present, otherwise just emit error
+    if p.at(SyntaxKind::R_BRACKET) {
+        p.bump();
+    }
+    Ok(m.complete(p, SyntaxKind::Attribute))
+}
+
+/// Parse attribute content: path with optional input
+fn attr_content(p: &mut Parser<'_>) -> Result<(), crate::parser::ParseError> {
+    attr_path(p)?;
+    if p.at(SyntaxKind::L_PAREN) {
+        attr_input_paren(p)?;
+    } else if p.at(SyntaxKind::EQ) {
+        attr_input_eq(p)?;
+    }
+    Ok(())
+}
+
+/// Parse attribute path: `name` or `name.path.segments`
+fn attr_path(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    if let Err(err) = p.expect(SyntaxKind::IDENT) {
+        m.abandon(p);
+        return Err(err);
+    }
+    while p.eat(SyntaxKind::DOT) {
+        if let Err(err) = p.expect(SyntaxKind::IDENT) {
+            p.error(err);
+            break;
+        }
+    }
+    Ok(m.complete(p, SyntaxKind::AttrPath))
+}
+
+/// Parse parenthesized attribute input: `(args, ...)`
+fn attr_input_paren(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    p.expect(SyntaxKind::L_PAREN)?;
+
+    // Parse comma-separated args with error recovery
+    // Use a maximum iteration count to prevent infinite loops
+    const MAX_ARGS: usize = 1000;
+    let mut arg_count = 0;
+
+    while !p.at(SyntaxKind::R_PAREN)
+        && !p.at(SyntaxKind::R_BRACKET)
+        && p.current().is_some()
+        && arg_count < MAX_ARGS
+    {
+        arg_count += 1;
+
+        if let Err(err) = attr_arg(p) {
+            p.error(err);
+            // Skip one token to make progress
+            if p.current().is_some()
+                && !p.at(SyntaxKind::R_PAREN)
+                && !p.at(SyntaxKind::COMMA)
+                && !p.at(SyntaxKind::R_BRACKET)
+            {
+                p.bump();
+            }
+        }
+
+        // Eat comma if present, otherwise we're done with args
+        if !p.eat(SyntaxKind::COMMA) {
+            break;
+        }
+    }
+
+    // Don't fail if R_PAREN missing - just emit error and continue
+    if !p.at(SyntaxKind::R_PAREN) {
+        p.error(p.error_at_current("expected `)`".to_string()));
+    } else {
+        p.bump();
+    }
+    Ok(m.complete(p, SyntaxKind::AttrInput))
+}
+
+/// Parse `= value` attribute input
+fn attr_input_eq(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    p.expect(SyntaxKind::EQ)?;
+    match p.current() {
+        Some(
+            SyntaxKind::STRING_LITERAL
+            | SyntaxKind::INT_LITERAL
+            | SyntaxKind::TRUE_KW
+            | SyntaxKind::FALSE_KW,
+        ) => p.bump(),
+        _ => return Err(p.error_at_current("expected literal".to_string())),
+    }
+    Ok(m.complete(p, SyntaxKind::AttrInput))
+}
+
+/// Parse a single attribute argument: `value`, `key = value`, or nested `name(args)`
+fn attr_arg(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    // Check for key = value pattern
+    if p.at(SyntaxKind::IDENT) && p.peek_at(1, SyntaxKind::EQ) && !p.peek_at(2, SyntaxKind::EQ) {
+        p.bump(); // key
+        p.bump(); // =
+        if let Err(err) = attr_value(p) {
+            // Value failed but we consumed key and = so complete the arg
+            p.error(err);
+        }
+        Ok(m.complete(p, SyntaxKind::AttrArg))
+    } else {
+        // Must successfully parse a value, otherwise fail
+        match attr_value(p) {
+            Ok(()) => Ok(m.complete(p, SyntaxKind::AttrArg)),
+            Err(err) => {
+                m.abandon(p);
+                Err(err)
+            }
+        }
+    }
+}
+
+/// Parse an attribute value: literal, identifier, or nested attribute content
+fn attr_value(p: &mut Parser<'_>) -> Result<(), crate::parser::ParseError> {
+    match p.current() {
+        Some(
+            SyntaxKind::STRING_LITERAL
+            | SyntaxKind::INT_LITERAL
+            | SyntaxKind::TRUE_KW
+            | SyntaxKind::FALSE_KW,
+        ) => {
+            p.bump();
+            Ok(())
+        }
+        Some(SyntaxKind::IDENT) => {
+            // Could be simple ident or nested: name(args)
+            attr_content(p)?;
+            Ok(())
+        }
+        _ => Err(p.error_at_current("expected attribute value".to_string())),
+    }
+}
+
 /// Parse optional visibility: `pub`, `pub(crate)`, `pub(super)`, `pub(self)`, `pub(in path)`
 fn opt_visibility(p: &mut Parser<'_>) -> Option<CompletedMarker> {
     if !p.at(SyntaxKind::PUB_KW) {
@@ -40,13 +288,16 @@ fn opt_visibility(p: &mut Parser<'_>) -> Option<CompletedMarker> {
     Some(m.complete(p, SyntaxKind::Visibility))
 }
 
-/// Parse a function definition: `[pub] fn name(params) [: Type] [where ...] { body }`
+/// Parse a function definition: `[attrs] [pub] fn name(params) [: Type] [where ...] { body }`
 ///
 /// Return type syntax: `fn foo(): i32 where T { ... }`
 pub(crate) fn function_def(
     p: &mut Parser<'_>,
 ) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
+
+    // Optional attributes
+    opt_attributes(p);
 
     // Optional visibility
     opt_visibility(p);
@@ -237,9 +488,12 @@ fn param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseErro
 
 /// Parse a struct definition.
 ///
-/// Syntax: `[pub] struct Name(fields) [where ...]` or `[pub] struct Name;`
+/// Syntax: `[attrs] [pub] struct Name(fields) [where ...]` or `[attrs] [pub] struct Name;`
 pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
+
+    // Optional attributes
+    opt_attributes(p);
 
     // Optional visibility
     opt_visibility(p);
@@ -333,9 +587,12 @@ fn paren_field_def(
     Ok(m.complete(p, SyntaxKind::FieldDef))
 }
 
-/// Parse a type alias: `[pub] type Name = Type [where ...];`
+/// Parse a type alias: `[attrs] [pub] type Name = Type [where ...];`
 pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
+
+    // Optional attributes
+    opt_attributes(p);
 
     // Optional visibility
     opt_visibility(p);
@@ -367,9 +624,12 @@ const IMPL_ITEM_RECOVERY_SET: &[SyntaxKind] =
 
 /// Parse an impl block.
 ///
-/// Syntax: `impl Type [where T, U] { items }`
+/// Syntax: `[attrs] impl Type [where T, U] { items }`
 pub(crate) fn impl_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
+
+    // Optional attributes
+    opt_attributes(p);
 
     // impl keyword
     p.expect(SyntaxKind::IMPL_KW)?;
@@ -400,16 +660,22 @@ pub(crate) fn impl_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
 /// Calculate lookahead to skip past visibility modifier.
 /// Returns the offset after visibility where the item keyword should be.
 fn visibility_lookahead(p: &mut Parser<'_>) -> usize {
-    if !p.at(SyntaxKind::PUB_KW) {
+    visibility_lookahead_at(p, 0)
+}
+
+/// Calculate lookahead to skip past visibility modifier, starting at a given offset.
+/// Returns the number of tokens to skip (relative to start_offset).
+fn visibility_lookahead_at(p: &mut Parser<'_>, start_offset: usize) -> usize {
+    if p.peek(start_offset) != Some(SyntaxKind::PUB_KW) {
         return 0;
     }
     // Check for pub(...)
-    if p.peek_at(1, SyntaxKind::L_PAREN) {
+    if p.peek(start_offset + 1) == Some(SyntaxKind::L_PAREN) {
         // Find the matching R_PAREN
         let mut depth = 1;
         let mut offset = 2;
         while depth > 0 {
-            match p.peek(offset) {
+            match p.peek(start_offset + offset) {
                 Some(SyntaxKind::L_PAREN) => depth += 1,
                 Some(SyntaxKind::R_PAREN) => depth -= 1,
                 None => break,
@@ -454,9 +720,12 @@ pub(crate) fn extern_block(
 const EXTERN_ITEM_RECOVERY_SET: &[SyntaxKind] =
     &[SyntaxKind::FN_KW, SyntaxKind::PUB_KW, SyntaxKind::R_BRACE];
 
-/// Parse an extern function declaration: `[pub] fn name(params) [: Type];`
+/// Parse an extern function declaration: `[attrs] [pub] fn name(params) [: Type];`
 fn extern_fn(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
+
+    // Optional attributes
+    opt_attributes(p);
 
     // Optional visibility
     opt_visibility(p);
@@ -481,7 +750,7 @@ fn extern_fn(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
     Ok(m.complete(p, SyntaxKind::ExternFn))
 }
 
-/// Parse a use declaration: `[pub] use path[.{tree}|.*|as name];`
+/// Parse a use declaration: `[attrs] [pub] use path[.{tree}|.*|as name];`
 ///
 /// Examples:
 /// - `use std.vec.Vec;`
@@ -491,6 +760,9 @@ fn extern_fn(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
 /// - `use std.{vec.Vec, io.{Read, Write}};`
 pub(crate) fn use_decl(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
+
+    // Optional attributes
+    opt_attributes(p);
 
     // Optional visibility
     opt_visibility(p);
@@ -623,11 +895,37 @@ fn use_tree_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::P
     Ok(m.complete(p, SyntaxKind::UseTreeList))
 }
 
+/// Calculate lookahead to skip past attributes.
+/// Returns the offset after all outer attributes where the visibility/item keyword should be.
+fn attribute_lookahead(p: &mut Parser<'_>) -> usize {
+    let mut offset = 0;
+    while p.peek(offset) == Some(SyntaxKind::HASH)
+        && p.peek(offset + 1) != Some(SyntaxKind::BANG)
+        && p.peek(offset + 1) == Some(SyntaxKind::L_BRACKET)
+    {
+        // Skip #[...]
+        offset += 2; // Skip # and [
+        let mut depth = 1;
+        while depth > 0 {
+            match p.peek(offset) {
+                Some(SyntaxKind::L_BRACKET) => depth += 1,
+                Some(SyntaxKind::R_BRACKET) => depth -= 1,
+                None => break,
+                _ => {}
+            }
+            offset += 1;
+        }
+    }
+    offset
+}
+
 /// Parse a top-level item (function, struct, type alias, impl block, extern block, or use decl).
 pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
-    // Check for visibility modifier and calculate lookahead
-    let has_pub = p.at(SyntaxKind::PUB_KW);
-    let lookahead = visibility_lookahead(p);
+    // Skip over attributes and visibility to find the item keyword
+    let attr_offset = attribute_lookahead(p);
+    let vis_offset = visibility_lookahead_at(p, attr_offset);
+    let lookahead = attr_offset + vis_offset;
+    let has_pub = p.peek(attr_offset) == Some(SyntaxKind::PUB_KW);
 
     match p.peek(lookahead) {
         Some(SyntaxKind::FN_KW) => function_def(p),
@@ -648,6 +946,9 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser:
 /// Parse a source file (sequence of items).
 pub(crate) fn source_file(p: &mut Parser<'_>) -> CompletedMarker {
     let m = p.start();
+
+    // Parse inner attributes at the start of the file
+    opt_inner_attributes(p);
 
     while p.current().is_some() {
         if let Err(err) = item(p) {

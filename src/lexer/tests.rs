@@ -1103,8 +1103,35 @@ fn error_at_sign() {
 }
 
 #[test]
-fn error_hash() {
-    check("#", &[(Token::Error, "#")]);
+fn op_hash() {
+    check_single("#", Token::Hash);
+}
+
+#[test]
+fn attribute_tokens_sequence() {
+    check(
+        "#[test]",
+        &[
+            (Token::Hash, "#"),
+            (Token::LBracket, "["),
+            (Token::Ident, "test"),
+            (Token::RBracket, "]"),
+        ],
+    );
+}
+
+#[test]
+fn inner_attribute_tokens_sequence() {
+    check(
+        "#![feature]",
+        &[
+            (Token::Hash, "#"),
+            (Token::Bang, "!"),
+            (Token::LBracket, "["),
+            (Token::Ident, "feature"),
+            (Token::RBracket, "]"),
+        ],
+    );
 }
 
 #[test]
@@ -1537,10 +1564,10 @@ fn recovery_invalid_character() {
 
 #[test]
 fn recovery_multiple_invalid_characters() {
-    let result = lex_all("@ # ~");
+    let result = lex_all("@ ^ ~");
     assert_eq!(result.errors.len(), 3);
     assert_eq!(result.errors[0].kind, LexErrorKind::InvalidCharacter('@'));
-    assert_eq!(result.errors[1].kind, LexErrorKind::InvalidCharacter('#'));
+    assert_eq!(result.errors[1].kind, LexErrorKind::InvalidCharacter('^'));
     assert_eq!(result.errors[2].kind, LexErrorKind::InvalidCharacter('~'));
 }
 
@@ -1693,9 +1720,9 @@ fn recovery_unicode_invalid_char() {
 #[test]
 fn recovery_preserves_token_order() {
     // Now includes whitespace tokens
-    let result = lex_all("a @ b # c");
+    let result = lex_all("a @ b ^ c");
     let tokens: Vec<_> = result.tokens.iter().map(|t| t.text).collect();
-    assert_eq!(tokens, vec!["a", " ", "@", " ", "b", " ", "#", " ", "c"]);
+    assert_eq!(tokens, vec!["a", " ", "@", " ", "b", " ", "^", " ", "c"]);
 }
 
 #[test]
