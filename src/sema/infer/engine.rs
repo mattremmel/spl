@@ -40,10 +40,33 @@ use crate::lexer::Span;
 use crate::sema::SemanticContext;
 use crate::sema::resolver::ResolveResult;
 use crate::sema::symbol::DefId;
-use crate::sema::types::{TypeId, TypeVar};
+use crate::sema::types::{Mutability, PrimitiveKind, TypeId, TypeVar};
 use rustc_hash::FxHashMap;
 
 use super::{InferResult, SelfParam};
+
+/// Method on an opaque primitive type (like StrRef).
+#[derive(Clone, Debug)]
+pub(super) struct OpaqueMethod {
+    /// Method name (e.g., "ptr", "len")
+    pub name: String,
+    /// Parameter types (excluding self)
+    pub params: Vec<TypeId>,
+    /// Return type
+    pub ret: TypeId,
+    /// How to lower this method call
+    pub lowering: OpaqueMethodLowering,
+}
+
+/// How to lower an opaque method call during HIR lowering.
+#[derive(Clone, Debug)]
+pub enum OpaqueMethodLowering {
+    /// Lower to field projection (e.g., .ptr() -> field 0)
+    FieldAccess(u32),
+    /// Lower to intrinsic call (future use)
+    #[allow(dead_code)]
+    IntrinsicCall(String),
+}
 
 /// The kind of loop for break/continue validation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -155,11 +178,20 @@ pub(super) struct InferEngine {
     /// Records the types of explicit type annotations like `-> i32`, `: bool`, etc.
     /// These are separate from `expr_types` because type annotations are not expressions.
     pub(super) type_annotation_types: FxHashMap<Span, TypeId>,
+
+    // === Opaque Primitive Methods ===
+    /// Methods on opaque primitive types (e.g., StrRef has .ptr() and .len()).
+    /// Maps TypeId to available methods for that type.
+    pub(super) opaque_methods: FxHashMap<TypeId, Vec<OpaqueMethod>>,
+
+    /// Resolved opaque method calls: maps call span to the resolved OpaqueMethod.
+    /// Used during HIR lowering to convert method calls to field accesses.
+    pub opaque_method_resolutions: FxHashMap<Span, OpaqueMethodLowering>,
 }
 
 impl InferEngine {
     pub(super) fn new(resolve_result: ResolveResult) -> Self {
-        Self {
+        let mut engine = Self {
             ctx: resolve_result.ctx,
             resolutions: resolve_result.resolutions,
             expr_types: FxHashMap::default(),
@@ -178,7 +210,37 @@ impl InferEngine {
             current_loop_kind: None,
             method_resolutions: FxHashMap::default(),
             type_annotation_types: FxHashMap::default(),
-        }
+            opaque_methods: FxHashMap::default(),
+            opaque_method_resolutions: FxHashMap::default(),
+        };
+        engine.register_opaque_methods();
+        engine
+    }
+
+    /// Register methods on opaque primitive types (StrRef, etc.).
+    fn register_opaque_methods(&mut self) {
+        let str_ref_ty = self.ctx.types.str_ref();
+        let usize_ty = self.ctx.types.primitive(PrimitiveKind::Usize);
+        let u8_ty = self.ctx.types.primitive(PrimitiveKind::U8);
+        let ptr_u8 = self.ctx.types.mk_raw_ptr(Mutability::Shared, u8_ty);
+
+        self.opaque_methods.insert(
+            str_ref_ty,
+            vec![
+                OpaqueMethod {
+                    name: "ptr".into(),
+                    params: vec![],
+                    ret: ptr_u8,
+                    lowering: OpaqueMethodLowering::FieldAccess(0),
+                },
+                OpaqueMethod {
+                    name: "len".into(),
+                    params: vec![],
+                    ret: usize_ty,
+                    lowering: OpaqueMethodLowering::FieldAccess(1),
+                },
+            ],
+        );
     }
 
     pub(super) fn into_result(self) -> InferResult {
@@ -189,6 +251,7 @@ impl InferEngine {
             resolutions: self.resolutions,
             method_resolutions: self.method_resolutions,
             type_annotation_types: self.type_annotation_types,
+            opaque_method_resolutions: self.opaque_method_resolutions,
             diagnostics: self.diagnostics,
         }
     }

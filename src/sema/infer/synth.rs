@@ -909,6 +909,7 @@ impl InferEngine {
     ) -> TypeId {
         // Resolve receiver type and auto-deref references
         let resolved = self.resolve_type(receiver_type);
+        let mut current_resolved = resolved;
         let mut receiver_type_val = self.ctx.types.get(resolved).clone();
 
         const MAX_DEREF: usize = 100;
@@ -926,7 +927,63 @@ impl InferEngine {
                 );
             }
             let inner_resolved = self.resolve_type(*inner);
+            current_resolved = inner_resolved;
             receiver_type_val = self.ctx.types.get(inner_resolved).clone();
+        }
+
+        // Get the method name from the last segment (needed for both opaque and struct methods)
+        let last_segment = &segments[segments.len() - 1];
+        let method_name_ref = match last_segment.name() {
+            Some(n) => n,
+            None => return self.ctx.types.error(),
+        };
+
+        let method_token = match method_name_ref.token() {
+            Some(t) => t,
+            None => return self.ctx.types.error(),
+        };
+
+        let method_name = method_token.text().to_string();
+
+        // Check opaque primitive methods first (e.g., StrRef.ptr(), StrRef.len())
+        if let Some(methods) = self.opaque_methods.get(&current_resolved).cloned() {
+            for opaque_method in &methods {
+                if opaque_method.name == method_name {
+                    // Check argument count
+                    let args: Vec<_> = apply_expr.args().collect();
+                    if args.len() != opaque_method.params.len() {
+                        let span = text_range_to_span(apply_expr.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "expected {} argument{}, found {}",
+                                opaque_method.params.len(),
+                                if opaque_method.params.len() == 1 { "" } else { "s" },
+                                args.len()
+                            ))
+                            .with_label(span, "wrong number of arguments"),
+                        );
+                        return self.ctx.types.error();
+                    }
+                    // Type check arguments
+                    for (arg, expected) in args.iter().zip(&opaque_method.params) {
+                        if let Some(value) = arg.value() {
+                            self.check_expr(&value, *expected);
+                        }
+                    }
+                    // Store resolution for HIR lowering
+                    let call_span = text_range_to_span(apply_expr.syntax().text_range());
+                    self.opaque_method_resolutions
+                        .insert(call_span, opaque_method.lowering.clone());
+                    return opaque_method.ret;
+                }
+            }
+            // Method not found on opaque type
+            let span = text_range_to_span(apply_expr.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error(format!("method `{}` not found on type `str`", method_name))
+                    .with_label(span, "unknown method"),
+            );
+            return self.ctx.types.error();
         }
 
         // Get the struct def_id and type_args from the receiver type
@@ -941,20 +998,6 @@ impl InferEngine {
                 return self.ctx.types.error();
             }
         };
-
-        // Get the method name from the last segment
-        let last_segment = &segments[segments.len() - 1];
-        let method_name_ref = match last_segment.name() {
-            Some(n) => n,
-            None => return self.ctx.types.error(),
-        };
-
-        let method_token = match method_name_ref.token() {
-            Some(t) => t,
-            None => return self.ctx.types.error(),
-        };
-
-        let method_name = method_token.text().to_string();
 
         // Look up the method in the struct's impl
         let method_def_ids = self
@@ -1523,21 +1566,21 @@ impl InferEngine {
             return elems[idx];
         }
 
-        // Handle StrRef field access (.0 = ptr, .1 = len as i64)
+        // Block field access on opaque types (StrRef) - use methods instead
         if let Ok(idx) = field_name.parse::<usize>()
             && matches!(&base_type, Type::StrRef)
         {
-            if idx < 2 {
-                // Both ptr and len are represented as i64 at runtime
-                return self.ctx.types.i64();
-            } else {
-                let span = text_range_to_span(field.syntax().text_range());
-                self.diagnostics.push(
-                    Diagnostic::error(format!("&str only has fields .0 and .1, not .{}", idx))
-                        .with_label(span, "invalid field index"),
-                );
-                return self.ctx.types.error();
-            }
+            let span = text_range_to_span(field.syntax().text_range());
+            let hint = match idx {
+                0 => "use `.ptr()` to access the pointer",
+                1 => "use `.len()` to access the length",
+                _ => "str has no such field",
+            };
+            self.diagnostics.push(
+                Diagnostic::error(format!("no field `{}` on type `str`", idx))
+                    .with_label(span, hint),
+            );
+            return self.ctx.types.error();
         }
 
         // Handle struct field access
@@ -1602,6 +1645,48 @@ impl InferEngine {
         // Resolve receiver type to find struct DefId
         let resolved = self.resolve_type(receiver_ty);
         let receiver_type = self.ctx.types.get(resolved).clone();
+
+        // Check opaque primitive methods first (e.g., StrRef.ptr(), StrRef.len())
+        if let Some(methods) = self.opaque_methods.get(&resolved).cloned() {
+            for opaque_method in &methods {
+                if opaque_method.name == method_name {
+                    // Check argument count
+                    let args: Vec<_> = method
+                        .arg_list()
+                        .map(|a| a.args().collect())
+                        .unwrap_or_default();
+                    if args.len() != opaque_method.params.len() {
+                        let span = text_range_to_span(method.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "expected {} argument{}, found {}",
+                                opaque_method.params.len(),
+                                if opaque_method.params.len() == 1 { "" } else { "s" },
+                                args.len()
+                            ))
+                            .with_label(span, "wrong number of arguments"),
+                        );
+                        return self.ctx.types.error();
+                    }
+                    // Type check arguments
+                    for (arg, expected) in args.iter().zip(&opaque_method.params) {
+                        self.check_expr(arg, *expected);
+                    }
+                    // Store resolution for HIR lowering
+                    let call_span = text_range_to_span(method.syntax().text_range());
+                    self.opaque_method_resolutions
+                        .insert(call_span, opaque_method.lowering.clone());
+                    return opaque_method.ret;
+                }
+            }
+            // Method not found on opaque type
+            let span = text_range_to_span(method.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error(format!("method `{}` not found on type `str`", method_name))
+                    .with_label(span, "unknown method"),
+            );
+            return self.ctx.types.error();
+        }
 
         // Handle reference receivers (auto-deref) and get type args
         let (struct_def_id, receiver_type_args) = match &receiver_type {
@@ -2174,6 +2259,12 @@ impl InferEngine {
             // Numeric types can be cast to each other
             (Type::Primitive(s), Type::Primitive(t)) => is_numeric_type(*s) && is_numeric_type(*t),
 
+            // Raw pointers can be cast to integers (for FFI, pointer arithmetic, etc.)
+            (Type::RawPtr(_, _), Type::Primitive(t)) => is_numeric_type(*t),
+
+            // Integers can be cast to raw pointers
+            (Type::Primitive(s), Type::RawPtr(_, _)) => is_numeric_type(*s),
+
             // Type variables are allowed (inference not complete)
             (Type::Infer(_, _), _) | (_, Type::Infer(_, _)) => true,
 
@@ -2197,6 +2288,13 @@ impl InferEngine {
                 match mutability {
                     Mutability::Shared => format!("&{}", inner_str),
                     Mutability::Mutable => format!("&mut {}", inner_str),
+                }
+            }
+            Type::RawPtr(mutability, pointee) => {
+                let pointee_str = self.type_to_string(*pointee);
+                match mutability {
+                    Mutability::Shared => format!("*{}", pointee_str),
+                    Mutability::Mutable => format!("*mut {}", pointee_str),
                 }
             }
             Type::Array(elem, len) => {

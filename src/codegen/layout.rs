@@ -67,6 +67,7 @@ impl<'a> LayoutComputer<'a> {
 
             // References and pointers are pointer-sized
             Type::Ref(_, _) => TypeLayout::new(self.pointer_size, self.pointer_size),
+            Type::RawPtr(_, _) => TypeLayout::new(self.pointer_size, self.pointer_size),
             Type::FnPtr { .. } => TypeLayout::new(self.pointer_size, self.pointer_size),
 
             // Arrays: element_size * count, element alignment

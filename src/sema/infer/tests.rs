@@ -3654,3 +3654,95 @@ fn param3_eee() {
         "i32",
     );
 }
+
+// =============================================================================
+// 12.0 Opaque Primitive Types (StrRef methods)
+// =============================================================================
+//
+// Tests for opaque primitive types like StrRef that have methods instead of
+// direct field access. StrRef has .ptr() and .len() methods.
+
+// -----------------------------------------------------------------------------
+// 12.1 Block Field Access Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn strref_field_0_blocked() {
+    check_err(
+        r#"fn main() { let s = "hello"; let p = s.0; }"#,
+        &["no field `0`"],
+    );
+}
+
+#[test]
+fn strref_field_1_blocked() {
+    check_err(
+        r#"fn main() { let s = "hello"; let n = s.1; }"#,
+        &["no field `1`"],
+    );
+}
+
+// -----------------------------------------------------------------------------
+// 12.2 Method Resolution Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn strref_ptr_method() {
+    // Returns *u8
+    check(r#"fn main() { let s = "hello"; let p = s.ptr(); }"#, "*u8");
+}
+
+#[test]
+fn strref_len_method() {
+    // Returns usize - test with explicit type to ensure type is correct
+    check(r#"fn main() { let s: str = "hello"; let n = s.len(); }"#, "usize");
+}
+
+#[test]
+fn strref_method_on_literal() {
+    check(r#"fn main() { let n = "hello".len(); }"#, "usize");
+}
+
+#[test]
+fn strref_unknown_method() {
+    check_err(r#"fn main() { "hello".foo(); }"#, &["method `foo` not found"]);
+}
+
+#[test]
+fn strref_unknown_method_on_variable() {
+    // This should give the same error as strref_unknown_method
+    check_err(r#"fn main() { let s = "hello"; s.foo(); }"#, &["method `foo` not found"]);
+}
+
+#[test]
+fn strref_method_wrong_args() {
+    check_err(r#"fn main() { "hello".len(42); }"#, &["expected 0 argument"]);
+}
+
+// -----------------------------------------------------------------------------
+// 12.3 Type Compatibility Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn strref_through_variable() {
+    // Verify that a StrRef variable preserves its type
+    check(r#"fn main() { let s = "hello"; let t = s; }"#, "str");
+}
+
+#[test]
+fn strref_variable_in_function_call() {
+    // Pass a string variable to a function
+    check(
+        r#"fn f(_ s: str) {} fn main() { let s = "hello"; f(s); let x = 1; }"#,
+        "i32", // last binding is x
+    );
+}
+
+#[test]
+fn strref_len_is_usize() {
+    // Verify .len() returns usize by passing it to a function expecting usize
+    check(
+        r#"fn f(_ n: usize) {} fn main() { f("hi".len()); let x = 1; }"#,
+        "i32", // last binding is x; if len() didn't return usize, there'd be an error
+    );
+}

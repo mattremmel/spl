@@ -58,8 +58,9 @@ impl TypeMapper {
         match ty {
             Type::Primitive(prim) => self.map_primitive(*prim),
 
-            // References and function pointers are pointer-sized
+            // References, raw pointers, and function pointers are pointer-sized
             Type::Ref(_, _) => Some(self.pointer_type),
+            Type::RawPtr(_, _) => Some(self.pointer_type),
             Type::FnPtr { .. } => Some(self.pointer_type),
 
             // Infer types should be resolved before codegen

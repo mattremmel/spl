@@ -8,8 +8,8 @@ extern "C" {
 
 /// Print a string to stdout (no newline).
 pub fn print(_ s: str) {
-    // str is a fat pointer: .0 = ptr, .1 = len
-    __print_str(s.0, s.1);
+    // str is an opaque type with .ptr() and .len() methods
+    __print_str(s.ptr() as i64, s.len() as i64);
 }
 
 /// Print a string to stdout followed by a newline.

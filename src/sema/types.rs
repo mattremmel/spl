@@ -185,6 +185,9 @@ pub enum Type {
     /// A reference type `&T` or `&mut T`.
     Ref(Mutability, TypeId),
 
+    /// A raw pointer type `*T` (immutable) or `*mut T` (mutable).
+    RawPtr(Mutability, TypeId),
+
     /// An array type `[T; N]` with a compile-time known size.
     Array(TypeId, u64),
 
@@ -376,6 +379,11 @@ impl TypeInterner {
     /// Create a reference type.
     pub fn mk_ref(&mut self, mutability: Mutability, inner: TypeId) -> TypeId {
         self.intern(Type::Ref(mutability, inner))
+    }
+
+    /// Create a raw pointer type.
+    pub fn mk_raw_ptr(&mut self, mutability: Mutability, pointee: TypeId) -> TypeId {
+        self.intern(Type::RawPtr(mutability, pointee))
     }
 
     /// Create an array type.

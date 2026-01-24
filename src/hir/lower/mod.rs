@@ -104,6 +104,8 @@ struct LoweringContext {
     method_resolutions: FxHashMap<Span, DefId>,
     /// Map from type annotation spans to their resolved TypeIds.
     type_annotation_types: FxHashMap<Span, TypeId>,
+    /// Resolved opaque method calls (e.g., str.ptr(), str.len()).
+    opaque_method_resolutions: FxHashMap<Span, crate::sema::infer::OpaqueMethodLowering>,
 }
 
 impl LoweringContext {
@@ -119,6 +121,7 @@ impl LoweringContext {
             resolutions: infer_result.resolutions,
             method_resolutions: infer_result.method_resolutions,
             type_annotation_types: infer_result.type_annotation_types,
+            opaque_method_resolutions: infer_result.opaque_method_resolutions,
         }
     }
 
@@ -1090,6 +1093,49 @@ impl LoweringContext {
         span: Span,
         ty: TypeId,
     ) -> ExprId {
+        // Check for opaque method resolution (e.g., str.ptr(), str.len())
+        if let Some(opaque_lowering) = self.opaque_method_resolutions.get(&span).cloned() {
+            // Get the receiver (first segment)
+            let first_segment = &segments[0];
+            let first_span = first_segment
+                .name()
+                .and_then(|n| n.token())
+                .map(|t| Self::text_range_to_span(t.text_range()))
+                .unwrap_or_else(|| span.clone());
+
+            let first_def_id = self
+                .resolutions
+                .get(&first_span)
+                .copied()
+                .unwrap_or(DefId(0));
+
+            let receiver_ty = self.get_binding_type(first_def_id);
+            let receiver = self.db.alloc_expr(HirExpr {
+                kind: HirExprKind::Var(first_def_id),
+                ty: receiver_ty,
+                span: first_span,
+            });
+
+            match opaque_lowering {
+                crate::sema::infer::OpaqueMethodLowering::FieldAccess(index) => {
+                    // Lower opaque method call to tuple field access
+                    let expr = HirExpr {
+                        kind: HirExprKind::TupleField {
+                            base: receiver,
+                            index,
+                        },
+                        ty,
+                        span,
+                    };
+                    return self.db.alloc_expr(expr);
+                }
+                crate::sema::infer::OpaqueMethodLowering::IntrinsicCall(_) => {
+                    // Future: lower to intrinsic call
+                    todo!("intrinsic call lowering")
+                }
+            }
+        }
+
         // Get the receiver (first segment)
         let first_segment = &segments[0];
         let first_span = first_segment
@@ -1345,6 +1391,33 @@ impl LoweringContext {
     }
 
     fn lower_method_call_expr(&mut self, call: &MethodCallExpr, span: Span, ty: TypeId) -> ExprId {
+        // Check for opaque method resolution (e.g., str.ptr(), str.len())
+        if let Some(opaque_lowering) = self.opaque_method_resolutions.get(&span).cloned() {
+            let receiver = call
+                .receiver()
+                .map(|e| self.lower_expr(&e))
+                .unwrap_or_else(|| self.lower_missing(span.clone()));
+
+            match opaque_lowering {
+                crate::sema::infer::OpaqueMethodLowering::FieldAccess(index) => {
+                    // Lower opaque method call to tuple field access
+                    let expr = HirExpr {
+                        kind: HirExprKind::TupleField {
+                            base: receiver,
+                            index,
+                        },
+                        ty,
+                        span,
+                    };
+                    return self.db.alloc_expr(expr);
+                }
+                crate::sema::infer::OpaqueMethodLowering::IntrinsicCall(_) => {
+                    // Future: lower to intrinsic call
+                    todo!("intrinsic call lowering")
+                }
+            }
+        }
+
         let receiver = call
             .receiver()
             .map(|e| self.lower_expr(&e))

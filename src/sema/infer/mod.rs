@@ -26,6 +26,8 @@ use rustc_hash::FxHashMap;
 
 use engine::InferEngine;
 
+pub use engine::OpaqueMethodLowering;
+
 /// Result of type inference.
 pub struct InferResult {
     /// The semantic context with symbol table and types.
@@ -41,6 +43,9 @@ pub struct InferResult {
     /// Map from type annotation spans to their resolved TypeIds.
     /// Includes return type annotations (-> i32), parameter types (x: bool), etc.
     pub type_annotation_types: FxHashMap<Span, TypeId>,
+    /// Resolved opaque method calls (e.g., str.ptr(), str.len()).
+    /// Maps call span to how to lower the call.
+    pub opaque_method_resolutions: FxHashMap<Span, OpaqueMethodLowering>,
     /// Diagnostics produced during inference.
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -96,6 +101,13 @@ impl InferResult {
                 match mutability {
                     Mutability::Shared => format!("&{}", inner_str),
                     Mutability::Mutable => format!("&mut {}", inner_str),
+                }
+            }
+            Type::RawPtr(mutability, pointee) => {
+                let pointee_str = self.type_to_string(*pointee);
+                match mutability {
+                    Mutability::Shared => format!("*{}", pointee_str),
+                    Mutability::Mutable => format!("*mut {}", pointee_str),
                 }
             }
             Type::Array(elem, len) => {

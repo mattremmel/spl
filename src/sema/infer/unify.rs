@@ -259,6 +259,15 @@ impl InferEngine {
                 mutability_ok && self.unify(*inner1, *inner2)
             }
 
+            // Raw pointers: mutability must match or coerce, pointee types must unify.
+            // Coercion: *mut T -> *T is allowed (mutable can become shared),
+            // but *T -> *mut T is forbidden (can't gain mutability).
+            (Type::RawPtr(m1, inner1), Type::RawPtr(m2, inner2)) => {
+                let mutability_ok =
+                    m1 == m2 || (*m1 == Mutability::Mutable && *m2 == Mutability::Shared);
+                mutability_ok && self.unify(*inner1, *inner2)
+            }
+
             // Arrays must match in element type and length
             (Type::Array(elem1, len1), Type::Array(elem2, len2)) => {
                 len1 == len2 && self.unify(*elem1, *elem2)
@@ -424,6 +433,14 @@ impl InferEngine {
                     self.ctx.types.mk_ref(mutability, new_inner)
                 }
             }
+            Type::RawPtr(mutability, pointee) => {
+                let new_pointee = self.substitute_type_params(pointee, subst);
+                if new_pointee == pointee {
+                    type_id
+                } else {
+                    self.ctx.types.mk_raw_ptr(mutability, new_pointee)
+                }
+            }
             Type::Array(elem, len) => {
                 let new_elem = self.substitute_type_params(elem, subst);
                 if new_elem == elem {
@@ -549,6 +566,7 @@ impl InferEngine {
                 // For now, we'll leave them as-is
             }
             Type::Ref(_, inner) => self.collect_defaults(inner, defaults),
+            Type::RawPtr(_, pointee) => self.collect_defaults(pointee, defaults),
             Type::Array(elem, _) => self.collect_defaults(elem, defaults),
             Type::Slice(elem) => self.collect_defaults(elem, defaults),
             Type::Tuple(elems) => {
@@ -602,6 +620,10 @@ impl InferEngine {
             Type::Ref(mutability, inner) => {
                 let inner_resolved = self.fully_resolve_type(inner);
                 self.ctx.types.mk_ref(mutability, inner_resolved)
+            }
+            Type::RawPtr(mutability, pointee) => {
+                let pointee_resolved = self.fully_resolve_type(pointee);
+                self.ctx.types.mk_raw_ptr(mutability, pointee_resolved)
             }
             Type::Array(elem, len) => {
                 let elem_resolved = self.fully_resolve_type(elem);
