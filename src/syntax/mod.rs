@@ -38,7 +38,6 @@ pub enum SyntaxKind {
     MATCH_KW,
     EXTERN_KW,
     USE_KW,
-    MOD_KW,
     MODULE_KW,
 
     // Operators
@@ -232,7 +231,6 @@ impl From<Token> for SyntaxKind {
             Token::Match => Self::MATCH_KW,
             Token::Extern => Self::EXTERN_KW,
             Token::Use => Self::USE_KW,
-            Token::Mod => Self::MOD_KW,
             Token::Module => Self::MODULE_KW,
             Token::Plus => Self::PLUS,
             Token::Minus => Self::MINUS,

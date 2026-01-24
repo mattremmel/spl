@@ -86,8 +86,6 @@ pub enum Token {
     Extern,
     #[token("use")]
     Use,
-    #[token("mod")]
-    Mod,
     #[token("module")]
     Module,
 

@@ -182,11 +182,6 @@ fn keyword_use() {
 }
 
 #[test]
-fn keyword_mod() {
-    check_single("mod", Token::Mod);
-}
-
-#[test]
 fn keyword_module() {
     check_single("module", Token::Module);
 }
