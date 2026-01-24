@@ -72,6 +72,7 @@ pub mod lexer;
 pub mod mir;
 pub mod parser;
 pub mod sema;
+pub mod session;
 pub mod stdlib;
 pub mod syntax;
 pub mod testing;
@@ -80,6 +81,7 @@ pub use diagnostic::{Diagnostic, DiagnosticRenderer, Label, RenderConfig, Severi
 pub use lexer::{Lexer, Span, SpannedToken, Token};
 pub use parser::{Parse, ParseError, parse};
 pub use sema::{DefId, SemanticContext, Symbol, SymbolKind};
+pub use session::CompileSession;
 pub use syntax::{Lang, SyntaxKind, SyntaxNode, SyntaxToken};
 
 // ============================================================================
@@ -212,7 +214,7 @@ pub fn compile(source: &str) -> CompileResult {
     }
 
     // Phase 5: HIR lowering
-    let hir_db = hir::lower::lower_to_hir(&source_file, infer_result);
+    let hir_db = hir::lower::lower_to_hir(&source_file, &infer_result);
 
     // Phase 6: MIR lowering
     let bodies = mir::lower_hir_to_mir(&hir_db);

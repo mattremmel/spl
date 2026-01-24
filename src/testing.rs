@@ -21,6 +21,7 @@ use crate::ast::SourceFile;
 use crate::mir::{BasicBlockData, Body, Constant, Operand, Rvalue, StatementKind, TerminatorKind};
 use crate::parser::ParseError;
 use crate::sema::{InferResult, ResolveResult};
+use crate::session::CompileSession;
 use crate::{Diagnostic, Severity, mir};
 use rowan::ast::AstNode;
 
@@ -75,6 +76,30 @@ pub fn compile_err(source: &str) -> Vec<Diagnostic> {
     } else {
         panic!("expected errors but compilation succeeded");
     }
+}
+
+/// Create a compile session for the given source code.
+///
+/// The session provides lazy, cached access to each compilation phase.
+/// Use this when you need fine-grained control over the compilation pipeline
+/// or want to access intermediate results.
+///
+/// # Example
+///
+/// ```
+/// use spl::testing::session;
+///
+/// let mut sess = session("fn main() { let x = 1; }");
+///
+/// // Access phases lazily
+/// let ast = sess.ast().unwrap();
+/// let infer = sess.infer().unwrap();
+///
+/// // Diagnostics accumulated across all accessed phases
+/// assert!(!sess.has_errors());
+/// ```
+pub fn session(source: &str) -> CompileSession<'_> {
+    CompileSession::new(source)
 }
 
 /// Format diagnostics for display in test output.

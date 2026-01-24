@@ -225,7 +225,7 @@ pub enum Type {
 ///
 /// Types are interned so that type equality can be checked via TypeId comparison.
 /// Primitive types are pre-interned with stable IDs.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TypeInterner {
     /// All interned types.
     types: Vec<Type>,

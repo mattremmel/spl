@@ -81,7 +81,7 @@ use rustc_hash::FxHashMap;
 /// Lower a source file to HIR.
 ///
 /// This takes the AST and inference results and produces a fully typed HIR.
-pub fn lower_to_hir(source_file: &SourceFile, infer_result: InferResult) -> HirDatabase {
+pub fn lower_to_hir(source_file: &SourceFile, infer_result: &InferResult) -> HirDatabase {
     let mut ctx = LoweringContext::new(infer_result);
     ctx.lower_source_file(source_file);
     ctx.into_database()
@@ -109,19 +109,19 @@ struct LoweringContext {
 }
 
 impl LoweringContext {
-    fn new(infer_result: InferResult) -> Self {
+    fn new(infer_result: &InferResult) -> Self {
         let mut db = HirDatabase::new();
-        // Transfer the type interner from the inference result
-        db.types = infer_result.types;
+        // Clone the type interner from the inference result
+        db.types = infer_result.types.clone();
 
         Self {
             db,
-            expr_types: infer_result.expr_types,
-            binding_types: infer_result.binding_types,
-            resolutions: infer_result.resolutions,
-            method_resolutions: infer_result.method_resolutions,
-            type_annotation_types: infer_result.type_annotation_types,
-            intrinsic_methods: infer_result.intrinsic_methods,
+            expr_types: infer_result.expr_types.clone(),
+            binding_types: infer_result.binding_types.clone(),
+            resolutions: infer_result.resolutions.clone(),
+            method_resolutions: infer_result.method_resolutions.clone(),
+            type_annotation_types: infer_result.type_annotation_types.clone(),
+            intrinsic_methods: infer_result.intrinsic_methods.clone(),
         }
     }
 

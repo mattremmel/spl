@@ -33,7 +33,7 @@ fn lower_source(source: &str) -> Vec<Body> {
     let source_file = SourceFile::cast(parsed.syntax()).unwrap();
     let resolve_result = resolve(&source_file);
     let infer_result = infer(&source_file, &resolve_result);
-    let hir = lower_to_hir(&source_file, infer_result);
+    let hir = lower_to_hir(&source_file, &infer_result);
     lower_hir_to_mir(&hir)
 }
 
