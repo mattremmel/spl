@@ -1,12 +1,13 @@
 //! Terminator lowering from MIR to Cranelift IR.
 
-use cranelift_codegen::ir::{InstBuilder, TrapCode};
+use cranelift_codegen::ir::{InstBuilder, MemFlags, TrapCode, Value};
 use cranelift_module::Module;
 
 use crate::codegen::error::{CodegenError, TRAP_ASSERT_FAILED, TRAP_RESUME, TRAP_UNREACHABLE};
 use crate::mir::operand::{Constant, Operand};
 use crate::mir::terminator::{Terminator, TerminatorKind};
 use crate::mir::types::Local;
+use crate::sema::types::Type;
 
 use super::FunctionLowerer;
 
@@ -125,27 +126,48 @@ impl<'a> FunctionLowerer<'a> {
                 let func_ref = module.declare_func_in_func(func_info.func_id, self.builder.func);
 
                 // Lower arguments, coercing to the expected parameter types
-                let mut arg_values = Vec::with_capacity(args.len());
+                // StrRef arguments are passed as two values (ptr, len)
+                let mut arg_values = Vec::with_capacity(args.len() * 2);
                 let mut param_idx = 0;
                 for arg in args {
-                    // Get the expected parameter type from the callee's signature
-                    let expected_ty = if param_idx < func_info.signature.params.len() {
-                        Some(func_info.signature.params[param_idx].value_type)
-                    } else {
-                        None
+                    // Check if this argument is a StrRef (string constant or str-typed place)
+                    // Note: We must check the RESULT type after projections, not just the base local
+                    let is_strref = match arg {
+                        Operand::Constant(Constant::String(_)) => true,
+                        Operand::Copy(place) | Operand::Move(place) => {
+                            // Get the result type after applying all projections
+                            let result_ty = self.compute_place_result_type(place);
+                            matches!(self.types.get(result_ty), Type::StrRef)
+                        }
+                        _ => false,
                     };
 
-                    if let Some(expected) = expected_ty {
-                        if let Some(val) = self.lower_operand_as(arg, expected)? {
-                            arg_values.push(val);
-                            param_idx += 1;
-                        }
-                        // Skip ZST arguments (no param_idx increment for ZST)
+                    if is_strref {
+                        // StrRef is passed as two values (ptr, len)
+                        let (ptr, len) = self.lower_strref_operand(arg)?;
+                        arg_values.push(ptr);
+                        arg_values.push(len);
+                        param_idx += 2; // StrRef takes 2 parameter slots
                     } else {
-                        // No expected type (ZST or error), just try to lower
-                        if let Some(val) = self.lower_operand(arg)? {
-                            arg_values.push(val);
-                            param_idx += 1;
+                        // Get the expected parameter type from the callee's signature
+                        let expected_ty = if param_idx < func_info.signature.params.len() {
+                            Some(func_info.signature.params[param_idx].value_type)
+                        } else {
+                            None
+                        };
+
+                        if let Some(expected) = expected_ty {
+                            if let Some(val) = self.lower_operand_as(arg, expected)? {
+                                arg_values.push(val);
+                                param_idx += 1;
+                            }
+                            // Skip ZST arguments (no param_idx increment for ZST)
+                        } else {
+                            // No expected type (ZST or error), just try to lower
+                            if let Some(val) = self.lower_operand(arg)? {
+                                arg_values.push(val);
+                                param_idx += 1;
+                            }
                         }
                     }
                 }
@@ -154,6 +176,7 @@ impl<'a> FunctionLowerer<'a> {
                 let call_inst = self.builder.ins().call(func_ref, &arg_values);
 
                 // Store the return value in the destination (if not ZST)
+                // TODO: Handle StrRef return values (would need to store 2 values)
                 let results = self.builder.inst_results(call_inst);
                 if !results.is_empty() {
                     let return_val = results[0];
@@ -226,5 +249,76 @@ impl<'a> FunctionLowerer<'a> {
                 Ok(())
             }
         }
+    }
+
+    /// Lower a StrRef operand to its component values (ptr, len).
+    ///
+    /// StrRef is a fat pointer that must be passed as two separate values
+    /// at the ABI level.
+    fn lower_strref_operand(&mut self, operand: &Operand) -> Result<(Value, Value), CodegenError> {
+        let ptr_ty = self.type_mapper.pointer_type();
+
+        match operand {
+            Operand::Constant(Constant::String(s)) => {
+                // Create the string data and get its address
+                let gv = self.declare_string_data(s)?;
+                let str_ptr = self.builder.ins().global_value(ptr_ty, gv);
+                let str_len = self.builder.ins().iconst(ptr_ty, s.len() as i64);
+                Ok((str_ptr, str_len))
+            }
+            Operand::Copy(place) | Operand::Move(place) => {
+                // Load both fields from the StrRef in memory
+                let (addr, _) = self.compute_place_address(place)?;
+
+                // Load ptr (field 0) and len (field 1)
+                let flags = MemFlags::trusted();
+                let str_ptr = self.builder.ins().load(ptr_ty, flags, addr, 0);
+
+                let ptr_size = if ptr_ty == cranelift_codegen::ir::types::I64 {
+                    8
+                } else {
+                    4
+                };
+                let str_len = self.builder.ins().load(ptr_ty, flags, addr, ptr_size);
+
+                Ok((str_ptr, str_len))
+            }
+            _ => Err(CodegenError::Internal(
+                "unexpected operand for StrRef".to_string(),
+            )),
+        }
+    }
+
+    /// Compute the result type of a place after applying all projections.
+    fn compute_place_result_type(
+        &self,
+        place: &crate::mir::types::Place,
+    ) -> crate::sema::types::TypeId {
+        use crate::mir::types::PlaceElem;
+
+        let mut current_ty = self.body.local_decl(place.local).ty;
+
+        for proj in &place.projection {
+            current_ty = match proj {
+                PlaceElem::Field(idx) => {
+                    // Get the field type
+                    self.layout
+                        .field_type(current_ty, idx.index() as usize)
+                        .unwrap_or(current_ty)
+                }
+                PlaceElem::Deref => {
+                    // Get the pointee type
+                    self.layout.pointee_type(current_ty).unwrap_or(current_ty)
+                }
+                PlaceElem::Index(_) | PlaceElem::ConstantIndex { .. } => {
+                    // Get the element type
+                    self.layout.element_type(current_ty).unwrap_or(current_ty)
+                }
+                PlaceElem::Subslice { .. } => current_ty, // Slice type unchanged
+                PlaceElem::Downcast(_) => current_ty,     // Enum variant type
+            };
+        }
+
+        current_ty
     }
 }

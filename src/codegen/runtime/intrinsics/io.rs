@@ -84,6 +84,14 @@ pub fn register(runtime: &mut Runtime) {
         __eprint_str as *const u8,
         make_signature(call_conv, &[types::I64, types::I64], &[]),
     );
+
+    // __print_newline: () -> ()
+    // Print a newline to stdout
+    runtime.register(
+        "__print_newline",
+        __print_newline as *const u8,
+        make_signature(call_conv, &[], &[]),
+    );
 }
 
 /// Write bytes to stdout.
@@ -114,6 +122,12 @@ pub extern "C" fn __eprint_str(ptr: *const u8, len: i64) {
     let slice = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
     let _ = std::io::stderr().write_all(slice);
     let _ = std::io::stderr().flush();
+}
+
+/// Print a newline to stdout.
+pub extern "C" fn __print_newline() {
+    let _ = std::io::stdout().write_all(b"\n");
+    let _ = std::io::stdout().flush();
 }
 
 #[cfg(test)]

@@ -5,17 +5,18 @@
 
 use cranelift_codegen::ir::AbiParam;
 use cranelift_frontend::FunctionBuilder;
-use cranelift_module::FuncId;
+use cranelift_module::{FuncId, Linkage};
 
 use super::aot::AotContext;
 use super::context::CodegenContext;
 use super::error::{CodegenError, RuntimeError};
 use super::lower::FunctionLowerer;
 use super::registry::{FunctionInfo, FunctionRegistry};
+use super::runtime::{Runtime, intrinsics};
 use super::types::TypeMapper;
 use crate::mir::body::Body;
 use crate::sema::symbol::DefId;
-use crate::sema::types::TypeInterner;
+use crate::sema::types::{Type, TypeInterner};
 
 /// A function definition with its DefId and MIR body.
 pub struct FunctionDef<'a> {
@@ -127,10 +128,14 @@ pub struct ModuleCompiler {
 }
 
 impl ModuleCompiler {
-    /// Create a new module compiler.
+    /// Create a new module compiler with runtime intrinsics.
     pub fn new() -> Result<Self, CodegenError> {
+        // Create runtime with all intrinsics registered
+        let mut runtime = Runtime::new();
+        intrinsics::register_all(&mut runtime);
+
         Ok(ModuleCompiler {
-            ctx: CodegenContext::new_jit()?,
+            ctx: CodegenContext::new_jit_with_runtime(&runtime)?,
             registry: FunctionRegistry::new(),
         })
     }
@@ -138,16 +143,17 @@ impl ModuleCompiler {
     /// Compile multiple functions and return a compiled module.
     ///
     /// The functions can call each other via `TerminatorKind::Call`.
+    /// Extern functions (prefixed with `__`) are imported from the runtime.
     pub fn compile(
         functions: &[FunctionDef<'_>],
         types: &TypeInterner,
     ) -> Result<CompiledModule, CodegenError> {
         let mut compiler = Self::new()?;
 
-        // Pass 1: Declare all functions
+        // Pass 1: Declare all functions (imports and exports)
         let func_ids = compiler.declare_functions(functions, types)?;
 
-        // Pass 2: Define all function bodies
+        // Pass 2: Define function bodies (skip extern/imported functions)
         compiler.define_functions(functions, types, &func_ids)?;
 
         // Pass 3: Finalize and collect function pointers
@@ -155,6 +161,10 @@ impl ModuleCompiler {
 
         let mut function_ptrs = rustc_hash::FxHashMap::default();
         for (func_def, func_id) in functions.iter().zip(func_ids.iter()) {
+            // Skip extern functions - they don't have function pointers in our module
+            if func_def.name.starts_with("__") {
+                continue;
+            }
             let ptr = compiler.ctx.get_function_ptr(*func_id);
             function_ptrs.insert(func_def.def_id, ptr);
         }
@@ -166,6 +176,9 @@ impl ModuleCompiler {
     }
 
     /// Declaration pass: declare all functions and build registry.
+    ///
+    /// Extern functions (prefixed with `__`) are declared as imports,
+    /// while regular functions are declared as exports.
     fn declare_functions(
         &mut self,
         functions: &[FunctionDef<'_>],
@@ -176,7 +189,17 @@ impl ModuleCompiler {
 
         for func_def in functions {
             let sig = Self::build_signature(&self.ctx, &type_mapper, func_def.body, types);
-            let func_id = self.ctx.declare_function(&func_def.name, &sig)?;
+
+            // Extern functions (intrinsics) are imported, regular functions are exported
+            let linkage = if func_def.name.starts_with("__") {
+                Linkage::Import
+            } else {
+                Linkage::Export
+            };
+
+            let func_id = self
+                .ctx
+                .declare_function_with_linkage(&func_def.name, &sig, linkage)?;
 
             self.registry
                 .register(func_def.def_id, FunctionInfo::new(func_id, sig));
@@ -187,6 +210,8 @@ impl ModuleCompiler {
     }
 
     /// Definition pass: define all function bodies.
+    ///
+    /// Skips extern functions (prefixed with `__`) since they're imported.
     fn define_functions(
         &mut self,
         functions: &[FunctionDef<'_>],
@@ -194,6 +219,10 @@ impl ModuleCompiler {
         func_ids: &[FuncId],
     ) -> Result<(), CodegenError> {
         for (func_def, func_id) in functions.iter().zip(func_ids.iter()) {
+            // Skip extern functions - they're imported, not defined
+            if func_def.name.starts_with("__") {
+                continue;
+            }
             self.define_single_function(func_def, types, *func_id)?;
         }
         Ok(())
@@ -240,14 +269,24 @@ impl ModuleCompiler {
 
         // Add return type (if not ZST)
         let return_ty = body.return_ty();
-        if let Some(clif_ty) = type_mapper.map_type(return_ty, types) {
+        // Handle StrRef return specially - return as two values (ptr, len)
+        if matches!(types.get(return_ty), Type::StrRef) {
+            let ptr_ty = type_mapper.pointer_type();
+            sig.returns.push(AbiParam::new(ptr_ty)); // ptr
+            sig.returns.push(AbiParam::new(ptr_ty)); // len
+        } else if let Some(clif_ty) = type_mapper.map_type(return_ty, types) {
             sig.returns.push(AbiParam::new(clif_ty));
         }
 
         // Add parameter types
         for arg in body.args() {
             let arg_ty = body.local_decl(arg).ty;
-            if let Some(clif_ty) = type_mapper.map_type(arg_ty, types) {
+            // Handle StrRef params specially - pass as two values (ptr, len)
+            if matches!(types.get(arg_ty), Type::StrRef) {
+                let ptr_ty = type_mapper.pointer_type();
+                sig.params.push(AbiParam::new(ptr_ty)); // ptr
+                sig.params.push(AbiParam::new(ptr_ty)); // len
+            } else if let Some(clif_ty) = type_mapper.map_type(arg_ty, types) {
                 sig.params.push(AbiParam::new(clif_ty));
             }
         }
@@ -431,14 +470,24 @@ impl AotModuleCompiler {
 
         // Add return type (if not ZST)
         let return_ty = body.return_ty();
-        if let Some(clif_ty) = type_mapper.map_type(return_ty, types) {
+        // Handle StrRef return specially - return as two values (ptr, len)
+        if matches!(types.get(return_ty), Type::StrRef) {
+            let ptr_ty = type_mapper.pointer_type();
+            sig.returns.push(AbiParam::new(ptr_ty)); // ptr
+            sig.returns.push(AbiParam::new(ptr_ty)); // len
+        } else if let Some(clif_ty) = type_mapper.map_type(return_ty, types) {
             sig.returns.push(AbiParam::new(clif_ty));
         }
 
         // Add parameter types
         for arg in body.args() {
             let arg_ty = body.local_decl(arg).ty;
-            if let Some(clif_ty) = type_mapper.map_type(arg_ty, types) {
+            // Handle StrRef params specially - pass as two values (ptr, len)
+            if matches!(types.get(arg_ty), Type::StrRef) {
+                let ptr_ty = type_mapper.pointer_type();
+                sig.params.push(AbiParam::new(ptr_ty)); // ptr
+                sig.params.push(AbiParam::new(ptr_ty)); // len
+            } else if let Some(clif_ty) = type_mapper.map_type(arg_ty, types) {
                 sig.params.push(AbiParam::new(clif_ty));
             }
         }

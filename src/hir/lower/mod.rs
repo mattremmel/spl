@@ -53,7 +53,7 @@ mod tests;
 pub use folding::try_lower_expr;
 
 use crate::ast::{
-    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, FieldExpr,
+    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, ExternFn, FieldExpr,
     FunctionDef, IfExpr, IndexExpr, IsExpr, Item, LetStmt, LiteralExpr, LoopExpr, MatchExpr,
     MethodCallExpr, ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt,
     StructExpr, TupleExpr, WhileExpr,
@@ -193,6 +193,15 @@ impl LoweringContext {
                 self.lower_type_alias(type_alias).map(HirItem::TypeAlias)
             }
             Item::Impl(impl_block) => self.lower_impl(impl_block).map(HirItem::Impl),
+            Item::Extern(extern_block) => {
+                // Lower each extern function declaration
+                for extern_fn in extern_block.extern_fns() {
+                    if let Some(hir_fn) = self.lower_extern_fn(&extern_fn) {
+                        self.db.items.push(HirItem::Function(hir_fn));
+                    }
+                }
+                None // Don't return the extern block itself as an item
+            }
         }
     }
 
@@ -231,6 +240,53 @@ impl LoweringContext {
 
         // Lower body
         let body = func.body().map(|b| self.lower_block(&b));
+
+        Some(HirFunction {
+            def_id,
+            name,
+            type_params,
+            params,
+            ret_type,
+            body,
+            span,
+        })
+    }
+
+    fn lower_extern_fn(&mut self, extern_fn: &ExternFn) -> Option<HirFunction> {
+        let ident_token = extern_fn.name()?.ident_token()?;
+        let name = ident_token.text().to_string();
+        let span = Self::text_range_to_span(extern_fn.syntax().text_range());
+
+        // Get DefId from the function name span
+        let name_span = Self::text_range_to_span(ident_token.text_range());
+        let def_id = self
+            .resolutions
+            .get(&name_span)
+            .copied()
+            .unwrap_or(DefId(0));
+
+        // No type parameters for extern functions (currently)
+        let type_params = Vec::new();
+
+        // Lower parameters
+        let params = extern_fn
+            .param_list()
+            .map(|pl| {
+                pl.params()
+                    .filter_map(|p| self.lower_param(&p))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        // Get return type
+        let ret_type = extern_fn
+            .ret_type()
+            .map(|rt| Self::text_range_to_span(rt.syntax().text_range()))
+            .map(|rt_span| self.get_type_annotation(&rt_span))
+            .unwrap_or_else(|| self.db.types.unit());
+
+        // Extern functions have no body
+        let body = None;
 
         Some(HirFunction {
             def_id,

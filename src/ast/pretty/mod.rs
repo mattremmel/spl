@@ -49,6 +49,7 @@ impl AstPrinter {
             Item::Struct(s) => self.print_struct(s),
             Item::Impl(i) => self.print_impl(i),
             Item::TypeAlias(t) => self.print_type_alias(t),
+            Item::Extern(e) => self.print_extern_block(e),
         }
     }
 
@@ -127,6 +128,45 @@ impl AstPrinter {
         self.indented(|p| {
             if let Some(ty) = alias.ty() {
                 p.print_type(&ty);
+            }
+        });
+    }
+
+    fn print_extern_block(&mut self, extern_block: &ExternBlock) {
+        let abi = extern_block
+            .abi()
+            .map(|t| t.text().to_string())
+            .unwrap_or_else(|| "\"C\"".to_string());
+        self.line(&format!("ExternBlock {abi}"));
+
+        self.indented(|p| {
+            for func in extern_block.extern_fns() {
+                p.print_extern_fn(&func);
+            }
+        });
+    }
+
+    fn print_extern_fn(&mut self, func: &ExternFn) {
+        let name = func
+            .name()
+            .and_then(|n| n.ident_token())
+            .map(|t| t.text().to_string())
+            .unwrap_or_else(|| "?".to_string());
+
+        let vis = if func.visibility().is_some() {
+            "pub "
+        } else {
+            ""
+        };
+        self.line(&format!("{vis}ExternFn \"{name}\""));
+
+        self.indented(|p| {
+            if let Some(params) = func.param_list() {
+                p.print_param_list(&params);
+            }
+            if let Some(ret_ty) = func.ret_type() {
+                p.line("ReturnType");
+                p.indented(|p| p.print_type(&ret_ty));
             }
         });
     }

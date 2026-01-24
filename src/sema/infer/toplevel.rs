@@ -1,6 +1,6 @@
 //! Top-level type inference for source files and functions.
 
-use crate::ast::{Expr, FunctionDef, Item, SourceFile, WhereClause};
+use crate::ast::{Expr, ExternFn, FunctionDef, Item, SourceFile, WhereClause};
 use crate::diagnostic::Diagnostic;
 use crate::sema::symbol::DefId;
 use crate::sema::types::{Mutability, PrimitiveKind, Type, TypeId};
@@ -90,6 +90,12 @@ impl InferEngine {
 
                     // Clear current_self_type after processing impl block
                     self.current_self_type = None;
+                }
+                Item::Extern(extern_block) => {
+                    // Collect signatures for extern functions
+                    for extern_fn in extern_block.extern_fns() {
+                        self.collect_extern_fn_signature(&extern_fn);
+                    }
                 }
             }
         }
@@ -189,6 +195,79 @@ impl InferEngine {
             def_id,
             FnSignature {
                 self_param,
+                type_params,
+                params,
+                ret,
+            },
+        );
+    }
+
+    /// Collect the signature of an extern function declaration.
+    pub(super) fn collect_extern_fn_signature(&mut self, extern_fn: &ExternFn) {
+        let name = match extern_fn.name() {
+            Some(n) => n,
+            None => return,
+        };
+
+        let token = match name.ident_token() {
+            Some(t) => t,
+            None => return,
+        };
+
+        let span = text_range_to_span(token.text_range());
+        let def_id = match self.resolutions.get(&span) {
+            Some(id) => *id,
+            None => return,
+        };
+
+        // Extern functions don't have type parameters (currently)
+        let type_params = Vec::new();
+
+        // Collect parameters and bind their types
+        let mut params = Vec::new();
+        if let Some(param_list) = extern_fn.param_list() {
+            for param in param_list.params() {
+                let param_name = param
+                    .name()
+                    .and_then(|n| n.ident_token())
+                    .map(|t| t.text().to_string())
+                    .unwrap_or_default();
+                let param_ty = param
+                    .ty()
+                    .map(|t| self.ast_type_to_type_id(&t))
+                    .unwrap_or_else(|| self.fresh_type_var());
+                // Get external label (None if `_`, explicit label, or defaults to param name)
+                let label = param.external_label();
+                params.push(ParamInfo {
+                    label,
+                    name: param_name.clone(),
+                    ty: param_ty,
+                });
+
+                // Bind the parameter's DefId to its type (needed for HIR lowering)
+                // This is similar to what infer_function does for regular functions
+                if let Some(param_name_node) = param.name()
+                    && let Some(param_token) = param_name_node.ident_token()
+                {
+                    let param_span = text_range_to_span(param_token.text_range());
+                    if let Some(&param_def_id) = self.resolutions.get(&param_span) {
+                        self.binding_types.insert(param_def_id, param_ty);
+                    }
+                }
+            }
+        }
+
+        // Get return type
+        let ret = extern_fn
+            .ret_type()
+            .map(|t| self.ast_type_to_type_id(&t))
+            .unwrap_or_else(|| self.ctx.types.unit());
+
+        // Extern functions don't have self parameters
+        self.fn_signatures.insert(
+            def_id,
+            FnSignature {
+                self_param: None,
                 type_params,
                 params,
                 ret,

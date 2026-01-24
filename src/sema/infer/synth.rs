@@ -1523,6 +1523,23 @@ impl InferEngine {
             return elems[idx];
         }
 
+        // Handle StrRef field access (.0 = ptr, .1 = len as i64)
+        if let Ok(idx) = field_name.parse::<usize>()
+            && matches!(&base_type, Type::StrRef)
+        {
+            if idx < 2 {
+                // Both ptr and len are represented as i64 at runtime
+                return self.ctx.types.i64();
+            } else {
+                let span = text_range_to_span(field.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error(format!("&str only has fields .0 and .1, not .{}", idx))
+                        .with_label(span, "invalid field index"),
+                );
+                return self.ctx.types.error();
+            }
+        }
+
         // Handle struct field access
         if let Type::Struct(def_id, type_args) = &base_type {
             let def_id = *def_id;
@@ -2690,14 +2707,15 @@ impl InferEngine {
                                     return self.ctx.types.error();
                                 }
 
+                                // Check for str (string reference type) BEFORE primitives
+                                // because str is in PrimitiveKind but we want StrRef for type annotations
+                                if name == "str" {
+                                    return self.ctx.types.str_ref();
+                                }
+
                                 // Check for primitive types
                                 if let Some(prim) = PrimitiveKind::from_name(name) {
                                     return self.ctx.types.primitive(prim);
-                                }
-
-                                // Check for str (string reference type)
-                                if name == "str" {
-                                    return self.ctx.types.str_ref();
                                 }
 
                                 // Look up in resolutions

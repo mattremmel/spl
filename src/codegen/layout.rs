@@ -147,6 +147,16 @@ impl<'a> LayoutComputer<'a> {
         match ty_data {
             Type::Tuple(elems) => self.compute_field_offset(elems, field_idx),
             Type::Struct(_, fields) => self.compute_field_offset(fields, field_idx),
+            // StrRef is a fat pointer: [ptr, len], both pointer-sized
+            Type::StrRef => {
+                if field_idx == 0 {
+                    0 // ptr at offset 0
+                } else if field_idx == 1 {
+                    self.pointer_size // len at offset pointer_size
+                } else {
+                    0
+                }
+            }
             _ => 0,
         }
     }
@@ -178,6 +188,14 @@ impl<'a> LayoutComputer<'a> {
         match ty_data {
             Type::Tuple(elems) => elems.get(field_idx).copied(),
             Type::Struct(_, fields) => fields.get(field_idx).copied(),
+            // StrRef fields are both i64 (ptr and len)
+            Type::StrRef => {
+                if field_idx < 2 {
+                    Some(self.types.i64())
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }

@@ -9,6 +9,8 @@ ast_node!(FunctionDef);
 ast_node!(StructDef);
 ast_node!(ImplBlock);
 ast_node!(TypeAlias);
+ast_node!(ExternBlock);
+ast_node!(ExternFn);
 ast_node!(ParamList);
 ast_node!(Param);
 ast_node!(SelfParam);
@@ -31,13 +33,14 @@ impl SourceFile {
     }
 }
 
-/// Top-level item (function, struct, impl, type alias).
+/// Top-level item (function, struct, impl, type alias, extern block).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Item {
     Function(FunctionDef),
     Struct(StructDef),
     Impl(ImplBlock),
     TypeAlias(TypeAlias),
+    Extern(ExternBlock),
 }
 
 impl AstNode for Item {
@@ -50,6 +53,7 @@ impl AstNode for Item {
                 | SyntaxKind::StructDef
                 | SyntaxKind::ImplBlock
                 | SyntaxKind::TypeAlias
+                | SyntaxKind::ExternBlock
         )
     }
 
@@ -59,6 +63,7 @@ impl AstNode for Item {
             SyntaxKind::StructDef => Some(Item::Struct(StructDef(node))),
             SyntaxKind::ImplBlock => Some(Item::Impl(ImplBlock(node))),
             SyntaxKind::TypeAlias => Some(Item::TypeAlias(TypeAlias(node))),
+            SyntaxKind::ExternBlock => Some(Item::Extern(ExternBlock(node))),
             _ => None,
         }
     }
@@ -69,6 +74,7 @@ impl AstNode for Item {
             Item::Struct(it) => it.syntax(),
             Item::Impl(it) => it.syntax(),
             Item::TypeAlias(it) => it.syntax(),
+            Item::Extern(it) => it.syntax(),
         }
     }
 }
@@ -149,6 +155,44 @@ impl TypeAlias {
     }
 
     pub fn where_clause(&self) -> Option<WhereClause> {
+        child(&self.0)
+    }
+}
+
+impl ExternBlock {
+    pub fn extern_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::EXTERN_KW)
+    }
+
+    /// Get the ABI string (e.g., "C").
+    pub fn abi(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::STRING_LITERAL)
+    }
+
+    /// Get extern function declarations.
+    pub fn extern_fns(&self) -> impl Iterator<Item = ExternFn> {
+        children(&self.0)
+    }
+}
+
+impl ExternFn {
+    pub fn visibility(&self) -> Option<Visibility> {
+        child(&self.0)
+    }
+
+    pub fn fn_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::FN_KW)
+    }
+
+    pub fn name(&self) -> Option<Name> {
+        child(&self.0)
+    }
+
+    pub fn param_list(&self) -> Option<ParamList> {
+        child(&self.0)
+    }
+
+    pub fn ret_type(&self) -> Option<Type> {
         child(&self.0)
     }
 }

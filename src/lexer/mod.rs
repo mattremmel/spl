@@ -82,6 +82,8 @@ pub enum Token {
     Not,
     #[token("match")]
     Match,
+    #[token("extern")]
+    Extern,
 
     // === Operators ===
     // Arithmetic

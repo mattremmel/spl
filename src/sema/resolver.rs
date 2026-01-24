@@ -34,9 +34,10 @@
 
 use crate::DefId;
 use crate::ast::{
-    ApplyExpr, Block, Expr, FieldDef, FunctionDef, GenericParam, ImplBlock, Item, LetStmt, Name,
-    NameRef, Param, ParamList, Pat, Path, PathSegment, SelfParam, SourceFile, Stmt, StructDef,
-    StructExpr, StructExprField, StructPat, StructPatField, Type, TypeAlias, WhereClause,
+    ApplyExpr, Block, Expr, ExternBlock, ExternFn, FieldDef, FunctionDef, GenericParam, ImplBlock,
+    Item, LetStmt, Name, NameRef, Param, ParamList, Pat, Path, PathSegment, SelfParam, SourceFile,
+    Stmt, StructDef, StructExpr, StructExprField, StructPat, StructPatField, Type, TypeAlias,
+    WhereClause,
 };
 use crate::diagnostic::Diagnostic;
 use crate::lexer::Span;
@@ -213,6 +214,7 @@ impl<'ctx> Resolver<'ctx> {
             Item::Struct(struct_def) => self.collect_struct(struct_def),
             Item::TypeAlias(type_alias) => self.collect_type_alias(type_alias),
             Item::Impl(impl_block) => self.collect_impl_block(impl_block),
+            Item::Extern(extern_block) => self.collect_extern_block(extern_block),
         }
     }
 
@@ -272,6 +274,20 @@ impl<'ctx> Resolver<'ctx> {
         self.ctx.exit_scope();
     }
 
+    fn collect_extern_block(&mut self, extern_block: &ExternBlock) {
+        // Collect all extern function declarations
+        for extern_fn in extern_block.extern_fns() {
+            self.collect_extern_fn(&extern_fn);
+        }
+    }
+
+    fn collect_extern_fn(&mut self, extern_fn: &ExternFn) {
+        if let Some(name) = extern_fn.name() {
+            let vis = self.convert_visibility(&extern_fn.visibility());
+            self.define_name(&name, SymbolKind::Function, vis, false);
+        }
+    }
+
     // ===== Pass 2: Resolution =====
 
     fn resolve_source_file(&mut self, source_file: &SourceFile) {
@@ -286,6 +302,7 @@ impl<'ctx> Resolver<'ctx> {
             Item::Struct(struct_def) => self.resolve_struct(struct_def),
             Item::TypeAlias(type_alias) => self.resolve_type_alias(type_alias),
             Item::Impl(impl_block) => self.resolve_impl_block(impl_block),
+            Item::Extern(extern_block) => self.resolve_extern_block(extern_block),
         }
     }
 
@@ -381,6 +398,30 @@ impl<'ctx> Resolver<'ctx> {
         // Resolve items
         for item in impl_block.items() {
             self.resolve_item(&item);
+        }
+
+        self.ctx.exit_scope();
+    }
+
+    fn resolve_extern_block(&mut self, extern_block: &ExternBlock) {
+        // Resolve parameter and return types in extern function declarations
+        for extern_fn in extern_block.extern_fns() {
+            self.resolve_extern_fn(&extern_fn);
+        }
+    }
+
+    fn resolve_extern_fn(&mut self, extern_fn: &ExternFn) {
+        // Enter a scope for parameter names (not strictly necessary but consistent)
+        self.ctx.enter_scope(ScopeKind::Function);
+
+        // Define and resolve parameters
+        if let Some(params) = extern_fn.param_list() {
+            self.define_params(&params);
+        }
+
+        // Resolve return type
+        if let Some(ret_ty) = extern_fn.ret_type() {
+            self.resolve_type(&ret_ty);
         }
 
         self.ctx.exit_scope();

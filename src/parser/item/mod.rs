@@ -437,7 +437,64 @@ fn visibility_lookahead(p: &mut Parser<'_>) -> usize {
     }
 }
 
-/// Parse a top-level item (function, struct, type alias, or impl block).
+/// Parse an extern block: `extern "ABI" { fn name(...); ... }`
+pub(crate) fn extern_block(
+    p: &mut Parser<'_>,
+) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    // extern keyword
+    p.expect(SyntaxKind::EXTERN_KW)?;
+
+    // Optional ABI string (e.g., "C")
+    p.eat(SyntaxKind::STRING_LITERAL);
+
+    // Items block
+    p.expect(SyntaxKind::L_BRACE)?;
+
+    while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
+        if let Err(err) = extern_fn(p) {
+            p.recover_with_error(err, EXTERN_ITEM_RECOVERY_SET);
+        }
+    }
+
+    p.expect(SyntaxKind::R_BRACE)?;
+
+    Ok(m.complete(p, SyntaxKind::ExternBlock))
+}
+
+/// Recovery set for extern block contents.
+const EXTERN_ITEM_RECOVERY_SET: &[SyntaxKind] =
+    &[SyntaxKind::FN_KW, SyntaxKind::PUB_KW, SyntaxKind::R_BRACE];
+
+/// Parse an extern function declaration: `[pub] fn name(params) [: Type];`
+fn extern_fn(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    // Optional visibility
+    opt_visibility(p);
+
+    // fn keyword
+    p.expect(SyntaxKind::FN_KW)?;
+
+    // Function name
+    name(p)?;
+
+    // Parameter list
+    param_list(p)?;
+
+    // Optional return type
+    if p.eat(SyntaxKind::COLON) {
+        stmt::type_annotation(p)?;
+    }
+
+    // Semicolon (no body)
+    p.expect(SyntaxKind::SEMI)?;
+
+    Ok(m.complete(p, SyntaxKind::ExternFn))
+}
+
+/// Parse a top-level item (function, struct, type alias, impl block, or extern block).
 pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     // Check for visibility modifier and calculate lookahead
     let has_pub = p.at(SyntaxKind::PUB_KW);
@@ -448,8 +505,10 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser:
         Some(SyntaxKind::STRUCT_KW) => struct_def(p),
         Some(SyntaxKind::TYPE_KW) => type_alias(p),
         Some(SyntaxKind::IMPL_KW) if !has_pub => impl_block(p),
+        Some(SyntaxKind::EXTERN_KW) if !has_pub => extern_block(p),
         _ => {
-            let err = p.error_at_current("expected item (fn, struct, type, or impl)".to_string());
+            let err =
+                p.error_at_current("expected item (fn, struct, type, impl, or extern)".to_string());
             Err(err)
         }
     }

@@ -36,6 +36,7 @@ pub enum SyntaxKind {
     IS_KW,
     NOT_KW,
     MATCH_KW,
+    EXTERN_KW,
 
     // Operators
     PLUS,
@@ -98,6 +99,8 @@ pub enum SyntaxKind {
     StructDef,
     ImplBlock,
     TypeAlias,
+    ExternBlock,
+    ExternFn,
     ParamList,
     Param,
     SelfParam,
@@ -221,6 +224,7 @@ impl From<Token> for SyntaxKind {
             Token::Is => Self::IS_KW,
             Token::Not => Self::NOT_KW,
             Token::Match => Self::MATCH_KW,
+            Token::Extern => Self::EXTERN_KW,
             Token::Plus => Self::PLUS,
             Token::Minus => Self::MINUS,
             Token::Star => Self::STAR,

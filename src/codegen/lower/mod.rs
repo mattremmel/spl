@@ -234,7 +234,29 @@ impl<'a> FunctionLowerer<'a> {
 
         for arg in self.body.args() {
             let decl = self.body.local_decl(arg);
-            if self.type_mapper.map_type(decl.ty, self.types).is_some()
+            let ty = self.types.get(decl.ty);
+
+            // Handle StrRef arguments specially - they are passed as 2 values (ptr, len)
+            if matches!(ty, crate::sema::types::Type::StrRef) {
+                if let Some(LocalStorage::StackSlot(slot)) = self.local_map.get(arg) {
+                    let ptr_ty = self.type_mapper.pointer_type();
+                    let ptr_size: i32 = if ptr_ty == types::I64 { 8 } else { 4 };
+
+                    // Get the stack slot address
+                    let addr = self.builder.ins().stack_addr(ptr_ty, slot, 0);
+
+                    // Store ptr at offset 0
+                    let ptr_val = block_params[param_idx];
+                    let flags = MemFlags::trusted();
+                    self.builder.ins().store(flags, ptr_val, addr, 0);
+
+                    // Store len at offset ptr_size
+                    let len_val = block_params[param_idx + 1];
+                    self.builder.ins().store(flags, len_val, addr, ptr_size);
+
+                    param_idx += 2;
+                }
+            } else if self.type_mapper.map_type(decl.ty, self.types).is_some()
                 && let Some(LocalStorage::Variable(var)) = self.local_map.get(arg)
             {
                 let val = block_params[param_idx];

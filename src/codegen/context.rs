@@ -92,8 +92,21 @@ impl CodegenContext {
         name: &str,
         signature: &cranelift_codegen::ir::Signature,
     ) -> Result<FuncId, CodegenError> {
+        self.declare_function_with_linkage(name, signature, Linkage::Export)
+    }
+
+    /// Declare a function in the module with the specified linkage.
+    ///
+    /// Use `Linkage::Export` for functions defined in this module.
+    /// Use `Linkage::Import` for external functions (e.g., runtime intrinsics).
+    pub fn declare_function_with_linkage(
+        &mut self,
+        name: &str,
+        signature: &cranelift_codegen::ir::Signature,
+        linkage: Linkage,
+    ) -> Result<FuncId, CodegenError> {
         self.module
-            .declare_function(name, Linkage::Export, signature)
+            .declare_function(name, linkage, signature)
             .map_err(|e| CodegenError::ModuleError(e.to_string()))
     }
 

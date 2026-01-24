@@ -1,8 +1,19 @@
 // SPL Prelude - automatically imported into all SPL programs.
-//
-// This file will eventually contain:
-// - pub fn print(s: str)
-// - pub fn println(s: str)
-// - Other common utilities
-//
-// For now, this is a placeholder.
+
+// Extern declarations for runtime intrinsics.
+extern "C" {
+    fn __print_str(_ ptr: i64, _ len: i64);
+    fn __print_newline();
+}
+
+/// Print a string to stdout (no newline).
+pub fn print(_ s: str) {
+    // str is a fat pointer: .0 = ptr, .1 = len
+    __print_str(s.0, s.1);
+}
+
+/// Print a string to stdout followed by a newline.
+pub fn println(_ s: str) {
+    print(s);
+    __print_newline();
+}

@@ -134,12 +134,12 @@ mod tests {
     }
 
     #[test]
-    fn stdlib_is_currently_empty() {
-        // Until we add actual stdlib functions, it should be empty
+    fn stdlib_has_print_functions() {
         let stdlib = StdlibDefs::compile().unwrap();
+        // The stdlib should have print, println, and extern functions
         assert!(
-            stdlib.is_empty(),
-            "stdlib should be empty until we add functions"
+            !stdlib.is_empty(),
+            "stdlib should have print/println functions"
         );
     }
 }
