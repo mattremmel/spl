@@ -3406,3 +3406,251 @@ fn error_mixed_second_unexpected_label() {
         &["unexpected label `b`"],
     );
 }
+
+// -----------------------------------------------------------------------------
+// 15.3 Three-parameter permutations (P=positional, D=default, E=external)
+// All 27 permutations: 3^3
+// -----------------------------------------------------------------------------
+
+// PPP
+#[test]
+fn param3_ppp() {
+    check(
+        "fn f(_ a: i32, _ b: i32, _ c: i32): i32 { a + b + c } fn main() { let x = f(1, 2, 3); }",
+        "i32",
+    );
+}
+
+// PPD
+#[test]
+fn param3_ppd() {
+    check(
+        "fn f(_ a: i32, _ b: i32, c: i32): i32 { a + b + c } fn main() { let x = f(1, 2, c: 3); }",
+        "i32",
+    );
+}
+
+// PPE
+#[test]
+fn param3_ppe() {
+    check(
+        "fn f(_ a: i32, _ b: i32, to c: i32): i32 { a + b + c } fn main() { let x = f(1, 2, to: 3); }",
+        "i32",
+    );
+}
+
+// PDP
+#[test]
+fn param3_pdp() {
+    check(
+        "fn f(_ a: i32, b: i32, _ c: i32): i32 { a + b + c } fn main() { let x = f(1, b: 2, 3); }",
+        "i32",
+    );
+}
+
+// PDD
+#[test]
+fn param3_pdd() {
+    check(
+        "fn f(_ a: i32, b: i32, c: i32): i32 { a + b + c } fn main() { let x = f(1, b: 2, c: 3); }",
+        "i32",
+    );
+}
+
+// PDE
+#[test]
+fn param3_pde() {
+    check(
+        "fn f(_ a: i32, b: i32, to c: i32): i32 { a + b + c } fn main() { let x = f(1, b: 2, to: 3); }",
+        "i32",
+    );
+}
+
+// PEP
+#[test]
+fn param3_pep() {
+    check(
+        "fn f(_ a: i32, at b: i32, _ c: i32): i32 { a + b + c } fn main() { let x = f(1, at: 2, 3); }",
+        "i32",
+    );
+}
+
+// PED
+#[test]
+fn param3_ped() {
+    check(
+        "fn f(_ a: i32, at b: i32, c: i32): i32 { a + b + c } fn main() { let x = f(1, at: 2, c: 3); }",
+        "i32",
+    );
+}
+
+// PEE
+#[test]
+fn param3_pee() {
+    check(
+        "fn f(_ a: i32, at b: i32, to c: i32): i32 { a + b + c } fn main() { let x = f(1, at: 2, to: 3); }",
+        "i32",
+    );
+}
+
+// DPP
+#[test]
+fn param3_dpp() {
+    check(
+        "fn f(a: i32, _ b: i32, _ c: i32): i32 { a + b + c } fn main() { let x = f(a: 1, 2, 3); }",
+        "i32",
+    );
+}
+
+// DPD
+#[test]
+fn param3_dpd() {
+    check(
+        "fn f(a: i32, _ b: i32, c: i32): i32 { a + b + c } fn main() { let x = f(a: 1, 2, c: 3); }",
+        "i32",
+    );
+}
+
+// DPE
+#[test]
+fn param3_dpe() {
+    check(
+        "fn f(a: i32, _ b: i32, to c: i32): i32 { a + b + c } fn main() { let x = f(a: 1, 2, to: 3); }",
+        "i32",
+    );
+}
+
+// DDP
+#[test]
+fn param3_ddp() {
+    check(
+        "fn f(a: i32, b: i32, _ c: i32): i32 { a + b + c } fn main() { let x = f(a: 1, b: 2, 3); }",
+        "i32",
+    );
+}
+
+// DDD
+#[test]
+fn param3_ddd() {
+    check(
+        "fn f(a: i32, b: i32, c: i32): i32 { a + b + c } fn main() { let x = f(a: 1, b: 2, c: 3); }",
+        "i32",
+    );
+}
+
+// DDE
+#[test]
+fn param3_dde() {
+    check(
+        "fn f(a: i32, b: i32, to c: i32): i32 { a + b + c } fn main() { let x = f(a: 1, b: 2, to: 3); }",
+        "i32",
+    );
+}
+
+// DEP
+#[test]
+fn param3_dep() {
+    check(
+        "fn f(a: i32, at b: i32, _ c: i32): i32 { a + b + c } fn main() { let x = f(a: 1, at: 2, 3); }",
+        "i32",
+    );
+}
+
+// DED
+#[test]
+fn param3_ded() {
+    check(
+        "fn f(a: i32, at b: i32, c: i32): i32 { a + b + c } fn main() { let x = f(a: 1, at: 2, c: 3); }",
+        "i32",
+    );
+}
+
+// DEE
+#[test]
+fn param3_dee() {
+    check(
+        "fn f(a: i32, at b: i32, to c: i32): i32 { a + b + c } fn main() { let x = f(a: 1, at: 2, to: 3); }",
+        "i32",
+    );
+}
+
+// EPP
+#[test]
+fn param3_epp() {
+    check(
+        "fn f(from a: i32, _ b: i32, _ c: i32): i32 { a + b + c } fn main() { let x = f(from: 1, 2, 3); }",
+        "i32",
+    );
+}
+
+// EPD
+#[test]
+fn param3_epd() {
+    check(
+        "fn f(from a: i32, _ b: i32, c: i32): i32 { a + b + c } fn main() { let x = f(from: 1, 2, c: 3); }",
+        "i32",
+    );
+}
+
+// EPE
+#[test]
+fn param3_epe() {
+    check(
+        "fn f(from a: i32, _ b: i32, to c: i32): i32 { a + b + c } fn main() { let x = f(from: 1, 2, to: 3); }",
+        "i32",
+    );
+}
+
+// EDP
+#[test]
+fn param3_edp() {
+    check(
+        "fn f(from a: i32, b: i32, _ c: i32): i32 { a + b + c } fn main() { let x = f(from: 1, b: 2, 3); }",
+        "i32",
+    );
+}
+
+// EDD
+#[test]
+fn param3_edd() {
+    check(
+        "fn f(from a: i32, b: i32, c: i32): i32 { a + b + c } fn main() { let x = f(from: 1, b: 2, c: 3); }",
+        "i32",
+    );
+}
+
+// EDE
+#[test]
+fn param3_ede() {
+    check(
+        "fn f(from a: i32, b: i32, to c: i32): i32 { a + b + c } fn main() { let x = f(from: 1, b: 2, to: 3); }",
+        "i32",
+    );
+}
+
+// EEP
+#[test]
+fn param3_eep() {
+    check(
+        "fn f(from a: i32, at b: i32, _ c: i32): i32 { a + b + c } fn main() { let x = f(from: 1, at: 2, 3); }",
+        "i32",
+    );
+}
+
+// EED
+#[test]
+fn param3_eed() {
+    check(
+        "fn f(from a: i32, at b: i32, c: i32): i32 { a + b + c } fn main() { let x = f(from: 1, at: 2, c: 3); }",
+        "i32",
+    );
+}
+
+// EEE
+#[test]
+fn param3_eee() {
+    check(
+        "fn f(from a: i32, at b: i32, to c: i32): i32 { a + b + c } fn main() { let x = f(from: 1, at: 2, to: 3); }",
+        "i32",
+    );
+}
