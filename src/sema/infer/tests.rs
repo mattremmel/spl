@@ -3254,3 +3254,155 @@ fn mixed_positional_and_labeled() {
         "i32",
     );
 }
+
+// -----------------------------------------------------------------------------
+// 15.1 Two-parameter permutations (positional, default, external)
+// -----------------------------------------------------------------------------
+
+// (positional, positional)
+#[test]
+fn param_positional_positional() {
+    check(
+        "fn f(_ a: i32, _ b: i32): i32 { a + b } fn main() { let x = f(1, 2); }",
+        "i32",
+    );
+}
+
+// (positional, default)
+#[test]
+fn param_positional_default() {
+    check(
+        "fn f(_ a: i32, b: i32): i32 { a + b } fn main() { let x = f(1, b: 2); }",
+        "i32",
+    );
+}
+
+// (positional, external)
+#[test]
+fn param_positional_external() {
+    check(
+        "fn f(_ a: i32, to b: i32): i32 { a + b } fn main() { let x = f(1, to: 2); }",
+        "i32",
+    );
+}
+
+// (default, positional)
+#[test]
+fn param_default_positional() {
+    check(
+        "fn f(a: i32, _ b: i32): i32 { a + b } fn main() { let x = f(a: 1, 2); }",
+        "i32",
+    );
+}
+
+// (default, default)
+#[test]
+fn param_default_default() {
+    check(
+        "fn f(a: i32, b: i32): i32 { a + b } fn main() { let x = f(a: 1, b: 2); }",
+        "i32",
+    );
+}
+
+// (default, external)
+#[test]
+fn param_default_external() {
+    check(
+        "fn f(a: i32, to b: i32): i32 { a + b } fn main() { let x = f(a: 1, to: 2); }",
+        "i32",
+    );
+}
+
+// (external, positional)
+#[test]
+fn param_external_positional() {
+    check(
+        "fn f(from a: i32, _ b: i32): i32 { a + b } fn main() { let x = f(from: 1, 2); }",
+        "i32",
+    );
+}
+
+// (external, default)
+#[test]
+fn param_external_default() {
+    check(
+        "fn f(from a: i32, b: i32): i32 { a + b } fn main() { let x = f(from: 1, b: 2); }",
+        "i32",
+    );
+}
+
+// (external, external)
+#[test]
+fn param_external_external() {
+    check(
+        "fn f(from a: i32, to b: i32): i32 { a + b } fn main() { let x = f(from: 1, to: 2); }",
+        "i32",
+    );
+}
+
+// -----------------------------------------------------------------------------
+// 15.2 Error cases for label mismatches
+// -----------------------------------------------------------------------------
+
+// Positional rejects any label
+#[test]
+fn error_positional_with_wrong_label() {
+    check_err(
+        "fn f(_ a: i32, _ b: i32) {} fn main() { f(x: 1, 2); }",
+        &["unexpected label `x`"],
+    );
+}
+
+// Default requires matching label
+#[test]
+fn error_default_with_wrong_label() {
+    check_err(
+        "fn f(a: i32, b: i32) {} fn main() { f(x: 1, b: 2); }",
+        &["expected label `a`, found `x`"],
+    );
+}
+
+// Default requires label (not positional)
+#[test]
+fn error_default_missing_label() {
+    check_err(
+        "fn f(a: i32, b: i32) {} fn main() { f(1, b: 2); }",
+        &["expected labeled argument `a`"],
+    );
+}
+
+// External requires matching label
+#[test]
+fn error_external_with_wrong_label() {
+    check_err(
+        "fn f(from a: i32) {} fn main() { f(to: 1); }",
+        &["expected label `from`, found `to`"],
+    );
+}
+
+// External requires label (not positional)
+#[test]
+fn error_external_missing_label() {
+    check_err(
+        "fn f(from a: i32) {} fn main() { f(1); }",
+        &["expected labeled argument `from`"],
+    );
+}
+
+// Mixed: first positional, second requires label
+#[test]
+fn error_mixed_second_missing_label() {
+    check_err(
+        "fn f(_ a: i32, b: i32) {} fn main() { f(1, 2); }",
+        &["expected labeled argument `b`"],
+    );
+}
+
+// Mixed: first requires label, second positional given label
+#[test]
+fn error_mixed_second_unexpected_label() {
+    check_err(
+        "fn f(a: i32, _ b: i32) {} fn main() { f(a: 1, b: 2); }",
+        &["unexpected label `b`"],
+    );
+}
