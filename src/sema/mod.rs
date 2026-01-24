@@ -291,13 +291,13 @@ impl SemanticContext {
     // ===== ID Validation Helpers =====
 
     /// Returns true if the given ScopeId is valid (within bounds).
-    #[cfg(debug_assertions)]
+    /// Used in debug assertions; trivial enough to always compile.
     fn is_valid_scope_id(&self, scope_id: ScopeId) -> bool {
         (scope_id.0 as usize) < self.scopes.len()
     }
 
     /// Returns true if the given DefId is valid (within bounds).
-    #[cfg(debug_assertions)]
+    /// Used in debug assertions; trivial enough to always compile.
     fn is_valid_def_id(&self, def_id: DefId) -> bool {
         (def_id.0 as usize) < self.symbols.len()
     }

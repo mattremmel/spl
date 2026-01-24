@@ -139,6 +139,12 @@ impl<'hir> MirLoweringContext<'hir> {
                 place
             }
             HirExprKind::Var(def_id) => {
+                debug_assert!(
+                    def_id.is_valid(),
+                    "Variable reference with INVALID DefId at {:?} - HIR lowering produced invalid variable reference",
+                    span
+                );
+
                 // Look up the local for this variable
                 if let Some(&local) = self.local_map.get(def_id) {
                     Place::from_local(local)
@@ -328,7 +334,14 @@ impl<'hir> MirLoweringContext<'hir> {
 
                 // Get struct DefId from base type and resolve field index
                 let field_idx = match self.hir.types.get(base_ty) {
-                    Type::Struct(def_id, _) => self.resolve_field_index(*def_id, field),
+                    Type::Struct(def_id, _) => {
+                        debug_assert!(
+                            def_id.is_valid(),
+                            "Field access on struct with INVALID DefId at {:?} - type system produced invalid struct type",
+                            span
+                        );
+                        self.resolve_field_index(*def_id, field)
+                    }
                     _ => panic!(
                         "Field access on non-struct type: {:?}",
                         self.hir.types.get(base_ty)
@@ -794,6 +807,12 @@ impl<'hir> MirLoweringContext<'hir> {
         value: Option<ExprId>,
         span: Span,
     ) -> Place {
+        debug_assert!(
+            !self.loop_stack.is_empty(),
+            "Break expression at {:?} with empty loop_stack - HIR should not contain break outside of loop",
+            span
+        );
+
         // Get current loop context
         let loop_ctx = self
             .loop_stack
@@ -824,6 +843,12 @@ impl<'hir> MirLoweringContext<'hir> {
 
     /// Lower a continue expression.
     fn lower_continue_expr(&mut self, builder: &mut MirBuilder, span: Span) -> Place {
+        debug_assert!(
+            !self.loop_stack.is_empty(),
+            "Continue expression at {:?} with empty loop_stack - HIR should not contain continue outside of loop",
+            span
+        );
+
         // Get current loop context
         let loop_ctx = self
             .loop_stack
@@ -895,6 +920,12 @@ impl<'hir> MirLoweringContext<'hir> {
             .get(&expr_id)
             .copied()
             .unwrap_or(DefId::INVALID); // Fallback for unresolved
+
+        debug_assert!(
+            method_def_id.is_valid(),
+            "Method call at expr {:?} resolved to INVALID DefId - type inference failed to resolve this method",
+            expr_id
+        );
 
         // Receiver becomes first argument
         let receiver_operand = self.lower_expr_as_operand(builder, receiver);

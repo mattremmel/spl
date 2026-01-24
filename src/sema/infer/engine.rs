@@ -278,6 +278,15 @@ impl InferEngine {
     }
 
     pub(super) fn into_result(self) -> InferResult {
+        // Verify no INVALID DefIds made it into binding_types
+        #[cfg(debug_assertions)]
+        for def_id in self.binding_types.keys() {
+            debug_assert!(
+                def_id.is_valid(),
+                "INVALID DefId found in binding_types after inference - resolution phase produced invalid binding"
+            );
+        }
+
         InferResult {
             ctx: self.ctx,
             expr_types: self.expr_types,

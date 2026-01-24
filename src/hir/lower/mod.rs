@@ -221,6 +221,12 @@ impl LoweringContext {
             .copied()
             .unwrap_or(DefId::INVALID);
 
+        debug_assert!(
+            def_id.is_valid(),
+            "Function '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this name",
+            name, name_span
+        );
+
         // Lower type parameters
         let type_params = Vec::new(); // TODO: implement generic params
 
@@ -267,6 +273,12 @@ impl LoweringContext {
             .get(&name_span)
             .copied()
             .unwrap_or(DefId::INVALID);
+
+        debug_assert!(
+            def_id.is_valid(),
+            "Extern function '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this name",
+            name, name_span
+        );
 
         // No type parameters for extern functions (currently)
         let type_params = Vec::new();
@@ -315,6 +327,13 @@ impl LoweringContext {
             .get(&name_span)
             .copied()
             .unwrap_or(DefId::INVALID);
+
+        debug_assert!(
+            def_id.is_valid(),
+            "Parameter '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this binding",
+            _name, name_span
+        );
+
         let ty = self.get_binding_type(def_id);
 
         let pat = HirPat {
@@ -347,6 +366,12 @@ impl LoweringContext {
             .get(&name_span)
             .copied()
             .unwrap_or(DefId::INVALID);
+
+        debug_assert!(
+            def_id.is_valid(),
+            "Struct '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this type",
+            name, name_span
+        );
 
         let type_params = Vec::new(); // TODO
 
@@ -381,6 +406,13 @@ impl LoweringContext {
             .get(&name_span)
             .copied()
             .unwrap_or(DefId::INVALID);
+
+        debug_assert!(
+            def_id.is_valid(),
+            "Field '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this field",
+            name, name_span
+        );
+
         let ty = self.get_binding_type(def_id);
 
         Some(HirField {
@@ -404,6 +436,12 @@ impl LoweringContext {
             .get(&name_span)
             .copied()
             .unwrap_or(DefId::INVALID);
+
+        debug_assert!(
+            def_id.is_valid(),
+            "Type alias '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this alias",
+            name, name_span
+        );
 
         let ty = self.get_type(&span);
 
@@ -554,6 +592,13 @@ impl LoweringContext {
                     .get(&name_span)
                     .copied()
                     .unwrap_or(DefId::INVALID);
+
+                debug_assert!(
+                    def_id.is_valid(),
+                    "Pattern binding resolved to INVALID DefId at {:?} - resolution phase failed to register this binding",
+                    name_span
+                );
+
                 let ty = self.get_binding_type(def_id);
 
                 let hir_pat = HirPat {
@@ -600,6 +645,12 @@ impl LoweringContext {
                     .get(&path_span)
                     .copied()
                     .unwrap_or(DefId::INVALID);
+
+                debug_assert!(
+                    def_id.is_valid(),
+                    "Struct pattern path resolved to INVALID DefId at {:?} - resolution phase failed to register this struct type",
+                    path_span
+                );
 
                 let fields: Vec<_> = struct_pat
                     .fields()
@@ -797,6 +848,12 @@ impl LoweringContext {
                 .copied()
                 .unwrap_or(DefId::INVALID);
 
+            debug_assert!(
+                def_id.is_valid(),
+                "Path expression resolved to INVALID DefId at {:?} - resolution phase failed to register this name",
+                first_span
+            );
+
             return self.db.alloc_expr(HirExpr {
                 kind: HirExprKind::Var(def_id),
                 ty,
@@ -818,6 +875,12 @@ impl LoweringContext {
             .get(&first_span)
             .copied()
             .unwrap_or(DefId::INVALID);
+
+        debug_assert!(
+            def_id.is_valid(),
+            "Multi-segment path first segment resolved to INVALID DefId at {:?} - resolution phase failed to register this name",
+            first_span
+        );
 
         // Start with the first segment as a Var expression
         let first_ty = self.get_binding_type(def_id);
@@ -929,12 +992,13 @@ impl LoweringContext {
     }
 
     fn lower_struct_expr(&mut self, struct_expr: &StructExpr, span: Span, ty: TypeId) -> ExprId {
-        // Get the struct DefId from the path
+        // Get the struct DefId from the path - use token range to match resolver
         let path_span = struct_expr
             .path()
             .and_then(|p| p.segments().next())
             .and_then(|seg| seg.name())
-            .map(|n| Self::text_range_to_span(n.syntax().text_range()))
+            .and_then(|n| n.token())
+            .map(|t| Self::text_range_to_span(t.text_range()))
             .unwrap_or_else(|| span.clone());
 
         let def_id = self
@@ -942,6 +1006,12 @@ impl LoweringContext {
             .get(&path_span)
             .copied()
             .unwrap_or(DefId::INVALID);
+
+        debug_assert!(
+            def_id.is_valid(),
+            "Struct expression path resolved to INVALID DefId at {:?} - resolution phase failed to register this struct type",
+            path_span
+        );
 
         let fields: Vec<_> = struct_expr
             .fields()
@@ -984,12 +1054,13 @@ impl LoweringContext {
         span: Span,
         ty: TypeId,
     ) -> ExprId {
-        // Get the struct DefId from the path
+        // Get the struct DefId from the path - use token range to match resolver
         let path_span = apply_expr
             .path()
             .and_then(|p| p.segments().next())
             .and_then(|seg| seg.name())
-            .map(|n| Self::text_range_to_span(n.syntax().text_range()))
+            .and_then(|n| n.token())
+            .map(|t| Self::text_range_to_span(t.text_range()))
             .unwrap_or_else(|| span.clone());
 
         let def_id = self
@@ -997,6 +1068,12 @@ impl LoweringContext {
             .get(&path_span)
             .copied()
             .unwrap_or(DefId::INVALID);
+
+        debug_assert!(
+            def_id.is_valid(),
+            "Apply expression struct path resolved to INVALID DefId at {:?} - resolution phase failed to register this struct type",
+            path_span
+        );
 
         // Lower field initializers from arguments
         let fields: Vec<_> = apply_expr

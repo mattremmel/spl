@@ -82,7 +82,6 @@ impl<'ctx> Resolver<'ctx> {
         // Pass 1: Collect top-level definitions
         self.collect_source_file(source_file);
 
-        #[cfg(debug_assertions)]
         let resolutions_after_pass1 = self.resolutions.len();
 
         // Pass 2: Resolve all references
@@ -496,7 +495,6 @@ impl<'ctx> Resolver<'ctx> {
     fn resolve_block(&mut self, block: &Block) {
         use rowan::ast::AstNode;
 
-        #[cfg(debug_assertions)]
         let scope_depth_before = self.ctx.scope_depth();
 
         self.ctx.enter_scope(ScopeKind::Block);

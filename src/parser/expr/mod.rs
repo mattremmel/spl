@@ -72,7 +72,6 @@ fn expr_bp(
         return Err(p.error_at_current("expression nesting limit exceeded".to_string()));
     }
 
-    #[cfg(debug_assertions)]
     let start_offset = p.current_offset();
 
     let mut lhs = match lhs(p, allow_struct, depth)? {

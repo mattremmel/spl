@@ -116,7 +116,7 @@ impl InferEngine {
 
     /// Check if the resolved type is concrete or an unbound variable.
     /// Returns true if the type is concrete or an unbound type variable.
-    #[cfg(debug_assertions)]
+    /// Used in debug assertions; trivial enough to always compile.
     fn is_resolved_or_unbound(&self, type_id: TypeId) -> bool {
         match self.ctx.types.get(type_id) {
             Type::Infer(v, _) => !self.substitution.contains_key(v),
