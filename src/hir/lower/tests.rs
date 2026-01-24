@@ -39,7 +39,7 @@ fn lower(source: &str) -> HirDatabase {
     );
     let source_file = SourceFile::cast(parsed.syntax()).unwrap();
     let resolve_result = resolve(&source_file);
-    let infer_result = infer(&source_file, resolve_result);
+    let infer_result = infer(&source_file, &resolve_result);
     lower_to_hir(&source_file, infer_result)
 }
 

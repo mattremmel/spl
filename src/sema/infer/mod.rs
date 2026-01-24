@@ -21,7 +21,7 @@ use crate::sema::SemanticContext;
 use crate::sema::SymbolKind;
 use crate::sema::resolver::ResolveResult;
 use crate::sema::symbol::DefId;
-use crate::sema::types::{InferKind, Mutability, Type, TypeId};
+use crate::sema::types::{InferKind, Mutability, Type, TypeId, TypeInterner};
 use rustc_hash::FxHashMap;
 
 use engine::InferEngine;
@@ -49,8 +49,8 @@ pub enum UnifyError {
 
 /// Result of type inference.
 pub struct InferResult {
-    /// The semantic context with symbol table and types.
-    pub ctx: SemanticContext,
+    /// Type interner with all types created during inference.
+    pub types: TypeInterner,
     /// Map from expression spans to their inferred types.
     pub expr_types: FxHashMap<Span, TypeId>,
     /// Map from local bindings (DefId) to their inferred types.
@@ -72,12 +72,12 @@ pub struct InferResult {
 impl InferResult {
     /// Display the type of the last let binding in the source (by position).
     /// Used for testing.
-    pub fn display_first_binding(&self) -> String {
+    pub fn display_first_binding(&self, ctx: &SemanticContext) -> String {
         // Find the last binding by source position (largest span start)
         let mut best: Option<(DefId, TypeId, usize)> = None;
 
         for (&def_id, &type_id) in &self.binding_types {
-            let symbol = self.ctx.get_symbol(def_id);
+            let symbol = ctx.get_symbol(def_id);
             // Skip built-in primitives (they have span 0..0)
             if symbol.span == (0..0) {
                 continue;
@@ -96,18 +96,18 @@ impl InferResult {
         }
 
         match best {
-            Some((_, type_id, _)) => self.type_to_string(type_id),
+            Some((_, type_id, _)) => self.type_to_string(type_id, ctx),
             None => "???".to_string(),
         }
     }
 
     /// Convert a type ID to a human-readable string.
-    pub fn type_to_string(&self, type_id: TypeId) -> String {
-        let ty = self.ctx.types.get(type_id);
-        self.type_repr(ty, type_id)
+    pub fn type_to_string(&self, type_id: TypeId, ctx: &SemanticContext) -> String {
+        let ty = self.types.get(type_id);
+        self.type_repr(ty, type_id, ctx)
     }
 
-    fn type_repr(&self, ty: &Type, _type_id: TypeId) -> String {
+    fn type_repr(&self, ty: &Type, _type_id: TypeId, ctx: &SemanticContext) -> String {
         match ty {
             Type::Primitive(prim) => prim.as_str().to_string(),
             Type::Infer(var, kind) => match kind {
@@ -116,53 +116,53 @@ impl InferResult {
                 InferKind::Float => format!("?float{}", var.0),
             },
             Type::Ref(mutability, inner) => {
-                let inner_str = self.type_to_string(*inner);
+                let inner_str = self.type_to_string(*inner, ctx);
                 match mutability {
                     Mutability::Shared => format!("&{}", inner_str),
                     Mutability::Mutable => format!("&mut {}", inner_str),
                 }
             }
             Type::RawPtr(mutability, pointee) => {
-                let pointee_str = self.type_to_string(*pointee);
+                let pointee_str = self.type_to_string(*pointee, ctx);
                 match mutability {
                     Mutability::Shared => format!("*{}", pointee_str),
                     Mutability::Mutable => format!("*mut {}", pointee_str),
                 }
             }
             Type::Array(elem, len) => {
-                let elem_str = self.type_to_string(*elem);
+                let elem_str = self.type_to_string(*elem, ctx);
                 format!("[{}; {}]", elem_str, len)
             }
             Type::Slice(elem) => {
-                let elem_str = self.type_to_string(*elem);
+                let elem_str = self.type_to_string(*elem, ctx);
                 format!("[{}]", elem_str)
             }
             Type::Tuple(elems) => {
                 if elems.is_empty() {
                     "()".to_string()
                 } else if elems.len() == 1 {
-                    let elem_str = self.type_to_string(elems[0]);
+                    let elem_str = self.type_to_string(elems[0], ctx);
                     format!("({},)", elem_str)
                 } else {
-                    let elem_strs: Vec<_> = elems.iter().map(|e| self.type_to_string(*e)).collect();
+                    let elem_strs: Vec<_> = elems.iter().map(|e| self.type_to_string(*e, ctx)).collect();
                     format!("({})", elem_strs.join(", "))
                 }
             }
             Type::Struct(def_id, _type_args) => {
-                let symbol = self.ctx.get_symbol(*def_id);
-                self.ctx.resolve(symbol.name).to_string()
+                let symbol = ctx.get_symbol(*def_id);
+                ctx.resolve(symbol.name).to_string()
             }
             Type::FnPtr { params, ret } => {
-                let param_strs: Vec<_> = params.iter().map(|p| self.type_to_string(*p)).collect();
-                let ret_str = self.type_to_string(*ret);
+                let param_strs: Vec<_> = params.iter().map(|p| self.type_to_string(*p, ctx)).collect();
+                let ret_str = self.type_to_string(*ret, ctx);
                 format!("fn({}) -> {}", param_strs.join(", "), ret_str)
             }
             Type::StrRef => "str".to_string(),
             Type::Error => "<error>".to_string(),
             Type::Alias(_, _) => "<alias>".to_string(),
             Type::Param(def_id) => {
-                let symbol = self.ctx.get_symbol(*def_id);
-                self.ctx.resolve(symbol.name).to_string()
+                let symbol = ctx.get_symbol(*def_id);
+                ctx.resolve(symbol.name).to_string()
             }
             Type::SelfType => "Self".to_string(),
         }
@@ -172,7 +172,8 @@ impl InferResult {
 /// Run type inference on a source file.
 ///
 /// Takes the resolved AST and produces type assignments for all expressions and bindings.
-pub fn infer(source_file: &SourceFile, resolve_result: ResolveResult) -> InferResult {
+/// The ResolveResult is borrowed, allowing it to be reused after inference completes.
+pub fn infer(source_file: &SourceFile, resolve_result: &ResolveResult) -> InferResult {
     let mut engine = InferEngine::new(resolve_result);
     engine.infer_source_file(source_file);
     engine.apply_defaults();

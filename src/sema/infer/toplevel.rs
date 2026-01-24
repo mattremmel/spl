@@ -11,7 +11,7 @@ use super::engine::{FnSignature, InferEngine, LoopKind, ParamInfo};
 use super::helpers::text_range_to_span;
 use super::{SelfParam, SelfParamKind};
 
-impl InferEngine {
+impl<'a> InferEngine<'a> {
     // =========================================================================
     // Top-Level Inference
     // =========================================================================
@@ -36,12 +36,12 @@ impl InferEngine {
                     // Create type args from impl type params (as Type::Param)
                     let type_args: Vec<TypeId> = impl_type_params
                         .iter()
-                        .map(|&def_id| self.ctx.types.mk_param(def_id))
+                        .map(|&def_id| self.types.mk_param(def_id))
                         .collect();
 
                     // Create the struct type with type args
                     let struct_ty =
-                        struct_def_id.map(|id| self.ctx.types.mk_struct(id, type_args.clone()));
+                        struct_def_id.map(|id| self.types.mk_struct(id, type_args.clone()));
 
                     // Set current_self_type so that `Self` in signatures resolves correctly
                     self.current_self_type = struct_ty;
@@ -67,10 +67,10 @@ impl InferEngine {
                                     // Apply the appropriate wrapper based on receiver kind
                                     sp.self_ty = match sp.kind {
                                         SelfParamKind::Ref => {
-                                            self.ctx.types.mk_ref(Mutability::Shared, sty)
+                                            self.types.mk_ref(Mutability::Shared, sty)
                                         }
                                         SelfParamKind::RefMut => {
-                                            self.ctx.types.mk_ref(Mutability::Mutable, sty)
+                                            self.types.mk_ref(Mutability::Mutable, sty)
                                         }
                                         SelfParamKind::Owned => sty,
                                     };
@@ -189,7 +189,7 @@ impl InferEngine {
         let ret = func
             .ret_type()
             .map(|t| self.ast_type_to_type_id(&t))
-            .unwrap_or_else(|| self.ctx.types.unit());
+            .unwrap_or_else(|| self.types.unit());
 
         self.fn_signatures.insert(
             def_id,
@@ -261,7 +261,7 @@ impl InferEngine {
         let ret = extern_fn
             .ret_type()
             .map(|t| self.ast_type_to_type_id(&t))
-            .unwrap_or_else(|| self.ctx.types.unit());
+            .unwrap_or_else(|| self.types.unit());
 
         // Extern functions don't have self parameters
         self.fn_signatures.insert(
@@ -288,8 +288,8 @@ impl InferEngine {
 
             if self.has_recursive_type(struct_id, &mut visited, &mut in_progress, &mut path) {
                 // Found a cycle - report error
-                let symbol = self.ctx.get_symbol(struct_id);
-                let name = self.ctx.resolve(symbol.name);
+                let symbol = self.resolve_ctx.get_symbol(struct_id);
+                let name = self.resolve_ctx.resolve(symbol.name);
                 self.diagnostics.push(
                     Diagnostic::error(format!("recursive type `{}` has infinite size", name))
                         .with_label(symbol.span.clone(), "recursive without indirection"),
@@ -340,7 +340,7 @@ impl InferEngine {
     /// Get the struct DefId if this type directly contains a struct (not through a reference).
     /// Returns None if the type is a reference, primitive, or other non-struct type.
     fn get_direct_struct_dependency(&self, type_id: TypeId) -> Option<DefId> {
-        let ty = self.ctx.types.get(type_id);
+        let ty = self.types.get(type_id);
         match ty {
             Type::Struct(def_id, _) => Some(*def_id),
             Type::Ref(_, _) => None, // References break the cycle
@@ -393,8 +393,8 @@ impl InferEngine {
             let mut in_progress = FxHashSet::default();
 
             if self.has_alias_cycle(alias_id, &mut visited, &mut in_progress) {
-                let symbol = self.ctx.get_symbol(alias_id);
-                let name = self.ctx.resolve(symbol.name);
+                let symbol = self.resolve_ctx.get_symbol(alias_id);
+                let name = self.resolve_ctx.resolve(symbol.name);
                 self.diagnostics.push(
                     Diagnostic::error(format!("cyclic type alias definition for `{}`", name))
                         .with_label(symbol.span.clone(), "cyclic reference"),
@@ -404,7 +404,7 @@ impl InferEngine {
         }
 
         // Replace cyclic alias targets with Error to prevent infinite recursion in resolve_type
-        let error_ty = self.ctx.types.error();
+        let error_ty = self.types.error();
         for alias_id in cyclic_aliases {
             self.type_alias_targets.insert(alias_id, error_ty);
         }
@@ -444,7 +444,7 @@ impl InferEngine {
     /// Get the alias DefId if this type directly references a type alias.
     /// Also traverses arrays and tuples to find aliases in compound types.
     fn get_referenced_alias(&self, type_id: TypeId) -> Option<DefId> {
-        let ty = self.ctx.types.get(type_id);
+        let ty = self.types.get(type_id);
         match ty {
             // mk_struct is used for both structs and type aliases
             // Check if the DefId is actually a type alias
@@ -675,7 +675,7 @@ impl InferEngine {
 
     /// Check if a type is the unit type (either Primitive::Unit or empty tuple)
     fn is_unit_type(&self, type_id: TypeId) -> bool {
-        match self.ctx.types.get(type_id) {
+        match self.types.get(type_id) {
             Type::Primitive(PrimitiveKind::Unit) => true,
             Type::Tuple(elems) => elems.is_empty(),
             _ => false,

@@ -238,7 +238,7 @@ pub fn infer_ok(source: &str) -> InferResult {
             format_diagnostics(&resolve_result.diagnostics)
         );
     }
-    let infer_result = crate::sema::infer(&ast, resolve_result);
+    let infer_result = crate::sema::infer(&ast, &resolve_result);
     if !infer_result.diagnostics.is_empty() {
         panic!(
             "type inference failed:\n{}",
@@ -268,7 +268,7 @@ pub fn infer_ok(source: &str) -> InferResult {
 pub fn infer_err(source: &str) -> Vec<Diagnostic> {
     let ast = parse_ok(source);
     let resolve_result = crate::sema::resolve(&ast);
-    let infer_result = crate::sema::infer(&ast, resolve_result);
+    let infer_result = crate::sema::infer(&ast, &resolve_result);
     if infer_result.diagnostics.is_empty() {
         panic!("expected type inference errors but inference succeeded");
     }

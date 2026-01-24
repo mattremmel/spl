@@ -112,7 +112,7 @@ impl LoweringContext {
     fn new(infer_result: InferResult) -> Self {
         let mut db = HirDatabase::new();
         // Transfer the type interner from the inference result
-        db.types = infer_result.ctx.types;
+        db.types = infer_result.types;
 
         Self {
             db,

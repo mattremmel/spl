@@ -29,7 +29,7 @@ fn check(source: &str, expected: &str) {
             .collect::<Vec<_>>()
     );
 
-    let infer_result = infer(&source_file, resolve_result);
+    let infer_result = infer(&source_file, &resolve_result);
     assert!(
         infer_result.diagnostics.is_empty(),
         "expected no inference errors, got: {:?}",
@@ -40,7 +40,7 @@ fn check(source: &str, expected: &str) {
             .collect::<Vec<_>>()
     );
 
-    let actual = infer_result.display_first_binding();
+    let actual = infer_result.display_first_binding(&resolve_result.ctx);
     assert_eq!(actual, expected, "type mismatch");
 }
 
@@ -54,27 +54,28 @@ fn check_err(source: &str, expected: &[&str]) {
     );
     let source_file = SourceFile::cast(parse_result.syntax()).expect("expected SourceFile");
     let resolve_result = resolve(&source_file);
-    // Resolution errors may or may not exist depending on the test
+    let infer_result = infer(&source_file, &resolve_result);
 
-    let infer_result = infer(&source_file, resolve_result);
+    // Combine diagnostics from both resolution and inference phases
+    let all_diagnostics: Vec<_> = resolve_result
+        .diagnostics
+        .iter()
+        .chain(infer_result.diagnostics.iter())
+        .collect();
 
     assert!(
-        !infer_result.diagnostics.is_empty(),
+        !all_diagnostics.is_empty(),
         "expected errors containing {:?}, got none",
         expected
     );
 
     for pattern in expected {
-        let found = infer_result
-            .diagnostics
-            .iter()
-            .any(|d| d.message.contains(pattern));
+        let found = all_diagnostics.iter().any(|d| d.message.contains(pattern));
         assert!(
             found,
             "expected error containing '{}', got: {:?}",
             pattern,
-            infer_result
-                .diagnostics
+            all_diagnostics
                 .iter()
                 .map(|d| &d.message)
                 .collect::<Vec<_>>()
@@ -94,7 +95,7 @@ fn check_warn(source: &str, expected: &[&str]) {
     let source_file = SourceFile::cast(parse_result.syntax()).expect("expected SourceFile");
     let resolve_result = resolve(&source_file);
 
-    let infer_result = infer(&source_file, resolve_result);
+    let infer_result = infer(&source_file, &resolve_result);
 
     // For warnings, we expect some diagnostics but type inference still succeeds
     assert!(

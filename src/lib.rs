@@ -197,7 +197,7 @@ pub fn compile(source: &str) -> CompileResult {
     truncate_diagnostics_if_needed(&mut diagnostics);
 
     // Phase 4: Type inference
-    let mut infer_result = sema::infer(&source_file, resolve_result);
+    let mut infer_result = sema::infer(&source_file, &resolve_result);
     diagnostics.append(&mut infer_result.diagnostics);
     truncate_diagnostics_if_needed(&mut diagnostics);
 

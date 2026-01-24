@@ -43,19 +43,19 @@ use super::helpers::{is_float_type, is_integer_type};
 /// alias chains or pathological substitution patterns.
 const MAX_RESOLVE_DEPTH: usize = 256;
 
-impl InferEngine {
+impl<'a> InferEngine<'a> {
     // =========================================================================
     // Contract Helpers
     // =========================================================================
 
     /// Check if a TypeId is valid (within bounds of the type interner).
     pub(super) fn is_valid_type_id(&self, id: TypeId) -> bool {
-        (id.0 as usize) < self.ctx.types.types_len()
+        (id.0 as usize) < self.types.types_len()
     }
 
     /// Extract the TypeVar from a type if it's a variable type.
     fn extract_type_var(&self, id: TypeId) -> Option<TypeVar> {
-        match self.ctx.types.get(id) {
+        match self.types.get(id) {
             Type::Infer(v, _) => Some(*v),
             _ => None,
         }
@@ -119,7 +119,7 @@ impl InferEngine {
     /// Returns true if the type is concrete or an unbound type variable.
     /// Used in debug assertions; trivial enough to always compile.
     fn is_resolved_or_unbound(&self, type_id: TypeId) -> bool {
-        match self.ctx.types.get(type_id) {
+        match self.types.get(type_id) {
             Type::Infer(v, _) => !self.substitution.contains_key(v),
             _ => true, // Concrete type
         }
@@ -143,7 +143,7 @@ impl InferEngine {
             self.is_valid_type_id(type_id),
             "precondition: type_id {} must be valid (< {})",
             type_id.0,
-            self.ctx.types.types_len()
+            self.types.types_len()
         );
 
         // Return unresolved to avoid stack overflow
@@ -151,7 +151,7 @@ impl InferEngine {
             return type_id;
         }
 
-        let ty = self.ctx.types.get(type_id);
+        let ty = self.types.get(type_id);
         let result = match ty {
             Type::Infer(var, _) => {
                 if let Some(&subst) = self.substitution.get(var) {
@@ -211,8 +211,8 @@ impl InferEngine {
             return Ok(());
         }
 
-        let ty_a = self.ctx.types.get(a).clone();
-        let ty_b = self.ctx.types.get(b).clone();
+        let ty_a = self.types.get(a).clone();
+        let ty_b = self.types.get(b).clone();
 
         let result: Result<(), UnifyError> = match (&ty_a, &ty_b) {
             // Error type unifies with anything
@@ -503,7 +503,7 @@ impl InferEngine {
         type_id: TypeId,
         subst: &FxHashMap<DefId, TypeId>,
     ) -> TypeId {
-        let ty = self.ctx.types.get(type_id).clone();
+        let ty = self.types.get(type_id).clone();
         match ty {
             Type::Param(def_id) => {
                 // Substitute if we have a mapping
@@ -514,7 +514,7 @@ impl InferEngine {
                 if new_inner == inner {
                     type_id
                 } else {
-                    self.ctx.types.mk_ref(mutability, new_inner)
+                    self.types.mk_ref(mutability, new_inner)
                 }
             }
             Type::RawPtr(mutability, pointee) => {
@@ -522,7 +522,7 @@ impl InferEngine {
                 if new_pointee == pointee {
                     type_id
                 } else {
-                    self.ctx.types.mk_raw_ptr(mutability, new_pointee)
+                    self.types.mk_raw_ptr(mutability, new_pointee)
                 }
             }
             Type::Array(elem, len) => {
@@ -530,7 +530,7 @@ impl InferEngine {
                 if new_elem == elem {
                     type_id
                 } else {
-                    self.ctx.types.mk_array(new_elem, len)
+                    self.types.mk_array(new_elem, len)
                 }
             }
             Type::Slice(elem) => {
@@ -538,7 +538,7 @@ impl InferEngine {
                 if new_elem == elem {
                     type_id
                 } else {
-                    self.ctx.types.mk_slice(new_elem)
+                    self.types.mk_slice(new_elem)
                 }
             }
             Type::Tuple(elems) => {
@@ -549,7 +549,7 @@ impl InferEngine {
                 if new_elems == elems {
                     type_id
                 } else {
-                    self.ctx.types.mk_tuple(new_elems)
+                    self.types.mk_tuple(new_elems)
                 }
             }
             Type::Struct(def_id, type_args) => {
@@ -560,7 +560,7 @@ impl InferEngine {
                 if new_args == type_args {
                     type_id
                 } else {
-                    self.ctx.types.mk_struct(def_id, new_args)
+                    self.types.mk_struct(def_id, new_args)
                 }
             }
             Type::Alias(def_id, type_args) => {
@@ -571,7 +571,7 @@ impl InferEngine {
                 if new_args == type_args {
                     type_id
                 } else {
-                    self.ctx.types.mk_alias(def_id, new_args)
+                    self.types.mk_alias(def_id, new_args)
                 }
             }
             Type::FnPtr { params, ret } => {
@@ -583,7 +583,7 @@ impl InferEngine {
                 if new_params == params && new_ret == ret {
                     type_id
                 } else {
-                    self.ctx.types.mk_fn_ptr(new_params, new_ret)
+                    self.types.mk_fn_ptr(new_params, new_ret)
                 }
             }
             // Primitives, variables, error, string, selftype don't need substitution
@@ -633,16 +633,16 @@ impl InferEngine {
     }
 
     fn collect_defaults(&self, type_id: TypeId, defaults: &mut Vec<(TypeVar, TypeId)>) {
-        let ty = self.ctx.types.get(type_id).clone();
+        let ty = self.types.get(type_id).clone();
         match ty {
             Type::Infer(var, InferKind::Int) => {
                 if !self.substitution.contains_key(&var) {
-                    defaults.push((var, self.ctx.types.i32()));
+                    defaults.push((var, self.types.i32()));
                 }
             }
             Type::Infer(var, InferKind::Float) => {
                 if !self.substitution.contains_key(&var) {
-                    defaults.push((var, self.ctx.types.f64()));
+                    defaults.push((var, self.types.f64()));
                 }
             }
             Type::Infer(_, InferKind::General) => {
@@ -675,7 +675,7 @@ impl InferEngine {
 
     pub(super) fn fully_resolve_type(&mut self, type_id: TypeId) -> TypeId {
         let resolved = self.resolve_type(type_id);
-        let ty = self.ctx.types.get(resolved).clone();
+        let ty = self.types.get(resolved).clone();
 
         match ty {
             Type::Infer(var, InferKind::Int) => {
@@ -683,7 +683,7 @@ impl InferEngine {
                     self.fully_resolve_type(subst)
                 } else {
                     // Apply default
-                    self.ctx.types.i32()
+                    self.types.i32()
                 }
             }
             Type::Infer(var, InferKind::Float) => {
@@ -691,7 +691,7 @@ impl InferEngine {
                     self.fully_resolve_type(subst)
                 } else {
                     // Apply default
-                    self.ctx.types.f64()
+                    self.types.f64()
                 }
             }
             Type::Infer(var, InferKind::General) => {
@@ -703,35 +703,35 @@ impl InferEngine {
             }
             Type::Ref(mutability, inner) => {
                 let inner_resolved = self.fully_resolve_type(inner);
-                self.ctx.types.mk_ref(mutability, inner_resolved)
+                self.types.mk_ref(mutability, inner_resolved)
             }
             Type::RawPtr(mutability, pointee) => {
                 let pointee_resolved = self.fully_resolve_type(pointee);
-                self.ctx.types.mk_raw_ptr(mutability, pointee_resolved)
+                self.types.mk_raw_ptr(mutability, pointee_resolved)
             }
             Type::Array(elem, len) => {
                 let elem_resolved = self.fully_resolve_type(elem);
-                self.ctx.types.mk_array(elem_resolved, len)
+                self.types.mk_array(elem_resolved, len)
             }
             Type::Slice(elem) => {
                 let elem_resolved = self.fully_resolve_type(elem);
-                self.ctx.types.mk_slice(elem_resolved)
+                self.types.mk_slice(elem_resolved)
             }
             Type::Tuple(elems) => {
                 let resolved_elems: Vec<_> =
                     elems.iter().map(|e| self.fully_resolve_type(*e)).collect();
-                self.ctx.types.mk_tuple(resolved_elems)
+                self.types.mk_tuple(resolved_elems)
             }
             Type::Struct(def_id, args) => {
                 let resolved_args: Vec<_> =
                     args.iter().map(|a| self.fully_resolve_type(*a)).collect();
-                self.ctx.types.mk_struct(def_id, resolved_args)
+                self.types.mk_struct(def_id, resolved_args)
             }
             Type::FnPtr { params, ret } => {
                 let resolved_params: Vec<_> =
                     params.iter().map(|p| self.fully_resolve_type(*p)).collect();
                 let resolved_ret = self.fully_resolve_type(ret);
-                self.ctx.types.mk_fn_ptr(resolved_params, resolved_ret)
+                self.types.mk_fn_ptr(resolved_params, resolved_ret)
             }
             _ => resolved,
         }
@@ -772,16 +772,21 @@ mod tests {
     use crate::parser::parse;
     use crate::sema::infer::UnifyError;
     use crate::sema::resolver::resolve;
+    use crate::sema::resolver::ResolveResult;
     use crate::sema::symbol::DefId;
     use rowan::ast::AstNode;
 
-    /// Helper to create a minimal InferEngine for testing has_cycle.
-    fn create_test_engine() -> InferEngine {
+    /// Helper to create a minimal ResolveResult for testing.
+    fn create_test_resolve_result() -> ResolveResult {
         // Parse minimal source to get a valid ResolveResult
         let source = "fn main() {}";
         let parse_result = parse(source);
         let source_file = SourceFile::cast(parse_result.syntax()).unwrap();
-        let resolve_result = resolve(&source_file);
+        resolve(&source_file)
+    }
+
+    /// Helper to create a minimal InferEngine for testing has_cycle.
+    fn create_test_engine(resolve_result: &ResolveResult) -> InferEngine<'_> {
         InferEngine::new(resolve_result)
     }
 
@@ -797,7 +802,8 @@ mod tests {
     #[test]
     fn has_cycle_empty_substitution_returns_false() {
         // An empty substitution has no chains to follow
-        let engine = create_test_engine();
+        let resolve_result = create_test_resolve_result();
+        let engine = create_test_engine(&resolve_result);
         let var = TypeVar(999); // Any unbound variable
         assert!(!engine.has_cycle(var));
     }
@@ -806,12 +812,13 @@ mod tests {
     fn has_cycle_single_step_to_concrete_returns_false() {
         // Chain: v0 -> i32 (concrete type)
         // The algorithm should terminate when it reaches a concrete type.
-        let mut engine = create_test_engine();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
         let v0 = engine.fresh_type_var();
         let var = engine.extract_type_var(v0).unwrap();
 
         // Bind v0 to i32 (a concrete type)
-        engine.substitution.insert(var, engine.ctx.types.i32());
+        engine.substitution.insert(var, engine.types.i32());
 
         assert!(!engine.has_cycle(var));
     }
@@ -820,7 +827,8 @@ mod tests {
     fn has_cycle_chain_to_concrete_returns_false() {
         // Chain: v0 -> v1 -> v2 -> i32 (concrete)
         // Tests O(n) traversal of acyclic chain.
-        let mut engine = create_test_engine();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
 
         // Create 3 type variables
         let v0_id = engine.fresh_type_var();
@@ -834,7 +842,7 @@ mod tests {
         // Chain: v0 -> v1 -> v2 -> i32
         engine.substitution.insert(v0, v1_id);
         engine.substitution.insert(v1, v2_id);
-        engine.substitution.insert(v2, engine.ctx.types.i32());
+        engine.substitution.insert(v2, engine.types.i32());
 
         assert!(!engine.has_cycle(v0));
     }
@@ -843,7 +851,8 @@ mod tests {
     fn has_cycle_self_loop_returns_true() {
         // Cycle: v0 -> v0 (1-node cycle)
         // Tests detection of simplest possible cycle.
-        let mut engine = create_test_engine();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
         let v0_id = engine.fresh_type_var();
         let v0 = engine.extract_type_var(v0_id).unwrap();
 
@@ -856,7 +865,8 @@ mod tests {
     #[test]
     fn has_cycle_two_node_cycle_returns_true() {
         // Cycle: v0 -> v1 -> v0 (2-node cycle)
-        let mut engine = create_test_engine();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
 
         let v0_id = engine.fresh_type_var();
         let v1_id = engine.fresh_type_var();
@@ -875,7 +885,8 @@ mod tests {
     fn has_cycle_long_tail_with_cycle_returns_true() {
         // Chain with tail leading into cycle: v0 -> v1 -> v2 -> v3 -> v2
         // (Entry from outside the cycle)
-        let mut engine = create_test_engine();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
 
         let v0_id = engine.fresh_type_var();
         let v1_id = engine.fresh_type_var();
@@ -900,7 +911,8 @@ mod tests {
     fn has_cycle_odd_length_cycle_returns_true() {
         // Cycle: v0 -> v1 -> v2 -> v0 (3-node cycle, odd length)
         // Verifies algorithm works for odd cycle lengths.
-        let mut engine = create_test_engine();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
 
         let v0_id = engine.fresh_type_var();
         let v1_id = engine.fresh_type_var();
@@ -921,7 +933,8 @@ mod tests {
     #[test]
     fn has_cycle_unbound_variable_returns_false() {
         // An unbound variable (not in substitution) has no cycle.
-        let mut engine = create_test_engine();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
 
         // Create some variables but don't bind the one we check
         let v0_id = engine.fresh_type_var();
@@ -947,9 +960,10 @@ mod tests {
     #[test]
     fn unify_err_primitive_mismatch() {
         // i32 vs bool should fail with TypeMismatch
-        let mut engine = create_test_engine();
-        let i32_ty = engine.ctx.types.i32();
-        let bool_ty = engine.ctx.types.bool();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let i32_ty = engine.types.i32();
+        let bool_ty = engine.types.bool();
 
         let result = engine.unify(i32_ty, bool_ty);
         assert!(matches!(result, Err(UnifyError::TypeMismatch { .. })));
@@ -958,10 +972,11 @@ mod tests {
     #[test]
     fn unify_err_mutability_shared_to_mut() {
         // &i32 vs &mut i32 should fail (can't coerce shared to mutable)
-        let mut engine = create_test_engine();
-        let i32_ty = engine.ctx.types.i32();
-        let shared_ref = engine.ctx.types.mk_ref(Mutability::Shared, i32_ty);
-        let mut_ref = engine.ctx.types.mk_ref(Mutability::Mutable, i32_ty);
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let i32_ty = engine.types.i32();
+        let shared_ref = engine.types.mk_ref(Mutability::Shared, i32_ty);
+        let mut_ref = engine.types.mk_ref(Mutability::Mutable, i32_ty);
 
         // Trying to unify &i32 (expected) with &mut i32 (actual) should fail
         let result = engine.unify(shared_ref, mut_ref);
@@ -971,10 +986,11 @@ mod tests {
     #[test]
     fn unify_err_tuple_arity() {
         // (i32, i32) vs (i32,) should fail with ArityMismatch
-        let mut engine = create_test_engine();
-        let i32_ty = engine.ctx.types.i32();
-        let tuple2 = engine.ctx.types.mk_tuple(vec![i32_ty, i32_ty]);
-        let tuple1 = engine.ctx.types.mk_tuple(vec![i32_ty]);
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let i32_ty = engine.types.i32();
+        let tuple2 = engine.types.mk_tuple(vec![i32_ty, i32_ty]);
+        let tuple1 = engine.types.mk_tuple(vec![i32_ty]);
 
         let result = engine.unify(tuple2, tuple1);
         assert!(matches!(
@@ -989,11 +1005,12 @@ mod tests {
     #[test]
     fn unify_err_fn_ptr_arity() {
         // fn(i32) vs fn(i32, i32) should fail with ArityMismatch
-        let mut engine = create_test_engine();
-        let i32_ty = engine.ctx.types.i32();
-        let unit_ty = engine.ctx.types.unit();
-        let fn1 = engine.ctx.types.mk_fn_ptr(vec![i32_ty], unit_ty);
-        let fn2 = engine.ctx.types.mk_fn_ptr(vec![i32_ty, i32_ty], unit_ty);
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let i32_ty = engine.types.i32();
+        let unit_ty = engine.types.unit();
+        let fn1 = engine.types.mk_fn_ptr(vec![i32_ty], unit_ty);
+        let fn2 = engine.types.mk_fn_ptr(vec![i32_ty, i32_ty], unit_ty);
 
         let result = engine.unify(fn1, fn2);
         assert!(matches!(
@@ -1008,10 +1025,11 @@ mod tests {
     #[test]
     fn unify_err_array_length() {
         // [i32; 5] vs [i32; 10] should fail with ArrayLengthMismatch
-        let mut engine = create_test_engine();
-        let i32_ty = engine.ctx.types.i32();
-        let arr5 = engine.ctx.types.mk_array(i32_ty, 5);
-        let arr10 = engine.ctx.types.mk_array(i32_ty, 10);
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let i32_ty = engine.types.i32();
+        let arr5 = engine.types.mk_array(i32_ty, 5);
+        let arr10 = engine.types.mk_array(i32_ty, 10);
 
         let result = engine.unify(arr5, arr10);
         assert!(matches!(
@@ -1026,9 +1044,10 @@ mod tests {
     #[test]
     fn unify_err_int_var_vs_bool() {
         // {int} vs bool should fail with ConstraintViolation
-        let mut engine = create_test_engine();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
         let int_var = engine.fresh_int_var();
-        let bool_ty = engine.ctx.types.bool();
+        let bool_ty = engine.types.bool();
 
         let result = engine.unify(int_var, bool_ty);
         assert!(matches!(
@@ -1043,9 +1062,10 @@ mod tests {
     #[test]
     fn unify_err_float_var_vs_int() {
         // {float} vs i32 should fail with ConstraintViolation
-        let mut engine = create_test_engine();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
         let float_var = engine.fresh_float_var();
-        let i32_ty = engine.ctx.types.i32();
+        let i32_ty = engine.types.i32();
 
         let result = engine.unify(float_var, i32_ty);
         assert!(matches!(
@@ -1060,11 +1080,12 @@ mod tests {
     #[test]
     fn unify_err_struct_def_mismatch() {
         // Foo vs Bar (different struct DefIds) should fail with TypeMismatch
-        let mut engine = create_test_engine();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
         let foo_id = DefId(1000); // Fake DefId for struct Foo
         let bar_id = DefId(1001); // Fake DefId for struct Bar
-        let foo_ty = engine.ctx.types.mk_struct(foo_id, vec![]);
-        let bar_ty = engine.ctx.types.mk_struct(bar_id, vec![]);
+        let foo_ty = engine.types.mk_struct(foo_id, vec![]);
+        let bar_ty = engine.types.mk_struct(bar_id, vec![]);
 
         let result = engine.unify(foo_ty, bar_ty);
         assert!(matches!(result, Err(UnifyError::TypeMismatch { .. })));
@@ -1073,8 +1094,9 @@ mod tests {
     #[test]
     fn unify_ok_same_type() {
         // i32 vs i32 should succeed
-        let mut engine = create_test_engine();
-        let i32_ty = engine.ctx.types.i32();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let i32_ty = engine.types.i32();
 
         let result = engine.unify(i32_ty, i32_ty);
         assert!(result.is_ok());
@@ -1083,10 +1105,11 @@ mod tests {
     #[test]
     fn unify_ok_mut_to_shared() {
         // &mut i32 vs &i32 should succeed (mutable coerces to shared)
-        let mut engine = create_test_engine();
-        let i32_ty = engine.ctx.types.i32();
-        let mut_ref = engine.ctx.types.mk_ref(Mutability::Mutable, i32_ty);
-        let shared_ref = engine.ctx.types.mk_ref(Mutability::Shared, i32_ty);
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let i32_ty = engine.types.i32();
+        let mut_ref = engine.types.mk_ref(Mutability::Mutable, i32_ty);
+        let shared_ref = engine.types.mk_ref(Mutability::Shared, i32_ty);
 
         let result = engine.unify(mut_ref, shared_ref);
         assert!(result.is_ok());
@@ -1095,9 +1118,10 @@ mod tests {
     #[test]
     fn unify_ok_int_var_to_i64() {
         // {int} vs i64 should succeed
-        let mut engine = create_test_engine();
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
         let int_var = engine.fresh_int_var();
-        let i64_ty = engine.ctx.types.i64();
+        let i64_ty = engine.types.i64();
 
         let result = engine.unify(int_var, i64_ty);
         assert!(result.is_ok());

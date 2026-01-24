@@ -10,7 +10,7 @@ use crate::ast::{Block, LetStmt, LiteralExpr, Stmt};
 use crate::diagnostic::Diagnostic;
 use crate::hir::{LoweredExpr, lower::try_lower_expr};
 use crate::sema::types::{InferKind, Mutability, PrimitiveKind, Type, TypeId};
-use crate::sema::{ScopeKind, SymbolKind};
+use crate::sema::SymbolKind;
 use crate::syntax::SyntaxKind;
 use rowan::ast::AstNode;
 use rustc_hash::FxHashMap;
@@ -20,7 +20,7 @@ use super::helpers::{
     is_numeric_type, parse_int_literal_value, parse_int_suffix, text_range_to_span,
 };
 
-impl InferEngine {
+impl<'a> InferEngine<'a> {
     // =========================================================================
     // Mutability Checking
     // =========================================================================
@@ -50,12 +50,12 @@ impl InferEngine {
                 let span = text_range_to_span(token.text_range());
 
                 if let Some(&def_id) = self.resolutions.get(&span) {
-                    let symbol = self.ctx.get_symbol(def_id);
+                    let symbol = self.resolve_ctx.get_symbol(def_id);
 
                     // For single-segment paths, check if the variable is mutable
                     if segments.len() == 1 {
                         if !symbol.is_mutable {
-                            let name = self.ctx.resolve(symbol.name);
+                            let name = self.resolve_ctx.resolve(symbol.name);
                             return Some(format!("cannot assign to immutable variable `{name}`"));
                         }
                         return None;
@@ -65,7 +65,7 @@ impl InferEngine {
                     // Check if base is mutable or is a mutable reference
                     if let Some(&base_ty) = self.binding_types.get(&def_id) {
                         let resolved = self.resolve_type(base_ty);
-                        let ty = self.ctx.types.get(resolved);
+                        let ty = self.types.get(resolved);
                         if let Type::Ref(mutability, _) = ty {
                             return if *mutability == Mutability::Mutable {
                                 None // OK - mutable reference
@@ -76,7 +76,7 @@ impl InferEngine {
                     }
                     // Not a reference - check if the base variable is mutable
                     if !symbol.is_mutable {
-                        let name = self.ctx.resolve(symbol.name);
+                        let name = self.resolve_ctx.resolve(symbol.name);
                         return Some(format!("cannot assign to immutable variable `{name}`"));
                     }
                 }
@@ -90,7 +90,7 @@ impl InferEngine {
                     let base_span = text_range_to_span(base.syntax().text_range());
                     if let Some(&base_ty) = self.expr_types.get(&base_span) {
                         let resolved = self.resolve_type(base_ty);
-                        let ty = self.ctx.types.get(resolved);
+                        let ty = self.types.get(resolved);
                         if let Type::Ref(mutability, _) = ty {
                             return if *mutability == Mutability::Mutable {
                                 None // OK - mutable reference
@@ -115,7 +115,7 @@ impl InferEngine {
                         .expr_types
                         .get(&text_range_to_span(inner.syntax().text_range()))?;
                     let resolved = self.resolve_type(*inner_ty);
-                    let ty = self.ctx.types.get(resolved);
+                    let ty = self.types.get(resolved);
                     if let Type::Ref(Mutability::Shared, _) = ty {
                         return Some("cannot assign to immutable reference".to_string());
                     }
@@ -158,12 +158,12 @@ impl InferEngine {
                 let span = text_range_to_span(token.text_range());
 
                 if let Some(&def_id) = self.resolutions.get(&span) {
-                    let symbol = self.ctx.get_symbol(def_id);
+                    let symbol = self.resolve_ctx.get_symbol(def_id);
 
                     // For single-segment paths, check if variable is mutable
                     if segments.len() == 1 {
                         if !symbol.is_mutable {
-                            let name = self.ctx.resolve(symbol.name);
+                            let name = self.resolve_ctx.resolve(symbol.name);
                             return Some(format!(
                                 "cannot borrow `{name}` as mutable, as it is not declared as mutable"
                             ));
@@ -175,7 +175,7 @@ impl InferEngine {
                     // Check if base is mutable or is a mutable reference
                     if let Some(&base_ty) = self.binding_types.get(&def_id) {
                         let resolved = self.resolve_type(base_ty);
-                        let ty = self.ctx.types.get(resolved);
+                        let ty = self.types.get(resolved);
                         if let Type::Ref(mutability, _) = ty {
                             return if *mutability == Mutability::Mutable {
                                 None // OK - mutable reference
@@ -189,7 +189,7 @@ impl InferEngine {
                     }
                     // Not a reference - check if the base variable is mutable
                     if !symbol.is_mutable {
-                        let name = self.ctx.resolve(symbol.name);
+                        let name = self.resolve_ctx.resolve(symbol.name);
                         return Some(format!(
                             "cannot borrow `{name}` as mutable, as it is not declared as mutable"
                         ));
@@ -205,7 +205,7 @@ impl InferEngine {
                     let base_span = text_range_to_span(base.syntax().text_range());
                     if let Some(&base_ty) = self.expr_types.get(&base_span) {
                         let resolved = self.resolve_type(base_ty);
-                        let ty = self.ctx.types.get(resolved);
+                        let ty = self.types.get(resolved);
                         if let Type::Ref(mutability, _) = ty {
                             return if *mutability == Mutability::Mutable {
                                 None // OK - mutable reference
@@ -233,7 +233,7 @@ impl InferEngine {
                     let inner_span = text_range_to_span(inner.syntax().text_range());
                     if let Some(&inner_ty) = self.expr_types.get(&inner_span) {
                         let resolved = self.resolve_type(inner_ty);
-                        let ty = self.ctx.types.get(resolved);
+                        let ty = self.types.get(resolved);
                         if let Type::Ref(Mutability::Shared, _) = ty {
                             return Some(
                                 "cannot borrow through shared reference as mutable".to_string(),
@@ -277,7 +277,7 @@ impl InferEngine {
                     suffix,
                     span: _,
                 } => self.synth_lowered_float(suffix),
-                LoweredExpr::BoolLiteral { .. } => self.ctx.types.bool(),
+                LoweredExpr::BoolLiteral { .. } => self.types.bool(),
                 LoweredExpr::Passthrough => unreachable!(),
             };
             self.expr_types.insert(span, type_id);
@@ -320,7 +320,7 @@ impl InferEngine {
     fn synth_literal(&mut self, lit: &LiteralExpr) -> TypeId {
         let token = match lit.token() {
             Some(t) => t,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         match token.kind() {
@@ -342,7 +342,7 @@ impl InferEngine {
                         self.diagnostics
                             .push(Diagnostic::error(&msg).with_label(span, "literal out of range"));
                     }
-                    self.ctx.types.primitive(kind)
+                    self.types.primitive(kind)
                 } else {
                     // No suffix - create an int inference variable
                     self.fresh_int_var()
@@ -351,18 +351,18 @@ impl InferEngine {
             SyntaxKind::FLOAT_LITERAL => {
                 let text = token.text();
                 if text.ends_with("f32") {
-                    self.ctx.types.primitive(PrimitiveKind::F32)
+                    self.types.primitive(PrimitiveKind::F32)
                 } else if text.ends_with("f64") {
-                    self.ctx.types.primitive(PrimitiveKind::F64)
+                    self.types.primitive(PrimitiveKind::F64)
                 } else {
                     // No suffix - create a float inference variable
                     self.fresh_float_var()
                 }
             }
-            SyntaxKind::TRUE_KW | SyntaxKind::FALSE_KW => self.ctx.types.bool(),
-            SyntaxKind::CHAR_LITERAL => self.ctx.types.char(),
-            SyntaxKind::STRING_LITERAL => self.ctx.types.str_ref(),
-            _ => self.ctx.types.error(),
+            SyntaxKind::TRUE_KW | SyntaxKind::FALSE_KW => self.types.bool(),
+            SyntaxKind::CHAR_LITERAL => self.types.char(),
+            SyntaxKind::STRING_LITERAL => self.types.str_ref(),
+            _ => self.types.error(),
         }
     }
 
@@ -378,7 +378,7 @@ impl InferEngine {
                 self.diagnostics
                     .push(Diagnostic::error(&msg).with_label(span, "literal out of range"));
             }
-            self.ctx.types.primitive(kind)
+            self.types.primitive(kind)
         } else {
             self.fresh_int_var()
         }
@@ -387,8 +387,8 @@ impl InferEngine {
     /// Synthesize type for a lowered float literal (from HIR lowering).
     fn synth_lowered_float(&mut self, suffix: Option<PrimitiveKind>) -> TypeId {
         match suffix {
-            Some(PrimitiveKind::F32) => self.ctx.types.primitive(PrimitiveKind::F32),
-            Some(PrimitiveKind::F64) => self.ctx.types.primitive(PrimitiveKind::F64),
+            Some(PrimitiveKind::F32) => self.types.primitive(PrimitiveKind::F32),
+            Some(PrimitiveKind::F64) => self.types.primitive(PrimitiveKind::F64),
             _ => self.fresh_float_var(),
         }
     }
@@ -396,25 +396,25 @@ impl InferEngine {
     fn synth_path(&mut self, path_expr: &PathExpr) -> TypeId {
         let path = match path_expr.path() {
             Some(p) => p,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let segments: Vec<_> = path.segments().collect();
         if segments.is_empty() {
-            return self.ctx.types.error();
+            return self.types.error();
         }
 
         // Get the type of the first segment (base variable)
         let first_segment = &segments[0];
         let name_ref = match first_segment.name() {
             Some(n) => n,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         // Use token() instead of ident_token() to handle `self` keyword
         let token = match name_ref.token() {
             Some(t) => t,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let span = text_range_to_span(token.text_range());
@@ -422,7 +422,7 @@ impl InferEngine {
         // Look up the resolved DefId
         let def_id = match self.resolutions.get(&span) {
             Some(id) => *id,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         // Get the type of the first segment
@@ -431,9 +431,9 @@ impl InferEngine {
         } else if let Some(sig) = self.fn_signatures.get(&def_id).cloned() {
             // It's a function - for multi-segment paths this might be a qualified function call
             let (param_types, ret_ty) = self.instantiate_signature(&sig);
-            self.ctx.types.mk_fn_ptr(param_types, ret_ty)
+            self.types.mk_fn_ptr(param_types, ret_ty)
         } else {
-            return self.ctx.types.error();
+            return self.types.error();
         };
 
         // If there's only one segment, we're done
@@ -446,9 +446,9 @@ impl InferEngine {
             let field_name = match segment.name() {
                 Some(n) => match n.token() {
                     Some(t) => t.text().to_string(),
-                    None => return self.ctx.types.error(),
+                    None => return self.types.error(),
                 },
-                None => return self.ctx.types.error(),
+                None => return self.types.error(),
             };
 
             // Look up the field in the current type
@@ -467,7 +467,7 @@ impl InferEngine {
     ) -> TypeId {
         // Resolve and auto-deref references for field access
         let resolved = self.resolve_type(base_type);
-        let mut base_type_val = self.ctx.types.get(resolved).clone();
+        let mut base_type_val = self.types.get(resolved).clone();
 
         const MAX_DEREF: usize = 100;
         #[cfg(debug_assertions)]
@@ -484,7 +484,7 @@ impl InferEngine {
                 );
             }
             let inner_resolved = self.resolve_type(*inner);
-            base_type_val = self.ctx.types.get(inner_resolved).clone();
+            base_type_val = self.types.get(inner_resolved).clone();
         }
 
         // Handle struct field access
@@ -522,7 +522,7 @@ impl InferEngine {
                 Diagnostic::error(format!("no field `{}` on struct", field_name))
                     .with_label(span, "unknown field"),
             );
-            return self.ctx.types.error();
+            return self.types.error();
         }
 
         // Not a struct type
@@ -530,19 +530,19 @@ impl InferEngine {
         self.diagnostics.push(
             Diagnostic::error("field access on non-struct type").with_label(span, "not a struct"),
         );
-        self.ctx.types.error()
+        self.types.error()
     }
 
     fn synth_paren(&mut self, paren: &ParenExpr) -> TypeId {
         match paren.expr() {
             Some(inner) => self.synth_expr(&inner),
-            None => self.ctx.types.error(),
+            None => self.types.error(),
         }
     }
 
     fn synth_tuple(&mut self, tuple: &TupleExpr) -> TypeId {
         let elem_types: Vec<TypeId> = tuple.exprs().map(|e| self.synth_expr(&e)).collect();
-        self.ctx.types.mk_tuple(elem_types)
+        self.types.mk_tuple(elem_types)
     }
 
     fn synth_array(&mut self, array: &ArrayExpr) -> TypeId {
@@ -550,7 +550,7 @@ impl InferEngine {
         if exprs.is_empty() {
             // Empty array needs type annotation
             let elem = self.fresh_type_var();
-            return self.ctx.types.mk_array(elem, 0);
+            return self.types.mk_array(elem, 0);
         }
 
         // Check for repeat syntax [elem; count]
@@ -559,10 +559,10 @@ impl InferEngine {
             let elem_type = self.synth_expr(&exprs[0]);
             // Second expression is the count - evaluate as constant
             let count = self.eval_const_usize(&exprs[1]).unwrap_or(0);
-            let result = self.ctx.types.mk_array(elem_type, count as u64);
+            let result = self.types.mk_array(elem_type, count as u64);
 
             debug_assert!(
-                matches!(self.ctx.types.get(result), Type::Array(_, _)),
+                matches!(self.types.get(result), Type::Array(_, _)),
                 "postcondition: synth_array must return Array type"
             );
 
@@ -585,10 +585,10 @@ impl InferEngine {
             }
         }
 
-        let result = self.ctx.types.mk_array(first_type, exprs.len() as u64);
+        let result = self.types.mk_array(first_type, exprs.len() as u64);
 
         debug_assert!(
-            matches!(self.ctx.types.get(result), Type::Array(_, _)),
+            matches!(self.types.get(result), Type::Array(_, _)),
             "postcondition: synth_array must return Array type"
         );
 
@@ -598,35 +598,35 @@ impl InferEngine {
     fn synth_struct(&mut self, struct_expr: &StructExpr) -> TypeId {
         let path = match struct_expr.path() {
             Some(p) => p,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         // Get the struct's DefId
         let segment = match path.segments().next() {
             Some(s) => s,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let name_ref = match segment.name() {
             Some(n) => n,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let token = match name_ref.ident_token() {
             Some(t) => t,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let span = text_range_to_span(token.text_range());
         let def_id = match self.resolutions.get(&span) {
             Some(id) => *id,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         // Resolve type alias to actual struct if needed
         let struct_def_id = if let Some(&target_ty) = self.type_alias_targets.get(&def_id) {
             let resolved = self.resolve_type(target_ty);
-            match self.ctx.types.get(resolved) {
+            match self.types.get(resolved) {
                 Type::Struct(actual_def_id, _) => *actual_def_id,
                 _ => {
                     // Alias doesn't resolve to struct - emit error
@@ -634,7 +634,7 @@ impl InferEngine {
                         Diagnostic::error("type alias does not refer to a struct")
                             .with_label(span, "expected struct type"),
                     );
-                    return self.ctx.types.error();
+                    return self.types.error();
                 }
             }
         } else {
@@ -671,7 +671,7 @@ impl InferEngine {
         let has_update_base = if let Some(update_base) = struct_expr.update_base() {
             if let Some(base_expr) = update_base.expr() {
                 let base_ty = self.synth_expr(&base_expr);
-                let expected_struct_ty = self.ctx.types.mk_struct(struct_def_id, type_args.clone());
+                let expected_struct_ty = self.types.mk_struct(struct_def_id, type_args.clone());
                 if self.unify(base_ty, expected_struct_ty).is_err() {
                     let span = text_range_to_span(base_expr.syntax().text_range());
                     self.diagnostics.push(
@@ -732,10 +732,10 @@ impl InferEngine {
             "postcondition: struct expr must have all fields or update base (or emit diagnostic)"
         );
 
-        let result = self.ctx.types.mk_struct(struct_def_id, type_args);
+        let result = self.types.mk_struct(struct_def_id, type_args);
 
         debug_assert!(
-            matches!(self.ctx.types.get(result), Type::Struct(_, _)),
+            matches!(self.types.get(result), Type::Struct(_, _)),
             "postcondition: synth_struct must return Struct type"
         );
 
@@ -746,13 +746,13 @@ impl InferEngine {
         // Get the path from the apply expression
         let path = match apply_expr.path() {
             Some(p) => p,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         // Collect all path segments
         let segments: Vec<_> = path.segments().collect();
         if segments.is_empty() {
-            return self.ctx.types.error();
+            return self.types.error();
         }
 
         // Handle multi-segment paths like `S::new` (associated function call)
@@ -764,18 +764,18 @@ impl InferEngine {
         let segment = &segments[0];
         let name_ref = match segment.name() {
             Some(n) => n,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let token = match name_ref.token() {
             Some(t) => t,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let span = text_range_to_span(token.text_range());
         let def_id = match self.resolutions.get(&span) {
             Some(id) => *id,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         // Determine if this is a function or struct based on what's in the resolution
@@ -793,7 +793,7 @@ impl InferEngine {
         // Check if it's a type alias that resolves to a struct
         if let Some(&target_ty) = self.type_alias_targets.get(&def_id) {
             let resolved = self.resolve_type(target_ty);
-            if let Type::Struct(actual_def_id, _) = self.ctx.types.get(resolved) {
+            if let Type::Struct(actual_def_id, _) = self.types.get(resolved) {
                 return self.synth_apply_as_struct(apply_expr, *actual_def_id);
             }
         }
@@ -803,7 +803,7 @@ impl InferEngine {
             Diagnostic::error("cannot apply: not a function or struct")
                 .with_label(span, "not callable or instantiable"),
         );
-        self.ctx.types.error()
+        self.types.error()
     }
 
     /// Handle qualified paths like `S.new()` or `instance.method()`
@@ -816,18 +816,18 @@ impl InferEngine {
         let first_segment = &segments[0];
         let first_name_ref = match first_segment.name() {
             Some(n) => n,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let first_token = match first_name_ref.token() {
             Some(t) => t,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let first_span = text_range_to_span(first_token.text_range());
         let first_def_id = match self.resolutions.get(&first_span) {
             Some(id) => *id,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         // Check if the first segment is a variable (instance method call like `p.distance()`)
@@ -840,32 +840,32 @@ impl InferEngine {
             first_def_id
         } else if let Some(&target_ty) = self.type_alias_targets.get(&first_def_id) {
             let resolved = self.resolve_type(target_ty);
-            if let Type::Struct(actual_def_id, _) = self.ctx.types.get(resolved) {
+            if let Type::Struct(actual_def_id, _) = self.types.get(resolved) {
                 *actual_def_id
             } else {
                 self.diagnostics.push(
                     Diagnostic::error("not a struct type")
                         .with_label(first_span, "expected struct"),
                 );
-                return self.ctx.types.error();
+                return self.types.error();
             }
         } else {
             self.diagnostics.push(
                 Diagnostic::error("not a struct type").with_label(first_span, "expected struct"),
             );
-            return self.ctx.types.error();
+            return self.types.error();
         };
 
         // Get the last segment which should be the method name
         let last_segment = &segments[segments.len() - 1];
         let method_name_ref = match last_segment.name() {
             Some(n) => n,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let method_token = match method_name_ref.token() {
             Some(t) => t,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let method_name = method_token.text().to_string();
@@ -878,8 +878,8 @@ impl InferEngine {
             .unwrap_or_default();
 
         for method_def_id in method_def_ids {
-            let symbol = self.ctx.get_symbol(method_def_id);
-            let fn_name = self.ctx.resolve(symbol.name);
+            let symbol = self.resolve_ctx.get_symbol(method_def_id);
+            let fn_name = self.resolve_ctx.resolve(symbol.name);
             if fn_name == method_name
                 && let Some(sig) = self.fn_signatures.get(&method_def_id).cloned()
             {
@@ -897,7 +897,7 @@ impl InferEngine {
             Diagnostic::error(format!("method `{}` not found", method_name))
                 .with_label(method_span, "unknown method"),
         );
-        self.ctx.types.error()
+        self.types.error()
     }
 
     /// Handle instance method calls like `instance.method()`
@@ -910,7 +910,7 @@ impl InferEngine {
         // Resolve receiver type and auto-deref references
         let resolved = self.resolve_type(receiver_type);
         let mut current_resolved = resolved;
-        let mut receiver_type_val = self.ctx.types.get(resolved).clone();
+        let mut receiver_type_val = self.types.get(resolved).clone();
 
         const MAX_DEREF: usize = 100;
         #[cfg(debug_assertions)]
@@ -928,19 +928,19 @@ impl InferEngine {
             }
             let inner_resolved = self.resolve_type(*inner);
             current_resolved = inner_resolved;
-            receiver_type_val = self.ctx.types.get(inner_resolved).clone();
+            receiver_type_val = self.types.get(inner_resolved).clone();
         }
 
         // Get the method name from the last segment (needed for both opaque and struct methods)
         let last_segment = &segments[segments.len() - 1];
         let method_name_ref = match last_segment.name() {
             Some(n) => n,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let method_token = match method_name_ref.token() {
             Some(t) => t,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let method_name = method_token.text().to_string();
@@ -970,7 +970,7 @@ impl InferEngine {
                             ))
                             .with_label(span, "wrong number of arguments"),
                         );
-                        return self.ctx.types.error();
+                        return self.types.error();
                     }
                     // Type check arguments
                     for (arg, param) in args.iter().zip(&sig.params) {
@@ -990,7 +990,7 @@ impl InferEngine {
                 Diagnostic::error(format!("method `{}` not found on type `str`", method_name))
                     .with_label(span, "unknown method"),
             );
-            return self.ctx.types.error();
+            return self.types.error();
         }
 
         // Get the struct def_id and type_args from the receiver type
@@ -1002,7 +1002,7 @@ impl InferEngine {
                     Diagnostic::error("method call on non-struct type")
                         .with_label(span, "not a struct"),
                 );
-                return self.ctx.types.error();
+                return self.types.error();
             }
         };
 
@@ -1014,8 +1014,8 @@ impl InferEngine {
             .unwrap_or_default();
 
         for method_def_id in method_def_ids {
-            let symbol = self.ctx.get_symbol(method_def_id);
-            let fn_name = self.ctx.resolve(symbol.name);
+            let symbol = self.resolve_ctx.get_symbol(method_def_id);
+            let fn_name = self.resolve_ctx.resolve(symbol.name);
             if fn_name == method_name
                 && let Some(sig) = self.fn_signatures.get(&method_def_id).cloned()
             {
@@ -1039,7 +1039,7 @@ impl InferEngine {
             Diagnostic::error(format!("method `{}` not found", method_name))
                 .with_label(method_span, "unknown method"),
         );
-        self.ctx.types.error()
+        self.types.error()
     }
 
     /// Synthesize type for an instance method call with a receiver
@@ -1215,7 +1215,7 @@ impl InferEngine {
         let has_update_base = if let Some(update_base) = apply_expr.update_base() {
             if let Some(base_expr) = update_base.expr() {
                 let base_ty = self.synth_expr(&base_expr);
-                let expected_struct_ty = self.ctx.types.mk_struct(struct_def_id, type_args.clone());
+                let expected_struct_ty = self.types.mk_struct(struct_def_id, type_args.clone());
                 if self.unify(base_ty, expected_struct_ty).is_err() {
                     let span = text_range_to_span(base_expr.syntax().text_range());
                     self.diagnostics.push(
@@ -1298,23 +1298,23 @@ impl InferEngine {
             }
         }
 
-        self.ctx.types.mk_struct(struct_def_id, type_args)
+        self.types.mk_struct(struct_def_id, type_args)
     }
 
     fn synth_binary(&mut self, bin: &BinExpr) -> TypeId {
         let op = match bin.op_token() {
             Some(t) => t,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let lhs = match bin.lhs() {
             Some(e) => e,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let rhs = match bin.rhs() {
             Some(e) => e,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         match op.kind() {
@@ -1329,7 +1329,7 @@ impl InferEngine {
 
                 // Check operand types are numeric
                 let lhs_resolved = self.resolve_type(lhs_ty);
-                let lhs_type = self.ctx.types.get(lhs_resolved).clone();
+                let lhs_type = self.types.get(lhs_resolved).clone();
                 let is_lhs_numeric = match &lhs_type {
                     Type::Infer(_, InferKind::Int) | Type::Infer(_, InferKind::Float) => true,
                     Type::Primitive(p) => is_numeric_type(*p),
@@ -1341,7 +1341,7 @@ impl InferEngine {
                         Diagnostic::error("cannot apply binary operator to non-numeric type")
                             .with_label(span, "not a numeric type"),
                     );
-                    return self.ctx.types.error();
+                    return self.types.error();
                 }
 
                 if self.unify(lhs_ty, rhs_ty).is_err() {
@@ -1350,7 +1350,7 @@ impl InferEngine {
                         Diagnostic::error("type mismatch in binary operation")
                             .with_label(span, "mismatched operand types"),
                     );
-                    return self.ctx.types.error();
+                    return self.types.error();
                 }
 
                 lhs_ty
@@ -1374,14 +1374,14 @@ impl InferEngine {
                     );
                 }
 
-                self.ctx.types.bool()
+                self.types.bool()
             }
 
             // Logical operators - operands and result are bool
             SyntaxKind::AND_AND | SyntaxKind::OR_OR => {
                 let lhs_ty = self.synth_expr(&lhs);
                 let rhs_ty = self.synth_expr(&rhs);
-                let bool_ty = self.ctx.types.bool();
+                let bool_ty = self.types.bool();
 
                 if self.unify(lhs_ty, bool_ty).is_err() {
                     let span = text_range_to_span(lhs.syntax().text_range());
@@ -1426,22 +1426,22 @@ impl InferEngine {
                     );
                 }
 
-                self.ctx.types.unit()
+                self.types.unit()
             }
 
-            _ => self.ctx.types.error(),
+            _ => self.types.error(),
         }
     }
 
     fn synth_prefix(&mut self, prefix: &PrefixExpr) -> TypeId {
         let op = match prefix.op_token() {
             Some(t) => t,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let inner = match prefix.expr() {
             Some(e) => e,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let inner_ty = self.synth_expr(&inner);
@@ -1451,7 +1451,7 @@ impl InferEngine {
                 // Negation is valid for numeric types
                 // Note: Negated suffixed literals (e.g., -128i8) are handled by HIR lowering
                 let resolved = self.resolve_type(inner_ty);
-                let ty = self.ctx.types.get(resolved).clone();
+                let ty = self.types.get(resolved).clone();
                 match &ty {
                     Type::Infer(_, InferKind::Int) | Type::Infer(_, InferKind::Float) => inner_ty,
                     Type::Primitive(p) if is_numeric_type(*p) => inner_ty,
@@ -1461,27 +1461,27 @@ impl InferEngine {
                             Diagnostic::error("cannot apply unary `-` to non-numeric type")
                                 .with_label(span, "not a numeric type"),
                         );
-                        self.ctx.types.error()
+                        self.types.error()
                     }
                 }
             }
             SyntaxKind::BANG => {
                 // Logical not is valid for bool
-                let bool_ty = self.ctx.types.bool();
+                let bool_ty = self.types.bool();
                 if self.unify(inner_ty, bool_ty).is_err() {
                     let span = text_range_to_span(inner.syntax().text_range());
                     self.diagnostics.push(
                         Diagnostic::error("cannot apply unary `!` to non-bool type")
                             .with_label(span, "not a bool"),
                     );
-                    return self.ctx.types.error();
+                    return self.types.error();
                 }
                 bool_ty
             }
             SyntaxKind::STAR => {
                 // Dereference
                 let resolved = self.resolve_type(inner_ty);
-                let ty = self.ctx.types.get(resolved).clone();
+                let ty = self.types.get(resolved).clone();
                 match ty {
                     Type::Ref(_, inner) => inner,
                     _ => {
@@ -1490,18 +1490,18 @@ impl InferEngine {
                             Diagnostic::error("cannot dereference non-reference type")
                                 .with_label(span, "not a reference"),
                         );
-                        self.ctx.types.error()
+                        self.types.error()
                     }
                 }
             }
-            _ => self.ctx.types.error(),
+            _ => self.types.error(),
         }
     }
 
     fn synth_ref(&mut self, ref_expr: &RefExpr) -> TypeId {
         let inner = match ref_expr.expr() {
             Some(e) => e,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let inner_ty = self.synth_expr(&inner);
@@ -1517,7 +1517,7 @@ impl InferEngine {
             Mutability::Shared
         };
 
-        self.ctx.types.mk_ref(mutability, inner_ty)
+        self.types.mk_ref(mutability, inner_ty)
     }
 
     fn synth_field(&mut self, field: &FieldExpr) -> TypeId {
@@ -1525,12 +1525,12 @@ impl InferEngine {
 
         let base = match field.expr() {
             Some(e) => e,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let base_ty = self.synth_expr(&base);
         let resolved = self.resolve_type(base_ty);
-        let mut base_type = self.ctx.types.get(resolved).clone();
+        let mut base_type = self.types.get(resolved).clone();
 
         // Auto-deref references for field access
         #[cfg(debug_assertions)]
@@ -1548,7 +1548,7 @@ impl InferEngine {
             }
 
             let inner_resolved = self.resolve_type(*inner);
-            base_type = self.ctx.types.get(inner_resolved).clone();
+            base_type = self.types.get(inner_resolved).clone();
         }
 
         // Handle tuple field access (e.g., t.0, t.1)
@@ -1560,7 +1560,7 @@ impl InferEngine {
                 Some(t) => t.text().to_string(),
                 None => match field.name().and_then(|n| n.ident_token()) {
                     Some(t) => t.text().to_string(),
-                    None => return self.ctx.types.error(),
+                    None => return self.types.error(),
                 },
             },
         };
@@ -1587,7 +1587,7 @@ impl InferEngine {
                 Diagnostic::error(format!("no field `{}` on type `str`", idx))
                     .with_label(span, hint),
             );
-            return self.ctx.types.error();
+            return self.types.error();
         }
 
         // Handle struct field access
@@ -1619,20 +1619,20 @@ impl InferEngine {
                 Diagnostic::error(format!("no field `{}` on struct", field_name))
                     .with_label(span, "unknown field"),
             );
-            return self.ctx.types.error();
+            return self.types.error();
         }
 
         let span = text_range_to_span(field.syntax().text_range());
         self.diagnostics.push(
             Diagnostic::error("field access on non-struct type").with_label(span, "not a struct"),
         );
-        self.ctx.types.error()
+        self.types.error()
     }
 
     fn synth_method_call(&mut self, method: &MethodCallExpr) -> TypeId {
         let receiver = match method.receiver() {
             Some(e) => e,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let receiver_ty = self.synth_expr(&receiver);
@@ -1643,15 +1643,15 @@ impl InferEngine {
             None => match method.name() {
                 Some(n) => match n.ident_token() {
                     Some(t) => t.text().to_string(),
-                    None => return self.ctx.types.error(),
+                    None => return self.types.error(),
                 },
-                None => return self.ctx.types.error(),
+                None => return self.types.error(),
             },
         };
 
         // Resolve receiver type to find struct DefId
         let resolved = self.resolve_type(receiver_ty);
-        let receiver_type = self.ctx.types.get(resolved).clone();
+        let receiver_type = self.types.get(resolved).clone();
 
         // Check primitive type methods first (e.g., str.ptr(), str.len())
         if let Some(method_def_ids) = self.primitive_methods.get(&resolved).cloned() {
@@ -1681,7 +1681,7 @@ impl InferEngine {
                             ))
                             .with_label(span, "wrong number of arguments"),
                         );
-                        return self.ctx.types.error();
+                        return self.types.error();
                     }
                     // Type check arguments
                     for (arg, param) in args.iter().zip(&sig.params) {
@@ -1699,7 +1699,7 @@ impl InferEngine {
                 Diagnostic::error(format!("method `{}` not found on type `str`", method_name))
                     .with_label(span, "unknown method"),
             );
-            return self.ctx.types.error();
+            return self.types.error();
         }
 
         // Handle reference receivers (auto-deref) and get type args
@@ -1707,7 +1707,7 @@ impl InferEngine {
             Type::Struct(def_id, type_args) => (Some(*def_id), type_args.clone()),
             Type::Ref(_, inner) => {
                 let inner_resolved = self.resolve_type(*inner);
-                let inner_type = self.ctx.types.get(inner_resolved);
+                let inner_type = self.types.get(inner_resolved);
                 if let Type::Struct(def_id, type_args) = inner_type {
                     (Some(*def_id), type_args.clone())
                 } else {
@@ -1743,8 +1743,8 @@ impl InferEngine {
             // Search for method with matching name
             let mut found_method = None;
             for method_def_id in method_def_ids {
-                let symbol = self.ctx.get_symbol(method_def_id);
-                let fn_name = self.ctx.resolve(symbol.name);
+                let symbol = self.resolve_ctx.get_symbol(method_def_id);
+                let fn_name = self.resolve_ctx.resolve(symbol.name);
                 if fn_name == method_name
                     && let Some(sig) = self.fn_signatures.get(&method_def_id).cloned()
                 {
@@ -1817,18 +1817,18 @@ impl InferEngine {
             Diagnostic::error(format!("method `{}` not found", method_name))
                 .with_label(span, "unknown method"),
         );
-        self.ctx.types.error()
+        self.types.error()
     }
 
     fn synth_call(&mut self, call: &CallExpr) -> TypeId {
         let callee = match call.callee() {
             Some(e) => e,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let callee_ty = self.synth_expr(&callee);
         let resolved = self.resolve_type(callee_ty);
-        let callee_type = self.ctx.types.get(resolved).clone();
+        let callee_type = self.types.get(resolved).clone();
 
         // Check if callee is a function
         let (param_types, ret_ty) = match callee_type {
@@ -1871,8 +1871,8 @@ impl InferEngine {
                                     self.struct_methods.get(&struct_def_id).cloned()
                                 {
                                     for method_def_id in methods {
-                                        let symbol = self.ctx.get_symbol(method_def_id);
-                                        let method_name = self.ctx.resolve(symbol.name);
+                                        let symbol = self.resolve_ctx.get_symbol(method_def_id);
+                                        let method_name = self.resolve_ctx.resolve(symbol.name);
                                         if method_name == fn_name
                                             && let Some(sig) =
                                                 self.fn_signatures.get(&method_def_id).cloned()
@@ -1895,7 +1895,7 @@ impl InferEngine {
                 self.diagnostics.push(
                     Diagnostic::error("value is not a function").with_label(span, "not a function"),
                 );
-                return self.ctx.types.error();
+                return self.types.error();
             }
         };
 
@@ -1937,19 +1937,19 @@ impl InferEngine {
     fn synth_index(&mut self, index: &IndexExpr) -> TypeId {
         let base = match index.base() {
             Some(e) => e,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let idx = match index.index() {
             Some(e) => e,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let base_ty = self.synth_expr(&base);
         let _ = self.synth_expr(&idx); // Check index expression
 
         let resolved = self.resolve_type(base_ty);
-        let base_type = self.ctx.types.get(resolved).clone();
+        let base_type = self.types.get(resolved).clone();
 
         match base_type {
             Type::Array(elem, len) => {
@@ -1975,7 +1975,7 @@ impl InferEngine {
                     Diagnostic::error("cannot index into this type")
                         .with_label(span, "not indexable"),
                 );
-                self.ctx.types.error()
+                self.types.error()
             }
         }
     }
@@ -1983,7 +1983,7 @@ impl InferEngine {
     fn synth_slice(&mut self, slice: &SliceExpr) -> TypeId {
         let base = match slice.base() {
             Some(e) => e,
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         let base_ty = self.synth_expr(&base);
@@ -1997,16 +1997,16 @@ impl InferEngine {
         }
 
         let resolved = self.resolve_type(base_ty);
-        let base_type = self.ctx.types.get(resolved).clone();
+        let base_type = self.types.get(resolved).clone();
 
         match base_type {
-            Type::Array(elem, _) | Type::Slice(elem) => self.ctx.types.mk_slice(elem),
+            Type::Array(elem, _) | Type::Slice(elem) => self.types.mk_slice(elem),
             _ => {
                 let span = text_range_to_span(base.syntax().text_range());
                 self.diagnostics.push(
                     Diagnostic::error("cannot slice this type").with_label(span, "not sliceable"),
                 );
-                self.ctx.types.error()
+                self.types.error()
             }
         }
     }
@@ -2015,7 +2015,7 @@ impl InferEngine {
         // Check condition is bool
         if let Some(cond) = if_expr.condition() {
             let cond_ty = self.synth_expr(&cond);
-            let bool_ty = self.ctx.types.bool();
+            let bool_ty = self.types.bool();
             if self.unify(cond_ty, bool_ty).is_err() {
                 let span = text_range_to_span(cond.syntax().text_range());
                 self.diagnostics.push(
@@ -2029,7 +2029,7 @@ impl InferEngine {
         let then_ty = if let Some(then_block) = if_expr.then_branch() {
             self.synth_block(&then_block)
         } else {
-            self.ctx.types.unit()
+            self.types.unit()
         };
 
         // Synthesize else branch (if present)
@@ -2042,7 +2042,7 @@ impl InferEngine {
             self.synth_block(&else_block)
         } else {
             // No else branch - if expression returns unit
-            return self.ctx.types.unit();
+            return self.types.unit();
         };
 
         // Unify branches
@@ -2061,7 +2061,7 @@ impl InferEngine {
         // Check condition is bool
         if let Some(cond) = while_expr.condition() {
             let cond_ty = self.synth_expr(&cond);
-            let bool_ty = self.ctx.types.bool();
+            let bool_ty = self.types.bool();
             if self.unify(cond_ty, bool_ty).is_err() {
                 let span = text_range_to_span(cond.syntax().text_range());
                 self.diagnostics.push(
@@ -2083,7 +2083,7 @@ impl InferEngine {
         self.current_loop_kind = old_loop_kind;
 
         // While loops always return unit
-        self.ctx.types.unit()
+        self.types.unit()
     }
 
     fn synth_for(&mut self, for_expr: &ForExpr) -> TypeId {
@@ -2112,7 +2112,7 @@ impl InferEngine {
         self.current_loop_kind = old_loop_kind;
 
         // For loops always return unit
-        self.ctx.types.unit()
+        self.types.unit()
     }
 
     fn synth_loop(&mut self, loop_expr: &LoopExpr) -> TypeId {
@@ -2139,7 +2139,7 @@ impl InferEngine {
         if has_break {
             break_ty
         } else {
-            self.ctx.types.never()
+            self.types.never()
         }
     }
 
@@ -2152,7 +2152,7 @@ impl InferEngine {
                 Diagnostic::error("break outside of loop")
                     .with_label(span, "`break` can only be used inside a loop"),
             );
-            return self.ctx.types.never();
+            return self.types.never();
         };
 
         // Mark that we found a break in the current loop
@@ -2180,11 +2180,11 @@ impl InferEngine {
             }
         } else if let Some(break_ty) = self.current_loop_break_type {
             // Break without value - unify with unit
-            let unit_ty = self.ctx.types.unit();
+            let unit_ty = self.types.unit();
             let _ = self.unify(break_ty, unit_ty);
         }
         // Break is a diverging expression
-        self.ctx.types.never()
+        self.types.never()
     }
 
     fn synth_continue(&mut self, continue_expr: &ContinueExpr) -> TypeId {
@@ -2197,14 +2197,14 @@ impl InferEngine {
             );
         }
         // Continue is a diverging expression
-        self.ctx.types.never()
+        self.types.never()
     }
 
     fn synth_return(&mut self, return_expr: &ReturnExpr) -> TypeId {
         let value_ty = if let Some(value) = return_expr.expr() {
             self.synth_expr(&value)
         } else {
-            self.ctx.types.unit()
+            self.types.unit()
         };
 
         if let Some(ret_ty) = self.current_return_type
@@ -2218,13 +2218,13 @@ impl InferEngine {
         }
 
         // Return is a diverging expression
-        self.ctx.types.never()
+        self.types.never()
     }
 
     fn synth_block_expr(&mut self, block_expr: &BlockExpr) -> TypeId {
         match block_expr.block() {
             Some(block) => self.synth_block(&block),
-            None => self.ctx.types.unit(),
+            None => self.types.unit(),
         }
     }
 
@@ -2232,13 +2232,13 @@ impl InferEngine {
         // Synthesize the source expression
         let source_ty = match cast.expr() {
             Some(expr) => self.synth_expr(&expr),
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         // Get the target type
         let target_ty = match cast.ty() {
             Some(ty) => self.ast_type_to_type_id(&ty),
-            None => return self.ctx.types.error(),
+            None => return self.types.error(),
         };
 
         // Validate the cast
@@ -2263,8 +2263,8 @@ impl InferEngine {
 
     /// Check if a cast from source type to target type is valid.
     fn is_valid_cast(&self, source: TypeId, target: TypeId) -> bool {
-        let source_ty = self.ctx.types.get(source);
-        let target_ty = self.ctx.types.get(target);
+        let source_ty = self.types.get(source);
+        let target_ty = self.types.get(target);
 
         match (source_ty, target_ty) {
             // Error type can be cast to anything (to avoid cascading errors)
@@ -2289,7 +2289,7 @@ impl InferEngine {
 
     /// Convert a type to a string for error messages.
     pub(super) fn type_to_string(&self, type_id: TypeId) -> String {
-        let ty = self.ctx.types.get(type_id);
+        let ty = self.types.get(type_id);
         match ty {
             Type::Primitive(prim) => prim.as_str().to_string(),
             Type::Infer(var, kind) => match kind {
@@ -2328,8 +2328,8 @@ impl InferEngine {
                 }
             }
             Type::Struct(def_id, _) => {
-                let symbol = self.ctx.get_symbol(*def_id);
-                self.ctx.resolve(symbol.name).to_string()
+                let symbol = self.resolve_ctx.get_symbol(*def_id);
+                self.resolve_ctx.resolve(symbol.name).to_string()
             }
             Type::FnPtr { params, ret } => {
                 let param_strs: Vec<_> = params.iter().map(|p| self.type_to_string(*p)).collect();
@@ -2340,8 +2340,8 @@ impl InferEngine {
             Type::Error => "<error>".to_string(),
             Type::Alias(_, _) => "<alias>".to_string(),
             Type::Param(def_id) => {
-                let symbol = self.ctx.get_symbol(*def_id);
-                self.ctx.resolve(symbol.name).to_string()
+                let symbol = self.resolve_ctx.get_symbol(*def_id);
+                self.resolve_ctx.resolve(symbol.name).to_string()
             }
             Type::SelfType => "Self".to_string(),
         }
@@ -2359,7 +2359,7 @@ impl InferEngine {
         let scrutinee_ty = if let Some(lhs) = is_expr.lhs() {
             self.synth_expr(&lhs)
         } else {
-            self.ctx.types.error()
+            self.types.error()
         };
 
         // Check the pattern against the scrutinee type
@@ -2368,7 +2368,7 @@ impl InferEngine {
         }
 
         // `is` expressions always return bool
-        self.ctx.types.bool()
+        self.types.bool()
     }
 
     fn synth_match(&mut self, match_expr: &MatchExpr) -> TypeId {
@@ -2376,15 +2376,14 @@ impl InferEngine {
         let scrutinee_ty = if let Some(scrutinee) = match_expr.scrutinee() {
             self.synth_expr(&scrutinee)
         } else {
-            return self.ctx.types.error();
+            return self.types.error();
         };
 
         // Collect arm body types
         let mut arm_types = Vec::new();
 
         for arm in match_expr.arms() {
-            // Enter a new scope for this arm (pattern bindings are local to the arm)
-            self.ctx.enter_scope(ScopeKind::Block);
+            // Scope for match arm pattern bindings is already handled by resolver
 
             // Check and define pattern bindings
             if let Some(pat) = arm.pattern() {
@@ -2395,7 +2394,7 @@ impl InferEngine {
             // Check guard expression if present (must be bool)
             if let Some(guard) = arm.guard() {
                 let guard_ty = self.synth_expr(&guard);
-                let bool_ty = self.ctx.types.bool();
+                let bool_ty = self.types.bool();
                 if self.unify(guard_ty, bool_ty).is_err() {
                     let span = text_range_to_span(guard.syntax().text_range());
                     self.diagnostics.push(
@@ -2410,13 +2409,11 @@ impl InferEngine {
                 let body_ty = self.synth_expr(&body);
                 arm_types.push(body_ty);
             }
-
-            self.ctx.exit_scope();
         }
 
         // Unify all arm types
         if arm_types.is_empty() {
-            return self.ctx.types.unit();
+            return self.types.unit();
         }
 
         let result_ty = arm_types[0];
@@ -2453,7 +2450,7 @@ impl InferEngine {
                         SyntaxKind::INT_LITERAL => {
                             let (prim, _) = parse_int_suffix(token.text());
                             if let Some(kind) = prim {
-                                self.ctx.types.primitive(kind)
+                                self.types.primitive(kind)
                             } else {
                                 // Unsuffixed - create inference var that should unify
                                 self.fresh_int_var()
@@ -2462,17 +2459,17 @@ impl InferEngine {
                         SyntaxKind::FLOAT_LITERAL => {
                             let text = token.text();
                             if text.ends_with("f32") {
-                                self.ctx.types.primitive(PrimitiveKind::F32)
+                                self.types.primitive(PrimitiveKind::F32)
                             } else if text.ends_with("f64") {
-                                self.ctx.types.primitive(PrimitiveKind::F64)
+                                self.types.primitive(PrimitiveKind::F64)
                             } else {
                                 self.fresh_float_var()
                             }
                         }
-                        SyntaxKind::TRUE_KW | SyntaxKind::FALSE_KW => self.ctx.types.bool(),
-                        SyntaxKind::CHAR_LITERAL => self.ctx.types.primitive(PrimitiveKind::Char),
-                        SyntaxKind::STRING_LITERAL => self.ctx.types.str_ref(),
-                        _ => self.ctx.types.error(),
+                        SyntaxKind::TRUE_KW | SyntaxKind::FALSE_KW => self.types.bool(),
+                        SyntaxKind::CHAR_LITERAL => self.types.primitive(PrimitiveKind::Char),
+                        SyntaxKind::STRING_LITERAL => self.types.str_ref(),
+                        _ => self.types.error(),
                     };
 
                     if self.unify(lit_ty, expected_ty).is_err() {
@@ -2487,7 +2484,7 @@ impl InferEngine {
             Pat::Tuple(tuple_pat) => {
                 // Check that expected type is a tuple with matching arity
                 let resolved = self.resolve_type(expected_ty);
-                let ty_data = self.ctx.types.get(resolved).clone();
+                let ty_data = self.types.get(resolved).clone();
                 if let Type::Tuple(elem_types) = ty_data {
                     let patterns: Vec<_> = tuple_pat.patterns().collect();
                     if patterns.len() != elem_types.len() {
@@ -2519,7 +2516,7 @@ impl InferEngine {
             Pat::Ref(ref_pat) => {
                 // Check that expected type is a reference
                 let resolved = self.resolve_type(expected_ty);
-                let ty_data = self.ctx.types.get(resolved).clone();
+                let ty_data = self.types.get(resolved).clone();
                 if let Type::Ref(_, inner_ty) = ty_data {
                     if let Some(inner_pat) = ref_pat.pat() {
                         self.check_pattern_type(&inner_pat, inner_ty);
@@ -2566,7 +2563,7 @@ impl InferEngine {
                             let ty = self.synth_expr(&expr);
                             // Check if this expression has the never type
                             let resolved = self.resolve_type(ty);
-                            let inner = self.ctx.types.get(resolved);
+                            let inner = self.types.get(resolved);
                             if matches!(inner, Type::Primitive(PrimitiveKind::Never)) {
                                 diverges = true;
                             }
@@ -2593,7 +2590,7 @@ impl InferEngine {
 
                 let ty = self.synth_expr(&expr);
                 let resolved = self.resolve_type(ty);
-                let inner = self.ctx.types.get(resolved);
+                let inner = self.types.get(resolved);
                 if matches!(inner, Type::Primitive(PrimitiveKind::Never)) {
                     diverges = true;
                 }
@@ -2605,9 +2602,9 @@ impl InferEngine {
             self.synth_expr(&tail)
         } else if diverges {
             // If the block diverges, its type is never
-            self.ctx.types.never()
+            self.types.never()
         } else {
-            self.ctx.types.unit()
+            self.types.unit()
         };
 
         // Postcondition: if block diverges and has no tail, result must be never type
@@ -2616,7 +2613,7 @@ impl InferEngine {
             let resolved = self.resolve_type(result);
             debug_assert!(
                 matches!(
-                    self.ctx.types.get(resolved),
+                    self.types.get(resolved),
                     Type::Primitive(PrimitiveKind::Never)
                 ),
                 "postcondition: diverging block without tail must return never type"
@@ -2653,7 +2650,7 @@ impl InferEngine {
 
         // Get the resolved type
         let resolved = self.resolve_type(expected);
-        let ty = self.ctx.types.get(resolved).clone();
+        let ty = self.types.get(resolved).clone();
 
         // Validate if it's a concrete integer type
         if let Type::Primitive(kind) = ty
@@ -2721,7 +2718,7 @@ impl InferEngine {
 
             // Check if initializer diverges (e.g., let x = return 42;)
             let resolved = self.resolve_type(ty);
-            let inner = self.ctx.types.get(resolved);
+            let inner = self.types.get(resolved);
             let diverges = matches!(inner, Type::Primitive(PrimitiveKind::Never));
 
             (ty, diverges)
@@ -2753,22 +2750,15 @@ impl InferEngine {
                 if let Some(token) = token {
                     let span = text_range_to_span(token.text_range());
                     // The resolver already defined this binding, we just need to record its type
-                    // Look up in resolutions first
                     if let Some(&def_id) = self.resolutions.get(&span) {
                         self.binding_types.insert(def_id, ty);
-                    } else {
-                        // Try to find by name in current scope
-                        let name = token.text();
-                        let interned = self.ctx.intern(name);
-                        if let Some(def_id) = self.ctx.lookup(interned) {
-                            self.binding_types.insert(def_id, ty);
-                        }
                     }
+                    // If not in resolutions, the resolver didn't define it (error already reported)
                 }
             }
             Pat::Tuple(tuple_pat) => {
                 let resolved = self.resolve_type(ty);
-                let ty_data = self.ctx.types.get(resolved).clone();
+                let ty_data = self.types.get(resolved).clone();
                 if let Type::Tuple(elem_types) = ty_data {
                     for (inner_pat, elem_ty) in tuple_pat.patterns().zip(elem_types.iter()) {
                         self.define_pattern(&inner_pat, *elem_ty);
@@ -2816,27 +2806,27 @@ impl InferEngine {
                                         return self_ty;
                                     }
                                     // Self used outside impl block - error
-                                    return self.ctx.types.error();
+                                    return self.types.error();
                                 }
 
                                 // Check for str (string reference type) BEFORE primitives
                                 // because str is in PrimitiveKind but we want StrRef for type annotations
                                 if name == "str" {
-                                    return self.ctx.types.str_ref();
+                                    return self.types.str_ref();
                                 }
 
                                 // Check for primitive types
                                 if let Some(prim) = PrimitiveKind::from_name(name) {
-                                    return self.ctx.types.primitive(prim);
+                                    return self.types.primitive(prim);
                                 }
 
                                 // Look up in resolutions
                                 let span = text_range_to_span(token.text_range());
                                 if let Some(&def_id) = self.resolutions.get(&span) {
                                     // Check if it's a type parameter or a struct
-                                    let symbol = self.ctx.get_symbol(def_id);
+                                    let symbol = self.resolve_ctx.get_symbol(def_id);
                                     if symbol.kind == SymbolKind::TypeParam {
-                                        return self.ctx.types.mk_param(def_id);
+                                        return self.types.mk_param(def_id);
                                     }
                                     // It's a struct or type alias - parse generic arguments
                                     let type_args: Vec<TypeId> = segment
@@ -2847,13 +2837,13 @@ impl InferEngine {
                                                 .collect()
                                         })
                                         .unwrap_or_default();
-                                    return self.ctx.types.mk_struct(def_id, type_args);
+                                    return self.types.mk_struct(def_id, type_args);
                                 }
                             }
                         }
                     }
                 }
-                self.ctx.types.error()
+                self.types.error()
             }
             crate::ast::Type::Ref(ref_type) => {
                 let mutability = if ref_type.mut_kw().is_some() {
@@ -2863,9 +2853,9 @@ impl InferEngine {
                 };
                 if let Some(inner) = ref_type.ty() {
                     let inner_ty = self.ast_type_to_type_id_inner(&inner);
-                    self.ctx.types.mk_ref(mutability, inner_ty)
+                    self.types.mk_ref(mutability, inner_ty)
                 } else {
-                    self.ctx.types.error()
+                    self.types.error()
                 }
             }
             crate::ast::Type::Array(array_type) => {
@@ -2892,17 +2882,17 @@ impl InferEngine {
                     } else {
                         0
                     };
-                    self.ctx.types.mk_array(elem, len)
+                    self.types.mk_array(elem, len)
                 } else {
-                    self.ctx.types.error()
+                    self.types.error()
                 }
             }
             crate::ast::Type::Slice(slice_type) => {
                 if let Some(elem_ty) = slice_type.elem_ty() {
                     let elem = self.ast_type_to_type_id_inner(&elem_ty);
-                    self.ctx.types.mk_slice(elem)
+                    self.types.mk_slice(elem)
                 } else {
-                    self.ctx.types.error()
+                    self.types.error()
                 }
             }
             crate::ast::Type::Tuple(tuple_type) => {
@@ -2910,7 +2900,7 @@ impl InferEngine {
                     .types()
                     .map(|t| self.ast_type_to_type_id_inner(&t))
                     .collect();
-                self.ctx.types.mk_tuple(elems)
+                self.types.mk_tuple(elems)
             }
             crate::ast::Type::FnPtr(fn_ptr) => {
                 let params: Vec<_> = fn_ptr
@@ -2920,10 +2910,10 @@ impl InferEngine {
                 let ret = fn_ptr
                     .ret_type()
                     .map(|t| self.ast_type_to_type_id_inner(&t))
-                    .unwrap_or_else(|| self.ctx.types.unit());
-                self.ctx.types.mk_fn_ptr(params, ret)
+                    .unwrap_or_else(|| self.types.unit());
+                self.types.mk_fn_ptr(params, ret)
             }
-            crate::ast::Type::Never(_) => self.ctx.types.never(),
+            crate::ast::Type::Never(_) => self.types.never(),
         }
     }
 }

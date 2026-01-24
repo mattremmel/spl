@@ -40,7 +40,7 @@ use crate::lexer::Span;
 use crate::sema::SemanticContext;
 use crate::sema::resolver::ResolveResult;
 use crate::sema::symbol::DefId;
-use crate::sema::types::{Mutability, PrimitiveKind, TypeId, TypeVar};
+use crate::sema::types::{Mutability, PrimitiveKind, TypeId, TypeInterner, TypeVar};
 use rustc_hash::FxHashMap;
 
 use super::{InferResult, SelfParam};
@@ -90,14 +90,18 @@ pub(super) struct FnSignature {
 
 /// The type inference engine.
 ///
-/// Holds all state needed for type inference, including the semantic context
-/// (symbol table, type interner), inference results, and contextual information
-/// about the current position in the AST (current function, loop, etc.).
-pub(super) struct InferEngine {
-    /// The semantic context containing symbol table and type interner.
-    pub(super) ctx: SemanticContext,
+/// Holds all state needed for type inference, including references to the
+/// semantic context (symbol table) and its own type interner, inference results,
+/// and contextual information about the current position in the AST.
+pub(super) struct InferEngine<'a> {
+    /// Borrowed reference to the semantic context for symbol/scope lookup.
+    pub(super) resolve_ctx: &'a SemanticContext,
+
+    /// Owned type interner for creating types during inference.
+    pub(super) types: TypeInterner,
 
     /// Name resolutions from the resolver phase (span → DefId).
+    /// Cloned from ResolveResult to allow modification during inference.
     pub(super) resolutions: FxHashMap<Span, DefId>,
 
     // === Inference Results ===
@@ -177,15 +181,16 @@ pub(super) struct InferEngine {
     pub(super) builtin_method_names: FxHashMap<DefId, String>,
 }
 
-impl InferEngine {
-    pub(super) fn new(resolve_result: ResolveResult) -> Self {
+impl<'a> InferEngine<'a> {
+    pub(super) fn new(resolve_result: &'a ResolveResult) -> Self {
         let mut engine = Self {
-            ctx: resolve_result.ctx,
-            resolutions: resolve_result.resolutions,
+            resolve_ctx: &resolve_result.ctx,
+            types: TypeInterner::new(),
+            resolutions: resolve_result.resolutions.clone(),
             expr_types: FxHashMap::default(),
             binding_types: FxHashMap::default(),
             substitution: FxHashMap::default(),
-            diagnostics: resolve_result.diagnostics,
+            diagnostics: Vec::new(), // Fresh diagnostics, not inherited
             fn_signatures: FxHashMap::default(),
             struct_fields: FxHashMap::default(),
             struct_type_params: FxHashMap::default(),
@@ -212,10 +217,10 @@ impl InferEngine {
     /// in the same structures used for struct methods, enabling unified
     /// method resolution.
     fn register_builtin_primitive_methods(&mut self) {
-        let str_ty = self.ctx.types.str_ref();
-        let usize_ty = self.ctx.types.primitive(PrimitiveKind::Usize);
-        let u8_ty = self.ctx.types.primitive(PrimitiveKind::U8);
-        let ptr_u8 = self.ctx.types.mk_raw_ptr(Mutability::Shared, u8_ty);
+        let str_ty = self.types.str_ref();
+        let usize_ty = self.types.primitive(PrimitiveKind::Usize);
+        let u8_ty = self.types.primitive(PrimitiveKind::U8);
+        let ptr_u8 = self.types.mk_raw_ptr(Mutability::Shared, u8_ty);
 
         // Create synthetic DefIds for ptr() and len() methods
         let ptr_def_id = self.create_builtin_method("ptr", str_ty, vec![], ptr_u8);
@@ -288,7 +293,7 @@ impl InferEngine {
         }
 
         InferResult {
-            ctx: self.ctx,
+            types: self.types,
             expr_types: self.expr_types,
             binding_types: self.binding_types,
             resolutions: self.resolutions,
@@ -305,16 +310,16 @@ impl InferEngine {
 
     /// Create a fresh type variable.
     pub(super) fn fresh_type_var(&mut self) -> TypeId {
-        self.ctx.types.fresh_type_var()
+        self.types.fresh_type_var()
     }
 
     /// Create a fresh integer type variable (defaults to i32 if unconstrained).
     pub(super) fn fresh_int_var(&mut self) -> TypeId {
-        self.ctx.types.fresh_int_var()
+        self.types.fresh_int_var()
     }
 
     /// Create a fresh float type variable (defaults to f64 if unconstrained).
     pub(super) fn fresh_float_var(&mut self) -> TypeId {
-        self.ctx.types.fresh_float_var()
+        self.types.fresh_float_var()
     }
 }

@@ -123,7 +123,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
             // No panic from cycle detection
         }
 
@@ -143,7 +143,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
             // No panic from cycle detection in chained unification
         }
 
@@ -160,7 +160,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
             // No panic from resolve_type postcondition
         }
 
@@ -178,7 +178,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
     }
 
@@ -437,7 +437,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
 
         #[test]
@@ -451,7 +451,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
 
         #[test]
@@ -465,7 +465,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
 
         #[test]
@@ -481,7 +481,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
 
         #[test]
@@ -497,7 +497,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let infer_result = infer(&source_file, resolve_result);
+            let infer_result = infer(&source_file, &resolve_result);
 
             // Should have a diagnostic about missing field
             assert!(
@@ -523,7 +523,7 @@ mod tests {
             assert!(parse.ok(), "parse errors: {:?}", parse.errors());
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
 
         #[test]
@@ -539,7 +539,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
 
         #[test]
@@ -553,7 +553,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
 
         #[test]
@@ -567,7 +567,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
 
         #[test]
@@ -587,7 +587,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
 
         #[test]
@@ -603,7 +603,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
     }
 
@@ -681,7 +681,7 @@ mod tests {
                     .collect::<Vec<_>>()
             );
 
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
             // All contracts should pass without panic
         }
 
@@ -715,7 +715,7 @@ mod tests {
 
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
 
         #[test]
@@ -734,7 +734,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let _infer_result = infer(&source_file, resolve_result);
+            let _infer_result = infer(&source_file, &resolve_result);
         }
     }
 
@@ -986,7 +986,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let infer_result = infer(&source_file, resolve_result);
+            let infer_result = infer(&source_file, &resolve_result);
 
             // Should produce diagnostic, not panic
             // Note: The compiler currently reports "field access on non-struct type"
@@ -1021,7 +1021,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let infer_result = infer(&source_file, resolve_result);
+            let infer_result = infer(&source_file, &resolve_result);
 
             // Note: The compiler currently reports "field access on non-struct type"
             // for tuple index out of bounds, which is acceptable error handling.
@@ -1055,7 +1055,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let infer_result = infer(&source_file, resolve_result);
+            let infer_result = infer(&source_file, &resolve_result);
 
             assert!(
                 !infer_result.diagnostics.is_empty(),
@@ -1078,7 +1078,7 @@ mod tests {
             let parse = parse(source);
             let source_file = SourceFile::cast(parse.syntax()).unwrap();
             let resolve_result = resolve(&source_file);
-            let infer_result = infer(&source_file, resolve_result);
+            let infer_result = infer(&source_file, &resolve_result);
 
             let tuple_errors: Vec<_> = infer_result
                 .diagnostics
