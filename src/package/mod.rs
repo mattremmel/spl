@@ -27,7 +27,9 @@ mod source_map;
 
 pub use compilation_unit::CompilationUnit;
 pub use directive::{parse_package_directives, DirectiveError, PackageDirectives};
-pub use resolver::{resolve_includes, try_resolve_includes, ResolveError};
+pub use resolver::{
+    resolve_includes, resolve_packages, try_resolve_includes, try_resolve_packages, ResolveError,
+};
 pub use scanner::{find_subpackages, has_package_config, scan_directory, ScanError};
 pub use source_map::{FileId, SourceMap};
 
@@ -241,19 +243,29 @@ impl Package {
 
         // Find and load subpackages
         let subdirs = find_subpackages(&root)?;
+
+        // Get subpackage names and filter to those with .spl files
+        let available_packages: Vec<String> = subdirs
+            .iter()
+            .filter(|subdir| {
+                scan_directory(subdir)
+                    .map(|files| !files.is_empty())
+                    .unwrap_or(false)
+            })
+            .filter_map(|p| p.file_name())
+            .filter_map(|n| n.to_str())
+            .map(String::from)
+            .collect();
+
+        // Resolve which packages to include
+        let included_packages = try_resolve_packages(&available_packages, &directives, conditions)?;
+
         let mut subpackages = Vec::new();
-
-        for subdir in subdirs {
-            // Only load subdirectories that contain .spl files
-            let has_files = scan_directory(&subdir)
-                .map(|files| !files.is_empty())
-                .unwrap_or(false);
-
-            if has_files {
-                // Attempt to load, but don't fail the parent if subpackage fails
-                if let Ok(subpkg) = Self::load_with_conditions(&subdir, conditions) {
-                    subpackages.push(subpkg);
-                }
+        for pkg_name in &included_packages {
+            let subdir = root.join(pkg_name);
+            // Attempt to load, but don't fail the parent if subpackage fails
+            if let Ok(subpkg) = Self::load_with_conditions(&subdir, conditions) {
+                subpackages.push(subpkg);
             }
         }
 
