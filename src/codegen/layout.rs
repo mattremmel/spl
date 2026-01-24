@@ -49,9 +49,23 @@ impl<'a> LayoutComputer<'a> {
     /// Create a new layout computer.
     pub fn new(types: &'a TypeInterner, pointer_type: ClifType) -> Self {
         let pointer_size = pointer_type.bytes();
+        debug_assert!(
+            pointer_size == 4 || pointer_size == 8,
+            "precondition: pointer_size must be 4 or 8, got {}",
+            pointer_size
+        );
         Self {
             types,
             pointer_size,
+        }
+    }
+
+    /// Returns the TypeId for a pointer-sized integer type.
+    fn pointer_sized_int_type(&self) -> TypeId {
+        if self.pointer_size == 4 {
+            self.types.i32()
+        } else {
+            self.types.i64()
         }
     }
 
@@ -150,6 +164,11 @@ impl<'a> LayoutComputer<'a> {
             Type::Struct(_, fields) => self.compute_field_offset(fields, field_idx),
             // StrRef is a fat pointer: [ptr, len], both pointer-sized
             Type::StrRef => {
+                debug_assert!(
+                    field_idx < 2,
+                    "precondition: field_idx {} must be < 2 for StrRef",
+                    field_idx
+                );
                 if field_idx == 0 {
                     0 // ptr at offset 0
                 } else if field_idx == 1 {
@@ -187,12 +206,33 @@ impl<'a> LayoutComputer<'a> {
     pub fn field_type(&self, ty: TypeId, field_idx: usize) -> Option<TypeId> {
         let ty_data = self.types.get(ty);
         match ty_data {
-            Type::Tuple(elems) => elems.get(field_idx).copied(),
-            Type::Struct(_, fields) => fields.get(field_idx).copied(),
-            // StrRef fields are both i64 (ptr and len)
+            Type::Tuple(elems) => {
+                debug_assert!(
+                    field_idx < elems.len(),
+                    "precondition: field_idx {} must be < tuple length {}",
+                    field_idx,
+                    elems.len()
+                );
+                elems.get(field_idx).copied()
+            }
+            Type::Struct(_, fields) => {
+                debug_assert!(
+                    field_idx < fields.len(),
+                    "precondition: field_idx {} must be < struct field count {}",
+                    field_idx,
+                    fields.len()
+                );
+                fields.get(field_idx).copied()
+            }
+            // StrRef fields are both pointer-sized (ptr and len)
             Type::StrRef => {
+                debug_assert!(
+                    field_idx < 2,
+                    "precondition: field_idx {} must be < 2 for StrRef",
+                    field_idx
+                );
                 if field_idx < 2 {
-                    Some(self.types.i64())
+                    Some(self.pointer_sized_int_type())
                 } else {
                     None
                 }
@@ -422,7 +462,7 @@ mod tests {
 
         assert_eq!(computer.field_type(tuple, 0), Some(i32_ty));
         assert_eq!(computer.field_type(tuple, 1), Some(bool_ty));
-        assert_eq!(computer.field_type(tuple, 2), None);
+        // Out-of-bounds access panics in debug mode; see tuple_field_type_out_of_bounds_panics
     }
 
     #[test]
@@ -543,5 +583,96 @@ mod tests {
 
         assert_eq!(computer.layout_of(i128_ty), TypeLayout::new(16, 16));
         assert_eq!(computer.layout_of(u128_ty), TypeLayout::new(16, 16));
+    }
+
+    #[test]
+    fn strref_field_type_32bit() {
+        let interner = TypeInterner::new();
+        let str_ref_ty = interner.str_ref();
+        let i32_ty = interner.i32();
+
+        let computer = LayoutComputer::new(&interner, types::I32);
+
+        // Both ptr and len fields should be i32 on 32-bit
+        assert_eq!(computer.field_type(str_ref_ty, 0), Some(i32_ty));
+        assert_eq!(computer.field_type(str_ref_ty, 1), Some(i32_ty));
+        // Out-of-bounds access panics in debug mode; see strref_field_type_out_of_bounds_panics
+    }
+
+    #[test]
+    fn strref_field_type_64bit() {
+        let interner = TypeInterner::new();
+        let str_ref_ty = interner.str_ref();
+        let i64_ty = interner.i64();
+
+        let computer = LayoutComputer::new(&interner, types::I64);
+
+        assert_eq!(computer.field_type(str_ref_ty, 0), Some(i64_ty));
+        assert_eq!(computer.field_type(str_ref_ty, 1), Some(i64_ty));
+        // Out-of-bounds access panics in debug mode; see strref_field_type_out_of_bounds_panics
+    }
+
+    #[test]
+    fn strref_layout_32bit() {
+        let interner = TypeInterner::new();
+        let str_ref_ty = interner.str_ref();
+
+        let computer = LayoutComputer::new(&interner, types::I32);
+
+        // StrRef is 2 pointers: 8 bytes on 32-bit, align 4
+        assert_eq!(computer.layout_of(str_ref_ty), TypeLayout::new(8, 4));
+    }
+
+    #[test]
+    fn strref_field_offset_32bit() {
+        let interner = TypeInterner::new();
+        let str_ref_ty = interner.str_ref();
+
+        let computer = LayoutComputer::new(&interner, types::I32);
+
+        // ptr at 0, len at 4 on 32-bit
+        assert_eq!(computer.field_offset(str_ref_ty, 0), 0);
+        assert_eq!(computer.field_offset(str_ref_ty, 1), 4);
+    }
+
+    #[test]
+    fn slice_layout_32bit() {
+        let mut interner = TypeInterner::new();
+        let slice_ty = interner.mk_slice(interner.i32());
+
+        let computer = LayoutComputer::new(&interner, types::I32);
+
+        // Slice is 2 pointers: 8 bytes on 32-bit, align 4
+        assert_eq!(computer.layout_of(slice_ty), TypeLayout::new(8, 4));
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "field_idx")]
+    fn strref_field_type_out_of_bounds_panics() {
+        let interner = TypeInterner::new();
+        let str_ref_ty = interner.str_ref();
+        let computer = LayoutComputer::new(&interner, types::I64);
+        let _ = computer.field_type(str_ref_ty, 2);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "field_idx")]
+    fn tuple_field_type_out_of_bounds_panics() {
+        let mut interner = TypeInterner::new();
+        let tuple = interner.mk_tuple(vec![interner.i32()]);
+        let computer = LayoutComputer::new(&interner, types::I64);
+        let _ = computer.field_type(tuple, 1);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "field_idx")]
+    fn strref_field_offset_out_of_bounds_panics() {
+        let interner = TypeInterner::new();
+        let str_ref_ty = interner.str_ref();
+        let computer = LayoutComputer::new(&interner, types::I64);
+        let _ = computer.field_offset(str_ref_ty, 2);
     }
 }
