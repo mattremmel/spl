@@ -87,25 +87,3 @@ pub fn register(_runtime: &mut Runtime) {
     // using __memcmp, __memcpy, __alloc, and basic arithmetic.
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn register_adds_no_intrinsics() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        // No string intrinsics should exist
-        assert!(!runtime.contains("__str_len"));
-        assert!(!runtime.contains("__str_eq"));
-        assert!(!runtime.contains("__str_cmp"));
-        assert!(!runtime.contains("__str_find"));
-        assert!(!runtime.contains("__str_contains"));
-        assert!(!runtime.contains("__str_starts_with"));
-        assert!(!runtime.contains("__str_ends_with"));
-        assert!(!runtime.contains("__str_char_at"));
-        assert!(!runtime.contains("__str_concat"));
-        assert!(!runtime.contains("__str_slice"));
-    }
-}

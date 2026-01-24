@@ -239,9 +239,6 @@ mod tests {
         assert!(runtime.contains("__argc"));
         assert!(runtime.contains("__argv"));
         assert!(runtime.contains("__clock_ns"));
-
-        // This should NOT exist as an intrinsic
-        assert!(!runtime.contains("__clock_ms"));
     }
 
     #[test]

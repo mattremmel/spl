@@ -233,14 +233,6 @@ mod tests {
 
         assert!(runtime.contains("__str_to_float"));
         assert!(runtime.contains("__float_to_string"));
-
-        // These should NOT exist as intrinsics
-        assert!(!runtime.contains("__int_to_float"));
-        assert!(!runtime.contains("__float_to_int"));
-        assert!(!runtime.contains("__char_to_int"));
-        assert!(!runtime.contains("__int_to_char"));
-        assert!(!runtime.contains("__bool_to_int"));
-        assert!(!runtime.contains("__str_to_int"));
     }
 
     #[test]

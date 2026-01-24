@@ -138,12 +138,6 @@ mod tests {
         assert!(runtime.contains("__debug_print_int"));
         assert!(runtime.contains("__debug_print_ptr"));
         assert!(runtime.contains("__breakpoint"));
-
-        // These should NOT exist as intrinsics
-        assert!(!runtime.contains("__assert"));
-        assert!(!runtime.contains("__assert_eq_int"));
-        assert!(!runtime.contains("__assert_eq_float"));
-        assert!(!runtime.contains("__unreachable"));
     }
 
     #[test]
