@@ -1813,6 +1813,244 @@ fn lower_i8_add() {
 }
 
 #[test]
+fn lower_i32_add() {
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+
+    let mut body = Body::with_args(i32_ty, &[(i32_ty, false), (i32_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Add,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "i32_add");
+    let func: fn(i32, i32) -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(1_000_000i32, 2_000_000i32), 3_000_000i32);
+}
+
+#[test]
+fn lower_i128_add() {
+    let mut runner = JitTestRunner::new();
+    let i128_ty = runner.types_mut().primitive(PrimitiveKind::I128);
+
+    let mut body = Body::with_args(i128_ty, &[(i128_ty, false), (i128_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Add,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "i128_add");
+    let func: fn(i128, i128) -> i128 = unsafe { mem::transmute(ptr) };
+
+    // Use values larger than i64::MAX to verify i128 works
+    let large = 10_000_000_000_000_000_000i128;
+    assert_eq!(func(large, large), large * 2);
+}
+
+#[test]
+fn lower_isize_add() {
+    let mut runner = JitTestRunner::new();
+    let isize_ty = runner.types_mut().primitive(PrimitiveKind::Isize);
+
+    let mut body = Body::with_args(isize_ty, &[(isize_ty, false), (isize_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Add,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "isize_add");
+    let func: fn(isize, isize) -> isize = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(1000isize, 2000isize), 3000isize);
+}
+
+#[test]
+fn lower_u8_add() {
+    let mut runner = JitTestRunner::new();
+    let u8_ty = runner.types_mut().primitive(PrimitiveKind::U8);
+
+    let mut body = Body::with_args(u8_ty, &[(u8_ty, false), (u8_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Add,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "u8_add");
+    let func: fn(u8, u8) -> u8 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(10u8, 20u8), 30u8);
+}
+
+#[test]
+fn lower_u16_add() {
+    let mut runner = JitTestRunner::new();
+    let u16_ty = runner.types_mut().primitive(PrimitiveKind::U16);
+
+    let mut body = Body::with_args(u16_ty, &[(u16_ty, false), (u16_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Add,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "u16_add");
+    let func: fn(u16, u16) -> u16 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(100u16, 200u16), 300u16);
+}
+
+#[test]
+fn lower_u32_add() {
+    let mut runner = JitTestRunner::new();
+    let u32_ty = runner.types_mut().primitive(PrimitiveKind::U32);
+
+    let mut body = Body::with_args(u32_ty, &[(u32_ty, false), (u32_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Add,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "u32_add");
+    let func: fn(u32, u32) -> u32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(1_000_000u32, 2_000_000u32), 3_000_000u32);
+}
+
+#[test]
+fn lower_u64_add() {
+    let mut runner = JitTestRunner::new();
+    let u64_ty = runner.types_mut().primitive(PrimitiveKind::U64);
+
+    let mut body = Body::with_args(u64_ty, &[(u64_ty, false), (u64_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Add,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "u64_add");
+    let func: fn(u64, u64) -> u64 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(10_000_000_000u64, 20_000_000_000u64), 30_000_000_000u64);
+}
+
+#[test]
+fn lower_u128_add() {
+    let mut runner = JitTestRunner::new();
+    let u128_ty = runner.types_mut().primitive(PrimitiveKind::U128);
+
+    let mut body = Body::with_args(u128_ty, &[(u128_ty, false), (u128_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Add,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "u128_add");
+    let func: fn(u128, u128) -> u128 = unsafe { mem::transmute(ptr) };
+
+    // Use values larger than u64::MAX to verify u128 works
+    let large = 20_000_000_000_000_000_000u128;
+    assert_eq!(func(large, large), large * 2);
+}
+
+#[test]
+fn lower_usize_add() {
+    let mut runner = JitTestRunner::new();
+    let usize_ty = runner.types_mut().primitive(PrimitiveKind::Usize);
+
+    let mut body = Body::with_args(usize_ty, &[(usize_ty, false), (usize_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Add,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "usize_add");
+    let func: fn(usize, usize) -> usize = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(1000usize, 2000usize), 3000usize);
+}
+
+#[test]
 fn lower_nested_loops() {
     // outer_sum = 0
     // for i in 1..=2:

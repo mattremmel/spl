@@ -245,6 +245,26 @@ fn let_with_u64_annotation() {
 }
 
 #[test]
+fn let_with_u16_annotation() {
+    check("fn main() { let x: u16 = 42; }", "u16");
+}
+
+#[test]
+fn let_with_u128_annotation() {
+    check("fn main() { let x: u128 = 42; }", "u128");
+}
+
+#[test]
+fn let_with_isize_annotation() {
+    check("fn main() { let x: isize = 42; }", "isize");
+}
+
+#[test]
+fn let_with_usize_annotation() {
+    check("fn main() { let x: usize = 42; }", "usize");
+}
+
+#[test]
 fn let_with_f32_annotation() {
     check("fn main() { let x: f32 = 3.14; }", "f32");
 }
