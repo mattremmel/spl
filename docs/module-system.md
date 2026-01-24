@@ -1,57 +1,75 @@
 # SPL Module System
 
-This document defines the module system for SPL (Simple Programming Language). SPL uses a hybrid approach inspired by Go's simplicity and Rust's explicit control.
+This document defines the module system for SPL (Simple Programming Language).
+
+## Terminology
+
+| Term | Definition |
+|------|------------|
+| **Module** | The whole project/compilation unit (like Go's module, Rust's crate) |
+| **Package** | A directory of source files (like Go's package) |
+| **Source file** | A single `.spl` file; part of a package, not a named unit itself |
+| **Item** | A named entity: function, struct, type alias, etc. |
+
+```
+Module (project root)
+└── Package (directory)
+    └── Source files (.spl)
+        └── Items (fn, struct, etc.)
+```
+
+---
 
 ## Overview
 
 SPL's module system provides:
 
-- **File-to-module mapping**: Multiple files can form a single module (Go-style)
-- **Explicit control**: Optional `_module.spl` files for fine-grained module structure (Rust-style)
+- **Directory-based packages**: All `.spl` files in a directory form one package (Go-style)
+- **Explicit control**: Optional `_package.spl` files for fine-grained structure
 - **Unified imports**: `use` declarations for all symbols (internal and external)
 - **Visibility**: Public (`pub`) and private (default) items
 - **Prelude**: Common types available without explicit import
 
 ### Design Philosophy
 
-1. **Simple by default**: All `.spl` files in a directory form one module automatically
-2. **Explicit when needed**: `_module.spl` provides control over module structure
-3. **Familiar syntax**: Rust-like imports are readable and well-established
-4. **No boilerplate**: Prelude eliminates repetitive imports
+1. **Simple by default**: All `.spl` files in a directory form one package automatically
+2. **Explicit when needed**: `_package.spl` provides control without changing defaults
+3. **Unified `use`**: Single keyword for all imports—no distinction between internal and external
+4. **Minimal prelude**: Common types auto-imported, keeping the list small and predictable
 
 ---
 
-## 1. Module Structure
+## 1. Package Structure
 
-### Default Mode (No `_module.spl`)
+### Default Mode (No `_package.spl`)
 
-When no `_module.spl` file is present, SPL uses Go-style automatic module formation:
+When no `_package.spl` file is present, SPL uses Go-style automatic package formation:
 
 ```
 myproject/
-├── main.spl          # Entry point, part of root module
-├── utils.spl         # Part of root module
+├── main.spl          # Part of root package
+├── utils.spl         # Part of root package
 └── network/
-    ├── client.spl    # Part of 'network' module
-    └── server.spl    # Part of 'network' module
+    ├── client.spl    # Part of 'network' package
+    └── server.spl    # Part of 'network' package
 ```
 
 **Rules:**
-- All `.spl` files in a directory form a single module
-- Module name = directory name (root module = crate name)
-- Items in the same module can reference each other freely
-- Subdirectories are submodules automatically
-- No declaration needed for submodules
+- All `.spl` files in a directory form a single package
+- Package name = directory name (root package = module name)
+- Items in the same package can reference each other freely
+- Subdirectories are subpackages automatically
+- No declaration needed for subpackages
 
 ```spl
 // In myproject/main.spl
 fn main() {
-    let helper = utils_function();  // Same module, direct access
-    let client = network.Client.new();  // Submodule access
+    let helper = utils_function();  // Same package, direct access
+    let client = network.Client.new();  // Subpackage access
 }
 
 // In myproject/utils.spl
-fn utils_function() -> i32 {
+fn utils_function(): i32 {
     42
 }
 
@@ -59,73 +77,71 @@ fn utils_function() -> i32 {
 pub struct Client { }
 
 impl Client {
-    pub fn new() -> Client {
+    pub fn new(): Client {
         Client { }
     }
 }
 ```
 
-### Explicit Mode (With `_module.spl`)
+### Explicit Mode (With `_package.spl`)
 
-The `_module.spl` file provides explicit control over module structure:
+The `_package.spl` file provides explicit control over package structure:
 
 ```
 myproject/
-├── _module.spl       # Declares module structure
+├── _package.spl      # Controls root package
 ├── main.spl
-├── internal.spl      # Not part of module unless declared
+├── internal.spl
 └── network/
-    ├── _module.spl   # Controls network module
+    ├── _package.spl  # Controls network package
     └── client.spl
 ```
 
-**`_module.spl` contents:**
+**`_package.spl` contents:**
 
 ```spl
-// Declare submodules (optional, for re-exports or explicit ordering)
-mod network;        // Looks for network/_module.spl or network.spl
+// Declare subpackages (optional, for re-exports or explicit ordering)
+mod network;        // Looks for network/_package.spl or network.spl
 
 // Re-export items
 pub use network.Client;
 
-// All .spl files in the same directory are auto-included
+// All .spl files in the same directory are still auto-included
 ```
 
 **Rules:**
-- All `.spl` files in a directory are automatically part of the module
-- `_module.spl` provides re-exports and explicit ordering, not file inclusion
-- `pub mod name;` declares and exports a submodule publicly
+- All `.spl` files in a directory are automatically part of the package
+- `_package.spl` provides re-exports and explicit ordering, not file inclusion
+- `pub mod name;` declares and re-exports a subpackage publicly
 - `pub use path.item;` re-exports items
-- **Scope**: `_module.spl` only affects the current directory, not children
+- **Scope**: `_package.spl` only affects the current directory, not children
 
 ### Mode Inheritance
 
-`_module.spl` does **not** propagate to subdirectories. Each directory independently chooses its mode:
+`_package.spl` does **not** propagate to subdirectories. Each directory independently chooses its mode:
 
 ```
 myproject/
-├── _module.spl       # Explicit mode for root
+├── _package.spl      # Explicit mode for root
 ├── main.spl
-├── utils.spl         # Must be declared in _module.spl
-└── network/          # No _module.spl here
+├── utils.spl
+└── network/          # No _package.spl here
     ├── client.spl    # Auto-included (default mode)
     └── server.spl    # Auto-included (default mode)
 ```
 
 In this example:
-- Root uses explicit mode (has `_module.spl`)
-- `network/` uses default mode (no `_module.spl`)
-- All files in `network/` are automatically part of the `network` module
+- Root uses explicit mode (has `_package.spl`)
+- `network/` uses default mode (no `_package.spl`)
+- All files in `network/` are automatically part of the `network` package
 
-This prevents the "cascade problem" where adding `_module.spl` to one directory forces you to add it to all children.
-
-### Module Resolution
+### Package Resolution
 
 For `mod name;` declarations, SPL looks for:
 
 1. `name.spl` in the same directory
-2. `name/_module.spl` (directory with module file)
-3. `name/` directory with `.spl` files (default mode for submodule)
+2. `name/_package.spl` (directory with package file)
+3. `name/` directory with `.spl` files (default mode)
 
 ---
 
@@ -147,25 +163,33 @@ UseTree = "*"                                    (* glob import *)
 UseTreeList = UseTree { "," UseTree } [ "," ] ;
 ```
 
+### Path Keywords
+
+| Keyword | Meaning |
+|---------|---------|
+| `module.` | Root of current module (project) |
+| `self.` | Current package (directory) |
+| `super.` | Parent package |
+
 ### Examples
 
-The `use` keyword works uniformly for internal modules, external packages, and standard library:
+The `use` keyword works uniformly for internal packages and external modules:
 
 ```spl
-// Internal module items
-use module.utils.helper;      // From module root
-use super.common.Config;      // From parent module
-use self.internal.parse;      // From current module
+// From current module (project)
+use module.utils.helper;      // Module root → utils package → helper
+use super.common.Config;      // Parent package
+use self.internal.parse;      // Current package
 
-// External packages (same syntax)
+// External modules (same syntax)
 use std.vec.Vec;              // Standard library
 use std.collections.HashMap;  // Standard library
-use serde.Serialize;          // External package (future)
+use serde.Serialize;          // External module (future)
 
 // Import with rename
 use std.collections.HashMap as Map;
 
-// Import module (use qualified access)
+// Import package (use qualified access)
 use std.io;
 let reader = io.BufReader.new(file);
 
@@ -182,19 +206,19 @@ use std.{vec.Vec, io.{Read, Write}};
 let v = std.vec.Vec(i32).new();
 ```
 
-### Module Declarations
+### Package Declarations
 
 ```ebnf
 ModDecl = [ "pub" ] "mod" IDENTIFIER ";" ;
 ```
 
-Module declarations are only valid in `_module.spl` files:
+Package declarations are only valid in `_package.spl` files:
 
 ```spl
-// In _module.spl
-mod network;          // Private submodule
-pub mod utils;        // Public submodule
-pub mod api;          // Public submodule
+// In _package.spl
+mod network;          // Private subpackage
+pub mod utils;        // Public subpackage
+pub mod api;          // Public subpackage
 ```
 
 ---
@@ -205,17 +229,17 @@ pub mod api;          // Public submodule
 
 | Modifier | Visibility |
 |----------|------------|
-| (none) | Private to current module |
+| (none) | Private to current package |
 | `pub` | Public to all |
 
 ```spl
-// Private function (only accessible within this module)
-fn internal_helper() -> i32 {
+// Private function (only accessible within this package)
+fn internal_helper(): i32 {
     42
 }
 
 // Public function (accessible from anywhere)
-pub fn public_api() -> i32 {
+pub fn public_api(): i32 {
     internal_helper()
 }
 
@@ -226,14 +250,14 @@ pub struct Config {
 }
 ```
 
-### Privacy and Modules
+### Privacy and Packages
 
-- Private items are visible within their module and all submodules
-- Child modules can access parent's private items
-- Sibling modules cannot access each other's private items
+- Private items are visible within their package and all subpackages
+- Child packages can access parent's private items
+- Sibling packages cannot access each other's private items
 
 ```spl
-// In parent/_module.spl
+// In parent/_package.spl
 fn private_helper() { }
 pub fn public_fn() { }
 
@@ -241,8 +265,8 @@ mod child;
 
 // In parent/child.spl
 fn child_fn() {
-    super::private_helper();  // OK: child can access parent's private
-    super::public_fn();       // OK
+    super.private_helper();  // OK: child can access parent's private
+    super.public_fn();       // OK
 }
 ```
 
@@ -252,13 +276,13 @@ Planned visibility modifiers for finer control:
 
 | Modifier | Visibility |
 |----------|------------|
-| `pub(crate)` | Visible within crate only |
-| `pub(super)` | Visible to parent module |
-| `pub(in path)` | Visible to specific module |
+| `pub(module)` | Visible within module only |
+| `pub(super)` | Visible to parent package |
+| `pub(in path)` | Visible to specific package |
 
 ```spl
 // Future syntax
-pub(crate) fn crate_internal() { }
+pub(module) fn module_internal() { }
 pub(super) fn parent_accessible() { }
 pub(in module.api) fn api_only() { }
 ```
@@ -271,34 +295,34 @@ pub(in module.api) fn api_only() { }
 
 | Path | Description | Example |
 |------|-------------|---------|
-| Absolute | From module root | `module.submod.item` |
-| Relative | From current module | `submodule.item` |
-| Self | Current module | `self.item` |
-| Super | Parent module | `super.item` |
-| External | External crate | `cratename.item` |
+| Absolute | From module root | `module.utils.item` |
+| Relative | From current package | `subpkg.item` |
+| Self | Current package | `self.item` |
+| Super | Parent package | `super.item` |
+| External | External module | `std.item` |
 
 ### Resolution Rules
 
 1. **Unqualified names** resolve in order:
    - Local scope (variables, parameters)
-   - Items in current module
+   - Items in current package
    - Prelude items
 
 2. **Qualified paths** resolve:
    - `module.` from the module root
-   - `self.` from the current module
-   - `super.` from the parent module
+   - `self.` from the current package
+   - `super.` from the parent package
    - Other identifiers from current scope or imports
 
 ```spl
-use module.utils;           // Absolute: from module root
-use self.internal;          // Explicit current module
-use super.common;           // Parent module
-use std.collections.HashMap;  // External crate (future)
+use module.utils;             // Absolute: from module root
+use self.internal;            // Explicit current package
+use super.common;             // Parent package
+use std.collections.HashMap;  // External module
 
 fn example() {
     // Relative path
-    let x = submodule.function();
+    let x = subpkg.function();
 
     // Absolute path
     let y = module.other.function();
@@ -349,9 +373,9 @@ println                 // Print with newline
 
 ```spl
 // No imports needed for prelude items
-fn example() -> Option<i32> {
-    let v: Vec<i32> = Vec::new();
-    let s: String = String::from("hello");
+fn example(): Option(i32) {
+    let v: Vec(i32) = Vec.new();
+    let s: String = String.from("hello");
 
     if v.is_empty() {
         None
@@ -364,7 +388,7 @@ fn example() -> Option<i32> {
 ### Custom Prelude (Future)
 
 ```spl
-// In _module.spl (future syntax)
+// In _package.spl (future syntax)
 #![prelude(minimal)]      // Use minimal prelude
 #![prelude(none)]         // No prelude
 ```
@@ -378,9 +402,9 @@ The module system adds these reserved keywords:
 | Keyword | Description |
 |---------|-------------|
 | `use` | Import declaration |
-| `mod` | Module declaration |
-| `module` | Root module reference |
-| `super` | Parent module reference |
+| `mod` | Package declaration |
+| `module` | Module root reference |
+| `super` | Parent package reference |
 
 Note: `self` and `pub` are already keywords for other purposes.
 
@@ -388,7 +412,7 @@ Note: `self` and `pub` are already keywords for other purposes.
 
 ## 7. Item Grammar
 
-Items that can appear at module level:
+Items that can appear at package level:
 
 ```ebnf
 Item = [ "pub" ] ( FunctionDef | StructDef | ImplBlock | TypeAlias | UseDecl | ModDecl ) ;
@@ -397,7 +421,7 @@ Item = [ "pub" ] ( FunctionDef | StructDef | ImplBlock | TypeAlias | UseDecl | M
 In regular `.spl` files:
 - `FunctionDef`, `StructDef`, `ImplBlock`, `TypeAlias`, `UseDecl`
 
-In `_module.spl` files only:
+In `_package.spl` files only:
 - All of the above, plus `ModDecl`
 
 ---
@@ -421,11 +445,11 @@ fn main() {
 }
 
 // math.spl
-pub fn add(a: i32, b: i32) -> i32 {
+pub fn add(a: i32, b: i32): i32 {
     a + b
 }
 
-pub fn multiply(a: i32, b: i32) -> i32 {
+pub fn multiply(a: i32, b: i32): i32 {
     a * b
 }
 
@@ -435,23 +459,23 @@ pub fn show(value: i32) {
 }
 ```
 
-### Structured Project with Submodules
+### Structured Project with Subpackages
 
 ```
 webapp/
-├── _module.spl
+├── _package.spl
 ├── main.spl
 ├── handlers/
 │   ├── auth.spl
 │   └── api.spl
 └── models/
-    ├── _module.spl
+    ├── _package.spl
     ├── user.spl
     └── session.spl
 ```
 
 ```spl
-// _module.spl (root)
+// _package.spl (root)
 pub mod handlers;
 pub mod models;
 
@@ -471,7 +495,7 @@ pub fn login(user: &User) {
     // ...
 }
 
-// models/_module.spl
+// models/_package.spl
 mod user;
 mod session;
 
@@ -493,7 +517,7 @@ impl User {
 ### Re-exports for API Simplification
 
 ```spl
-// In lib/_module.spl
+// In lib/_package.spl
 mod internal;
 mod details;
 
@@ -516,8 +540,8 @@ pub use details.Config;
 
 | Feature | SPL | Rust | Go | Python |
 |---------|-----|------|----|----|
-| File = module | Dir-based | File-based | Dir-based | File-based |
-| Explicit mod decl | Optional | Required | No | No |
+| Directory unit | Package | Module | Package | Package |
+| Project unit | Module | Crate | Module | Distribution |
 | Import syntax | `use path.item` | `use path::item` | `import "path"` | `from x import y` |
 | Glob import | `use path.*` | `use path::*` | `.` import | `from x import *` |
 | Visibility default | Private | Private | Capitalization | Public |
@@ -532,10 +556,10 @@ pub use details.Config;
 
 | Concept | Description |
 |---------|-------------|
-| Module | Collection of items (functions, types, etc.) |
-| Crate | Compilation unit (root module + submodules) |
+| Module | The whole project/compilation unit |
+| Package | A directory of source files |
 | Item | Named entity: function, struct, type, etc. |
-| Path | Route to an item: `module.submod.item` |
+| Path | Route to an item: `module.pkg.item` |
 | Visibility | Who can access an item: `pub` or private |
 
 ### Quick Reference
@@ -553,15 +577,18 @@ use std.{vec.Vec, io.{Read, Write}};
 // Glob import
 use std.prelude.*;
 
-// Absolute path
-use module.submod.item;
+// From module root
+use module.utils.item;
 
-// Parent module
+// Parent package
 use super.item;
 
-// Module declaration (in _module.spl)
-mod submodule;
-pub mod public_submodule;
+// Current package
+use self.item;
+
+// Package declaration (in _package.spl only)
+mod subpackage;
+pub mod public_subpackage;
 
 // Re-export
 pub use internal.PublicApi;
@@ -569,10 +596,10 @@ pub use internal.PublicApi;
 
 ### Design Rationale
 
-1. **Go-style defaults**: Most projects don't need explicit module control. Automatic directory-based modules reduce boilerplate.
+1. **Go-style packages**: Directories are packages. All files in a directory share a namespace. Simple and intuitive.
 
-2. **Rust-style control**: When needed, `_module.spl` provides full control over module structure without changing the default behavior.
+2. **Explicit control when needed**: `_package.spl` provides re-exports and explicit structure without changing the default auto-include behavior.
 
-3. **Unified `use` keyword**: A single keyword for all imports (internal modules, external packages, standard library). No semantic distinction between "importing" external code and "using" internal code—both simply bring names into scope.
+3. **Unified `use` keyword**: Single keyword for all imports—internal packages and external modules use the same syntax.
 
-4. **Minimal prelude**: Auto-importing common types reduces boilerplate while keeping the prelude small and predictable.
+4. **Clear terminology**: Module = project, Package = directory. Aligned with Go's terminology.
