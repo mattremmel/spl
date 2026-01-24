@@ -511,6 +511,75 @@ pub fn format_mir(body: &Body) -> String {
     mir::pretty_print(body, None)
 }
 
+// ============================================================================
+// Package Loading Helpers
+// ============================================================================
+
+use crate::package::{Package, PackageError};
+
+/// Load a package from `tests/packages/`, panicking on error.
+///
+/// # Panics
+///
+/// Panics if the package cannot be loaded.
+///
+/// # Example
+///
+/// ```ignore
+/// use spl::testing::package_ok;
+///
+/// let pkg = package_ok("simple");
+/// assert_eq!(pkg.file_count(), 2);
+/// ```
+pub fn package_ok(name: &str) -> Package {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+    let path = std::path::Path::new(&manifest_dir)
+        .join("tests")
+        .join("packages")
+        .join(name);
+    Package::load(&path).unwrap_or_else(|e| panic!("failed to load package '{}': {:?}", name, e))
+}
+
+/// Load a package from `tests/packages/` and expect it to fail.
+///
+/// # Panics
+///
+/// Panics if the package loads successfully.
+///
+/// # Example
+///
+/// ```ignore
+/// use spl::testing::package_err;
+///
+/// let err = package_err("empty");
+/// // Error is returned for inspection
+/// ```
+pub fn package_err(name: &str) -> PackageError {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+    let path = std::path::Path::new(&manifest_dir)
+        .join("tests")
+        .join("packages")
+        .join(name);
+    match Package::load(&path) {
+        Ok(_) => panic!("expected package '{}' to fail, but it succeeded", name),
+        Err(e) => e,
+    }
+}
+
+/// Load a package from any path.
+///
+/// # Example
+///
+/// ```ignore
+/// use spl::testing::load_package;
+///
+/// let result = load_package("path/to/package");
+/// assert!(result.is_ok());
+/// ```
+pub fn load_package(path: impl AsRef<std::path::Path>) -> Result<Package, PackageError> {
+    Package::load(path)
+}
+
 /// Check a MIR snapshot using expect_test.
 ///
 /// Compiles the source and compares the MIR output to the expected snapshot.

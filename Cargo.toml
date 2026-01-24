@@ -30,7 +30,13 @@ include_dir = "0.7"
 datatest-stable = { version = "0.3.3", features = ["include-dir"] }
 pretty_assertions = "1.4"
 expect-test = "1.5"
+toml = "0.8"
+serde = { version = "1.0", features = ["derive"] }
 
 [[test]]
 name = "stdlib_tests"
+harness = false
+
+[[test]]
+name = "package_tests"
 harness = false

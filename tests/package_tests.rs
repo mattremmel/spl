@@ -1,0 +1,134 @@
+//! File-based integration tests for the package module.
+//!
+//! Uses datatest-stable to run tests from `tests/packages/` directories.
+//! Each test package has a `_test.toml` file that specifies test expectations.
+
+use serde::Deserialize;
+use spl::package::Package;
+use std::path::Path;
+
+/// Test configuration from `_test.toml`.
+#[derive(Debug, Deserialize)]
+struct TestConfig {
+    /// Test mode: "load-pass" or "load-fail"
+    mode: String,
+    /// Expected item count (for load-pass)
+    expect_items: Option<usize>,
+    /// Expected file count (for load-pass)
+    expect_files: Option<usize>,
+    /// Expected package name (for load-pass)
+    expect_name: Option<String>,
+    /// Expected subpackage count (for load-pass)
+    expect_subpackages: Option<usize>,
+    /// Expected error pattern (for load-fail)
+    expect_error: Option<String>,
+}
+
+fn run_package_test(path: &Path) -> datatest_stable::Result<()> {
+    // path is _test.toml, use parent as package dir
+    let pkg_dir = path.parent().expect("_test.toml should have parent dir");
+
+    // Read config from filesystem
+    let contents = std::fs::read_to_string(path)?;
+    let config: TestConfig = toml::from_str(&contents)?;
+
+    // Load the package
+    let result = Package::load(pkg_dir);
+
+    match config.mode.as_str() {
+        "load-pass" => {
+            let pkg = result.map_err(|e| format!("{}: load failed: {:?}", path.display(), e))?;
+
+            // Check expected item count
+            if let Some(expected) = config.expect_items {
+                let actual = pkg.items().count();
+                if actual != expected {
+                    return Err(format!(
+                        "{}: expected {} items, got {}",
+                        path.display(),
+                        expected,
+                        actual
+                    )
+                    .into());
+                }
+            }
+
+            // Check expected file count
+            if let Some(expected) = config.expect_files {
+                let actual = pkg.file_count();
+                if actual != expected {
+                    return Err(format!(
+                        "{}: expected {} files, got {}",
+                        path.display(),
+                        expected,
+                        actual
+                    )
+                    .into());
+                }
+            }
+
+            // Check expected name
+            if let Some(expected) = &config.expect_name {
+                let actual = pkg.name();
+                if actual != expected {
+                    return Err(format!(
+                        "{}: expected name '{}', got '{}'",
+                        path.display(),
+                        expected,
+                        actual
+                    )
+                    .into());
+                }
+            }
+
+            // Check expected subpackage count
+            if let Some(expected) = config.expect_subpackages {
+                let actual = pkg.subpackages().count();
+                if actual != expected {
+                    return Err(format!(
+                        "{}: expected {} subpackages, got {}",
+                        path.display(),
+                        expected,
+                        actual
+                    )
+                    .into());
+                }
+            }
+        }
+        "load-fail" => {
+            match result {
+                Ok(_) => {
+                    return Err(format!(
+                        "{}: expected load to fail, but it succeeded",
+                        path.display()
+                    )
+                    .into());
+                }
+                Err(err) => {
+                    // Check error pattern if specified
+                    if let Some(pattern) = &config.expect_error {
+                        let err_str = format!("{:?}", err);
+                        if !err_str.to_lowercase().contains(&pattern.to_lowercase()) {
+                            return Err(format!(
+                                "{}: expected error containing '{}', got: {}",
+                                path.display(),
+                                pattern,
+                                err_str
+                            )
+                            .into());
+                        }
+                    }
+                }
+            }
+        }
+        other => {
+            return Err(format!("{}: unknown mode: {}", path.display(), other).into());
+        }
+    }
+
+    Ok(())
+}
+
+datatest_stable::harness! {
+    { test = run_package_test, root = "tests/packages", pattern = r".*/_test\.toml$" },
+}
