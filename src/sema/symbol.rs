@@ -51,6 +51,7 @@ pub enum SymbolKind {
     Field,
     TypeParam,
     SelfParam,
+    Trait,
 }
 
 /// Visibility of a symbol.

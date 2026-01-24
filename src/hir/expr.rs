@@ -40,8 +40,8 @@ use crate::sema::symbol::DefId;
 use crate::sema::types::TypeId;
 use la_arena::Idx;
 
-use super::pat::PatId;
 use super::StmtId;
+use super::pat::PatId;
 
 /// A stable identifier for expressions in the HIR arena.
 pub type ExprId = Idx<HirExpr>;

@@ -389,6 +389,13 @@ impl<'ctx> Resolver<'ctx> {
     fn define_where_clause(&mut self, where_clause: &WhereClause) {
         for param in where_clause.type_params() {
             self.define_generic_param(&param);
+
+            // Resolve each bound path (e.g., Clone, Debug in `T: Clone + Debug`)
+            for bound in param.bounds() {
+                if let Some(path) = bound.path() {
+                    self.resolve_path(&path);
+                }
+            }
         }
     }
 
@@ -1004,6 +1011,22 @@ pub fn resolve(source_file: &SourceFile) -> ResolveResult {
         let name = ctx.intern(builtin);
         // Define with a dummy span since these are built-in
         let _ = ctx.define(name, SymbolKind::Struct, Visibility::Public, 0..0, false);
+    }
+
+    // Pre-define built-in traits
+    for builtin_trait in &[
+        "Clone",
+        "Copy",
+        "Debug",
+        "Default",
+        "Eq",
+        "Hash",
+        "Ord",
+        "PartialEq",
+        "PartialOrd",
+    ] {
+        let name = ctx.intern(builtin_trait);
+        let _ = ctx.define(name, SymbolKind::Trait, Visibility::Public, 0..0, false);
     }
 
     let resolver = Resolver::new(&mut ctx);
@@ -1712,5 +1735,71 @@ mod tests {
     #[test]
     fn resolve_let_type_annotation_custom() {
         check_ok("struct Foo; fn main() { let x: Foo; }");
+    }
+
+    // ===== Where clause bound validation =====
+
+    #[test]
+    fn builtin_trait_clone_exists() {
+        check_ok("fn foo(x: T) where T: Clone {}");
+    }
+
+    #[test]
+    fn builtin_trait_debug_exists() {
+        check_ok("fn foo(x: T) where T: Debug {}");
+    }
+
+    #[test]
+    fn builtin_trait_copy_exists() {
+        check_ok("fn foo(x: T) where T: Copy {}");
+    }
+
+    #[test]
+    fn where_clause_unknown_bound_errors() {
+        check_err(
+            "fn foo(x: T) where T: UnknownTrait {}",
+            &["cannot find `UnknownTrait`"],
+        );
+    }
+
+    #[test]
+    fn where_clause_typo_in_bound_errors() {
+        check_err("fn foo(x: T) where T: Cloen {}", &["cannot find `Cloen`"]);
+    }
+
+    #[test]
+    fn where_clause_multiple_bounds_all_resolve() {
+        check_ok("fn foo(x: T) where T: Clone + Debug {}");
+    }
+
+    #[test]
+    fn where_clause_multiple_bounds_one_fails() {
+        check_err(
+            "fn foo(x: T) where T: Clone + Bogus {}",
+            &["cannot find `Bogus`"],
+        );
+    }
+
+    #[test]
+    fn struct_where_clause_bound_resolves() {
+        check_ok("struct Wrapper(value: T) where T: Clone");
+    }
+
+    #[test]
+    fn struct_where_clause_unknown_bound_errors() {
+        check_err(
+            "struct Wrapper(value: T) where T: Foo",
+            &["cannot find `Foo`"],
+        );
+    }
+
+    #[test]
+    fn impl_where_clause_bound_resolves() {
+        check_ok("struct S() impl S where T: Clone {}");
+    }
+
+    #[test]
+    fn type_alias_where_clause_bound_resolves() {
+        check_ok("type Alias = T where T: Clone;");
     }
 }

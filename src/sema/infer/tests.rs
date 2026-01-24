@@ -3173,3 +3173,21 @@ fn match_wildcard_exhaustive() {
     // No warning expected - wildcard is exhaustive
     check("fn main() { let x = match 42 { 0 => 1, _ => 0 }; }", "i32");
 }
+
+// ===== Generic functions with trait bounds (non-regression) =====
+
+#[test]
+fn generic_with_clone_bound_works() {
+    check(
+        "fn identity(x: T): T where T: Clone { x } fn main() { let a = identity(42); }",
+        "i32",
+    );
+}
+
+#[test]
+fn generic_with_multiple_bounds_works() {
+    check(
+        "fn foo(x: T): T where T: Clone + Debug { x } fn main() { let a = foo(42); }",
+        "i32",
+    );
+}

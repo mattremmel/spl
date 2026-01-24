@@ -210,6 +210,11 @@ impl GenericParam {
     pub fn name(&self) -> Option<Name> {
         child(&self.0)
     }
+
+    /// Get type bounds (e.g., Clone, Debug in `T: Clone + Debug`).
+    pub fn bounds(&self) -> impl Iterator<Item = TypeBound> {
+        children(&self.0)
+    }
 }
 
 impl GenericArgs {
