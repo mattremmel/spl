@@ -1,6 +1,6 @@
 //! String intrinsic functions.
 //!
-//! Functions for string operations including comparison, searching, and manipulation.
+//! Functions for string operations including comparison and searching.
 //!
 //! # String Representation
 //!
@@ -8,7 +8,7 @@
 //! This is more efficient and allows embedded nulls, but requires passing both
 //! values through the ABI.
 //!
-//! # Query Operations (no allocation)
+//! # Query Operations
 //!
 //! - `__str_len`: Returns the length parameter
 //! - `__str_eq`: Compare two strings for equality
@@ -19,28 +19,19 @@
 //! - `__str_ends_with`: Check if string ends with suffix
 //! - `__str_char_at`: Get character at index
 //!
-//! # Allocation Operations
-//!
-//! - `__str_concat`: Concatenate two strings
-//! - `__str_slice`: Extract substring (returns a copy)
-//!
-//! # Memory Ownership
-//!
-//! Allocation operations use malloc-based allocation via `__alloc`.
-//! Caller owns the returned string and must call `__free(result.ptr)` when done.
-//! Returns (null, 0) for empty or invalid inputs.
-//!
 //! # Future Stdlib Candidates
 //!
-//! The following operations can be implemented in SPL once basic string
-//! operations are available, and should be part of the standard library:
+//! The following can be implemented in SPL using `__alloc`/`__memcpy`:
 //!
-//! - `to_upper`: Convert to uppercase (ASCII) - loop over chars with arithmetic
-//! - `to_lower`: Convert to lowercase (ASCII) - loop over chars with arithmetic
+//! - `str_concat`: Concatenate two strings
+//! - `str_slice`: Extract substring
+//! - `to_upper`: Convert to uppercase (ASCII)
+//! - `to_lower`: Convert to lowercase (ASCII)
+//! - `int_to_string`: Format integer as string
+//! - `bool_to_string`: Format boolean as "true"/"false"
 
 use cranelift_codegen::ir::types;
 
-use super::convert::StringResult;
 use super::{Runtime, default_call_conv, make_signature};
 
 /// Register all string intrinsics.
@@ -130,30 +121,6 @@ pub fn register(runtime: &mut Runtime) {
             call_conv,
             &[types::I64, types::I64, types::I64],
             &[types::I32],
-        ),
-    );
-
-    // ==================== Allocation operations (stubs) ====================
-
-    // __str_concat: (*const u8, I64, *const u8, I64) -> (*const u8, I64)
-    runtime.register(
-        "__str_concat",
-        __str_concat as *const u8,
-        make_signature(
-            call_conv,
-            &[types::I64, types::I64, types::I64, types::I64],
-            &[types::I64, types::I64],
-        ),
-    );
-
-    // __str_slice: (ptr, len, start, end) -> (ptr, len)
-    runtime.register(
-        "__str_slice",
-        __str_slice as *const u8,
-        make_signature(
-            call_conv,
-            &[types::I64, types::I64, types::I64, types::I64],
-            &[types::I64, types::I64],
         ),
     );
 }
@@ -364,103 +331,6 @@ pub extern "C" fn __str_char_at(ptr: *const u8, len: i64, index: i64) -> i32 {
             }
             Err(_) => -1,
         }
-    }
-}
-
-// ==================== Allocation operations (stubs) ====================
-
-/// Concatenate two strings.
-///
-/// Allocates a new buffer containing the concatenation of both strings.
-///
-/// # Ownership
-///
-/// Caller owns the returned string and must call `__free(result.ptr)` when done.
-/// Returns (null, 0) if both strings are empty.
-pub extern "C" fn __str_concat(
-    ptr1: *const u8,
-    len1: i64,
-    ptr2: *const u8,
-    len2: i64,
-) -> StringResult {
-    use super::memory::{__alloc, __memcpy};
-
-    let len1 = len1.max(0);
-    let len2 = len2.max(0);
-    let total = len1 + len2;
-
-    if total == 0 {
-        return StringResult {
-            ptr: std::ptr::null(),
-            len: 0,
-        };
-    }
-
-    let buf = __alloc(total);
-    if buf.is_null() {
-        return StringResult {
-            ptr: std::ptr::null(),
-            len: 0,
-        };
-    }
-
-    unsafe {
-        if len1 > 0 && !ptr1.is_null() {
-            __memcpy(buf, ptr1 as *mut u8, len1);
-        }
-        if len2 > 0 && !ptr2.is_null() {
-            __memcpy(buf.add(len1 as usize), ptr2 as *mut u8, len2);
-        }
-    }
-
-    StringResult {
-        ptr: buf,
-        len: total,
-    }
-}
-
-/// Extract a substring.
-///
-/// Returns a copy of the substring from `start` (inclusive) to `end` (exclusive).
-/// Indices are clamped to valid bounds.
-///
-/// # Ownership
-///
-/// Caller owns the returned string and must call `__free(result.ptr)` when done.
-/// Returns (null, 0) if the slice is empty or invalid.
-pub extern "C" fn __str_slice(ptr: *const u8, len: i64, start: i64, end: i64) -> StringResult {
-    use super::memory::{__alloc, __memcpy};
-
-    if ptr.is_null() || len <= 0 {
-        return StringResult {
-            ptr: std::ptr::null(),
-            len: 0,
-        };
-    }
-
-    let start = start.max(0).min(len) as usize;
-    let end = end.max(0).min(len) as usize;
-
-    if end <= start {
-        return StringResult {
-            ptr: std::ptr::null(),
-            len: 0,
-        };
-    }
-
-    let slice_len = (end - start) as i64;
-    let buf = __alloc(slice_len);
-    if buf.is_null() {
-        return StringResult {
-            ptr: std::ptr::null(),
-            len: 0,
-        };
-    }
-
-    unsafe { __memcpy(buf, ptr.add(start) as *mut u8, slice_len) };
-    StringResult {
-        ptr: buf,
-        len: slice_len,
     }
 }
 
@@ -706,116 +576,6 @@ mod tests {
         assert_eq!(__str_char_at(s.as_ptr(), s.len() as i64, -1), -1);
     }
 
-    #[test]
-    fn str_concat_basic() {
-        let s1 = "Hello, ";
-        let s2 = "World!";
-        let result = __str_concat(
-            s1.as_ptr(),
-            s1.len() as i64,
-            s2.as_ptr(),
-            s2.len() as i64,
-        );
-
-        assert!(!result.ptr.is_null());
-        assert_eq!(result.len, 13);
-        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(s, b"Hello, World!");
-
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn str_concat_empty_first() {
-        let s2 = "World";
-        let result = __str_concat(std::ptr::null(), 0, s2.as_ptr(), s2.len() as i64);
-        assert_eq!(result.len, 5);
-        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(s, b"World");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn str_concat_empty_second() {
-        let s1 = "Hello";
-        let result = __str_concat(s1.as_ptr(), s1.len() as i64, std::ptr::null(), 0);
-        assert_eq!(result.len, 5);
-        let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(s, b"Hello");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn str_concat_both_empty() {
-        let result = __str_concat(std::ptr::null(), 0, std::ptr::null(), 0);
-        assert!(result.ptr.is_null());
-        assert_eq!(result.len, 0);
-    }
-
-    #[test]
-    fn str_slice_middle() {
-        let s = "Hello, World!";
-        let result = __str_slice(s.as_ptr(), s.len() as i64, 7, 12);
-        let slice = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(slice, b"World");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn str_slice_full() {
-        let s = "Hello";
-        let result = __str_slice(s.as_ptr(), s.len() as i64, 0, 5);
-        assert_eq!(result.len, 5);
-        let slice = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(slice, b"Hello");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn str_slice_empty() {
-        let s = "Hello";
-        let result = __str_slice(s.as_ptr(), s.len() as i64, 2, 2);
-        assert!(result.ptr.is_null());
-        assert_eq!(result.len, 0);
-    }
-
-    #[test]
-    fn str_slice_out_of_bounds() {
-        let s = "Hello";
-        // End is clamped to actual length
-        let result = __str_slice(s.as_ptr(), s.len() as i64, 0, 100);
-        assert_eq!(result.len, 5);
-        let slice = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(slice, b"Hello");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn str_slice_negative_start() {
-        let s = "Hello";
-        // Negative start is clamped to 0
-        let result = __str_slice(s.as_ptr(), s.len() as i64, -5, 3);
-        assert_eq!(result.len, 3);
-        let slice = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
-        assert_eq!(slice, b"Hel");
-        super::super::memory::__free(result.ptr as *mut u8);
-    }
-
-    #[test]
-    fn str_slice_start_after_end() {
-        let s = "Hello";
-        let result = __str_slice(s.as_ptr(), s.len() as i64, 4, 2);
-        assert!(result.ptr.is_null());
-        assert_eq!(result.len, 0);
-    }
-
-    #[test]
-    fn str_slice_null_ptr() {
-        let result = __str_slice(std::ptr::null(), 10, 0, 5);
-        assert!(result.ptr.is_null());
-        assert_eq!(result.len, 0);
-    }
-
     // ==================== Registration tests ====================
 
     #[test]
@@ -823,7 +583,6 @@ mod tests {
         let mut runtime = Runtime::new();
         register(&mut runtime);
 
-        // Query operations
         assert!(runtime.contains("__str_len"));
         assert!(runtime.contains("__str_eq"));
         assert!(runtime.contains("__str_cmp"));
@@ -832,10 +591,6 @@ mod tests {
         assert!(runtime.contains("__str_starts_with"));
         assert!(runtime.contains("__str_ends_with"));
         assert!(runtime.contains("__str_char_at"));
-
-        // Allocation operations
-        assert!(runtime.contains("__str_concat"));
-        assert!(runtime.contains("__str_slice"));
     }
 
     // ==================== Signature tests ====================
@@ -889,22 +644,6 @@ mod tests {
         assert_eq!(func.signature.returns[0].value_type, types::I32);
     }
 
-    #[test]
-    fn str_concat_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__str_concat").unwrap();
-        assert_eq!(func.signature.params.len(), 4);
-        assert_eq!(func.signature.params[0].value_type, types::I64); // ptr1
-        assert_eq!(func.signature.params[1].value_type, types::I64); // len1
-        assert_eq!(func.signature.params[2].value_type, types::I64); // ptr2
-        assert_eq!(func.signature.params[3].value_type, types::I64); // len2
-        assert_eq!(func.signature.returns.len(), 2);
-        assert_eq!(func.signature.returns[0].value_type, types::I64); // ptr
-        assert_eq!(func.signature.returns[1].value_type, types::I64); // len
-    }
-
     // ==================== Edge case tests ====================
 
     #[test]
@@ -913,20 +652,6 @@ mod tests {
         // Even with negative length, we just return it
         let len = __str_len(s.as_ptr(), -5);
         assert_eq!(len, -5);
-    }
-
-    #[test]
-    fn str_concat_with_nulls_edge_case() {
-        // Both null with zero length returns null
-        let result = __str_concat(std::ptr::null(), 0, std::ptr::null(), 0);
-        assert!(result.ptr.is_null());
-        assert_eq!(result.len, 0);
-
-        // Negative lengths are treated as zero
-        let s = "Hello";
-        let result = __str_concat(s.as_ptr(), -5, std::ptr::null(), 0);
-        assert!(result.ptr.is_null());
-        assert_eq!(result.len, 0);
     }
 
     #[test]
