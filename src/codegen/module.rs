@@ -12,6 +12,7 @@ use super::error::{CodegenError, RuntimeError};
 use super::lower::FunctionLowerer;
 use super::registry::{FunctionInfo, FunctionRegistry};
 use super::runtime::{Runtime, intrinsics};
+use super::target::TargetConfig;
 use super::types::build_signature;
 use crate::mir::body::Body;
 use crate::sema::symbol::DefId;
@@ -129,9 +130,13 @@ pub struct ModuleCompiler {
 impl ModuleCompiler {
     /// Create a new module compiler with runtime intrinsics.
     pub fn new() -> Result<Self, CodegenError> {
-        // Create runtime with all intrinsics registered
+        // Get target config to determine pointer type
+        let target = TargetConfig::native()?;
+        let ptr_ty = target.pointer_type();
+
+        // Create runtime with all intrinsics registered using correct pointer type
         let mut runtime = Runtime::new();
-        intrinsics::register_all(&mut runtime);
+        intrinsics::register_all(&mut runtime, ptr_ty);
 
         Ok(ModuleCompiler {
             ctx: CodegenContext::new_jit_with_runtime(&runtime)?,

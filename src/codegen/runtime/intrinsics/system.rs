@@ -29,7 +29,7 @@
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use cranelift_codegen::ir::types;
+use cranelift_codegen::ir::{Type, types};
 
 use super::convert::StringResult;
 use super::{Runtime, default_call_conv, make_signature};
@@ -42,25 +42,24 @@ fn get_start_time() -> &'static Instant {
 }
 
 /// Register system intrinsics.
-pub fn register(runtime: &mut Runtime) {
+///
+/// # Parameters
+/// - `ptr_ty`: The pointer type for this target (I32 for 32-bit, I64 for 64-bit)
+pub fn register(runtime: &mut Runtime, ptr_ty: Type) {
     let call_conv = default_call_conv();
 
-    // __exit: (I64) -> !
+    // __exit: (code: I64) -> ! (code is NOT a pointer)
     runtime.register(
         "__exit",
         __exit as *const u8,
         make_signature(call_conv, &[types::I64], &[]),
     );
 
-    // __getenv: (I64, I64) -> (I64, I64)
+    // __getenv: (name_ptr: ptr, name_len: I64) -> (ptr, I64)
     runtime.register(
         "__getenv",
         __getenv as *const u8,
-        make_signature(
-            call_conv,
-            &[types::I64, types::I64],
-            &[types::I64, types::I64],
-        ),
+        make_signature(call_conv, &[ptr_ty, types::I64], &[ptr_ty, types::I64]),
     );
 
     // __argc: () -> I64
@@ -70,11 +69,11 @@ pub fn register(runtime: &mut Runtime) {
         make_signature(call_conv, &[], &[types::I64]),
     );
 
-    // __argv: (I64) -> (I64, I64)
+    // __argv: (index: I64) -> (ptr, I64)
     runtime.register(
         "__argv",
         __argv as *const u8,
-        make_signature(call_conv, &[types::I64], &[types::I64, types::I64]),
+        make_signature(call_conv, &[types::I64], &[ptr_ty, types::I64]),
     );
 
     // __clock_ns: () -> I64
@@ -232,7 +231,7 @@ mod tests {
     #[test]
     fn register_adds_system_intrinsics() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         assert!(runtime.contains("__exit"));
         assert!(runtime.contains("__getenv"));
@@ -244,7 +243,7 @@ mod tests {
     #[test]
     fn exit_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__exit").unwrap();
         assert_eq!(func.signature.params.len(), 1);
@@ -255,7 +254,7 @@ mod tests {
     #[test]
     fn getenv_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__getenv").unwrap();
         assert_eq!(func.signature.params.len(), 2);
@@ -265,7 +264,7 @@ mod tests {
     #[test]
     fn argc_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__argc").unwrap();
         assert!(func.signature.params.is_empty());
@@ -276,7 +275,7 @@ mod tests {
     #[test]
     fn argv_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__argv").unwrap();
         assert_eq!(func.signature.params.len(), 1);
@@ -286,11 +285,38 @@ mod tests {
     #[test]
     fn clock_ns_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__clock_ns").unwrap();
         assert!(func.signature.params.is_empty());
         assert_eq!(func.signature.returns.len(), 1);
         assert_eq!(func.signature.returns[0].value_type, types::I64);
+    }
+
+    // ==================== Pointer type tests (32-bit simulation) ====================
+
+    #[test]
+    fn getenv_signature_uses_pointer_type() {
+        let mut runtime = Runtime::new();
+        let ptr_ty = types::I32; // Simulate 32-bit platform
+        register(&mut runtime, ptr_ty);
+
+        let func = runtime.get("__getenv").unwrap();
+        assert_eq!(func.signature.params[0].value_type, ptr_ty); // name_ptr
+        assert_eq!(func.signature.params[1].value_type, types::I64); // name_len
+        assert_eq!(func.signature.returns[0].value_type, ptr_ty); // result ptr
+        assert_eq!(func.signature.returns[1].value_type, types::I64); // result len
+    }
+
+    #[test]
+    fn argv_signature_uses_pointer_type() {
+        let mut runtime = Runtime::new();
+        let ptr_ty = types::I32;
+        register(&mut runtime, ptr_ty);
+
+        let func = runtime.get("__argv").unwrap();
+        assert_eq!(func.signature.params[0].value_type, types::I64); // index
+        assert_eq!(func.signature.returns[0].value_type, ptr_ty); // result ptr
+        assert_eq!(func.signature.returns[1].value_type, types::I64); // result len
     }
 }

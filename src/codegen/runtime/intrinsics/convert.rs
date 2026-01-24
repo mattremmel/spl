@@ -63,7 +63,7 @@
 //! }
 //! ```
 
-use cranelift_codegen::ir::types;
+use cranelift_codegen::ir::{Type, types};
 
 use super::{Runtime, default_call_conv, make_signature};
 
@@ -75,23 +75,26 @@ pub struct StringResult {
 }
 
 /// Register conversion intrinsics.
-pub fn register(runtime: &mut Runtime) {
+///
+/// # Parameters
+/// - `ptr_ty`: The pointer type for this target (I32 for 32-bit, I64 for 64-bit)
+pub fn register(runtime: &mut Runtime, ptr_ty: Type) {
     let call_conv = default_call_conv();
 
-    // __str_to_float: (ptr, len) -> F64 (returns NaN on parse failure)
+    // __str_to_float: (ptr, len: I64) -> F64 (returns NaN on parse failure)
     // Float parsing is genuinely complex (strtod algorithms)
     runtime.register(
         "__str_to_float",
         __str_to_float as *const u8,
-        make_signature(call_conv, &[types::I64, types::I64], &[types::F64]),
+        make_signature(call_conv, &[ptr_ty, types::I64], &[types::F64]),
     );
 
-    // __float_to_string: (F64) -> (*const u8, I64)
+    // __float_to_string: (F64) -> (ptr, I64)
     // Float formatting is genuinely complex (Grisu/Ryu algorithms)
     runtime.register(
         "__float_to_string",
         __float_to_string as *const u8,
-        make_signature(call_conv, &[types::F64], &[types::I64, types::I64]),
+        make_signature(call_conv, &[types::F64], &[ptr_ty, types::I64]),
     );
 }
 
@@ -229,7 +232,7 @@ mod tests {
     #[test]
     fn register_adds_convert_intrinsics() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         assert!(runtime.contains("__str_to_float"));
         assert!(runtime.contains("__float_to_string"));
@@ -238,7 +241,7 @@ mod tests {
     #[test]
     fn str_to_float_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__str_to_float").unwrap();
         assert_eq!(func.signature.params.len(), 2);
@@ -251,7 +254,7 @@ mod tests {
     #[test]
     fn float_to_string_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__float_to_string").unwrap();
         assert_eq!(func.signature.params.len(), 1);
@@ -259,5 +262,31 @@ mod tests {
         assert_eq!(func.signature.returns.len(), 2);
         assert_eq!(func.signature.returns[0].value_type, types::I64);
         assert_eq!(func.signature.returns[1].value_type, types::I64);
+    }
+
+    // ==================== Pointer type tests (32-bit simulation) ====================
+
+    #[test]
+    fn str_to_float_signature_uses_pointer_type() {
+        let mut runtime = Runtime::new();
+        let ptr_ty = types::I32; // Simulate 32-bit platform
+        register(&mut runtime, ptr_ty);
+
+        let func = runtime.get("__str_to_float").unwrap();
+        assert_eq!(func.signature.params[0].value_type, ptr_ty); // ptr
+        assert_eq!(func.signature.params[1].value_type, types::I64); // len
+        assert_eq!(func.signature.returns[0].value_type, types::F64); // result
+    }
+
+    #[test]
+    fn float_to_string_signature_uses_pointer_type() {
+        let mut runtime = Runtime::new();
+        let ptr_ty = types::I32;
+        register(&mut runtime, ptr_ty);
+
+        let func = runtime.get("__float_to_string").unwrap();
+        assert_eq!(func.signature.params[0].value_type, types::F64); // value
+        assert_eq!(func.signature.returns[0].value_type, ptr_ty); // result ptr
+        assert_eq!(func.signature.returns[1].value_type, types::I64); // result len
     }
 }

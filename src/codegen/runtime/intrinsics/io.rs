@@ -61,28 +61,31 @@
 
 use std::io::Write;
 
-use cranelift_codegen::ir::types;
+use cranelift_codegen::ir::{Type, types};
 
 use super::{Runtime, default_call_conv, make_signature};
 
 /// Register I/O intrinsics.
-pub fn register(runtime: &mut Runtime) {
+///
+/// # Parameters
+/// - `ptr_ty`: The pointer type for this target (I32 for 32-bit, I64 for 64-bit)
+pub fn register(runtime: &mut Runtime, ptr_ty: Type) {
     let call_conv = default_call_conv();
 
-    // __print_str: (*const u8, I64) -> ()
+    // __print_str: (ptr, len: I64) -> ()
     // Raw byte output to stdout (syscall wrapper)
     runtime.register(
         "__print_str",
         __print_str as *const u8,
-        make_signature(call_conv, &[types::I64, types::I64], &[]),
+        make_signature(call_conv, &[ptr_ty, types::I64], &[]),
     );
 
-    // __eprint_str: (*const u8, I64) -> ()
+    // __eprint_str: (ptr, len: I64) -> ()
     // Raw byte output to stderr (syscall wrapper)
     runtime.register(
         "__eprint_str",
         __eprint_str as *const u8,
-        make_signature(call_conv, &[types::I64, types::I64], &[]),
+        make_signature(call_conv, &[ptr_ty, types::I64], &[]),
     );
 
     // __print_newline: () -> ()
@@ -172,7 +175,7 @@ mod tests {
     #[test]
     fn register_adds_io_intrinsics() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         assert!(runtime.contains("__print_str"));
         assert!(runtime.contains("__eprint_str"));
@@ -181,7 +184,7 @@ mod tests {
     #[test]
     fn print_str_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__print_str").unwrap();
         assert_eq!(func.signature.params.len(), 2);
@@ -193,12 +196,36 @@ mod tests {
     #[test]
     fn eprint_str_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__eprint_str").unwrap();
         assert_eq!(func.signature.params.len(), 2);
         assert_eq!(func.signature.params[0].value_type, types::I64); // ptr
         assert_eq!(func.signature.params[1].value_type, types::I64); // len
         assert!(func.signature.returns.is_empty());
+    }
+
+    // ==================== Pointer type tests (32-bit simulation) ====================
+
+    #[test]
+    fn print_str_signature_uses_pointer_type() {
+        let mut runtime = Runtime::new();
+        let ptr_ty = types::I32; // Simulate 32-bit platform
+        register(&mut runtime, ptr_ty);
+
+        let func = runtime.get("__print_str").unwrap();
+        assert_eq!(func.signature.params[0].value_type, ptr_ty); // ptr
+        assert_eq!(func.signature.params[1].value_type, types::I64); // len
+    }
+
+    #[test]
+    fn eprint_str_signature_uses_pointer_type() {
+        let mut runtime = Runtime::new();
+        let ptr_ty = types::I32;
+        register(&mut runtime, ptr_ty);
+
+        let func = runtime.get("__eprint_str").unwrap();
+        assert_eq!(func.signature.params[0].value_type, ptr_ty); // ptr
+        assert_eq!(func.signature.params[1].value_type, types::I64); // len
     }
 }

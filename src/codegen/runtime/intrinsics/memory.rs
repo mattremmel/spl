@@ -48,7 +48,7 @@
 //! }
 //! ```
 
-use cranelift_codegen::ir::types;
+use cranelift_codegen::ir::{Type, types};
 
 use super::{Runtime, default_call_conv, make_signature};
 
@@ -61,53 +61,52 @@ unsafe extern "C" {
 }
 
 /// Register all memory intrinsics.
-pub fn register(runtime: &mut Runtime) {
+///
+/// # Parameters
+/// - `ptr_ty`: The pointer type for this target (I32 for 32-bit, I64 for 64-bit)
+pub fn register(runtime: &mut Runtime, ptr_ty: Type) {
     let call_conv = default_call_conv();
 
-    // __alloc: (I64) -> I64 (ptr)
+    // __alloc: (size: I64) -> ptr
     runtime.register(
         "__alloc",
         __alloc as *const u8,
-        make_signature(call_conv, &[types::I64], &[types::I64]),
+        make_signature(call_conv, &[types::I64], &[ptr_ty]),
     );
 
-    // __realloc: (I64, I64) -> I64 (ptr)
+    // __realloc: (ptr, size: I64) -> ptr
     runtime.register(
         "__realloc",
         __realloc as *const u8,
-        make_signature(call_conv, &[types::I64, types::I64], &[types::I64]),
+        make_signature(call_conv, &[ptr_ty, types::I64], &[ptr_ty]),
     );
 
-    // __free: (I64) -> ()
+    // __free: (ptr) -> ()
     runtime.register(
         "__free",
         __free as *const u8,
-        make_signature(call_conv, &[types::I64], &[]),
+        make_signature(call_conv, &[ptr_ty], &[]),
     );
 
-    // __memcpy: (I64, I64, I64) -> ()
+    // __memcpy: (dst: ptr, src: ptr, n: I64) -> ()
     runtime.register(
         "__memcpy",
         __memcpy as *const u8,
-        make_signature(call_conv, &[types::I64, types::I64, types::I64], &[]),
+        make_signature(call_conv, &[ptr_ty, ptr_ty, types::I64], &[]),
     );
 
-    // __memset: (I64, I8, I64) -> ()
+    // __memset: (dst: ptr, val: I8, n: I64) -> ()
     runtime.register(
         "__memset",
         __memset as *const u8,
-        make_signature(call_conv, &[types::I64, types::I8, types::I64], &[]),
+        make_signature(call_conv, &[ptr_ty, types::I8, types::I64], &[]),
     );
 
-    // __memcmp: (I64, I64, I64) -> I64
+    // __memcmp: (a: ptr, b: ptr, n: I64) -> I64
     runtime.register(
         "__memcmp",
         __memcmp as *const u8,
-        make_signature(
-            call_conv,
-            &[types::I64, types::I64, types::I64],
-            &[types::I64],
-        ),
+        make_signature(call_conv, &[ptr_ty, ptr_ty, types::I64], &[types::I64]),
     );
 }
 
@@ -349,7 +348,7 @@ mod tests {
     #[test]
     fn register_adds_all_memory_intrinsics() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         assert!(runtime.contains("__alloc"));
         assert!(runtime.contains("__realloc"));
@@ -364,7 +363,7 @@ mod tests {
     #[test]
     fn alloc_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__alloc").unwrap();
         assert_eq!(func.signature.params.len(), 1);
@@ -376,7 +375,7 @@ mod tests {
     #[test]
     fn realloc_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__realloc").unwrap();
         assert_eq!(func.signature.params.len(), 2);
@@ -389,7 +388,7 @@ mod tests {
     #[test]
     fn free_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__free").unwrap();
         assert_eq!(func.signature.params.len(), 1);
@@ -400,7 +399,7 @@ mod tests {
     #[test]
     fn memcpy_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__memcpy").unwrap();
         assert_eq!(func.signature.params.len(), 3);
@@ -413,7 +412,7 @@ mod tests {
     #[test]
     fn memset_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__memset").unwrap();
         assert_eq!(func.signature.params.len(), 3);
@@ -426,7 +425,7 @@ mod tests {
     #[test]
     fn memcmp_signature() {
         let mut runtime = Runtime::new();
-        register(&mut runtime);
+        register(&mut runtime, types::I64);
 
         let func = runtime.get("__memcmp").unwrap();
         assert_eq!(func.signature.params.len(), 3);
@@ -435,6 +434,79 @@ mod tests {
         assert_eq!(func.signature.params[2].value_type, types::I64); // n
         assert_eq!(func.signature.returns.len(), 1);
         assert_eq!(func.signature.returns[0].value_type, types::I64);
+    }
+
+    // ==================== Pointer type tests (32-bit simulation) ====================
+
+    #[test]
+    fn alloc_signature_uses_pointer_type() {
+        let mut runtime = Runtime::new();
+        let ptr_ty = types::I32; // Simulate 32-bit platform
+        register(&mut runtime, ptr_ty);
+
+        let func = runtime.get("__alloc").unwrap();
+        // size param is I64, return is pointer
+        assert_eq!(func.signature.params[0].value_type, types::I64); // size
+        assert_eq!(func.signature.returns[0].value_type, ptr_ty); // return ptr
+    }
+
+    #[test]
+    fn realloc_signature_uses_pointer_type() {
+        let mut runtime = Runtime::new();
+        let ptr_ty = types::I32;
+        register(&mut runtime, ptr_ty);
+
+        let func = runtime.get("__realloc").unwrap();
+        assert_eq!(func.signature.params[0].value_type, ptr_ty); // ptr
+        assert_eq!(func.signature.params[1].value_type, types::I64); // size
+        assert_eq!(func.signature.returns[0].value_type, ptr_ty); // return ptr
+    }
+
+    #[test]
+    fn free_signature_uses_pointer_type() {
+        let mut runtime = Runtime::new();
+        let ptr_ty = types::I32;
+        register(&mut runtime, ptr_ty);
+
+        let func = runtime.get("__free").unwrap();
+        assert_eq!(func.signature.params[0].value_type, ptr_ty); // ptr
+    }
+
+    #[test]
+    fn memcpy_signature_uses_pointer_type() {
+        let mut runtime = Runtime::new();
+        let ptr_ty = types::I32;
+        register(&mut runtime, ptr_ty);
+
+        let func = runtime.get("__memcpy").unwrap();
+        assert_eq!(func.signature.params[0].value_type, ptr_ty); // dst
+        assert_eq!(func.signature.params[1].value_type, ptr_ty); // src
+        assert_eq!(func.signature.params[2].value_type, types::I64); // n
+    }
+
+    #[test]
+    fn memset_signature_uses_pointer_type() {
+        let mut runtime = Runtime::new();
+        let ptr_ty = types::I32;
+        register(&mut runtime, ptr_ty);
+
+        let func = runtime.get("__memset").unwrap();
+        assert_eq!(func.signature.params[0].value_type, ptr_ty); // dst
+        assert_eq!(func.signature.params[1].value_type, types::I8); // val
+        assert_eq!(func.signature.params[2].value_type, types::I64); // n
+    }
+
+    #[test]
+    fn memcmp_signature_uses_pointer_type() {
+        let mut runtime = Runtime::new();
+        let ptr_ty = types::I32;
+        register(&mut runtime, ptr_ty);
+
+        let func = runtime.get("__memcmp").unwrap();
+        assert_eq!(func.signature.params[0].value_type, ptr_ty); // a
+        assert_eq!(func.signature.params[1].value_type, ptr_ty); // b
+        assert_eq!(func.signature.params[2].value_type, types::I64); // n
+        assert_eq!(func.signature.returns[0].value_type, types::I64); // result
     }
 
     // ==================== Integration test ====================

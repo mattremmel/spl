@@ -101,20 +101,23 @@ mod panic;
 mod string;
 mod system;
 
-use cranelift_codegen::ir::{AbiParam, Signature};
+use cranelift_codegen::ir::{AbiParam, Signature, Type};
 use cranelift_codegen::isa::CallConv;
 
 use super::Runtime;
 
 /// Register all intrinsic functions with the runtime.
-pub fn register_all(runtime: &mut Runtime) {
+///
+/// # Parameters
+/// - `ptr_ty`: The pointer type for this target (I32 for 32-bit, I64 for 64-bit)
+pub fn register_all(runtime: &mut Runtime, ptr_ty: Type) {
     math::register(runtime);
-    io::register(runtime);
+    io::register(runtime, ptr_ty);
     panic::register(runtime);
-    convert::register(runtime);
+    convert::register(runtime, ptr_ty);
     string::register(runtime);
-    memory::register(runtime);
-    system::register(runtime);
+    memory::register(runtime, ptr_ty);
+    system::register(runtime, ptr_ty);
     debug::register(runtime);
 }
 
@@ -155,7 +158,7 @@ mod tests {
         let mut runtime = Runtime::new();
         assert!(runtime.is_empty());
 
-        register_all(&mut runtime);
+        register_all(&mut runtime, types::I64);
 
         assert!(!runtime.is_empty());
         // Should have at least the core intrinsics
@@ -165,7 +168,7 @@ mod tests {
     #[test]
     fn all_intrinsics_have_valid_signatures() {
         let mut runtime = Runtime::new();
-        register_all(&mut runtime);
+        register_all(&mut runtime, types::I64);
 
         for func in runtime.iter() {
             // Name should not be empty
@@ -182,7 +185,7 @@ mod tests {
     #[test]
     fn intrinsic_names_follow_double_underscore_prefix_convention() {
         let mut runtime = Runtime::new();
-        register_all(&mut runtime);
+        register_all(&mut runtime, types::I64);
 
         for func in runtime.iter() {
             assert!(
