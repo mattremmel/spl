@@ -8,7 +8,7 @@ SPL's module system provides:
 
 - **File-to-module mapping**: Multiple files can form a single module (Go-style)
 - **Explicit control**: Optional `_module.spl` files for fine-grained module structure (Rust-style)
-- **Import syntax**: Rust-style `use` declarations for importing items
+- **Unified imports**: `use` declarations for all symbols (internal and external)
 - **Visibility**: Public (`pub`) and private (default) items
 - **Prelude**: Common types available without explicit import
 
@@ -147,11 +147,20 @@ UseTree = "*"                                    (* glob import *)
 UseTreeList = UseTree { "," UseTree } [ "," ] ;
 ```
 
-### Import Examples
+### Examples
+
+The `use` keyword works uniformly for internal modules, external packages, and standard library:
 
 ```spl
-// Import single item
-use std.vec.Vec;
+// Internal module items
+use module.utils.helper;      // From module root
+use super.common.Config;      // From parent module
+use self.internal.parse;      // From current module
+
+// External packages (same syntax)
+use std.vec.Vec;              // Standard library
+use std.collections.HashMap;  // Standard library
+use serde.Serialize;          // External package (future)
 
 // Import with rename
 use std.collections.HashMap as Map;
@@ -171,15 +180,6 @@ use std.{vec.Vec, io.{Read, Write}};
 
 // Full qualified path (no import needed)
 let v = std.vec.Vec(i32).new();
-
-// Module root reference
-use module.utils.helper;
-
-// Parent module reference
-use super.common.Config;
-
-// Current module (explicit)
-use self.internal.parse;
 ```
 
 ### Module Declarations
@@ -573,6 +573,6 @@ pub use internal.PublicApi;
 
 2. **Rust-style control**: When needed, `_module.spl` provides full control over module structure without changing the default behavior.
 
-3. **Rust-style imports**: The `use` syntax is proven, readable, and handles complex import patterns elegantly.
+3. **Unified `use` keyword**: A single keyword for all imports (internal modules, external packages, standard library). No semantic distinction between "importing" external code and "using" internal code—both simply bring names into scope.
 
 4. **Minimal prelude**: Auto-importing common types reduces boilerplate while keeping the prelude small and predictable.
