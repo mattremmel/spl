@@ -2964,7 +2964,6 @@ fn block_expression_in_let_still_works() {
 }
 
 #[test]
-#[ignore = "match expression inference not yet implemented"]
 fn implicit_return_single_match_expr() {
     // Single match expression - implicit return allowed
     check(
@@ -3079,4 +3078,98 @@ fn unit_return_while_statement_allowed() {
 fn unit_return_with_trailing_semicolon() {
     // Unit return with expression statement at end - allowed
     check("fn f() { let x = 1; x; } fn main() { let y = f(); }", "()");
+}
+
+// =============================================================================
+// Is Expression Tests
+// =============================================================================
+
+#[test]
+fn is_expr_returns_bool() {
+    check("fn main() { let x = 42 is i32; }", "bool");
+}
+
+#[test]
+fn is_expr_with_literal_pattern() {
+    check("fn main() { let x = 42 is 42; }", "bool");
+}
+
+#[test]
+fn is_expr_with_wildcard() {
+    check("fn main() { let x = 42 is _; }", "bool");
+}
+
+#[test]
+fn is_not_expr_returns_bool() {
+    check("fn main() { let x = 42 is not 0; }", "bool");
+}
+
+#[test]
+fn is_expr_tuple_pattern() {
+    check("fn main() { let t = (1, 2); let b = t is (_, _); }", "bool");
+}
+
+#[test]
+fn is_expr_binding_pattern() {
+    check("fn main() { let x = 42 is n; }", "bool");
+}
+
+// =============================================================================
+// Match Expression Tests
+// =============================================================================
+
+#[test]
+fn match_simple_literal() {
+    check("fn main() { let x = match 42 { 0 => 1, _ => 2 }; }", "i32");
+}
+
+#[test]
+fn match_returns_unified_arm_type() {
+    check(
+        "fn main() { let x = match true { true => 1, false => 2 }; }",
+        "i32",
+    );
+}
+
+#[test]
+fn match_arm_type_mismatch_error() {
+    check_err(
+        "fn main() { let x = match 42 { 0 => 1, _ => true }; }",
+        &["type mismatch"],
+    );
+}
+
+#[test]
+fn match_with_guard() {
+    check(
+        "fn main() { let y = 0; let x = match 42 { n if n > y => 1, _ => 0 }; }",
+        "i32",
+    );
+}
+
+#[test]
+fn match_guard_must_be_bool() {
+    check_err(
+        "fn main() { match 42 { n if n => 1, _ => 0 }; }",
+        &["expected bool"],
+    );
+}
+
+#[test]
+fn match_binding_pattern() {
+    check("fn main() { let x = match 42 { n => n }; }", "i32");
+}
+
+#[test]
+fn match_tuple_destructuring() {
+    check(
+        "fn main() { let x = match (1, 2) { (a, b) => a + b }; }",
+        "i32",
+    );
+}
+
+#[test]
+fn match_wildcard_exhaustive() {
+    // No warning expected - wildcard is exhaustive
+    check("fn main() { let x = match 42 { 0 => 1, _ => 0 }; }", "i32");
 }

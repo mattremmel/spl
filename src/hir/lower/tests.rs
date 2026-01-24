@@ -1681,3 +1681,87 @@ fn types_are_attached() {
         let _ = db.types.get(expr.ty);
     }
 }
+
+// ========================================================================
+// Is Expression Tests
+// ========================================================================
+
+#[test]
+fn lower_is_expr() {
+    let db = lower("fn main() { let x = 42 is 42; }");
+    for (_, expr) in db.exprs.iter() {
+        if let HirExprKind::Is { negated, .. } = &expr.kind {
+            assert!(!negated);
+            return;
+        }
+    }
+    panic!("Did not find is expression");
+}
+
+#[test]
+fn lower_is_not_expr() {
+    let db = lower("fn main() { let x = 42 is not 0; }");
+    for (_, expr) in db.exprs.iter() {
+        if let HirExprKind::Is { negated, .. } = &expr.kind {
+            assert!(negated);
+            return;
+        }
+    }
+    panic!("Did not find is-not expression");
+}
+
+#[test]
+fn lower_is_expr_with_wildcard() {
+    let db = lower("fn main() { let x = 42 is _; }");
+    for (_, expr) in db.exprs.iter() {
+        if let HirExprKind::Is { pattern, .. } = &expr.kind {
+            let pat = db.pat(*pattern);
+            assert!(matches!(pat.kind, HirPatKind::Wildcard));
+            return;
+        }
+    }
+    panic!("Did not find is expression with wildcard");
+}
+
+// ========================================================================
+// Match Expression Tests
+// ========================================================================
+
+#[test]
+fn lower_match_expr() {
+    let db = lower("fn main() { match 42 { 0 => 1, _ => 2 }; }");
+    for (_, expr) in db.exprs.iter() {
+        if let HirExprKind::Match { arms, .. } = &expr.kind {
+            assert_eq!(arms.len(), 2);
+            return;
+        }
+    }
+    panic!("Did not find match expression");
+}
+
+#[test]
+fn lower_match_with_guard() {
+    let db = lower("fn main() { let y = 0; match 42 { n if n > y => 1, _ => 2 }; }");
+    for (_, expr) in db.exprs.iter() {
+        if let HirExprKind::Match { arms, .. } = &expr.kind {
+            assert!(arms[0].1.is_some()); // First arm has guard
+            return;
+        }
+    }
+    panic!("Did not find match with guard");
+}
+
+#[test]
+fn lower_match_single_arm() {
+    let db = lower("fn main() { match 42 { n => n }; }");
+    for (_, expr) in db.exprs.iter() {
+        if let HirExprKind::Match { arms, .. } = &expr.kind {
+            assert_eq!(arms.len(), 1);
+            // Check pattern is a binding
+            let pat = db.pat(arms[0].0);
+            assert!(matches!(pat.kind, HirPatKind::Bind { .. }));
+            return;
+        }
+    }
+    panic!("Did not find match expression");
+}

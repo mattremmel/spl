@@ -629,7 +629,7 @@ impl MatchArm {
         let arrow_pos = token(&self.0, SyntaxKind::FAT_ARROW)?.text_range().start();
         children::<Expr>(&self.0).find(|expr| {
             let pos = expr.syntax().text_range().start();
-            pos > if_token.text_range().end() && pos < arrow_pos
+            pos >= if_token.text_range().end() && pos < arrow_pos
         })
     }
 

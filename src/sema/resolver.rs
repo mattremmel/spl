@@ -671,8 +671,11 @@ impl<'ctx> Resolver<'ctx> {
                 if let Some(lhs) = is_expr.lhs() {
                     self.resolve_expr(&lhs);
                 }
-                // Pattern introduces bindings but we don't track those yet
-                // TODO: Implement pattern binding resolution
+                // Resolve pattern types (e.g., struct patterns)
+                if let Some(pat) = is_expr.pattern() {
+                    self.resolve_pattern_types(&pat);
+                }
+                // Note: `is` patterns don't introduce bindings that escape the expression
             }
             Expr::Match(match_expr) => {
                 // Resolve the scrutinee
@@ -681,14 +684,26 @@ impl<'ctx> Resolver<'ctx> {
                 }
                 // Resolve each arm
                 for arm in match_expr.arms() {
-                    // Pattern introduces bindings - would need to create scope
-                    // TODO: Implement proper scope for pattern bindings
+                    // Create a new scope for pattern bindings in this arm
+                    self.ctx.enter_scope(ScopeKind::Block);
+
+                    // Resolve pattern types and define pattern bindings
+                    if let Some(pat) = arm.pattern() {
+                        self.resolve_pattern_types(&pat);
+                        self.define_pattern(&pat, false);
+                    }
+
+                    // Resolve guard (can reference pattern bindings)
                     if let Some(guard) = arm.guard() {
                         self.resolve_expr(&guard);
                     }
+
+                    // Resolve body (can reference pattern bindings)
                     if let Some(body) = arm.body() {
                         self.resolve_expr(&body);
                     }
+
+                    self.ctx.exit_scope();
                 }
             }
         }

@@ -54,9 +54,9 @@ pub use folding::try_lower_expr;
 
 use crate::ast::{
     ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, FieldExpr,
-    FunctionDef, IfExpr, IndexExpr, Item, LetStmt, LiteralExpr, LoopExpr, MethodCallExpr,
-    ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt, StructExpr,
-    TupleExpr, WhileExpr,
+    FunctionDef, IfExpr, IndexExpr, IsExpr, Item, LetStmt, LiteralExpr, LoopExpr, MatchExpr,
+    MethodCallExpr, ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt,
+    StructExpr, TupleExpr, WhileExpr,
 };
 use crate::hir::{
     BinOp, ExprId, HirDatabase, HirExpr, HirExprKind, HirField, HirFunction, HirImpl, HirItem,
@@ -660,8 +660,8 @@ impl LoweringContext {
             Expr::Block(block_expr) => self.lower_block_expr(block_expr),
             Expr::Cast(cast) => self.lower_cast_expr(cast, span, ty),
             Expr::Range(_) => self.lower_missing(span), // TODO
-            // New syntax - not yet implemented in HIR lowering
-            Expr::Is(_) | Expr::Match(_) => self.lower_missing(span), // TODO: Implement pattern matching
+            Expr::Is(is_expr) => self.lower_is_expr(is_expr, span, ty),
+            Expr::Match(match_expr) => self.lower_match_expr(match_expr, span, ty),
         }
     }
 
@@ -1547,6 +1547,78 @@ impl LoweringContext {
                 expr: inner,
                 target_ty: ty,
             },
+            ty,
+            span,
+        };
+        self.db.alloc_expr(expr)
+    }
+
+    fn lower_is_expr(&mut self, is_expr: &IsExpr, span: Span, ty: TypeId) -> ExprId {
+        let scrutinee = is_expr
+            .lhs()
+            .map(|e| self.lower_expr(&e))
+            .unwrap_or_else(|| self.lower_missing(span.clone()));
+
+        let pattern = is_expr
+            .pattern()
+            .map(|p| self.lower_pattern(&p, false))
+            .unwrap_or_else(|| {
+                let missing_pat = HirPat {
+                    kind: HirPatKind::Missing,
+                    ty: self.error_type(),
+                    span: span.clone(),
+                };
+                self.db.alloc_pat(missing_pat)
+            });
+
+        let negated = is_expr.is_negated();
+
+        let expr = HirExpr {
+            kind: HirExprKind::Is {
+                scrutinee,
+                pattern,
+                negated,
+            },
+            ty,
+            span,
+        };
+        self.db.alloc_expr(expr)
+    }
+
+    fn lower_match_expr(&mut self, match_expr: &MatchExpr, span: Span, ty: TypeId) -> ExprId {
+        let scrutinee = match_expr
+            .scrutinee()
+            .map(|e| self.lower_expr(&e))
+            .unwrap_or_else(|| self.lower_missing(span.clone()));
+
+        let arms: Vec<_> = match_expr
+            .arms()
+            .map(|arm| {
+                let pattern = arm
+                    .pattern()
+                    .map(|p| self.lower_pattern(&p, false))
+                    .unwrap_or_else(|| {
+                        let missing_pat = HirPat {
+                            kind: HirPatKind::Missing,
+                            ty: self.error_type(),
+                            span: span.clone(),
+                        };
+                        self.db.alloc_pat(missing_pat)
+                    });
+
+                let guard = arm.guard().map(|g| self.lower_expr(&g));
+
+                let body = arm
+                    .body()
+                    .map(|b| self.lower_expr(&b))
+                    .unwrap_or_else(|| self.lower_missing(span.clone()));
+
+                (pattern, guard, body)
+            })
+            .collect();
+
+        let expr = HirExpr {
+            kind: HirExprKind::Match { scrutinee, arms },
             ty,
             span,
         };

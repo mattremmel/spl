@@ -2,13 +2,14 @@
 
 use crate::ast::{
     ApplyExpr, ArrayExpr, BinExpr, BlockExpr, BreakExpr, CallExpr, CastExpr, ContinueExpr, Expr,
-    FieldExpr, ForExpr, IfExpr, IndexExpr, LoopExpr, MethodCallExpr, ParenExpr, Pat, PathExpr,
-    PrefixExpr, RangeExpr, RefExpr, ReturnExpr, SliceExpr, StructExpr, TupleExpr, WhileExpr,
+    FieldExpr, ForExpr, IfExpr, IndexExpr, IsExpr, LoopExpr, MatchExpr, MethodCallExpr, ParenExpr,
+    Pat, PathExpr, PrefixExpr, RangeExpr, RefExpr, ReturnExpr, SliceExpr, StructExpr, TupleExpr,
+    WhileExpr,
 };
 use crate::ast::{Block, LetStmt, LiteralExpr, Stmt};
 use crate::diagnostic::Diagnostic;
 use crate::hir::{LoweredExpr, lower::try_lower_expr};
-use crate::sema::SymbolKind;
+use crate::sema::{ScopeKind, SymbolKind};
 use crate::sema::types::{InferKind, Mutability, PrimitiveKind, Type, TypeId};
 use crate::syntax::SyntaxKind;
 use rowan::ast::AstNode;
@@ -309,13 +310,8 @@ impl InferEngine {
             Expr::Block(block_expr) => self.synth_block_expr(block_expr),
             Expr::Cast(cast) => self.synth_cast(cast),
             Expr::Range(range) => self.synth_range(range),
-            // New syntax - not yet fully implemented in semantic analysis
-            Expr::Is(_) | Expr::Match(_) => {
-                // TODO: Implement proper type checking for `is` and `match` expressions
-                // For now, return bool for `is` (pattern match result) and
-                // type variable for `match` (requires unifying arm types)
-                self.ctx.types.bool()
-            }
+            Expr::Is(is_expr) => self.synth_is(is_expr),
+            Expr::Match(match_expr) => self.synth_match(match_expr),
         };
         self.expr_types.insert(span, type_id);
         type_id
@@ -2191,6 +2187,190 @@ impl InferEngine {
         // For now, return a placeholder
         // TODO: Implement Range type properly
         self.fresh_type_var()
+    }
+
+    fn synth_is(&mut self, is_expr: &IsExpr) -> TypeId {
+        // Synthesize the left-hand side (scrutinee)
+        let scrutinee_ty = if let Some(lhs) = is_expr.lhs() {
+            self.synth_expr(&lhs)
+        } else {
+            self.ctx.types.error()
+        };
+
+        // Check the pattern against the scrutinee type
+        if let Some(pat) = is_expr.pattern() {
+            self.check_pattern_type(&pat, scrutinee_ty);
+        }
+
+        // `is` expressions always return bool
+        self.ctx.types.bool()
+    }
+
+    fn synth_match(&mut self, match_expr: &MatchExpr) -> TypeId {
+        // Synthesize the scrutinee type
+        let scrutinee_ty = if let Some(scrutinee) = match_expr.scrutinee() {
+            self.synth_expr(&scrutinee)
+        } else {
+            return self.ctx.types.error();
+        };
+
+        // Collect arm body types
+        let mut arm_types = Vec::new();
+
+        for arm in match_expr.arms() {
+            // Enter a new scope for this arm (pattern bindings are local to the arm)
+            self.ctx.enter_scope(ScopeKind::Block);
+
+            // Check and define pattern bindings
+            if let Some(pat) = arm.pattern() {
+                self.check_pattern_type(&pat, scrutinee_ty);
+                self.define_pattern(&pat, scrutinee_ty);
+            }
+
+            // Check guard expression if present (must be bool)
+            if let Some(guard) = arm.guard() {
+                let guard_ty = self.synth_expr(&guard);
+                let bool_ty = self.ctx.types.bool();
+                if !self.unify(guard_ty, bool_ty) {
+                    let span = text_range_to_span(guard.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("match guard must be bool, expected bool")
+                            .with_label(span, "expected bool"),
+                    );
+                }
+            }
+
+            // Synthesize body type
+            if let Some(body) = arm.body() {
+                let body_ty = self.synth_expr(&body);
+                arm_types.push(body_ty);
+            }
+
+            self.ctx.exit_scope();
+        }
+
+        // Unify all arm types
+        if arm_types.is_empty() {
+            return self.ctx.types.unit();
+        }
+
+        let result_ty = arm_types[0];
+        for (i, &arm_ty) in arm_types.iter().enumerate().skip(1) {
+            if !self.unify(result_ty, arm_ty) {
+                let span = text_range_to_span(match_expr.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "type mismatch in match arms: arm {} has different type",
+                        i + 1
+                    ))
+                    .with_label(span, "arm types don't match"),
+                );
+            }
+        }
+
+        result_ty
+    }
+
+    /// Check that a pattern is compatible with an expected type.
+    /// This doesn't define bindings; it just validates the pattern structure.
+    fn check_pattern_type(&mut self, pat: &Pat, expected_ty: TypeId) {
+        match pat {
+            Pat::Ident(_) => {
+                // Binding patterns are always compatible
+            }
+            Pat::Wildcard(_) => {
+                // Wildcard is always compatible
+            }
+            Pat::Literal(lit_pat) => {
+                // Check that the literal type matches the expected type
+                if let Some(token) = lit_pat.token() {
+                    let lit_ty = match token.kind() {
+                        SyntaxKind::INT_LITERAL => {
+                            let (prim, _) = parse_int_suffix(token.text());
+                            if let Some(kind) = prim {
+                                self.ctx.types.primitive(kind)
+                            } else {
+                                // Unsuffixed - create inference var that should unify
+                                self.fresh_int_var()
+                            }
+                        }
+                        SyntaxKind::FLOAT_LITERAL => {
+                            let text = token.text();
+                            if text.ends_with("f32") {
+                                self.ctx.types.primitive(PrimitiveKind::F32)
+                            } else if text.ends_with("f64") {
+                                self.ctx.types.primitive(PrimitiveKind::F64)
+                            } else {
+                                self.fresh_float_var()
+                            }
+                        }
+                        SyntaxKind::TRUE_KW | SyntaxKind::FALSE_KW => self.ctx.types.bool(),
+                        SyntaxKind::CHAR_LITERAL => self.ctx.types.primitive(PrimitiveKind::Char),
+                        SyntaxKind::STRING_LITERAL => self.ctx.types.str_ref(),
+                        _ => self.ctx.types.error(),
+                    };
+
+                    if !self.unify(lit_ty, expected_ty) {
+                        let span = text_range_to_span(token.text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error("type mismatch in pattern")
+                                .with_label(span, "pattern type doesn't match scrutinee"),
+                        );
+                    }
+                }
+            }
+            Pat::Tuple(tuple_pat) => {
+                // Check that expected type is a tuple with matching arity
+                let resolved = self.resolve_type(expected_ty);
+                let ty_data = self.ctx.types.get(resolved).clone();
+                if let Type::Tuple(elem_types) = ty_data {
+                    let patterns: Vec<_> = tuple_pat.patterns().collect();
+                    if patterns.len() != elem_types.len() {
+                        let span = text_range_to_span(tuple_pat.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "tuple pattern has {} elements, but expected {}",
+                                patterns.len(),
+                                elem_types.len()
+                            ))
+                            .with_label(span, "wrong number of elements"),
+                        );
+                    } else {
+                        for (inner_pat, elem_ty) in patterns.iter().zip(elem_types.iter()) {
+                            self.check_pattern_type(inner_pat, *elem_ty);
+                        }
+                    }
+                } else {
+                    let span = text_range_to_span(tuple_pat.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("tuple pattern used with non-tuple type")
+                            .with_label(span, "expected tuple"),
+                    );
+                }
+            }
+            Pat::Struct(_struct_pat) => {
+                // TODO: Check struct pattern fields
+            }
+            Pat::Ref(ref_pat) => {
+                // Check that expected type is a reference
+                let resolved = self.resolve_type(expected_ty);
+                let ty_data = self.ctx.types.get(resolved).clone();
+                if let Type::Ref(_, inner_ty) = ty_data {
+                    if let Some(inner_pat) = ref_pat.pat() {
+                        self.check_pattern_type(&inner_pat, inner_ty);
+                    }
+                } else {
+                    let span = text_range_to_span(ref_pat.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("reference pattern used with non-reference type")
+                            .with_label(span, "expected reference"),
+                    );
+                }
+            }
+            _ => {
+                // Other patterns (Rest, Range, Slice) - not fully implemented
+            }
+        }
     }
 
     pub(super) fn synth_block(&mut self, block: &Block) -> TypeId {

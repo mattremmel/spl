@@ -40,6 +40,7 @@ use crate::sema::symbol::DefId;
 use crate::sema::types::TypeId;
 use la_arena::Idx;
 
+use super::pat::PatId;
 use super::StmtId;
 
 /// A stable identifier for expressions in the HIR arena.
@@ -182,6 +183,20 @@ pub enum HirExprKind {
 
     /// Cast expression: `expr as Type`.
     Cast { expr: ExprId, target_ty: TypeId },
+
+    /// Is expression: `expr is pattern` or `expr is not pattern`.
+    Is {
+        scrutinee: ExprId,
+        pattern: PatId,
+        negated: bool,
+    },
+
+    /// Match expression: `match expr { pattern => body, ... }`.
+    Match {
+        scrutinee: ExprId,
+        /// Arms as (pattern, optional guard, body).
+        arms: Vec<(PatId, Option<ExprId>, ExprId)>,
+    },
 
     /// Missing expression (for error recovery).
     Missing,

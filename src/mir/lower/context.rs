@@ -386,6 +386,60 @@ impl<'hir> MirLoweringContext<'hir> {
                 ));
                 place
             }
+            HirExprKind::Is {
+                scrutinee,
+                pattern,
+                negated,
+            } => {
+                // For now, `is` expressions produce a boolean result
+                // TODO: Implement proper pattern matching lowering
+                // Currently just evaluates scrutinee and returns true/false based on pattern
+                let _scrutinee_val = self.lower_expr_as_operand(builder, *scrutinee);
+
+                // Check if pattern is wildcard or catch-all binding (always matches)
+                let pat = self.hir.pat(*pattern);
+                let always_matches = matches!(
+                    pat.kind,
+                    crate::hir::HirPatKind::Wildcard | crate::hir::HirPatKind::Bind { .. }
+                );
+
+                let result = if always_matches {
+                    !negated
+                } else {
+                    // For literal patterns, we'd need to compare values
+                    // For now, return false for non-wildcard patterns (conservative)
+                    *negated
+                };
+
+                let temp = builder.alloc_temp(ty);
+                let place = Place::from_local(temp);
+                builder.push_statement(Statement::assign(
+                    place.clone(),
+                    Rvalue::Use(Operand::Constant(Constant::Bool(result))),
+                    span,
+                ));
+                place
+            }
+            HirExprKind::Match { scrutinee, arms } => {
+                // For now, match expressions produce the first arm's result
+                // TODO: Implement proper pattern matching with branching
+                let _scrutinee_val = self.lower_expr_as_operand(builder, *scrutinee);
+
+                if let Some((_pat, _guard, body)) = arms.first() {
+                    // Just lower the first arm's body for now
+                    self.lower_expr_to_place(builder, *body)
+                } else {
+                    // No arms - return zeroed value
+                    let temp = builder.alloc_temp(ty);
+                    let place = Place::from_local(temp);
+                    builder.push_statement(Statement::assign(
+                        place.clone(),
+                        Rvalue::Use(Operand::Constant(Constant::Zeroed(ty))),
+                        span,
+                    ));
+                    place
+                }
+            }
             HirExprKind::Missing => {
                 // Missing expressions (from error recovery) produce a zeroed value
                 let temp = builder.alloc_temp(ty);
