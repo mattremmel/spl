@@ -95,6 +95,11 @@ impl<'hir> MirLoweringContext<'hir> {
 
     /// Resolve a field name to its index within a struct.
     fn resolve_field_index(&self, struct_def_id: DefId, field_name: &str) -> u32 {
+        debug_assert!(
+            struct_def_id.is_valid(),
+            "Cannot resolve field '{}' with invalid struct DefId - this indicates a resolution bug in HIR lowering",
+            field_name
+        );
         for item in &self.hir.items {
             if let HirItem::Struct(s) = item
                 && s.def_id == struct_def_id
