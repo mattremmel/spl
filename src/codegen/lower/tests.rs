@@ -2598,25 +2598,118 @@ fn lower_place_deref_projection() {
 }
 
 #[test]
-#[ignore = "string constants not yet supported"]
 fn lower_string_constant() {
+    // Test that string constants can be lowered to (ptr, len) pairs.
+    // Since String is a compound type, we can't return it directly.
+    // Instead, we create a string local and return a constant.
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
+    let string_ty = runner.types_mut().string();
 
+    // fn() -> i32 { let s: String = "hello"; 42 }
     let mut body = Body::new(i32_ty);
     let entry = body.alloc_block();
 
-    // Use a string constant (should error)
+    // Allocate a local for the string
+    let string_local = body.alloc_local(LocalDecl::new(string_ty, false));
+
+    // _1 = "hello"
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(string_local),
+        Rvalue::Use(Operand::Constant(Constant::String("hello".to_string()))),
+        0..0,
+    ));
+
+    // _0 = 42
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::String("hello".to_string()))),
+        Rvalue::Use(Operand::Constant(Constant::Int(42))),
         0..0,
     ));
 
     body.block_mut(entry)
         .set_terminator(Terminator::return_(0..0));
 
-    let _ptr = runner.compile(&body, "string_constant");
+    let ptr = runner.compile(&body, "string_constant");
+    let func: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+    // Verify the function runs (string was lowered successfully)
+    assert_eq!(func(), 42);
+}
+
+#[test]
+fn lower_string_constant_empty() {
+    // Test empty string constant
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+    let string_ty = runner.types_mut().string();
+
+    let mut body = Body::new(i32_ty);
+    let entry = body.alloc_block();
+
+    let string_local = body.alloc_local(LocalDecl::new(string_ty, false));
+
+    // _1 = ""
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(string_local),
+        Rvalue::Use(Operand::Constant(Constant::String(String::new()))),
+        0..0,
+    ));
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Use(Operand::Constant(Constant::Int(1))),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "empty_string");
+    let func: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(), 1);
+}
+
+#[test]
+fn lower_string_constant_deduplication() {
+    // Test that the same string used multiple times is deduplicated
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+    let string_ty = runner.types_mut().string();
+
+    let mut body = Body::new(i32_ty);
+    let entry = body.alloc_block();
+
+    let string_local1 = body.alloc_local(LocalDecl::new(string_ty, false));
+    let string_local2 = body.alloc_local(LocalDecl::new(string_ty, false));
+
+    // Both locals use the same string - should be deduplicated
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(string_local1),
+        Rvalue::Use(Operand::Constant(Constant::String("hello".to_string()))),
+        0..0,
+    ));
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(string_local2),
+        Rvalue::Use(Operand::Constant(Constant::String("hello".to_string()))),
+        0..0,
+    ));
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Use(Operand::Constant(Constant::Int(2))),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "string_dedup");
+    let func: fn() -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(), 2);
 }
 
 #[test]

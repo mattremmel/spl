@@ -12,10 +12,10 @@ mod tests;
 
 use cranelift_codegen::ir::types;
 use cranelift_codegen::ir::{
-    AbiParam, Block, InstBuilder, MemFlags, StackSlotData, StackSlotKind, Value,
+    AbiParam, Block, GlobalValue, InstBuilder, MemFlags, StackSlotData, StackSlotKind, Value,
 };
 use cranelift_frontend::{FunctionBuilder, Variable};
-use cranelift_module::Module;
+use cranelift_module::{DataDescription, DataId, Linkage, Module};
 use rustc_hash::FxHashMap;
 
 use crate::codegen::error::CodegenError;
@@ -47,6 +47,10 @@ pub struct FunctionLowerer<'a> {
     func_registry: Option<&'a FunctionRegistry>,
     /// Optional module for importing functions (works with both JIT and AOT).
     module: Option<&'a mut dyn Module>,
+    /// Maps string contents to their data IDs for deduplication.
+    string_data: FxHashMap<String, DataId>,
+    /// Counter for generating unique string data names.
+    string_counter: usize,
 }
 
 impl<'a> FunctionLowerer<'a> {
@@ -83,11 +87,12 @@ impl<'a> FunctionLowerer<'a> {
         // Set up the function
         ctx.compilation_context().func.signature = sig;
 
-        // Build the function body
+        // Build the function body (with module access for string constants)
         {
-            let (func, func_ctx) = ctx.builder_context();
+            let (func, func_ctx, module) = ctx.builder_context_with_module();
             let builder = FunctionBuilder::new(func, func_ctx);
-            let lowerer = FunctionLowerer::new(builder, type_mapper, types, body);
+            let lowerer =
+                FunctionLowerer::new(builder, type_mapper, types, body).set_module(module);
             lowerer.lower_body()?;
         }
 
@@ -116,6 +121,8 @@ impl<'a> FunctionLowerer<'a> {
             body,
             func_registry: None,
             module: None,
+            string_data: FxHashMap::default(),
+            string_counter: 0,
         }
     }
 
@@ -325,5 +332,81 @@ impl<'a> FunctionLowerer<'a> {
     /// Get the storage kind for a local.
     fn local_storage(&self, local: Local) -> Option<LocalStorage> {
         self.local_map.get(local)
+    }
+
+    /// Declare a string constant in the data section and return a GlobalValue for it.
+    ///
+    /// Strings are deduplicated within the same function.
+    fn declare_string_data(&mut self, s: &str) -> Result<GlobalValue, CodegenError> {
+        let module = self.module.as_mut().ok_or_else(|| {
+            CodegenError::Internal("module required for string constants".to_string())
+        })?;
+
+        // Check if we already declared this string
+        let data_id = if let Some(&existing_id) = self.string_data.get(s) {
+            existing_id
+        } else {
+            // Generate unique name for this string data
+            let name = format!(".str.{}", self.string_counter);
+            self.string_counter += 1;
+
+            // Declare the data item (read-only, not TLS)
+            let data_id = module
+                .declare_data(&name, Linkage::Local, false, false)
+                .map_err(|e| CodegenError::ModuleError(e.to_string()))?;
+
+            // Define the data with the string bytes
+            let mut desc = DataDescription::new();
+            desc.define(s.as_bytes().into());
+            module
+                .define_data(data_id, &desc)
+                .map_err(|e| CodegenError::ModuleError(e.to_string()))?;
+
+            // Cache for deduplication
+            self.string_data.insert(s.to_string(), data_id);
+            data_id
+        };
+
+        // Need to re-borrow module after the if-else block
+        let module = self.module.as_mut().ok_or_else(|| {
+            CodegenError::Internal("module required for string constants".to_string())
+        })?;
+
+        // Import the data into the current function
+        let gv = module.declare_data_in_func(data_id, self.builder.func);
+        Ok(gv)
+    }
+
+    /// Lower a string constant to a destination address.
+    ///
+    /// Writes the pointer and length to the destination, which should be
+    /// a stack slot with space for two pointer-sized values.
+    pub(super) fn lower_string_constant_to(
+        &mut self,
+        s: &str,
+        dest_addr: Value,
+    ) -> Result<(), CodegenError> {
+        let ptr_ty = self.type_mapper.pointer_type();
+
+        // Declare string data and get a GlobalValue
+        let gv = self.declare_string_data(s)?;
+
+        // Get the address of the string data
+        let str_ptr = self.builder.ins().global_value(ptr_ty, gv);
+
+        // Create the length constant
+        let str_len = self.builder.ins().iconst(ptr_ty, s.len() as i64);
+
+        // Store pointer at offset 0
+        let flags = MemFlags::trusted();
+        self.builder.ins().store(flags, str_ptr, dest_addr, 0);
+
+        // Store length at offset ptr_size (field 1)
+        let ptr_size = if ptr_ty == types::I64 { 8 } else { 4 };
+        self.builder
+            .ins()
+            .store(flags, str_len, dest_addr, ptr_size);
+
+        Ok(())
     }
 }

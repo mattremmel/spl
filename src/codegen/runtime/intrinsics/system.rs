@@ -109,7 +109,7 @@ pub extern "C" fn __getenv(name_ptr: *const u8, name_len: i64) -> StringResult {
             return StringResult {
                 ptr: std::ptr::null(),
                 len: 0,
-            }
+            };
         }
     };
 

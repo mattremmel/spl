@@ -91,20 +91,20 @@ impl<'a> FunctionLowerer<'a> {
             && matches!(
                 self.local_storage(place.local),
                 Some(LocalStorage::Variable(_))
-            )
-        {
+            ) {
             // Get the pointer value directly from the SSA variable
-            let ptr = self.use_var(place.local).ok_or_else(|| {
-                CodegenError::Internal("SSA variable not found".to_string())
-            })?;
+            let ptr = self
+                .use_var(place.local)
+                .ok_or_else(|| CodegenError::Internal("SSA variable not found".to_string()))?;
 
             // Consume the Deref projection
             projections.next();
 
             // Update current_ty to the pointee type
-            current_ty = self.layout.pointee_type(current_ty).ok_or_else(|| {
-                CodegenError::Internal("deref on non-pointer type".to_string())
-            })?;
+            current_ty = self
+                .layout
+                .pointee_type(current_ty)
+                .ok_or_else(|| CodegenError::Internal("deref on non-pointer type".to_string()))?;
 
             ptr
         } else {
@@ -286,10 +286,7 @@ impl<'a> FunctionLowerer<'a> {
                 })?;
 
                 let func_info = registry.get(*def_id).ok_or_else(|| {
-                    CodegenError::Internal(format!(
-                        "function {:?} not found in registry",
-                        def_id
-                    ))
+                    CodegenError::Internal(format!("function {:?} not found in registry", def_id))
                 })?;
 
                 // Get the module to import the function reference

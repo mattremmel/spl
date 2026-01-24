@@ -428,11 +428,24 @@ impl InlineMathIntrinsic {
     /// Get the number of arguments this intrinsic expects.
     pub fn arg_count(self) -> usize {
         match self {
-            Self::AbsInt | Self::AbsFloat | Self::Sqrt
-            | Self::Floor | Self::Ceil | Self::Trunc | Self::Round
-            | Self::Clz | Self::Ctz | Self::Popcnt | Self::Bitrev => 1,
-            Self::MinInt | Self::MaxInt | Self::MinFloat | Self::MaxFloat
-            | Self::Copysign | Self::Rotl | Self::Rotr => 2,
+            Self::AbsInt
+            | Self::AbsFloat
+            | Self::Sqrt
+            | Self::Floor
+            | Self::Ceil
+            | Self::Trunc
+            | Self::Round
+            | Self::Clz
+            | Self::Ctz
+            | Self::Popcnt
+            | Self::Bitrev => 1,
+            Self::MinInt
+            | Self::MaxInt
+            | Self::MinFloat
+            | Self::MaxFloat
+            | Self::Copysign
+            | Self::Rotl
+            | Self::Rotr => 2,
             Self::Fma => 3,
         }
     }
@@ -631,9 +644,9 @@ mod tests {
         let ptr = ctx.get_function_ptr(func_id);
         let clz: fn(i64) -> i64 = unsafe { mem::transmute(ptr) };
 
-        assert_eq!(clz(1), 63);  // 0b000...001
-        assert_eq!(clz(2), 62);  // 0b000...010
-        assert_eq!(clz(-1), 0);  // All bits set
+        assert_eq!(clz(1), 63); // 0b000...001
+        assert_eq!(clz(2), 62); // 0b000...010
+        assert_eq!(clz(-1), 0); // All bits set
     }
 
     #[test]
@@ -668,7 +681,7 @@ mod tests {
         assert_eq!(popcnt(0), 0);
         assert_eq!(popcnt(1), 1);
         assert_eq!(popcnt(0b1111), 4);
-        assert_eq!(popcnt(-1), 64);  // All bits set
+        assert_eq!(popcnt(-1), 64); // All bits set
     }
 
     #[test]

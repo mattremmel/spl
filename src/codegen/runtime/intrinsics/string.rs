@@ -86,4 +86,3 @@ pub fn register(_runtime: &mut Runtime) {
     // No string intrinsics - all operations can be implemented in SPL
     // using __memcmp, __memcpy, __alloc, and basic arithmetic.
 }
-

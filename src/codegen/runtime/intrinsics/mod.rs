@@ -171,7 +171,11 @@ mod tests {
             // Name should not be empty
             assert!(!func.name.is_empty(), "Intrinsic has empty name");
             // Function pointer should not be null
-            assert!(!func.ptr.is_null(), "Intrinsic {} has null pointer", func.name);
+            assert!(
+                !func.ptr.is_null(),
+                "Intrinsic {} has null pointer",
+                func.name
+            );
         }
     }
 

@@ -6,7 +6,7 @@ use cranelift_codegen::ir::{InstBuilder, MemFlags, Value};
 
 use crate::codegen::LocalStorage;
 use crate::codegen::error::CodegenError;
-use crate::mir::operand::{AggregateKind, BinOp, CastKind, Operand, Rvalue, UnOp};
+use crate::mir::operand::{AggregateKind, BinOp, CastKind, Constant, Operand, Rvalue, UnOp};
 use crate::mir::types::{Local, Place};
 use crate::sema::types::TypeId;
 
@@ -21,6 +21,18 @@ impl<'a> FunctionLowerer<'a> {
     ) -> Result<Option<Value>, CodegenError> {
         match rvalue {
             Rvalue::Use(operand) => {
+                // Special handling for string constants (compound type)
+                if let Operand::Constant(Constant::String(s)) = operand {
+                    // String is a compound type - write directly to destination
+                    let dest_addr = self.local_stack_addr(dest).ok_or_else(|| {
+                        CodegenError::Internal(
+                            "string constant requires stack slot destination".to_string(),
+                        )
+                    })?;
+                    self.lower_string_constant_to(s, dest_addr)?;
+                    return Ok(None); // Compound type, no single value returned
+                }
+
                 // Get the destination type
                 if let Some(dest_ty) = self.local_type(dest) {
                     self.lower_operand_as(operand, dest_ty)
@@ -51,9 +63,7 @@ impl<'a> FunctionLowerer<'a> {
                         let ptr_ty = self.type_mapper.pointer_type();
                         Ok(Some(self.builder.ins().iconst(ptr_ty, *count as i64)))
                     }
-                    _ => Err(CodegenError::Internal(
-                        "len on non-array type".to_string(),
-                    )),
+                    _ => Err(CodegenError::Internal("len on non-array type".to_string())),
                 }
             }
 
