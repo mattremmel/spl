@@ -88,6 +88,20 @@ pub use syntax::{Lang, SyntaxKind, SyntaxNode, SyntaxToken};
 
 use rowan::ast::AstNode;
 
+/// Maximum number of diagnostics to report before stopping.
+/// This prevents overwhelming output on heavily broken code.
+const MAX_DIAGNOSTICS: usize = 100;
+
+/// Truncate diagnostics to MAX_DIAGNOSTICS if exceeded, adding an "error limit reached" note.
+fn truncate_diagnostics_if_needed(diagnostics: &mut Vec<Diagnostic>) {
+    if diagnostics.len() > MAX_DIAGNOSTICS {
+        diagnostics.truncate(MAX_DIAGNOSTICS);
+        diagnostics.push(Diagnostic::warning(format!(
+            "error limit reached ({MAX_DIAGNOSTICS} errors), stopping"
+        )));
+    }
+}
+
 /// Result of compiling source code through the full pipeline.
 ///
 /// Contains either MIR bodies (on success) or nothing (on error),
@@ -156,6 +170,7 @@ pub fn compile(source: &str) -> CompileResult {
     for error in parse.errors() {
         diagnostics.push(Diagnostic::error(&error.message).with_label(error.range.clone(), ""));
     }
+    truncate_diagnostics_if_needed(&mut diagnostics);
 
     // If there are parse errors, we cannot continue
     if !parse.ok() {
@@ -179,10 +194,12 @@ pub fn compile(source: &str) -> CompileResult {
     // Phase 3: Name resolution
     let mut resolve_result = sema::resolve(&source_file);
     diagnostics.append(&mut resolve_result.diagnostics);
+    truncate_diagnostics_if_needed(&mut diagnostics);
 
     // Phase 4: Type inference
     let mut infer_result = sema::infer(&source_file, resolve_result);
     diagnostics.append(&mut infer_result.diagnostics);
+    truncate_diagnostics_if_needed(&mut diagnostics);
 
     // Check for errors before lowering
     let has_errors = diagnostics.iter().any(|d| d.severity == Severity::Error);

@@ -43,7 +43,7 @@ pub(crate) use control_flow::block;
 
 /// Parse an expression.
 pub fn expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    expr_bp(p, 0, true)
+    expr_bp(p, 0, true, 0)
 }
 
 /// Parse an expression, but don't allow struct expressions.
@@ -52,22 +52,30 @@ pub fn expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::parser
 pub(crate) fn expr_no_struct(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    expr_bp(p, 0, false)
+    expr_bp(p, 0, false, 0)
 }
 
 /// Parse an expression with minimum binding power.
 ///
 /// The `min_bp` parameter acts as a precedence floor: we only consume operators
 /// whose left binding power meets or exceeds this threshold.
+///
+/// The `depth` parameter tracks recursion depth to prevent stack overflow on
+/// deeply nested expressions. Returns an error if depth exceeds MAX_EXPR_DEPTH.
 fn expr_bp(
     p: &mut Parser<'_>,
     min_bp: u8,
     allow_struct: bool,
+    depth: usize,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+    if depth > MAX_EXPR_DEPTH {
+        return Err(p.error_at_current("expression nesting limit exceeded".to_string()));
+    }
+
     #[cfg(debug_assertions)]
     let start_offset = p.current_offset();
 
-    let mut lhs = match lhs(p, allow_struct)? {
+    let mut lhs = match lhs(p, allow_struct, depth)? {
         Some(lhs) => lhs,
         None => return Ok(None),
     };
@@ -89,7 +97,7 @@ fn expr_bp(
             if l_bp < min_bp {
                 break;
             }
-            lhs = infix_expr(p, lhs, r_bp, allow_struct)?;
+            lhs = infix_expr(p, lhs, r_bp, allow_struct, depth + 1)?;
             continue;
         }
 
@@ -109,6 +117,7 @@ fn expr_bp(
 fn lhs(
     p: &mut Parser<'_>,
     allow_struct: bool,
+    depth: usize,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let current = match p.current() {
         Some(kind) => kind,
@@ -117,11 +126,11 @@ fn lhs(
 
     // Check for prefix operators
     if let Some(((), r_bp)) = prefix_bp(current) {
-        return prefix_expr(p, r_bp, allow_struct);
+        return prefix_expr(p, r_bp, allow_struct, depth + 1);
     }
 
     // Otherwise, parse a primary expression
-    primary_expr(p, allow_struct)
+    primary_expr(p, allow_struct, depth)
 }
 
 // === Binding power tables ===
@@ -147,6 +156,10 @@ const BP_MULTIPLICATIVE: (u8, u8) = (17, 18);
 const BP_CAST: (u8, u8) = (19, 20);
 const BP_PREFIX: u8 = 21;
 const BP_POSTFIX: u8 = 23;
+
+/// Maximum expression nesting depth to prevent stack overflow on malicious input.
+/// 256 levels is sufficient for any reasonable code while preventing DoS attacks.
+const MAX_EXPR_DEPTH: usize = 256;
 
 /// Prefix operator binding power ((), right).
 fn prefix_bp(op: SyntaxKind) -> Option<((), u8)> {

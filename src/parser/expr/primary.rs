@@ -9,9 +9,12 @@ use super::control_flow::{
 use super::expr;
 
 /// Parse a primary expression.
+///
+/// The `depth` parameter tracks recursion depth to prevent stack overflow.
 pub(super) fn primary_expr(
     p: &mut Parser<'_>,
     allow_struct: bool,
+    _depth: usize,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     match_token!(p, {
         // Literals

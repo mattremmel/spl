@@ -5,8 +5,9 @@
 //!
 //! # Current Implementation
 //!
-//! Uses Rust's allocator for allocation functions and standard library
-//! for memory operations.
+//! Uses libc's malloc/realloc/free for allocation. This is preferred over Rust's
+//! allocator API because libc tracks allocation sizes internally, avoiding the UB
+//! that would occur if we passed incorrect layouts to Rust's allocator.
 //!
 //! # Self-Hosting Alternatives
 //!
@@ -50,6 +51,14 @@
 use cranelift_codegen::ir::types;
 
 use super::{Runtime, default_call_conv, make_signature};
+
+// Import libc functions for allocation. Using libc directly avoids the UB that
+// would occur with Rust's allocator API when we don't know the original allocation size.
+unsafe extern "C" {
+    fn malloc(size: usize) -> *mut u8;
+    fn realloc(ptr: *mut u8, size: usize) -> *mut u8;
+    fn free(ptr: *mut u8);
+}
 
 /// Register all memory intrinsics.
 pub fn register(runtime: &mut Runtime) {
@@ -115,13 +124,8 @@ pub extern "C" fn __alloc(size: i64) -> *mut u8 {
         return std::ptr::null_mut();
     }
 
-    let layout = match std::alloc::Layout::from_size_align(size as usize, 8) {
-        Ok(layout) => layout,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    // SAFETY: We've validated size > 0 and alignment is valid
-    unsafe { std::alloc::alloc(layout) }
+    // SAFETY: libc malloc handles size tracking internally
+    unsafe { malloc(size as usize) }
 }
 
 /// Reallocate memory.
@@ -143,16 +147,9 @@ pub extern "C" fn __realloc(ptr: *mut u8, new_size: i64) -> *mut u8 {
         return std::ptr::null_mut();
     }
 
-    // Note: We don't know the original size, so we use a dummy layout.
-    // In a real implementation, we'd track allocation sizes.
-    let old_layout = std::alloc::Layout::from_size_align(1, 8).unwrap();
-    let new_layout = match std::alloc::Layout::from_size_align(new_size as usize, 8) {
-        Ok(layout) => layout,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    // SAFETY: ptr was allocated by our allocator
-    unsafe { std::alloc::realloc(ptr, old_layout, new_layout.size()) }
+    // SAFETY: libc realloc handles size tracking internally, avoiding the UB
+    // that would occur with Rust's allocator when we don't know the original size
+    unsafe { realloc(ptr, new_size as usize) }
 }
 
 /// Free allocated memory.
@@ -166,12 +163,9 @@ pub extern "C" fn __free(ptr: *mut u8) {
         return;
     }
 
-    // Note: We don't know the size, so we use a dummy layout.
-    // This works because Rust's global allocator tracks sizes internally.
-    let layout = std::alloc::Layout::from_size_align(1, 8).unwrap();
-
-    // SAFETY: ptr was allocated by our allocator
-    unsafe { std::alloc::dealloc(ptr, layout) }
+    // SAFETY: libc free handles size tracking internally, and null check above
+    // ensures we don't free null (though libc free also handles null safely)
+    unsafe { free(ptr) }
 }
 
 /// Copy memory from source to destination.

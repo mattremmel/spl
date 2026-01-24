@@ -36,10 +36,13 @@ use super::{expr, expr_bp};
 /// Takes `r_bp` (right binding power) to determine how tightly this prefix
 /// operator binds to following operators. For example, `-a.b` parses as
 /// `-(a.b)` because prefix operators have lower precedence than postfix.
+///
+/// The `depth` parameter tracks recursion depth to prevent stack overflow.
 pub(super) fn prefix_expr(
     p: &mut Parser<'_>,
     r_bp: u8,
     allow_struct: bool,
+    depth: usize,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
     let op = p.current().unwrap();
@@ -50,20 +53,20 @@ pub(super) fn prefix_expr(
     if op == SyntaxKind::AMP {
         p.bump(); // &
         p.eat(SyntaxKind::MUT_KW); // optional mut
-        let _ = expr_bp(p, r_bp, allow_struct)?;
+        let _ = expr_bp(p, r_bp, allow_struct, depth)?;
         return Ok(Some(m.complete(p, SyntaxKind::RefExpr)));
     }
 
     // Handle range prefix specially (..expr or ..)
     if op == SyntaxKind::DOT_DOT {
         p.bump(); // ..
-        let _ = expr_bp(p, r_bp, allow_struct)?; // Optional RHS
+        let _ = expr_bp(p, r_bp, allow_struct, depth)?; // Optional RHS
         return Ok(Some(m.complete(p, SyntaxKind::RangeExpr)));
     }
 
     // Regular prefix operator
     p.bump();
-    let _ = expr_bp(p, r_bp, allow_struct)?;
+    let _ = expr_bp(p, r_bp, allow_struct, depth)?;
 
     let kind = match op {
         SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::PLUS | SyntaxKind::STAR => {
@@ -76,11 +79,14 @@ pub(super) fn prefix_expr(
 }
 
 /// Parse an infix expression.
+///
+/// The `depth` parameter tracks recursion depth to prevent stack overflow.
 pub(super) fn infix_expr(
     p: &mut Parser<'_>,
     lhs: CompletedMarker,
     r_bp: u8,
     allow_struct: bool,
+    depth: usize,
 ) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = lhs.precede(p);
     let op = p.current().unwrap();
@@ -107,7 +113,7 @@ pub(super) fn infix_expr(
 
     // Regular binary operator
     p.bump();
-    let _ = expr_bp(p, r_bp, allow_struct)?;
+    let _ = expr_bp(p, r_bp, allow_struct, depth)?;
 
     // Determine the node kind based on operator
     let kind = match op {

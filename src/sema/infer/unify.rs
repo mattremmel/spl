@@ -38,6 +38,10 @@ use rustc_hash::FxHashMap;
 use super::engine::{FnSignature, InferEngine};
 use super::helpers::{is_float_type, is_integer_type};
 
+/// Maximum depth for type resolution to prevent stack overflow on deeply nested
+/// alias chains or pathological substitution patterns.
+const MAX_RESOLVE_DEPTH: usize = 256;
+
 impl InferEngine {
     // =========================================================================
     // Contract Helpers
@@ -126,6 +130,14 @@ impl InferEngine {
 
     /// Resolve a type through the substitution chain.
     pub(super) fn resolve_type(&self, type_id: TypeId) -> TypeId {
+        self.resolve_type_inner(type_id, 0)
+    }
+
+    /// Internal depth-limited type resolution.
+    ///
+    /// Returns the unresolved type if depth limit is exceeded to prevent
+    /// stack overflow on deeply nested alias chains.
+    fn resolve_type_inner(&self, type_id: TypeId, depth: usize) -> TypeId {
         debug_assert!(
             self.is_valid_type_id(type_id),
             "precondition: type_id {} must be valid (< {})",
@@ -133,11 +145,16 @@ impl InferEngine {
             self.ctx.types.types_len()
         );
 
+        // Return unresolved to avoid stack overflow
+        if depth > MAX_RESOLVE_DEPTH {
+            return type_id;
+        }
+
         let ty = self.ctx.types.get(type_id);
         let result = match ty {
             Type::Infer(var, _) => {
                 if let Some(&subst) = self.substitution.get(var) {
-                    self.resolve_type(subst)
+                    self.resolve_type_inner(subst, depth + 1)
                 } else {
                     type_id
                 }
@@ -145,7 +162,7 @@ impl InferEngine {
             // Resolve type aliases stored as Struct or Alias
             Type::Struct(def_id, _) | Type::Alias(def_id, _) => {
                 if let Some(&target) = self.type_alias_targets.get(def_id) {
-                    self.resolve_type(target)
+                    self.resolve_type_inner(target, depth + 1)
                 } else {
                     type_id
                 }

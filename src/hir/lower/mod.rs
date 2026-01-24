@@ -503,9 +503,11 @@ impl LoweringContext {
             .pat()
             .map(|p| self.lower_pattern(&p, let_stmt.mut_kw().is_some()));
 
-        let ty = let_stmt.ty().map(|_| {
-            // Get the annotated type from inference
-            self.get_type(&span)
+        let ty = let_stmt.ty().map(|ty_node| {
+            // Get the annotated type from inference using the type annotation's span,
+            // not the entire let statement span
+            let ty_span = Self::text_range_to_span(ty_node.syntax().text_range());
+            self.get_type(&ty_span)
         });
 
         let init = let_stmt.initializer().map(|e| self.lower_expr(&e));

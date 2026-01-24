@@ -107,6 +107,10 @@ const EXPR_RECOVERY_SET: &[SyntaxKind] = &[
     SyntaxKind::COMMA,
 ];
 
+/// Maximum number of tokens to skip during error recovery.
+/// Prevents infinite loops or excessive CPU usage on malformed input.
+const MAX_RECOVERY_TOKENS: usize = 500;
+
 /// Result of parsing, containing the syntax tree and any errors.
 #[derive(Debug)]
 pub struct Parse {
@@ -310,6 +314,9 @@ impl<'src> Parser<'src> {
 
     /// Emit an error and skip tokens until we reach a recovery point.
     /// Returns the marker for the error node wrapping the skipped tokens.
+    ///
+    /// This function is bounded to prevent infinite loops on malformed input.
+    /// At most MAX_RECOVERY_TOKENS tokens will be skipped.
     fn recover_with_error(
         &mut self,
         error: ParseError,
@@ -318,9 +325,12 @@ impl<'src> Parser<'src> {
         let m = self.start();
         self.error(error);
 
-        // Skip tokens until we hit a recovery point or EOF
-        while !self.at_set(recovery_set) && self.current().is_some() {
+        // Skip tokens until we hit a recovery point, EOF, or token limit
+        let mut consumed = 0;
+        while !self.at_set(recovery_set) && self.current().is_some() && consumed < MAX_RECOVERY_TOKENS
+        {
             self.bump();
+            consumed += 1;
         }
 
         m.complete(self, SyntaxKind::ERROR)
