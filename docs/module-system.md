@@ -85,7 +85,7 @@ impl Client {
 
 ### Explicit Mode (With `_package.spl`)
 
-The `_package.spl` file provides explicit control over package structure:
+The `_package.spl` file provides explicit control over package structure using compiler directives and re-exports:
 
 ```
 myproject/
@@ -100,48 +100,181 @@ myproject/
 **`_package.spl` contents:**
 
 ```spl
-// Declare subpackages (optional, for re-exports or explicit ordering)
-mod network;        // Looks for network/_package.spl or network.spl
+// Compiler directives (build-time configuration)
+#![name("mylib")]              // Override package name
 
-// Re-export items
+// Re-export items (affects public API)
 pub use network.Client;
+pub use internal.{Parser, Lexer};
 
-// All .spl files in the same directory are still auto-included
+// All .spl files in the same directory are still auto-included by default
 ```
 
 **Rules:**
-- All `.spl` files in a directory are automatically part of the package
-- `_package.spl` provides re-exports and explicit ordering, not file inclusion
-- `pub mod name;` declares and re-exports a subpackage publicly
-- `pub use path.item;` re-exports items
+- All `.spl` files in a directory are automatically part of the package (unless disabled)
+- `_package.spl` uses `#![...]` directives for build-time configuration
+- `pub use path.item;` re-exports items to simplify the public API
 - **Scope**: `_package.spl` only affects the current directory, not children
 
-### Mode Inheritance
+### `_package.spl` Directives
 
-`_package.spl` does **not** propagate to subdirectories. Each directory independently chooses its mode:
+Directives use `#![...]` syntax to indicate they are compiler/build-time configuration, not runtime code.
+
+#### Package Name Override
+
+```spl
+#![name("httptest")]  // Override package name (default is directory name)
+```
+
+#### File Inclusion Control
+
+```spl
+// Disable auto-include entirely (must explicitly include all files)
+#![no_auto_include]
+
+// Explicitly include a file
+#![include("parser.spl")]
+#![include("lexer.spl")]
+
+// Exclude a file from auto-include
+#![exclude("old_impl.spl")]
+#![exclude("experimental.spl")]
+```
+
+#### Conditional Inclusion
+
+For platform-specific or feature-gated code:
+
+```spl
+// Include only when condition is true
+// Note: include_if implicitly excludes the file from auto-include
+#![include_if(os = "linux", "fs_linux.spl")]
+#![include_if(os = "windows", "fs_windows.spl")]
+#![include_if(os = "macos", "fs_macos.spl")]
+
+// Exclude when condition is true
+#![exclude_if(feature = "no_std", "std_helpers.spl")]
+```
+
+#### Directive Grammar
+
+```ebnf
+Directive = "#![" DirectiveBody "]" ;
+
+DirectiveBody = "name" "(" STRING ")"
+              | "no_auto_include"
+              | "include" "(" STRING ")"
+              | "exclude" "(" STRING ")"
+              | "include_if" "(" Condition "," STRING ")"
+              | "exclude_if" "(" Condition "," STRING ")" ;
+```
+
+#### Condition Syntax
+
+```ebnf
+Condition = Comparison
+          | "not" Condition
+          | Condition "and" Condition
+          | Condition "or" Condition
+          | "(" Condition ")" ;
+
+Comparison = Key "=" Value ;
+
+Key = "os" | "arch" | "feature" ;
+Value = STRING ;
+```
+
+**Available condition keys:**
+
+| Key | Values |
+|-----|--------|
+| `os` | `"linux"`, `"windows"`, `"macos"`, `"freebsd"`, etc. |
+| `arch` | `"x86_64"`, `"aarch64"`, `"arm"`, `"wasm32"`, etc. |
+| `feature` | User-defined feature flags |
+
+**Complex conditions:**
+
+```spl
+#![include_if(os = "linux" and arch = "x86_64", "linux_x64_optimized.spl")]
+#![include_if(os = "windows" or os = "macos", "desktop_ui.spl")]
+#![exclude_if(not feature = "std", "std_io.spl")]
+```
+
+### Platform-Specific Files Example
+
+```
+filesystem/
+├── _package.spl
+├── common.spl        # Shared interface and types
+├── fs_linux.spl      # Linux implementation
+├── fs_windows.spl    # Windows implementation
+└── fs_macos.spl      # macOS implementation
+```
+
+```spl
+// filesystem/_package.spl
+#![include_if(os = "linux", "fs_linux.spl")]
+#![include_if(os = "windows", "fs_windows.spl")]
+#![include_if(os = "macos", "fs_macos.spl")]
+
+// Re-export the common API
+pub use self.{read_file, write_file, FileHandle};
+```
+
+Each platform file implements the same interface:
+
+```spl
+// fs_linux.spl
+pub fn read_file(path: &str): Result(Vec(u8), IoError) {
+    // Linux-specific implementation using syscalls
+}
+
+pub fn write_file(path: &str, data: &[u8]): Result((), IoError) {
+    // Linux-specific implementation
+}
+
+pub struct FileHandle { fd: i32 }
+```
+
+### Configuration Inheritance
+
+`_package.spl` does **not** propagate to subdirectories. Each directory independently manages its configuration:
 
 ```
 myproject/
-├── _package.spl      # Explicit mode for root
+├── _package.spl      # Configuration for root package
 ├── main.spl
 ├── utils.spl
 └── network/          # No _package.spl here
-    ├── client.spl    # Auto-included (default mode)
-    └── server.spl    # Auto-included (default mode)
+    ├── client.spl    # Auto-included (default behavior)
+    └── server.spl    # Auto-included (default behavior)
 ```
 
 In this example:
-- Root uses explicit mode (has `_package.spl`)
-- `network/` uses default mode (no `_package.spl`)
+- Root has `_package.spl` with custom configuration
+- `network/` uses default behavior (no `_package.spl`)
 - All files in `network/` are automatically part of the `network` package
 
-### Package Resolution
+### Subpackage Discovery
 
-For `mod name;` declarations, SPL looks for:
+Subdirectories are automatically discovered as subpackages. No explicit declaration is needed:
 
-1. `name.spl` in the same directory
-2. `name/_package.spl` (directory with package file)
-3. `name/` directory with `.spl` files (default mode)
+```
+myproject/
+├── main.spl
+├── utils/
+│   └── helpers.spl   # Automatically part of 'utils' package
+└── network/
+    └── client.spl    # Automatically part of 'network' package
+```
+
+```spl
+// In main.spl - subpackages are accessible without declaration
+fn main() {
+    let helper = utils.some_function();
+    let client = network.Client.new();
+}
+```
 
 ---
 
@@ -206,21 +339,6 @@ use std.{vec.Vec, io.{Read, Write}};
 let v = std.vec.Vec(i32).new();
 ```
 
-### Package Declarations
-
-```ebnf
-ModDecl = [ "pub" ] "mod" IDENTIFIER ";" ;
-```
-
-Package declarations are only valid in `_package.spl` files:
-
-```spl
-// In _package.spl
-mod network;          // Private subpackage
-pub mod utils;        // Public subpackage
-pub mod api;          // Public subpackage
-```
-
 ---
 
 ## 3. Visibility Rules
@@ -257,13 +375,11 @@ pub struct Config {
 - Sibling packages cannot access each other's private items
 
 ```spl
-// In parent/_package.spl
+// In parent/helpers.spl
 fn private_helper() { }
 pub fn public_fn() { }
 
-mod child;
-
-// In parent/child.spl
+// In parent/child/impl.spl (child is a subdirectory)
 fn child_fn() {
     super.private_helper();  // OK: child can access parent's private
     super.public_fn();       // OK
@@ -402,7 +518,6 @@ The module system adds these reserved keywords:
 | Keyword | Description |
 |---------|-------------|
 | `use` | Import declaration |
-| `mod` | Package declaration |
 | `module` | Module root reference |
 | `super` | Parent package reference |
 
@@ -415,14 +530,12 @@ Note: `self` and `pub` are already keywords for other purposes.
 Items that can appear at package level:
 
 ```ebnf
-Item = [ "pub" ] ( FunctionDef | StructDef | ImplBlock | TypeAlias | UseDecl | ModDecl ) ;
+Item = [ "pub" ] ( FunctionDef | StructDef | ImplBlock | TypeAlias | UseDecl ) ;
 ```
 
-In regular `.spl` files:
-- `FunctionDef`, `StructDef`, `ImplBlock`, `TypeAlias`, `UseDecl`
+All item types can appear in any `.spl` file, including `_package.spl`.
 
-In `_package.spl` files only:
-- All of the above, plus `ModDecl`
+In `_package.spl` files, directives (`#![...]`) can also appear at the top of the file before any items.
 
 ---
 
@@ -476,8 +589,8 @@ webapp/
 
 ```spl
 // _package.spl (root)
-pub mod handlers;
-pub mod models;
+// Re-export commonly used items for convenience
+pub use models.{User, Session};
 
 // main.spl
 use module.handlers.auth;
@@ -496,11 +609,9 @@ pub fn login(user: &User) {
 }
 
 // models/_package.spl
-mod user;
-mod session;
-
-pub use user.User;
-pub use session.Session;
+// Re-export public API from this package
+pub use self.user.User;
+pub use self.session.Session;
 
 // models/user.spl
 pub struct User {
@@ -518,10 +629,8 @@ impl User {
 
 ```spl
 // In lib/_package.spl
-mod internal;
-mod details;
 
-// Re-export public API
+// Re-export public API from subpackages
 pub use internal.Parser;
 pub use internal.Lexer;
 pub use details.Config;
@@ -586,20 +695,48 @@ use super.item;
 // Current package
 use self.item;
 
-// Package declaration (in _package.spl only)
-mod subpackage;
-pub mod public_subpackage;
-
-// Re-export
+// Re-export (in _package.spl)
 pub use internal.PublicApi;
+pub use subpkg.{TypeA, TypeB};
+```
+
+### `_package.spl` Directives Reference
+
+```spl
+// Override package name
+#![name("custom_name")]
+
+// Disable automatic file inclusion
+#![no_auto_include]
+
+// Explicitly include files
+#![include("file.spl")]
+
+// Exclude files from auto-include
+#![exclude("old_impl.spl")]
+
+// Conditional inclusion (implicitly excludes from auto-include)
+#![include_if(os = "linux", "linux_impl.spl")]
+#![include_if(os = "windows", "windows_impl.spl")]
+#![include_if(arch = "aarch64", "arm64_optimized.spl")]
+#![include_if(feature = "async", "async_support.spl")]
+
+// Conditional exclusion
+#![exclude_if(feature = "minimal", "extras.spl")]
+
+// Complex conditions
+#![include_if(os = "linux" and arch = "x86_64", "linux_x64.spl")]
+#![include_if(os = "macos" or os = "ios", "apple.spl")]
 ```
 
 ### Design Rationale
 
 1. **Go-style packages**: Directories are packages. All files in a directory share a namespace. Simple and intuitive.
 
-2. **Explicit control when needed**: `_package.spl` provides re-exports and explicit structure without changing the default auto-include behavior.
+2. **Directive-based configuration**: `_package.spl` uses `#![...]` syntax to clearly distinguish build-time configuration from runtime code. No special file naming conventions needed.
 
-3. **Unified `use` keyword**: Single keyword for all imports—internal packages and external modules use the same syntax.
+3. **Fine-grained control**: `include_if` and `exclude_if` enable platform-specific builds without cluttering the codebase with conditional compilation in every file.
 
-4. **Clear terminology**: Module = project, Package = directory. Aligned with Go's terminology.
+4. **Unified `use` keyword**: Single keyword for all imports—internal packages and external modules use the same syntax.
+
+5. **Clear terminology**: Module = project, Package = directory. Aligned with Go's terminology.
