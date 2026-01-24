@@ -219,7 +219,7 @@ impl LoweringContext {
             .resolutions
             .get(&name_span)
             .copied()
-            .unwrap_or(DefId(0));
+            .unwrap_or(DefId::INVALID);
 
         // Lower type parameters
         let type_params = Vec::new(); // TODO: implement generic params
@@ -266,7 +266,7 @@ impl LoweringContext {
             .resolutions
             .get(&name_span)
             .copied()
-            .unwrap_or(DefId(0));
+            .unwrap_or(DefId::INVALID);
 
         // No type parameters for extern functions (currently)
         let type_params = Vec::new();
@@ -314,7 +314,7 @@ impl LoweringContext {
             .resolutions
             .get(&name_span)
             .copied()
-            .unwrap_or(DefId(0));
+            .unwrap_or(DefId::INVALID);
         let ty = self.get_binding_type(def_id);
 
         let pat = HirPat {
@@ -346,7 +346,7 @@ impl LoweringContext {
             .resolutions
             .get(&name_span)
             .copied()
-            .unwrap_or(DefId(0));
+            .unwrap_or(DefId::INVALID);
 
         let type_params = Vec::new(); // TODO
 
@@ -380,7 +380,7 @@ impl LoweringContext {
             .resolutions
             .get(&name_span)
             .copied()
-            .unwrap_or(DefId(0));
+            .unwrap_or(DefId::INVALID);
         let ty = self.get_binding_type(def_id);
 
         Some(HirField {
@@ -403,7 +403,7 @@ impl LoweringContext {
             .resolutions
             .get(&name_span)
             .copied()
-            .unwrap_or(DefId(0));
+            .unwrap_or(DefId::INVALID);
 
         let ty = self.get_type(&span);
 
@@ -553,7 +553,7 @@ impl LoweringContext {
                     .resolutions
                     .get(&name_span)
                     .copied()
-                    .unwrap_or(DefId(0));
+                    .unwrap_or(DefId::INVALID);
                 let ty = self.get_binding_type(def_id);
 
                 let hir_pat = HirPat {
@@ -594,7 +594,7 @@ impl LoweringContext {
                     .resolutions
                     .get(&path_span)
                     .copied()
-                    .unwrap_or(DefId(0));
+                    .unwrap_or(DefId::INVALID);
 
                 let fields: Vec<_> = struct_pat
                     .fields()
@@ -609,7 +609,7 @@ impl LoweringContext {
                                 .resolutions
                                 .get(&field_span)
                                 .copied()
-                                .unwrap_or(DefId(0));
+                                .unwrap_or(DefId::INVALID);
                             let ty = self.get_binding_type(field_def_id);
                             let bind_pat = HirPat {
                                 kind: HirPatKind::Bind {
@@ -790,7 +790,7 @@ impl LoweringContext {
                 .resolutions
                 .get(&first_span)
                 .copied()
-                .unwrap_or(DefId(0));
+                .unwrap_or(DefId::INVALID);
 
             return self.db.alloc_expr(HirExpr {
                 kind: HirExprKind::Var(def_id),
@@ -812,7 +812,7 @@ impl LoweringContext {
             .resolutions
             .get(&first_span)
             .copied()
-            .unwrap_or(DefId(0));
+            .unwrap_or(DefId::INVALID);
 
         // Start with the first segment as a Var expression
         let first_ty = self.get_binding_type(def_id);
@@ -936,7 +936,7 @@ impl LoweringContext {
             .resolutions
             .get(&path_span)
             .copied()
-            .unwrap_or(DefId(0));
+            .unwrap_or(DefId::INVALID);
 
         let fields: Vec<_> = struct_expr
             .fields()
@@ -991,7 +991,7 @@ impl LoweringContext {
             .resolutions
             .get(&path_span)
             .copied()
-            .unwrap_or(DefId(0));
+            .unwrap_or(DefId::INVALID);
 
         // Lower field initializers from arguments
         let fields: Vec<_> = apply_expr
@@ -1060,7 +1060,7 @@ impl LoweringContext {
                 .and_then(|n| n.token())
                 .map(|t| Self::text_range_to_span(t.text_range()))
                 .and_then(|span| self.resolutions.get(&span).copied())
-                .unwrap_or(DefId(0));
+                .unwrap_or(DefId::INVALID);
 
             // Get the type for the path (function type)
             let path_span = Self::text_range_to_span(path.syntax().text_range());
@@ -1107,7 +1107,7 @@ impl LoweringContext {
             .resolutions
             .get(&first_span)
             .copied()
-            .unwrap_or(DefId(0));
+            .unwrap_or(DefId::INVALID);
 
         let receiver_ty = self.get_binding_type(first_def_id);
         let receiver = self.db.alloc_expr(HirExpr {

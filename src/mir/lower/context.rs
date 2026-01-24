@@ -889,7 +889,7 @@ impl<'hir> MirLoweringContext<'hir> {
             .method_resolutions
             .get(&expr_id)
             .copied()
-            .unwrap_or(DefId(0)); // Fallback for unresolved
+            .unwrap_or(DefId::INVALID); // Fallback for unresolved
 
         // Receiver becomes first argument
         let receiver_operand = self.lower_expr_as_operand(builder, receiver);

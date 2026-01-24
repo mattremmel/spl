@@ -39,6 +39,24 @@ use super::scope::ScopeId;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DefId(pub u32);
 
+impl DefId {
+    /// Sentinel value for unresolved/invalid definitions.
+    /// Uses u32::MAX to avoid collision with real DefIds (assigned from 0).
+    pub const INVALID: DefId = DefId(u32::MAX);
+
+    /// Check if this DefId is the invalid sentinel.
+    #[inline]
+    pub fn is_invalid(self) -> bool {
+        self == Self::INVALID
+    }
+
+    /// Check if this DefId is valid (not the sentinel).
+    #[inline]
+    pub fn is_valid(self) -> bool {
+        self != Self::INVALID
+    }
+}
+
 /// The kind of symbol being defined.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SymbolKind {
@@ -96,6 +114,35 @@ impl Symbol {
             span,
             scope_id,
             is_mutable,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn def_id_invalid_is_max() {
+        assert_eq!(DefId::INVALID, DefId(u32::MAX));
+    }
+
+    #[test]
+    fn def_id_invalid_is_invalid() {
+        assert!(DefId::INVALID.is_invalid());
+        assert!(!DefId::INVALID.is_valid());
+    }
+
+    #[test]
+    fn def_id_zero_is_valid() {
+        assert!(!DefId(0).is_invalid());
+        assert!(DefId(0).is_valid());
+    }
+
+    #[test]
+    fn def_id_regular_values_are_valid() {
+        for i in 0..100 {
+            assert!(DefId(i).is_valid());
         }
     }
 }

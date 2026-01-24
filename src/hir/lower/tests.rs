@@ -1765,3 +1765,72 @@ fn lower_match_single_arm() {
     }
     panic!("Did not find match expression");
 }
+
+// ========================================================================
+// DefId Validity Tests
+// ========================================================================
+
+#[test]
+fn resolved_function_has_valid_def_id() {
+    let db = lower("fn foo() {} fn main() { foo(); }");
+    for item in &db.items {
+        if let HirItem::Function(f) = item {
+            assert!(f.def_id.is_valid(), "Function DefId should be valid");
+        }
+    }
+}
+
+#[test]
+fn def_id_zero_is_valid() {
+    // DefId(0) is the first definition, which should be valid (not INVALID)
+    use crate::sema::symbol::DefId;
+    assert!(DefId(0).is_valid());
+    assert!(!DefId(0).is_invalid());
+}
+
+#[test]
+fn variable_references_have_valid_def_ids() {
+    let db = lower("fn main() { let x = 1; let y = x; }");
+    for (_, expr) in db.exprs.iter() {
+        if let HirExprKind::Var(def_id) = &expr.kind {
+            assert!(def_id.is_valid());
+        }
+    }
+}
+
+#[test]
+fn binding_patterns_have_valid_def_ids() {
+    let db = lower("fn main() { let x = 1; let mut y = 2; }");
+    for (_, pat) in db.pats.iter() {
+        if let HirPatKind::Bind { def_id, .. } = &pat.kind {
+            assert!(def_id.is_valid());
+        }
+    }
+}
+
+#[test]
+fn struct_pattern_has_valid_def_id() {
+    // Test struct patterns in destructuring - these should have valid DefIds
+    // because they resolve to bindings
+    let db = lower("struct Point(x: i32, y: i32) fn main() { let Point(x: a, y: b) = Point(x: 1, y: 2); }");
+    for (_, pat) in db.pats.iter() {
+        if let HirPatKind::Bind { def_id, .. } = &pat.kind {
+            assert!(def_id.is_valid(), "Struct pattern binding should have valid DefId");
+        }
+    }
+}
+
+#[test]
+fn function_params_have_valid_def_ids() {
+    let db = lower("fn add(a: i32, b: i32): i32 { a + b }");
+    for item in &db.items {
+        if let HirItem::Function(f) = item {
+            for param in &f.params {
+                let pat = db.pat(param.pat);
+                if let HirPatKind::Bind { def_id, .. } = &pat.kind {
+                    assert!(def_id.is_valid());
+                }
+            }
+        }
+    }
+}
