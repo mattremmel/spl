@@ -1,32 +1,67 @@
-//! Conversion intrinsic functions.
+//! Type conversion intrinsics.
 //!
-//! Functions for converting between types.
+//! # Genuine Intrinsics
 //!
-//! # Numeric Conversions
+//! Only float parsing/formatting require intrinsics due to algorithm complexity:
 //!
-//! - `__int_to_float`: Convert integer to float
-//! - `__float_to_int`: Convert float to integer (truncates toward zero)
-//! - `__char_to_int`: Get Unicode code point from character
-//! - `__int_to_char`: Convert code point to character
-//! - `__bool_to_int`: Convert boolean to 0/1
+//! - `__str_to_float`: Float parsing (strtod-like algorithms)
+//! - `__float_to_string`: Float formatting (Grisu/Ryu algorithms)
 //!
-//! # String Parsing
+//! # Compiler Codegen (not intrinsics)
 //!
-//! - `__str_to_int`: Parse string as integer
-//! - `__str_to_float`: Parse string as float
+//! These should be emitted directly by the compiler as single instructions:
 //!
-//! # String Formatting
+//! ```text
+//! int_to_float  -> cvtsi2sd (x86) / scvtf (ARM)
+//! float_to_int  -> cvttsd2si (x86) / fcvtzs (ARM)
+//! char_to_int   -> zero-extend or no-op (char is already an int)
+//! bool_to_int   -> zero-extend or no-op
+//! ```
 //!
-//! - `__float_to_string`: Format float as string (complex algorithm, kept as intrinsic)
+//! # Stdlib Candidates
 //!
-//! Caller owns the returned string and must call `__free(result.ptr)` when done.
+//! ```text
+//! fn int_to_char(code: Int) -> Option<Char> {
+//!     // Unicode validation: check valid ranges
+//!     if code < 0 || code > 0x10FFFF { return None }
+//!     if code >= 0xD800 && code <= 0xDFFF { return None }  // Surrogates
+//!     Some(code as Char)
+//! }
 //!
-//! # Future Stdlib Candidates
+//! fn str_to_int(s: String) -> Option<Int> {
+//!     let mut result = 0
+//!     let mut negative = false
+//!     let mut i = 0
+//!     // Skip whitespace, handle sign, accumulate digits
+//!     while i < s.len {
+//!         let c = s.ptr[i]
+//!         if c >= '0' && c <= '9' {
+//!             result = result * 10 + (c - '0')
+//!         }
+//!         i = i + 1
+//!     }
+//!     if negative { -result } else { result }
+//! }
 //!
-//! The following can be implemented in SPL with basic arithmetic/string ops:
+//! fn int_to_string(n: Int) -> String {
+//!     // Division/modulo loop, build digits in reverse
+//!     let buf = __alloc(21)  // Max i64 digits + sign
+//!     let mut i = 20
+//!     let negative = n < 0
+//!     let mut n = if negative { -n } else { n }
+//!     while n > 0 || i == 20 {
+//!         buf[i] = '0' + (n % 10)
+//!         n = n / 10
+//!         i = i - 1
+//!     }
+//!     if negative { buf[i] = '-'; i = i - 1 }
+//!     String { ptr: buf + i + 1, len: 20 - i }
+//! }
 //!
-//! - `int_to_string`: Division/modulo loop with char arithmetic
-//! - `bool_to_string`: Simple `if b { "true" } else { "false" }`
+//! fn bool_to_string(b: Bool) -> String {
+//!     if b { "true" } else { "false" }
+//! }
+//! ```
 
 use cranelift_codegen::ir::types;
 
@@ -39,140 +74,25 @@ pub struct StringResult {
     pub len: i64,
 }
 
-/// Register all conversion intrinsics.
+/// Register conversion intrinsics.
 pub fn register(runtime: &mut Runtime) {
     let call_conv = default_call_conv();
 
-    // ==================== Numeric conversions ====================
-
-    // __int_to_float: (I64) -> F64
-    runtime.register(
-        "__int_to_float",
-        __int_to_float as *const u8,
-        make_signature(call_conv, &[types::I64], &[types::F64]),
-    );
-
-    // __float_to_int: (F64) -> I64
-    runtime.register(
-        "__float_to_int",
-        __float_to_int as *const u8,
-        make_signature(call_conv, &[types::F64], &[types::I64]),
-    );
-
-    // __char_to_int: (I32) -> I64
-    runtime.register(
-        "__char_to_int",
-        __char_to_int as *const u8,
-        make_signature(call_conv, &[types::I32], &[types::I64]),
-    );
-
-    // __int_to_char: (I64) -> I32 (returns -1 for invalid code points)
-    runtime.register(
-        "__int_to_char",
-        __int_to_char as *const u8,
-        make_signature(call_conv, &[types::I64], &[types::I32]),
-    );
-
-    // __bool_to_int: (I8) -> I64
-    runtime.register(
-        "__bool_to_int",
-        __bool_to_int as *const u8,
-        make_signature(call_conv, &[types::I8], &[types::I64]),
-    );
-
-    // ==================== String parsing ====================
-
-    // __str_to_int: (ptr, len) -> I64 (returns 0 on parse failure)
-    runtime.register(
-        "__str_to_int",
-        __str_to_int as *const u8,
-        make_signature(call_conv, &[types::I64, types::I64], &[types::I64]),
-    );
-
     // __str_to_float: (ptr, len) -> F64 (returns NaN on parse failure)
+    // Float parsing is genuinely complex (strtod algorithms)
     runtime.register(
         "__str_to_float",
         __str_to_float as *const u8,
         make_signature(call_conv, &[types::I64, types::I64], &[types::F64]),
     );
 
-    // ==================== String formatting ====================
-
     // __float_to_string: (F64) -> (*const u8, I64)
-    // Float formatting is complex (Grisu/Ryu algorithms), so kept as intrinsic
+    // Float formatting is genuinely complex (Grisu/Ryu algorithms)
     runtime.register(
         "__float_to_string",
         __float_to_string as *const u8,
         make_signature(call_conv, &[types::F64], &[types::I64, types::I64]),
     );
-}
-
-// ==================== Numeric conversions ====================
-
-/// Convert an integer to a float.
-pub extern "C" fn __int_to_float(value: i64) -> f64 {
-    value as f64
-}
-
-/// Convert a float to an integer.
-///
-/// Truncates toward zero. Returns 0 for NaN.
-/// Saturates to i64::MIN/MAX for values outside the representable range.
-pub extern "C" fn __float_to_int(value: f64) -> i64 {
-    if value.is_nan() {
-        0
-    } else if value >= i64::MAX as f64 {
-        i64::MAX
-    } else if value <= i64::MIN as f64 {
-        i64::MIN
-    } else {
-        value as i64
-    }
-}
-
-/// Get the Unicode code point from a character.
-pub extern "C" fn __char_to_int(value: i32) -> i64 {
-    value as i64
-}
-
-/// Convert a code point to a character.
-///
-/// Returns the character code point if valid, or -1 if invalid.
-pub extern "C" fn __int_to_char(value: i64) -> i32 {
-    if value < 0 || value > u32::MAX as i64 {
-        return -1;
-    }
-    match char::from_u32(value as u32) {
-        Some(c) => c as i32,
-        None => -1,
-    }
-}
-
-/// Convert a boolean to an integer.
-///
-/// Returns 1 for true (non-zero), 0 for false.
-pub extern "C" fn __bool_to_int(value: i8) -> i64 {
-    if value != 0 { 1 } else { 0 }
-}
-
-// ==================== String parsing ====================
-
-/// Parse a string as an integer.
-///
-/// Returns the parsed value, or 0 if parsing fails.
-pub extern "C" fn __str_to_int(ptr: *const u8, len: i64) -> i64 {
-    if ptr.is_null() || len <= 0 {
-        return 0;
-    }
-
-    // SAFETY: Caller guarantees valid pointer
-    unsafe {
-        let slice = std::slice::from_raw_parts(ptr, len as usize);
-        match std::str::from_utf8(slice) {
-            Ok(s) => s.trim().parse::<i64>().unwrap_or(0),
-            Err(_) => 0,
-        }
-    }
 }
 
 /// Parse a string as a float.
@@ -192,8 +112,6 @@ pub extern "C" fn __str_to_float(ptr: *const u8, len: i64) -> f64 {
         }
     }
 }
-
-// ==================== String formatting ====================
 
 /// Convert a float to a string.
 ///
@@ -226,110 +144,6 @@ mod tests {
     use super::*;
     use cranelift_codegen::ir::types;
 
-    // ==================== Numeric conversion tests ====================
-
-    #[test]
-    fn int_to_float_positive() {
-        assert_eq!(__int_to_float(42), 42.0);
-    }
-
-    #[test]
-    fn int_to_float_negative() {
-        assert_eq!(__int_to_float(-42), -42.0);
-    }
-
-    #[test]
-    fn int_to_float_zero() {
-        assert_eq!(__int_to_float(0), 0.0);
-    }
-
-    #[test]
-    fn float_to_int_positive() {
-        assert_eq!(__float_to_int(42.9), 42);
-    }
-
-    #[test]
-    fn float_to_int_negative() {
-        assert_eq!(__float_to_int(-42.9), -42);
-    }
-
-    #[test]
-    fn float_to_int_nan() {
-        assert_eq!(__float_to_int(f64::NAN), 0);
-    }
-
-    #[test]
-    fn float_to_int_infinity() {
-        assert_eq!(__float_to_int(f64::INFINITY), i64::MAX);
-        assert_eq!(__float_to_int(f64::NEG_INFINITY), i64::MIN);
-    }
-
-    #[test]
-    fn char_to_int_ascii() {
-        assert_eq!(__char_to_int('A' as i32), 65);
-    }
-
-    #[test]
-    fn char_to_int_unicode() {
-        assert_eq!(__char_to_int('λ' as i32), 955);
-    }
-
-    #[test]
-    fn int_to_char_valid() {
-        assert_eq!(__int_to_char(65), 'A' as i32);
-        assert_eq!(__int_to_char(955), 'λ' as i32);
-    }
-
-    #[test]
-    fn int_to_char_invalid() {
-        assert_eq!(__int_to_char(-1), -1);
-        assert_eq!(__int_to_char(0xD800), -1); // Surrogate
-        assert_eq!(__int_to_char(0x110000), -1); // Beyond max code point
-    }
-
-    #[test]
-    fn bool_to_int_true() {
-        assert_eq!(__bool_to_int(1), 1);
-        assert_eq!(__bool_to_int(-1), 1); // Non-zero is true
-        assert_eq!(__bool_to_int(42), 1);
-    }
-
-    #[test]
-    fn bool_to_int_false() {
-        assert_eq!(__bool_to_int(0), 0);
-    }
-
-    // ==================== String parsing tests ====================
-
-    #[test]
-    fn str_to_int_positive() {
-        let s = "42";
-        assert_eq!(__str_to_int(s.as_ptr(), s.len() as i64), 42);
-    }
-
-    #[test]
-    fn str_to_int_negative() {
-        let s = "-42";
-        assert_eq!(__str_to_int(s.as_ptr(), s.len() as i64), -42);
-    }
-
-    #[test]
-    fn str_to_int_with_whitespace() {
-        let s = "  42  ";
-        assert_eq!(__str_to_int(s.as_ptr(), s.len() as i64), 42);
-    }
-
-    #[test]
-    fn str_to_int_invalid() {
-        let s = "hello";
-        assert_eq!(__str_to_int(s.as_ptr(), s.len() as i64), 0);
-    }
-
-    #[test]
-    fn str_to_int_null() {
-        assert_eq!(__str_to_int(std::ptr::null(), 10), 0);
-    }
-
     #[test]
     fn str_to_float_positive() {
         let s = "2.5";
@@ -360,8 +174,6 @@ mod tests {
         assert!(__str_to_float(std::ptr::null(), 10).is_nan());
     }
 
-    // ==================== String formatting tests ====================
-
     #[test]
     fn float_to_string_positive() {
         let result = __float_to_string(3.25);
@@ -380,7 +192,6 @@ mod tests {
     fn float_to_string_integer() {
         let result = __float_to_string(42.0);
         assert!(!result.ptr.is_null());
-        // Rust formats as "42" not "42.0"
         let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
         assert_eq!(s, b"42");
         super::super::memory::__free(result.ptr as *mut u8);
@@ -415,65 +226,21 @@ mod tests {
         super::super::memory::__free(result.ptr as *mut u8);
     }
 
-    // ==================== Registration tests ====================
-
     #[test]
-    fn register_adds_all_convert_intrinsics() {
+    fn register_adds_convert_intrinsics() {
         let mut runtime = Runtime::new();
         register(&mut runtime);
 
-        // Numeric conversions
-        assert!(runtime.contains("__int_to_float"));
-        assert!(runtime.contains("__float_to_int"));
-        assert!(runtime.contains("__char_to_int"));
-        assert!(runtime.contains("__int_to_char"));
-        assert!(runtime.contains("__bool_to_int"));
-
-        // String parsing
-        assert!(runtime.contains("__str_to_int"));
         assert!(runtime.contains("__str_to_float"));
-
-        // String formatting
         assert!(runtime.contains("__float_to_string"));
-    }
 
-    // ==================== Signature tests ====================
-
-    #[test]
-    fn int_to_float_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__int_to_float").unwrap();
-        assert_eq!(func.signature.params.len(), 1);
-        assert_eq!(func.signature.params[0].value_type, types::I64);
-        assert_eq!(func.signature.returns.len(), 1);
-        assert_eq!(func.signature.returns[0].value_type, types::F64);
-    }
-
-    #[test]
-    fn float_to_int_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__float_to_int").unwrap();
-        assert_eq!(func.signature.params.len(), 1);
-        assert_eq!(func.signature.params[0].value_type, types::F64);
-        assert_eq!(func.signature.returns.len(), 1);
-        assert_eq!(func.signature.returns[0].value_type, types::I64);
-    }
-
-    #[test]
-    fn str_to_int_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__str_to_int").unwrap();
-        assert_eq!(func.signature.params.len(), 2);
-        assert_eq!(func.signature.params[0].value_type, types::I64); // ptr
-        assert_eq!(func.signature.params[1].value_type, types::I64); // len
-        assert_eq!(func.signature.returns.len(), 1);
-        assert_eq!(func.signature.returns[0].value_type, types::I64);
+        // These should NOT exist as intrinsics
+        assert!(!runtime.contains("__int_to_float"));
+        assert!(!runtime.contains("__float_to_int"));
+        assert!(!runtime.contains("__char_to_int"));
+        assert!(!runtime.contains("__int_to_char"));
+        assert!(!runtime.contains("__bool_to_int"));
+        assert!(!runtime.contains("__str_to_int"));
     }
 
     #[test]
@@ -483,8 +250,8 @@ mod tests {
 
         let func = runtime.get("__str_to_float").unwrap();
         assert_eq!(func.signature.params.len(), 2);
-        assert_eq!(func.signature.params[0].value_type, types::I64); // ptr
-        assert_eq!(func.signature.params[1].value_type, types::I64); // len
+        assert_eq!(func.signature.params[0].value_type, types::I64);
+        assert_eq!(func.signature.params[1].value_type, types::I64);
         assert_eq!(func.signature.returns.len(), 1);
         assert_eq!(func.signature.returns[0].value_type, types::F64);
     }
@@ -498,7 +265,7 @@ mod tests {
         assert_eq!(func.signature.params.len(), 1);
         assert_eq!(func.signature.params[0].value_type, types::F64);
         assert_eq!(func.signature.returns.len(), 2);
-        assert_eq!(func.signature.returns[0].value_type, types::I64); // ptr
-        assert_eq!(func.signature.returns[1].value_type, types::I64); // len
+        assert_eq!(func.signature.returns[0].value_type, types::I64);
+        assert_eq!(func.signature.returns[1].value_type, types::I64);
     }
 }

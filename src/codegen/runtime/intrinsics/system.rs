@@ -1,44 +1,30 @@
 //! System intrinsic functions.
 //!
-//! Functions for interacting with the operating system: process control,
-//! environment variables, command-line arguments, and timing.
+//! Functions for interacting with the operating system.
 //!
-//! # Current Implementation
+//! # Genuine Intrinsics
 //!
-//! Uses Rust's standard library for OS interaction.
+//! - `__exit`: Process termination (syscall)
+//! - `__getenv`: Environment variable access (syscall)
+//! - `__argc`: Command-line argument count (process state)
+//! - `__argv`: Command-line argument access (process state)
+//! - `__clock_ns`: High-resolution timer (syscall)
 //!
-//! # Self-Hosting Alternatives
+//! # Stdlib Candidates
 //!
-//! ## libc
-//! ```c
-//! void __exit(int64_t code) { exit(code); }
-//! char* __getenv(const char* name) { return getenv(name); }
-//! ```
-//!
-//! ## Raw syscalls (Linux x86_64)
 //! ```text
-//! // __exit: SYS_exit_group = 231
-//! mov rax, 231
-//! mov rdi, code
-//! syscall
+//! fn clock_ms() -> Int {
+//!     __clock_ns() / 1_000_000
+//! }
 //!
-//! // __clock: SYS_clock_gettime = 228
-//! mov rax, 228
-//! mov rdi, 0        // CLOCK_REALTIME
-//! mov rsi, &timespec
-//! syscall
-//! ```
+//! fn clock_us() -> Int {
+//!     __clock_ns() / 1_000
+//! }
 //!
-//! ## Command-line arguments
-//! Arguments are typically passed via the stack at program start (Linux):
-//! ```text
-//! [argc: i64]
-//! [argv[0]: *const u8]
-//! [argv[1]: *const u8]
-//! ...
-//! [null]
+//! fn clock_s() -> Int {
+//!     __clock_ns() / 1_000_000_000
+//! }
 //! ```
-//! A minimal runtime captures these at `_start` and stores them globally.
 
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -55,18 +41,18 @@ fn get_start_time() -> &'static Instant {
     START_TIME.get_or_init(Instant::now)
 }
 
-/// Register all system intrinsics.
+/// Register system intrinsics.
 pub fn register(runtime: &mut Runtime) {
     let call_conv = default_call_conv();
 
-    // __exit: (I64) -> ! (never returns, but Cranelift doesn't have never type)
+    // __exit: (I64) -> !
     runtime.register(
         "__exit",
         __exit as *const u8,
         make_signature(call_conv, &[types::I64], &[]),
     );
 
-    // __getenv: (I64, I64) -> (I64, I64) - name (ptr, len) -> value (ptr, len)
+    // __getenv: (I64, I64) -> (I64, I64)
     runtime.register(
         "__getenv",
         __getenv as *const u8,
@@ -84,31 +70,22 @@ pub fn register(runtime: &mut Runtime) {
         make_signature(call_conv, &[], &[types::I64]),
     );
 
-    // __argv: (I64) -> (I64, I64) - index -> (ptr, len)
+    // __argv: (I64) -> (I64, I64)
     runtime.register(
         "__argv",
         __argv as *const u8,
         make_signature(call_conv, &[types::I64], &[types::I64, types::I64]),
     );
 
-    // __clock_ns: () -> I64 (nanoseconds since program start)
+    // __clock_ns: () -> I64
     runtime.register(
         "__clock_ns",
         __clock_ns as *const u8,
         make_signature(call_conv, &[], &[types::I64]),
     );
-
-    // __clock_ms: () -> I64 (milliseconds since program start)
-    runtime.register(
-        "__clock_ms",
-        __clock_ms as *const u8,
-        make_signature(call_conv, &[], &[types::I64]),
-    );
 }
 
 /// Exit the program with a status code.
-///
-/// This function never returns.
 pub extern "C" fn __exit(code: i64) -> ! {
     std::process::exit(code as i32);
 }
@@ -116,10 +93,6 @@ pub extern "C" fn __exit(code: i64) -> ! {
 /// Get an environment variable by name.
 ///
 /// Returns (null, 0) if the variable is not set.
-///
-/// # Safety
-///
-/// The returned pointer is only valid until the environment is modified.
 pub extern "C" fn __getenv(name_ptr: *const u8, name_len: i64) -> StringResult {
     if name_ptr.is_null() || name_len <= 0 {
         return StringResult {
@@ -143,7 +116,6 @@ pub extern "C" fn __getenv(name_ptr: *const u8, name_len: i64) -> StringResult {
     match std::env::var(name) {
         Ok(value) => {
             // Leak the string to get a stable pointer
-            // In a real implementation, we'd use an arena or have the caller free it
             let leaked = Box::leak(value.into_boxed_str());
             StringResult {
                 ptr: leaked.as_ptr(),
@@ -165,10 +137,6 @@ pub extern "C" fn __argc() -> i64 {
 /// Get a command-line argument by index.
 ///
 /// Returns (null, 0) if the index is out of bounds.
-///
-/// # Safety
-///
-/// The returned pointer is valid for the lifetime of the program.
 pub extern "C" fn __argv(index: i64) -> StringResult {
     if index < 0 {
         return StringResult {
@@ -179,7 +147,6 @@ pub extern "C" fn __argv(index: i64) -> StringResult {
 
     match std::env::args().nth(index as usize) {
         Some(arg) => {
-            // Leak the string to get a stable pointer
             let leaked = Box::leak(arg.into_boxed_str());
             StringResult {
                 ptr: leaked.as_ptr(),
@@ -194,19 +161,9 @@ pub extern "C" fn __argv(index: i64) -> StringResult {
 }
 
 /// Get nanoseconds elapsed since program start.
-///
-/// Uses a monotonic clock, suitable for measuring durations.
 pub extern "C" fn __clock_ns() -> i64 {
     let start = get_start_time();
     start.elapsed().as_nanos() as i64
-}
-
-/// Get milliseconds elapsed since program start.
-///
-/// Uses a monotonic clock, suitable for measuring durations.
-pub extern "C" fn __clock_ms() -> i64 {
-    let start = get_start_time();
-    start.elapsed().as_millis() as i64
 }
 
 #[cfg(test)]
@@ -214,13 +171,8 @@ mod tests {
     use super::*;
     use cranelift_codegen::ir::types;
 
-    // ==================== Direct call tests ====================
-
-    // Note: __exit cannot be tested directly as it terminates the process
-
     #[test]
     fn argc_returns_positive() {
-        // When running tests, argc is at least 1 (the test binary)
         assert!(__argc() >= 1);
     }
 
@@ -247,11 +199,8 @@ mod tests {
 
     #[test]
     fn getenv_existing_var() {
-        // PATH is almost always set
         let name = "PATH";
         let result = __getenv(name.as_ptr(), name.len() as i64);
-        // PATH might not be set in some CI environments, so we just check it doesn't crash
-        // If it is set, it should return a valid string
         if !result.ptr.is_null() {
             assert!(result.len > 0);
         }
@@ -281,15 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn clock_ms_returns_non_negative() {
-        let t = __clock_ms();
-        assert!(t >= 0);
-    }
-
-    // ==================== Registration tests ====================
-
-    #[test]
-    fn register_adds_all_system_intrinsics() {
+    fn register_adds_system_intrinsics() {
         let mut runtime = Runtime::new();
         register(&mut runtime);
 
@@ -298,10 +239,10 @@ mod tests {
         assert!(runtime.contains("__argc"));
         assert!(runtime.contains("__argv"));
         assert!(runtime.contains("__clock_ns"));
-        assert!(runtime.contains("__clock_ms"));
-    }
 
-    // ==================== Signature tests ====================
+        // This should NOT exist as an intrinsic
+        assert!(!runtime.contains("__clock_ms"));
+    }
 
     #[test]
     fn exit_signature() {
@@ -321,11 +262,7 @@ mod tests {
 
         let func = runtime.get("__getenv").unwrap();
         assert_eq!(func.signature.params.len(), 2);
-        assert_eq!(func.signature.params[0].value_type, types::I64); // ptr
-        assert_eq!(func.signature.params[1].value_type, types::I64); // len
         assert_eq!(func.signature.returns.len(), 2);
-        assert_eq!(func.signature.returns[0].value_type, types::I64); // ptr
-        assert_eq!(func.signature.returns[1].value_type, types::I64); // len
     }
 
     #[test]
@@ -346,10 +283,7 @@ mod tests {
 
         let func = runtime.get("__argv").unwrap();
         assert_eq!(func.signature.params.len(), 1);
-        assert_eq!(func.signature.params[0].value_type, types::I64); // index
         assert_eq!(func.signature.returns.len(), 2);
-        assert_eq!(func.signature.returns[0].value_type, types::I64); // ptr
-        assert_eq!(func.signature.returns[1].value_type, types::I64); // len
     }
 
     #[test]
@@ -358,17 +292,6 @@ mod tests {
         register(&mut runtime);
 
         let func = runtime.get("__clock_ns").unwrap();
-        assert!(func.signature.params.is_empty());
-        assert_eq!(func.signature.returns.len(), 1);
-        assert_eq!(func.signature.returns[0].value_type, types::I64);
-    }
-
-    #[test]
-    fn clock_ms_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__clock_ms").unwrap();
         assert!(func.signature.params.is_empty());
         assert_eq!(func.signature.returns.len(), 1);
         assert_eq!(func.signature.returns[0].value_type, types::I64);
