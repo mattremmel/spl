@@ -56,6 +56,17 @@ pub(super) enum LoopKind {
     For,
 }
 
+/// Parameter information including label for named parameters.
+#[derive(Clone)]
+pub(super) struct ParamInfo {
+    /// External label: None = positional (`_`), Some = labeled
+    pub(super) label: Option<String>,
+    /// Internal parameter name
+    pub(super) name: String,
+    /// Parameter type
+    pub(super) ty: TypeId,
+}
+
 /// Function signature information.
 #[derive(Clone)]
 pub(super) struct FnSignature {
@@ -65,7 +76,8 @@ pub(super) struct FnSignature {
     pub(super) self_param: Option<SelfParam>,
     /// Type parameters for generic functions (e.g., `T` in `fn foo<T>()`).
     pub(super) type_params: Vec<DefId>,
-    pub(super) params: Vec<(String, TypeId)>,
+    /// Parameters with their labels, names, and types.
+    pub(super) params: Vec<ParamInfo>,
     pub(super) ret: TypeId,
 }
 

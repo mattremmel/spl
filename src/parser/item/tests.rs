@@ -2182,3 +2182,154 @@ fn type_alias_with_where_clause() {
         "#]],
     );
 }
+
+// === Named Parameter Tests (Phase 1: LabelSpec parsing) ===
+
+#[test]
+fn param_with_underscore_label() {
+    check_item(
+        "fn add(_ a: i32) {}",
+        &expect![[r#"
+            FunctionDef@0..19
+              FN_KW@0..2 "fn"
+              Name@2..6
+                WHITESPACE@2..3 " "
+                IDENT@3..6 "add"
+              ParamList@6..16
+                L_PAREN@6..7 "("
+                Param@7..15
+                  LabelSpec@7..8
+                    IDENT@7..8 "_"
+                  Name@8..10
+                    WHITESPACE@8..9 " "
+                    IDENT@9..10 "a"
+                  COLON@10..11 ":"
+                  PathType@11..15
+                    Path@11..15
+                      PathSegment@11..15
+                        NameRef@11..15
+                          WHITESPACE@11..12 " "
+                          IDENT@12..15 "i32"
+                R_PAREN@15..16 ")"
+              Block@16..19
+                WHITESPACE@16..17 " "
+                L_BRACE@17..18 "{"
+                R_BRACE@18..19 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn param_with_external_label() {
+    check_item(
+        "fn greet(to person: String) {}",
+        &expect![[r#"
+            FunctionDef@0..30
+              FN_KW@0..2 "fn"
+              Name@2..8
+                WHITESPACE@2..3 " "
+                IDENT@3..8 "greet"
+              ParamList@8..27
+                L_PAREN@8..9 "("
+                Param@9..26
+                  LabelSpec@9..11
+                    IDENT@9..11 "to"
+                  Name@11..18
+                    WHITESPACE@11..12 " "
+                    IDENT@12..18 "person"
+                  COLON@18..19 ":"
+                  PathType@19..26
+                    Path@19..26
+                      PathSegment@19..26
+                        NameRef@19..26
+                          WHITESPACE@19..20 " "
+                          IDENT@20..26 "String"
+                R_PAREN@26..27 ")"
+              Block@27..30
+                WHITESPACE@27..28 " "
+                L_BRACE@28..29 "{"
+                R_BRACE@29..30 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn param_without_label() {
+    // Normal params without label spec should work as before
+    check_item(
+        "fn foo(x: i32) {}",
+        &expect![[r#"
+            FunctionDef@0..17
+              FN_KW@0..2 "fn"
+              Name@2..6
+                WHITESPACE@2..3 " "
+                IDENT@3..6 "foo"
+              ParamList@6..14
+                L_PAREN@6..7 "("
+                Param@7..13
+                  Name@7..8
+                    IDENT@7..8 "x"
+                  COLON@8..9 ":"
+                  PathType@9..13
+                    Path@9..13
+                      PathSegment@9..13
+                        NameRef@9..13
+                          WHITESPACE@9..10 " "
+                          IDENT@10..13 "i32"
+                R_PAREN@13..14 ")"
+              Block@14..17
+                WHITESPACE@14..15 " "
+                L_BRACE@15..16 "{"
+                R_BRACE@16..17 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn param_mixed_labels() {
+    check_item(
+        "fn range(from start: i32, _ count: i32) {}",
+        &expect![[r#"
+            FunctionDef@0..42
+              FN_KW@0..2 "fn"
+              Name@2..8
+                WHITESPACE@2..3 " "
+                IDENT@3..8 "range"
+              ParamList@8..39
+                L_PAREN@8..9 "("
+                Param@9..24
+                  LabelSpec@9..13
+                    IDENT@9..13 "from"
+                  Name@13..19
+                    WHITESPACE@13..14 " "
+                    IDENT@14..19 "start"
+                  COLON@19..20 ":"
+                  PathType@20..24
+                    Path@20..24
+                      PathSegment@20..24
+                        NameRef@20..24
+                          WHITESPACE@20..21 " "
+                          IDENT@21..24 "i32"
+                COMMA@24..25 ","
+                Param@25..38
+                  LabelSpec@25..27
+                    WHITESPACE@25..26 " "
+                    IDENT@26..27 "_"
+                  Name@27..33
+                    WHITESPACE@27..28 " "
+                    IDENT@28..33 "count"
+                  COLON@33..34 ":"
+                  PathType@34..38
+                    Path@34..38
+                      PathSegment@34..38
+                        NameRef@34..38
+                          WHITESPACE@34..35 " "
+                          IDENT@35..38 "i32"
+                R_PAREN@38..39 ")"
+              Block@39..42
+                WHITESPACE@39..40 " "
+                L_BRACE@40..41 "{"
+                R_BRACE@41..42 "}"
+        "#]],
+    );
+}

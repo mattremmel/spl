@@ -21,6 +21,7 @@ ast_node!(NameRef);
 ast_node!(Visibility);
 ast_node!(WhereClause);
 ast_node!(TypeBound);
+ast_node!(LabelSpec);
 
 // === Typed accessors ===
 
@@ -183,12 +184,53 @@ impl ParamList {
 }
 
 impl Param {
+    /// Get the label spec if present (`_` or external label).
+    pub fn label(&self) -> Option<LabelSpec> {
+        child(&self.0)
+    }
+
     pub fn name(&self) -> Option<Name> {
         child(&self.0)
     }
 
     pub fn ty(&self) -> Option<Type> {
         child(&self.0)
+    }
+
+    /// Get the external label for this parameter.
+    /// - Returns `None` if label spec is `_` (positional parameter)
+    /// - Returns the explicit label if a label spec is provided
+    /// - Returns the parameter name as default label if no label spec
+    pub fn external_label(&self) -> Option<String> {
+        if let Some(label_spec) = self.label() {
+            label_spec.label_text()
+        } else {
+            // Default: use param name as external label
+            self.name()?.ident_token().map(|t| t.text().to_string())
+        }
+    }
+}
+
+impl LabelSpec {
+    /// Check if this is the underscore label (positional parameter).
+    pub fn is_underscore(&self) -> bool {
+        self.ident_token().map(|t| t.text() == "_").unwrap_or(false)
+    }
+
+    /// Get the identifier token.
+    pub fn ident_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::IDENT)
+    }
+
+    /// Get the label text, or `None` if this is underscore.
+    pub fn label_text(&self) -> Option<String> {
+        let token = self.ident_token()?;
+        let text = token.text();
+        if text == "_" {
+            None
+        } else {
+            Some(text.to_string())
+        }
     }
 }
 

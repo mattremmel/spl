@@ -201,9 +201,25 @@ fn self_param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Pars
     Ok(m.complete(p, SyntaxKind::SelfParam))
 }
 
-/// Parse a regular parameter: `name: Type`
+/// Parse optional label spec: `_` | IDENTIFIER (when followed by another IDENT before `:`)
+/// This distinguishes `label param: Type` from `param: Type`
+fn opt_label_spec(p: &mut Parser<'_>) -> Option<CompletedMarker> {
+    // A label spec exists if we have IDENT followed by IDENT (skipping whitespace)
+    // i.e., `label param: Type` or `_ param: Type`
+    if p.at(SyntaxKind::IDENT) && p.peek_at(1, SyntaxKind::IDENT) {
+        let m = p.start();
+        p.bump(); // consume label or `_`
+        return Some(m.complete(p, SyntaxKind::LabelSpec));
+    }
+    None
+}
+
+/// Parse a regular parameter: `[LabelSpec] name: Type`
 fn param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
+
+    // Optional label spec
+    opt_label_spec(p);
 
     // Parameter name
     name(p)?;

@@ -520,7 +520,7 @@ mod jit_tests {
     fn jit_execute_function_call() {
         let result = jit_execute(
             r#"
-            fn add(a: i32, b: i32): i32 { a + b }
+            fn add(_ a: i32, _ b: i32): i32 { a + b }
             fn main(): i32 { add(10, 32) }
         "#,
         );
@@ -693,7 +693,7 @@ mod aot_tests {
     fn compile_to_object_multiple_functions() {
         let result = compile_to_object(
             r#"
-            fn add(a: i32, b: i32): i32 { a + b }
+            fn add(_ a: i32, _ b: i32): i32 { a + b }
             fn main(): i32 { add(10, 32) }
         "#,
         );
@@ -817,7 +817,7 @@ mod aot_tests {
 
         let result = compile_and_link(
             r#"
-            fn double(x: i32): i32 { x * 2 }
+            fn double(_ x: i32): i32 { x * 2 }
             fn main(): i32 { double(21) }
         "#,
             &exe_path,
@@ -865,7 +865,7 @@ mod aot_tests {
         use std::fs;
 
         let source = r#"
-            fn factorial(n: i32): i32 {
+            fn factorial(_ n: i32): i32 {
                 if n <= 1 { 1 } else { n * factorial(n - 1) }
             }
             fn main(): i32 { factorial(5) }
@@ -987,8 +987,8 @@ mod aot_tests {
 
         let result = compile_and_link(
             r#"
-            fn add(a: i32, b: i32): i32 { a + b }
-            fn mul(a: i32, b: i32): i32 { a * b }
+            fn add(_ a: i32, _ b: i32): i32 { a + b }
+            fn mul(_ a: i32, _ b: i32): i32 { a * b }
             fn main(): i32 { add(mul(3, 4), mul(2, 3)) }
         "#,
             &exe_path,

@@ -7,7 +7,7 @@ use crate::sema::types::{Mutability, PrimitiveKind, Type, TypeId};
 use rowan::ast::AstNode;
 use rustc_hash::FxHashSet;
 
-use super::engine::{FnSignature, InferEngine, LoopKind};
+use super::engine::{FnSignature, InferEngine, LoopKind, ParamInfo};
 use super::helpers::text_range_to_span;
 use super::{SelfParam, SelfParamKind};
 
@@ -169,7 +169,13 @@ impl InferEngine {
                     .ty()
                     .map(|t| self.ast_type_to_type_id(&t))
                     .unwrap_or_else(|| self.fresh_type_var());
-                params.push((param_name, param_ty));
+                // Get external label (None if `_`, explicit label, or defaults to param name)
+                let label = param.external_label();
+                params.push(ParamInfo {
+                    label,
+                    name: param_name,
+                    ty: param_ty,
+                });
             }
         }
 
@@ -516,7 +522,7 @@ impl InferEngine {
             }
 
             // Bind regular parameters
-            let param_types: Vec<_> = sig.params.iter().map(|(_, ty)| *ty).collect();
+            let param_types: Vec<_> = sig.params.iter().map(|p| p.ty).collect();
 
             for (param, param_ty) in param_list.params().zip(param_types.iter()) {
                 if let Some(param_name) = param.name()

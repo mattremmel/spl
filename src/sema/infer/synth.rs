@@ -1027,7 +1027,7 @@ impl InferEngine {
         let param_types: Vec<TypeId> = sig
             .params
             .iter()
-            .map(|(_, ty)| self.substitute_type_params(*ty, &subst))
+            .map(|p| self.substitute_type_params(p.ty, &subst))
             .collect();
         let ret_ty = self.substitute_type_params(sig.ret, &subst);
 
@@ -1063,17 +1063,17 @@ impl InferEngine {
         apply_expr: &ApplyExpr,
         sig: &super::engine::FnSignature,
     ) -> TypeId {
-        let (param_types, ret_ty) = self.instantiate_signature(sig);
+        let (param_infos, ret_ty) = self.instantiate_signature_with_labels(sig);
 
         // Check argument count
         let args: Vec<_> = apply_expr.args().collect();
-        if args.len() != param_types.len() {
+        if args.len() != param_infos.len() {
             let span = text_range_to_span(apply_expr.syntax().text_range());
             self.diagnostics.push(
                 Diagnostic::error(format!(
                     "expected {} argument{}, found {}",
-                    param_types.len(),
-                    if param_types.len() == 1 { "" } else { "s" },
+                    param_infos.len(),
+                    if param_infos.len() == 1 { "" } else { "s" },
                     args.len()
                 ))
                 .with_label(span, "wrong number of arguments"),
@@ -1081,10 +1081,46 @@ impl InferEngine {
             return ret_ty;
         }
 
-        // Check each argument using check_expr which handles coercion
-        for (arg, &expected_ty) in args.iter().zip(param_types.iter()) {
+        // Check each argument, validating labels and types
+        for (arg, param_info) in args.iter().zip(param_infos.iter()) {
+            // Get the argument's label (if any)
+            let arg_label = arg.name_token().map(|t| t.text().to_string()).or_else(|| {
+                arg.name()
+                    .and_then(|n| n.token())
+                    .map(|t| t.text().to_string())
+            });
+
+            let arg_span = text_range_to_span(arg.syntax().text_range());
+
+            // Validate label matches
+            match (&param_info.label, &arg_label) {
+                (Some(expected), Some(actual)) if expected != actual => {
+                    self.diagnostics.push(
+                        Diagnostic::error(format!(
+                            "expected label `{}`, found `{}`",
+                            expected, actual
+                        ))
+                        .with_label(arg_span, "wrong label"),
+                    );
+                }
+                (Some(expected), None) => {
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("expected labeled argument `{}`", expected))
+                            .with_label(arg_span, "missing label"),
+                    );
+                }
+                (None, Some(actual)) => {
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("unexpected label `{}`", actual))
+                            .with_label(arg_span, "positional parameter"),
+                    );
+                }
+                _ => {} // Labels match (or both are None for positional)
+            }
+
+            // Check argument type
             if let Some(expr) = arg.value() {
-                self.check_expr(&expr, expected_ty);
+                self.check_expr(&expr, param_info.ty);
             }
         }
 
@@ -1625,10 +1661,10 @@ impl InferEngine {
                 }
 
                 // Substitute in params and return type
-                let params: Vec<(String, TypeId)> = sig
+                let params: Vec<_> = sig
                     .params
                     .iter()
-                    .map(|(name, ty)| (name.clone(), self.substitute_type_params(*ty, &subst)))
+                    .map(|p| (p.name.clone(), self.substitute_type_params(p.ty, &subst)))
                     .collect();
                 let ret = self.substitute_type_params(sig.ret, &subst);
 

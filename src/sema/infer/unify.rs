@@ -345,7 +345,7 @@ impl InferEngine {
     pub(super) fn instantiate_signature(&mut self, sig: &FnSignature) -> (Vec<TypeId>, TypeId) {
         if sig.type_params.is_empty() {
             // No generics, return as-is
-            let param_types: Vec<_> = sig.params.iter().map(|(_, t)| *t).collect();
+            let param_types: Vec<_> = sig.params.iter().map(|p| p.ty).collect();
             return (param_types, sig.ret);
         }
 
@@ -359,13 +359,49 @@ impl InferEngine {
         let param_types: Vec<_> = sig
             .params
             .iter()
-            .map(|(_, t)| self.substitute_type_params(*t, &subst))
+            .map(|p| self.substitute_type_params(p.ty, &subst))
             .collect();
 
         // Substitute in return type
         let ret = self.substitute_type_params(sig.ret, &subst);
 
         (param_types, ret)
+    }
+
+    /// Instantiate a generic function signature with fresh type variables.
+    /// Returns (instantiated_param_infos_with_labels, instantiated_return_type).
+    pub(super) fn instantiate_signature_with_labels(
+        &mut self,
+        sig: &FnSignature,
+    ) -> (Vec<super::engine::ParamInfo>, TypeId) {
+        use super::engine::ParamInfo;
+
+        if sig.type_params.is_empty() {
+            // No generics, return as-is
+            return (sig.params.clone(), sig.ret);
+        }
+
+        // Create fresh type variables for each type parameter
+        let mut subst: FxHashMap<DefId, TypeId> = FxHashMap::default();
+        for &param_def_id in &sig.type_params {
+            subst.insert(param_def_id, self.fresh_type_var());
+        }
+
+        // Substitute in parameter types, preserving labels
+        let param_infos: Vec<_> = sig
+            .params
+            .iter()
+            .map(|p| ParamInfo {
+                label: p.label.clone(),
+                name: p.name.clone(),
+                ty: self.substitute_type_params(p.ty, &subst),
+            })
+            .collect();
+
+        // Substitute in return type
+        let ret = self.substitute_type_params(sig.ret, &subst);
+
+        (param_infos, ret)
     }
 
     /// Substitute type parameters with their instantiated types.

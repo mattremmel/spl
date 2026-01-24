@@ -260,7 +260,7 @@ fn let_with_f64_annotation() {
 
 #[test]
 fn infer_int_from_fn_param() {
-    check("fn f(x: i64) {} fn main() { let a = 42; f(a); }", "i64");
+    check("fn f(_ x: i64) {} fn main() { let a = 42; f(a); }", "i64");
 }
 
 #[test]
@@ -268,14 +268,14 @@ fn infer_int_from_fn_param_multiple() {
     // Both literals infer their types from the function parameters
     // The check function returns the last binding's type, so we check y's type (i64)
     check(
-        "fn f(a: i32, b: i64) {} fn main() { let x = 1; let y = 2; f(x, y); }",
+        "fn f(_ a: i32, _ b: i64) {} fn main() { let x = 1; let y = 2; f(x, y); }",
         "i64",
     );
 }
 
 #[test]
 fn infer_float_from_fn_param() {
-    check("fn f(x: f32) {} fn main() { let a = 3.14; f(a); }", "f32");
+    check("fn f(_ x: f32) {} fn main() { let a = 3.14; f(a); }", "f32");
 }
 
 #[test]
@@ -338,7 +338,10 @@ fn infer_through_variable_usage() {
 
 #[test]
 fn infer_backwards_through_usage() {
-    check("fn foo(x: i64) {} fn main() { let x = 42; foo(x); }", "i64");
+    check(
+        "fn foo(_ x: i64) {} fn main() { let x = 42; foo(x); }",
+        "i64",
+    );
 }
 
 #[test]
@@ -360,7 +363,7 @@ fn infer_tuple_elements_from_annotation() {
 fn infer_multiple_constraints_same() {
     // Same variable used in multiple calls with same type
     check(
-        "fn f(x: i64) {} fn main() { let a = 42; f(a); f(a); }",
+        "fn f(_ x: i64) {} fn main() { let a = 42; f(a); f(a); }",
         "i64",
     );
 }
@@ -548,13 +551,13 @@ fn call_no_args() {
 
 #[test]
 fn call_one_arg() {
-    check("fn f(x: i32) {} fn main() { let y = f(42); }", "()");
+    check("fn f(_ x: i32) {} fn main() { let y = f(42); }", "()");
 }
 
 #[test]
 fn call_multiple_args() {
     check(
-        "fn f(a: i32, b: bool) {} fn main() { let x = f(1, true); }",
+        "fn f(_ a: i32, _ b: bool) {} fn main() { let x = f(1, true); }",
         "()",
     );
 }
@@ -577,7 +580,7 @@ fn call_return_used_in_binary() {
 #[test]
 fn call_return_passed_to_fn() {
     check(
-        "fn f(): i32 { 1 } fn g(x: i32) {} fn main() { let y = g(f()); }",
+        "fn f(): i32 { 1 } fn g(_ x: i32) {} fn main() { let y = g(f()); }",
         "()",
     );
 }
@@ -585,7 +588,7 @@ fn call_return_passed_to_fn() {
 #[test]
 fn call_nested() {
     check(
-        "fn f(x: i32): i32 { x } fn main() { let y = f(f(1)); }",
+        "fn f(_ x: i32): i32 { x } fn main() { let y = f(f(1)); }",
         "i32",
     );
 }
@@ -611,24 +614,27 @@ fn call_mutual_recursion() {
 #[test]
 fn call_recursive() {
     check(
-        "fn f(n: i32): i32 { if n == 0 { 0 } else { f(n - 1) } } fn main() { let x = f(5); }",
+        "fn f(_ n: i32): i32 { if n == 0 { 0 } else { f(n - 1) } } fn main() { let x = f(5); }",
         "i32",
     );
 }
 
 #[test]
 fn call_infers_literal_type() {
-    check("fn f(x: i64) {} fn main() { let a = 42; f(a); }", "i64");
+    check("fn f(_ x: i64) {} fn main() { let a = 42; f(a); }", "i64");
 }
 
 #[test]
 fn call_infers_expr_type() {
-    check("fn f(x: i64) {} fn main() { let a = 1 + 2; f(a); }", "i64");
+    check(
+        "fn f(_ x: i64) {} fn main() { let a = 1 + 2; f(a); }",
+        "i64",
+    );
 }
 
 #[test]
 fn call_infers_var_type() {
-    check("fn f(x: i64) {} fn main() { let a = 1; f(a); }", "i64");
+    check("fn f(_ x: i64) {} fn main() { let a = 1; f(a); }", "i64");
 }
 
 // =============================================================================
@@ -958,7 +964,7 @@ fn ref_to_ref() {
 #[test]
 fn ref_in_function() {
     check(
-        "fn f(x: &i32) {} fn main() { let a = 42; f(&a); let b = a; }",
+        "fn f(_ x: &i32) {} fn main() { let a = 42; f(&a); let b = a; }",
         "i32",
     );
 }
@@ -966,7 +972,7 @@ fn ref_in_function() {
 #[test]
 fn ref_mut_in_function() {
     check(
-        "fn f(x: &mut i32) {} fn main() { let mut a = 42; f(&mut a); let b = a; }",
+        "fn f(_ x: &mut i32) {} fn main() { let mut a = 42; f(&mut a); let b = a; }",
         "i32",
     );
 }
@@ -974,7 +980,7 @@ fn ref_mut_in_function() {
 #[test]
 fn ref_return() {
     check(
-        "fn f(x: &i32): &i32 { x } fn main() { let a = 42; let b = f(&a); }",
+        "fn f(_ x: &i32): &i32 { x } fn main() { let a = 42; let b = f(&a); }",
         "&i32",
     );
 }
@@ -983,14 +989,14 @@ fn ref_return() {
 fn ref_coercion() {
     // Mutable reference can be coerced to shared reference
     check(
-        "fn f(x: &i32) {} fn main() { let mut a = 42; f(&a); let b = a; }",
+        "fn f(_ x: &i32) {} fn main() { let mut a = 42; f(&a); let b = a; }",
         "i32",
     );
 }
 
 #[test]
 fn ref_infers_inner_type() {
-    check("fn f(x: &i64) {} fn main() { let a = 42; f(&a); }", "i64");
+    check("fn f(_ x: &i64) {} fn main() { let a = 42; f(&a); }", "i64");
 }
 
 // =============================================================================
@@ -1047,7 +1053,7 @@ fn struct_nested() {
 #[test]
 fn struct_in_function_param() {
     check(
-        "struct S(a: i32) fn f(s: S) {} fn main() { let x = S(a: 1); f(x); }",
+        "struct S(a: i32) fn f(_ s: S) {} fn main() { let x = S(a: 1); f(x); }",
         "S",
     );
 }
@@ -1156,7 +1162,7 @@ fn error_comparison_mismatch() {
 #[test]
 fn error_too_few_args() {
     check_err(
-        "fn f(x: i32) {} fn main() { f(); }",
+        "fn f(_ x: i32) {} fn main() { f(); }",
         &["expected 1 argument"],
     );
 }
@@ -1164,7 +1170,7 @@ fn error_too_few_args() {
 #[test]
 fn error_too_many_args() {
     check_err(
-        "fn f(x: i32) {} fn main() { f(1, 2); }",
+        "fn f(_ x: i32) {} fn main() { f(1, 2); }",
         &["expected 1 argument"],
     );
 }
@@ -1318,7 +1324,7 @@ fn unit_explicit() {
 #[test]
 fn complex_nested_inference() {
     check(
-        "fn f(x: i64): i64 { x } fn main() { let a = f(1 + 2); }",
+        "fn f(_ x: i64): i64 { x } fn main() { let a = f(1 + 2); }",
         "i64",
     );
 }
@@ -1327,7 +1333,7 @@ fn complex_nested_inference() {
 fn diamond_inference() {
     // Same variable flows through multiple paths
     check(
-        "fn f(x: i64) {} fn g(x: i64) {} fn main() { let a = 42; f(a); g(a); }",
+        "fn f(_ x: i64) {} fn g(_ x: i64) {} fn main() { let a = 42; f(a); g(a); }",
         "i64",
     );
 }
@@ -1343,7 +1349,7 @@ fn long_chain_inference() {
 #[test]
 fn inference_through_function_chain() {
     check(
-        "fn f(x: i64): i64 { x } fn g(x: i64): i64 { x } fn h(x: i64): i64 { x } fn main() { let a = f(g(h(42))); }",
+        "fn f(_ x: i64): i64 { x } fn g(_ x: i64): i64 { x } fn h(_ x: i64): i64 { x } fn main() { let a = f(g(h(42))); }",
         "i64",
     );
 }
@@ -1356,7 +1362,7 @@ fn mixed_int_float_error() {
 #[test]
 fn conflicting_constraints_error() {
     check_err(
-        "fn f(x: i32) {} fn g(x: i64) {} fn main() { let a = 1; f(a); g(a); }",
+        "fn f(_ x: i32) {} fn g(x: i64) {} fn main() { let a = 1; f(a); g(a); }",
         &["type mismatch"],
     );
 }
@@ -1383,7 +1389,7 @@ fn deeply_nested_blocks() {
 #[test]
 fn many_function_params() {
     check(
-        "fn f(a: i32, b: i32, c: i32, d: i32, e: i32): i32 { a } fn main() { let x = f(1, 2, 3, 4, 5); }",
+        "fn f(_ a: i32, _ b: i32, _ c: i32, _ d: i32, _ e: i32): i32 { a } fn main() { let x = f(1, 2, 3, 4, 5); }",
         "i32",
     );
 }
@@ -1404,7 +1410,7 @@ fn function_only_return() {
 #[test]
 fn multiple_returns() {
     check(
-        "fn f(b: bool): i32 { if b { return 1; } return 2; } fn main() { let x = f(true); }",
+        "fn f(_ b: bool): i32 { if b { return 1; } return 2; } fn main() { let x = f(true); }",
         "i32",
     );
 }
@@ -1457,14 +1463,14 @@ fn inference_tuple_of_arrays() {
 #[test]
 fn inference_ref_to_array_element() {
     // Reference to an array element
-    check("fn f(arr: [i64; 3]) { let x = &arr[0]; }", "&i64");
+    check("fn f(_ arr: [i64; 3]) { let x = &arr[0]; }", "&i64");
 }
 
 #[test]
 fn inference_complex_expression_chain() {
     // Complex expression with multiple operators and calls
     check(
-        "fn f(x: i64): i64 { x } fn main() { let x = f(1) + f(2) + f(3); }",
+        "fn f(_ x: i64): i64 { x } fn main() { let x = f(1) + f(2) + f(3); }",
         "i64",
     );
 }
@@ -1479,7 +1485,7 @@ fn inference_block_tail_type() {
 fn inference_nested_function_calls() {
     // Deeply nested function calls
     check(
-        "fn f(x: i64): i64 { x } fn g(x: i64): i64 { x } fn main() { let x = f(g(f(g(42)))); }",
+        "fn f(_ x: i64): i64 { x } fn g(_ x: i64): i64 { x } fn main() { let x = f(g(f(g(42)))); }",
         "i64",
     );
 }
@@ -1498,7 +1504,7 @@ fn error_type_mismatch_basic() {
 fn error_wrong_arg_count() {
     // Error for wrong number of arguments
     check_err(
-        "fn f(a: i32, b: i32) {} fn main() { f(1); }",
+        "fn f(_ a: i32, _ b: i32) {} fn main() { f(1); }",
         &["expected 2 argument"],
     );
 }
@@ -1519,7 +1525,7 @@ fn error_binary_op_on_incompatible() {
 fn error_call_with_wrong_type() {
     // Calling function with wrong argument type
     check_err(
-        "fn f(x: i32) {} fn main() { f(\"hello\"); }",
+        "fn f(_ x: i32) {} fn main() { f(\"hello\"); }",
         &["type mismatch"],
     );
 }
@@ -1570,12 +1576,12 @@ fn shared_ref_to_immutable_ok() {
 
 #[test]
 fn error_assign_to_param() {
-    check_err("fn foo(x: i32) { x = 1; }", &["cannot assign"]);
+    check_err("fn foo(_ x: i32) { x = 1; }", &["cannot assign"]);
 }
 
 #[test]
 fn error_mut_ref_to_param() {
-    check_err("fn foo(x: i32) { let y = &mut x; }", &["cannot borrow"]);
+    check_err("fn foo(_ x: i32) { let y = &mut x; }", &["cannot borrow"]);
 }
 
 // Phase 4: Compound assignment
@@ -1666,7 +1672,7 @@ fn test_assign_field_through_immutable_ref() {
 #[test]
 fn generic_fn_identity_infers_from_arg() {
     check(
-        "fn identity(x: T): T where T { x } fn main() { let a = identity(42); }",
+        "fn identity(_ x: T): T where T { x } fn main() { let a = identity(42); }",
         "i32",
     );
 }
@@ -1674,7 +1680,7 @@ fn generic_fn_identity_infers_from_arg() {
 #[test]
 fn generic_fn_identity_infers_from_context() {
     check(
-        "fn identity(x: T): T where T { x } fn main() { let a: i64 = identity(42); }",
+        "fn identity(_ x: T): T where T { x } fn main() { let a: i64 = identity(42); }",
         "i64",
     );
 }
@@ -1684,7 +1690,7 @@ fn generic_fn_identity_infers_from_context() {
 #[test]
 fn generic_fn_two_params_same_type() {
     check(
-        "fn pair(a: T, b: T): T where T { a } fn main() { let x = pair(1, 2); }",
+        "fn pair(_ a: T, _ b: T): T where T { a } fn main() { let x = pair(1, 2); }",
         "i32",
     );
 }
@@ -1692,7 +1698,7 @@ fn generic_fn_two_params_same_type() {
 #[test]
 fn generic_fn_multiple_type_params() {
     check(
-        "fn swap(a: A, b: B): B where A, B { b } fn main() { let x = swap(1, true); }",
+        "fn swap(_ a: A, _ b: B): B where A, B { b } fn main() { let x = swap(1, true); }",
         "bool",
     );
 }
@@ -1730,7 +1736,7 @@ fn generic_struct_method_returns_param() {
 #[test]
 fn error_generic_type_mismatch() {
     check_err(
-        "fn pair(a: T, b: T): T where T { a } fn main() { pair(1, true); }",
+        "fn pair(_ a: T, _ b: T): T where T { a } fn main() { pair(1, true); }",
         &["type mismatch"],
     );
 }
@@ -1740,7 +1746,7 @@ fn error_generic_type_mismatch() {
 #[test]
 fn generic_nested_calls() {
     check(
-        "fn identity(x: T): T where T { x } fn main() { let a = identity(identity(42)); }",
+        "fn identity(_ x: T): T where T { x } fn main() { let a = identity(identity(42)); }",
         "i32",
     );
 }
@@ -1748,7 +1754,7 @@ fn generic_nested_calls() {
 #[test]
 fn generic_multiple_instantiations() {
     check(
-        "fn identity(x: T): T where T { x } fn main() { let a = identity(42); let b = identity(true); }",
+        "fn identity(_ x: T): T where T { x } fn main() { let a = identity(42); let b = identity(true); }",
         "bool",
     );
 }
@@ -1798,7 +1804,7 @@ fn generic_fn_returns_generic_struct() {
     check(
         r#"
         struct Wrapper(value: T) where T
-        fn wrap(x: T): Wrapper(T) where T { Wrapper(value: x) }
+        fn wrap(_ x: T): Wrapper(T) where T { Wrapper(value: x) }
         fn main() {
             let w = wrap(42);
             let x = w.value;
@@ -1813,7 +1819,7 @@ fn generic_fn_returns_generic_struct_inferred_from_context() {
     check(
         r#"
         struct Wrapper(value: T) where T
-        fn wrap(x: T): Wrapper(T) where T { Wrapper(value: x) }
+        fn wrap(_ x: T): Wrapper(T) where T { Wrapper(value: x) }
         fn main() {
             let w: Wrapper(i64) = wrap(42);
             let x = w.value;
@@ -2279,7 +2285,7 @@ fn no_warn_return_at_end() {
 fn no_warn_in_if_branch() {
     // No warning when return is in an if branch (other code still reachable)
     check(
-        "fn f(b: bool): i32 { if b { return 1; } let x: i32 = 2; return x; }",
+        "fn f(_ b: bool): i32 { if b { return 1; } let x: i32 = 2; return x; }",
         "i32",
     );
 }
@@ -2447,7 +2453,7 @@ fn return_path_tail_expression() {
 fn return_path_if_else_both_return() {
     // Both branches return a value - valid
     check(
-        "fn f(b: bool): i32 { if b { 1 } else { 2 } } fn main() { let x = f(true); }",
+        "fn f(_ b: bool): i32 { if b { 1 } else { 2 } } fn main() { let x = f(true); }",
         "i32",
     );
 }
@@ -2456,7 +2462,7 @@ fn return_path_if_else_both_return() {
 fn return_path_if_else_explicit() {
     // Both branches have explicit return - valid
     check(
-        "fn f(b: bool): i32 { if b { return 1; } else { return 2; } } fn main() { let x = f(true); }",
+        "fn f(_ b: bool): i32 { if b { return 1; } else { return 2; } } fn main() { let x = f(true); }",
         "i32",
     );
 }
@@ -2465,7 +2471,7 @@ fn return_path_if_else_explicit() {
 fn return_path_diverging_then_tail() {
     // If one branch returns, tail after if is still reachable - valid
     check(
-        "fn f(b: bool): i32 { if b { return 1; } return 0; } fn main() { let x = f(true); }",
+        "fn f(_ b: bool): i32 { if b { return 1; } return 0; } fn main() { let x = f(true); }",
         "i32",
     );
 }
@@ -2483,7 +2489,7 @@ fn return_path_loop_with_break() {
 fn return_path_nested_if() {
     // Nested if/else chains - all paths return
     check(
-        "fn f(a: bool, b: bool): i32 { if a { if b { 1 } else { 2 } } else { 3 } } fn main() { let x = f(true, false); }",
+        "fn f(_ a: bool, _ b: bool): i32 { if a { if b { 1 } else { 2 } } else { 3 } } fn main() { let x = f(true, false); }",
         "i32",
     );
 }
@@ -2505,7 +2511,7 @@ fn return_path_infinite_loop() {
 fn error_missing_return_if_no_else() {
     // If without else doesn't always return a value
     check_err(
-        "fn f(b: bool): i32 { if b { return 42; } }",
+        "fn f(_ b: bool): i32 { if b { return 42; } }",
         &["not all code paths return a value"],
     );
 }
@@ -2529,7 +2535,7 @@ fn error_missing_return_only_let() {
 fn error_missing_return_one_branch() {
     // Only else branch returns, then branch has no value
     check_err(
-        "fn f(b: bool): i32 { if b { let x = 1; } else { 2 } }",
+        "fn f(_ b: bool): i32 { if b { let x = 1; } else { 2 } }",
         &["type mismatch"],
     );
 }
@@ -2538,7 +2544,7 @@ fn error_missing_return_one_branch() {
 fn error_missing_return_nested_if_incomplete() {
     // Nested if missing inner else
     check_err(
-        "fn f(a: bool, b: bool): i32 { if a { if b { 1 } } else { 2 } }",
+        "fn f(_ a: bool, _ b: bool): i32 { if a { if b { 1 } } else { 2 } }",
         &["type mismatch"],
     );
 }
@@ -2618,7 +2624,7 @@ fn continue_in_for_ok() {
 fn warn_code_after_if_both_return() {
     // Code after if where both branches return is unreachable
     check_warn(
-        "fn f(b: bool): i32 { if b { return 1; } else { return 2; } let x = 3; x }",
+        "fn f(_ b: bool): i32 { if b { return 1; } else { return 2; } let x = 3; x }",
         &["unreachable"],
     );
 }
@@ -2633,7 +2639,7 @@ fn warn_code_after_loop_no_break() {
 fn no_warn_code_after_if_one_returns() {
     // Code after if where only one branch returns is reachable
     check(
-        "fn f(b: bool): i32 { if b { return 1; } let x = 2; return x; }",
+        "fn f(_ b: bool): i32 { if b { return 1; } let x = 2; return x; }",
         "i32",
     );
 }
@@ -2718,7 +2724,7 @@ fn float_var_defaults_to_f64() {
 fn int_var_constrained_by_multiple_same_type() {
     // Same int var used multiple times with the same integer type should succeed
     check(
-        "fn f(x: i64, y: i64) {} fn main() { let a = 1; f(a, a); }",
+        "fn f(_ x: i64, _ y: i64) {} fn main() { let a = 1; f(a, a); }",
         "i64",
     );
 }
@@ -2727,7 +2733,7 @@ fn int_var_constrained_by_multiple_same_type() {
 fn int_var_constrained_by_multiple_contexts() {
     // Int var constrained by parameter and return type (both i64) should work
     check(
-        "fn f(x: i64): i64 { x } fn main() { let a = 1; let b = f(a); }",
+        "fn f(_ x: i64): i64 { x } fn main() { let a = 1; let b = f(a); }",
         "i64",
     );
 }
@@ -2748,7 +2754,7 @@ fn error_int_var_cannot_unify_with_float_direct() {
 fn error_int_var_cannot_unify_with_float_via_function() {
     // Integer literal cannot satisfy float parameter
     check_err(
-        "fn f(x: f64) {} fn main() { let a = 42; f(a); }",
+        "fn f(_ x: f64) {} fn main() { let a = 42; f(a); }",
         &["type mismatch"],
     );
 }
@@ -2761,7 +2767,7 @@ fn error_int_var_cannot_unify_with_float_via_function() {
 fn float_var_constrained_by_multiple_same_type() {
     // Same float var used multiple times with the same float type should succeed
     check(
-        "fn f(x: f32, y: f32) {} fn main() { let a = 1.0; f(a, a); }",
+        "fn f(_ x: f32, _ y: f32) {} fn main() { let a = 1.0; f(a, a); }",
         "f32",
     );
 }
@@ -2776,7 +2782,7 @@ fn error_float_var_cannot_unify_with_int_direct() {
 fn error_float_var_cannot_unify_with_int_via_function() {
     // Float literal cannot satisfy integer parameter
     check_err(
-        "fn f(x: i32) {} fn main() { let a = 3.14; f(a); }",
+        "fn f(_ x: i32) {} fn main() { let a = 3.14; f(a); }",
         &["type mismatch"],
     );
 }
@@ -2789,7 +2795,7 @@ fn error_float_var_cannot_unify_with_int_via_function() {
 fn ref_coercion_mut_to_shared_explicit() {
     // &mut T explicitly coerces to &T when passed to function expecting &T
     check(
-        "fn f(x: &i32) {} fn main() { let mut a = 42; f(&mut a); }",
+        "fn f(_ x: &i32) {} fn main() { let mut a = 42; f(&mut a); }",
         "i32",
     );
 }
@@ -2807,7 +2813,7 @@ fn ref_coercion_in_method_receiver() {
 fn error_ref_coercion_shared_to_mut() {
     // &T cannot coerce to &mut T (cannot gain mutability)
     check_err(
-        "fn f(x: &mut i32) {} fn main() { let a = 42; f(&a); }",
+        "fn f(_ x: &mut i32) {} fn main() { let a = 42; f(&a); }",
         &["type mismatch"],
     );
 }
@@ -2866,7 +2872,7 @@ fn never_from_loop_without_break() {
 fn never_in_early_return_pattern() {
     // Return in one branch, value in another - function return type propagates
     check(
-        "fn f(b: bool): i32 { if b { return 1; } return 42; } fn main() { let x = f(true); }",
+        "fn f(_ b: bool): i32 { if b { return 1; } return 42; } fn main() { let x = f(true); }",
         "i32",
     );
 }
@@ -2888,7 +2894,7 @@ fn type_var_chain_through_multiple_lets() {
 fn type_var_bidirectional_through_function() {
     // Type should flow both ways: argument constrains param, return constrains usage
     check(
-        "fn identity(x: T): T where T { x } fn main() { let a: i64 = identity(1); }",
+        "fn identity(_ x: T): T where T { x } fn main() { let a: i64 = identity(1); }",
         "i64",
     );
 }
@@ -2907,7 +2913,7 @@ fn implicit_return_single_literal() {
 fn implicit_return_single_binary_expr() {
     // Single binary expression - implicit return allowed
     check(
-        "fn f(x: i32): i32 { x * 2 } fn main() { let y = f(21); }",
+        "fn f(_ x: i32): i32 { x * 2 } fn main() { let y = f(21); }",
         "i32",
     );
 }
@@ -2916,7 +2922,7 @@ fn implicit_return_single_binary_expr() {
 fn implicit_return_single_if_expr() {
     // Single if-expression - implicit return allowed
     check(
-        "fn f(a: i32, b: i32): i32 { if a > b { a } else { b } } fn main() { let x = f(1, 2); }",
+        "fn f(_ a: i32, _ b: i32): i32 { if a > b { a } else { b } } fn main() { let x = f(1, 2); }",
         "i32",
     );
 }
@@ -2925,7 +2931,7 @@ fn implicit_return_single_if_expr() {
 fn explicit_return_with_statements() {
     // Statements with explicit return - allowed
     check(
-        "fn f(x: i32): i32 { let y = x; return y + 1; } fn main() { let z = f(5); }",
+        "fn f(_ x: i32): i32 { let y = x; return y + 1; } fn main() { let z = f(5); }",
         "i32",
     );
 }
@@ -2940,7 +2946,7 @@ fn unit_return_with_statements_no_return_needed() {
 fn error_implicit_return_with_statements() {
     // Statements with implicit return - ERROR
     check_err(
-        "fn f(x: i32): i32 { let y = x; y + 1 }",
+        "fn f(_ x: i32): i32 { let y = x; y + 1 }",
         &["implicit return not allowed when function body contains statements"],
     );
 }
@@ -2967,7 +2973,7 @@ fn block_expression_in_let_still_works() {
 fn implicit_return_single_match_expr() {
     // Single match expression - implicit return allowed
     check(
-        "fn f(x: i32): i32 { match x { 0 => 1, _ => 2 } } fn main() { let y = f(0); }",
+        "fn f(_ x: i32): i32 { match x { 0 => 1, _ => 2 } } fn main() { let y = f(0); }",
         "i32",
     );
 }
@@ -2991,7 +2997,7 @@ fn implicit_return_single_block_expr() {
 fn implicit_return_single_path() {
     // Single path expression (parameter) - implicit return allowed
     check(
-        "fn f(x: i32): i32 { x } fn main() { let y = f(42); }",
+        "fn f(_ x: i32): i32 { x } fn main() { let y = f(42); }",
         "i32",
     );
 }
@@ -3009,7 +3015,7 @@ fn implicit_return_single_call() {
 fn explicit_return_as_tail_expr() {
     // Return expression as tail (no semicolon) - allowed
     check(
-        "fn f(x: i32): i32 { let y = x + 1; return y } fn main() { let z = f(5); }",
+        "fn f(_ x: i32): i32 { let y = x + 1; return y } fn main() { let z = f(5); }",
         "i32",
     );
 }
@@ -3036,7 +3042,7 @@ fn error_for_statement_plus_implicit_return() {
 fn error_if_no_else_statement_plus_implicit_return() {
     // If without else as statement followed by implicit return - ERROR
     check_err(
-        "fn f(b: bool): i32 { if b { let x = 1; } 42 }",
+        "fn f(_ b: bool): i32 { if b { let x = 1; } 42 }",
         &["implicit return not allowed when function body contains statements"],
     );
 }
@@ -3045,7 +3051,7 @@ fn error_if_no_else_statement_plus_implicit_return() {
 fn error_assignment_plus_implicit_return() {
     // Assignment statement followed by implicit return - ERROR
     check_err(
-        "fn f(x: i32): i32 { let mut y = x; y = y + 1; y }",
+        "fn f(_ x: i32): i32 { let mut y = x; y = y + 1; y }",
         &["implicit return not allowed when function body contains statements"],
     );
 }
@@ -3179,7 +3185,7 @@ fn match_wildcard_exhaustive() {
 #[test]
 fn generic_with_clone_bound_works() {
     check(
-        "fn identity(x: T): T where T: Clone { x } fn main() { let a = identity(42); }",
+        "fn identity(_ x: T): T where T: Clone { x } fn main() { let a = identity(42); }",
         "i32",
     );
 }
@@ -3187,7 +3193,64 @@ fn generic_with_clone_bound_works() {
 #[test]
 fn generic_with_multiple_bounds_works() {
     check(
-        "fn foo(x: T): T where T: Clone + Debug { x } fn main() { let a = foo(42); }",
+        "fn foo(_ x: T): T where T: Clone + Debug { x } fn main() { let a = foo(42); }",
+        "i32",
+    );
+}
+
+// =============================================================================
+// 15. Named Parameters (spl-g14.9)
+// =============================================================================
+
+#[test]
+fn labeled_param_with_correct_label() {
+    check(
+        "fn greet(to person: i32) {} fn main() { let x = greet(to: 42); }",
+        "()",
+    );
+}
+
+#[test]
+fn labeled_param_missing_label() {
+    check_err(
+        "fn greet(to person: i32) {} fn main() { greet(42); }",
+        &["expected labeled argument `to`"],
+    );
+}
+
+#[test]
+fn positional_param_works() {
+    check(
+        "fn add(_ a: i32, _ b: i32): i32 { a + b } fn main() { let x = add(1, 2); }",
+        "i32",
+    );
+}
+
+#[test]
+fn positional_param_rejects_label() {
+    check_err(
+        "fn add(_ a: i32): i32 { a } fn main() { add(a: 1); }",
+        &["unexpected label"],
+    );
+}
+
+#[test]
+fn default_label_matches_name() {
+    check("fn foo(x: i32) {} fn main() { let r = foo(x: 42); }", "()");
+}
+
+#[test]
+fn default_label_wrong_name() {
+    check_err(
+        "fn foo(x: i32) {} fn main() { foo(y: 42); }",
+        &["expected label `x`"],
+    );
+}
+
+#[test]
+fn mixed_positional_and_labeled() {
+    check(
+        "fn range(from start: i32, _ count: i32): i32 { start + count } fn main() { let x = range(from: 0, 5); }",
         "i32",
     );
 }
