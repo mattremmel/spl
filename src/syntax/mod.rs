@@ -280,7 +280,15 @@ impl rowan::Language for Lang {
 
     fn kind_from_raw(raw: rowan::SyntaxKind) -> Self::Kind {
         assert!(raw.0 < SyntaxKind::__LAST as u16);
-        // SAFETY: SyntaxKind is repr(u16) and we checked bounds
+        // SAFETY: This transmute is safe because:
+        // 1. SyntaxKind is #[repr(u16)], guaranteeing the same memory layout as u16
+        // 2. Rust guarantees repr(u16) enum variants are contiguous starting from 0
+        //    when no explicit discriminants are assigned
+        // 3. __LAST is the final sentinel variant, so any value < __LAST corresponds
+        //    to a valid SyntaxKind variant
+        // 4. The assert above ensures we never transmute an out-of-bounds value
+        // 5. This is the standard pattern from rowan's official examples and is used
+        //    by rust-analyzer: https://github.com/rust-analyzer/rowan/blob/master/examples/s_expressions.rs
         unsafe { std::mem::transmute::<u16, SyntaxKind>(raw.0) }
     }
 
