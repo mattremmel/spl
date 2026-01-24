@@ -106,15 +106,10 @@ pub(crate) fn type_annotation(
     // Tuple type: (T1, T2, ...)
     if p.at(SyntaxKind::L_PAREN) {
         p.bump();
-        if !p.at(SyntaxKind::R_PAREN) {
+        p.parse_delimited(SyntaxKind::R_PAREN, |p| {
             type_annotation(p)?;
-            while p.eat(SyntaxKind::COMMA) {
-                if p.at(SyntaxKind::R_PAREN) {
-                    break;
-                }
-                type_annotation(p)?;
-            }
-        }
+            Ok(())
+        })?;
         p.expect(SyntaxKind::R_PAREN)?;
         return Ok(m.complete(p, SyntaxKind::TupleType));
     }
@@ -123,15 +118,10 @@ pub(crate) fn type_annotation(
     if p.at(SyntaxKind::FN_KW) {
         p.bump();
         p.expect(SyntaxKind::L_PAREN)?;
-        if !p.at(SyntaxKind::R_PAREN) {
+        p.parse_delimited(SyntaxKind::R_PAREN, |p| {
             type_annotation(p)?;
-            while p.eat(SyntaxKind::COMMA) {
-                if p.at(SyntaxKind::R_PAREN) {
-                    break;
-                }
-                type_annotation(p)?;
-            }
-        }
+            Ok(())
+        })?;
         p.expect(SyntaxKind::R_PAREN)?;
         // Optional return type
         if p.eat(SyntaxKind::ARROW) {

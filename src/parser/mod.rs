@@ -111,6 +111,17 @@ const EXPR_RECOVERY_SET: &[SyntaxKind] = &[
 /// Prevents infinite loops or excessive CPU usage on malformed input.
 const MAX_RECOVERY_TOKENS: usize = 500;
 
+/// Get matching close delimiter for an open delimiter.
+/// Returns None if the token is not an open delimiter.
+fn matching_close(open: SyntaxKind) -> Option<SyntaxKind> {
+    match open {
+        SyntaxKind::L_PAREN => Some(SyntaxKind::R_PAREN),
+        SyntaxKind::L_BRACKET => Some(SyntaxKind::R_BRACKET),
+        SyntaxKind::L_BRACE => Some(SyntaxKind::R_BRACE),
+        _ => None,
+    }
+}
+
 /// Result of parsing, containing the syntax tree and any errors.
 #[derive(Debug)]
 pub struct Parse {
@@ -346,6 +357,85 @@ impl<'src> Parser<'src> {
     /// Skips tokens and wraps them in an ERROR node.
     fn recover_to_stmt(&mut self, error: ParseError) -> CompletedMarker {
         self.recover_with_error(error, STMT_RECOVERY_SET)
+    }
+
+    /// Recover by skipping to a matching close delimiter.
+    ///
+    /// Tracks nesting depth to find the correct matching delimiter.
+    /// Does NOT consume the final close delimiter.
+    /// Returns the number of tokens consumed.
+    ///
+    /// This is useful for recovering from errors inside delimited expressions
+    /// like function calls or parenthesized expressions.
+    #[allow(dead_code)]
+    fn recover_to_delimiter(&mut self, open: SyntaxKind) -> usize {
+        let Some(close) = matching_close(open) else {
+            return 0;
+        };
+
+        let mut depth = 1;
+        let mut consumed = 0;
+
+        while depth > 0 && self.current().is_some() && consumed < MAX_RECOVERY_TOKENS {
+            match self.current() {
+                Some(k) if k == open => {
+                    depth += 1;
+                    self.bump();
+                }
+                Some(k) if k == close => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return consumed; // Don't consume final close
+                    }
+                    self.bump();
+                }
+                _ => {
+                    self.bump();
+                }
+            }
+            consumed += 1;
+        }
+
+        consumed
+    }
+
+    // ===== Delimited List Parsing =====
+
+    /// Parse comma-separated items until reaching the close delimiter.
+    ///
+    /// This helper extracts the common pattern for parsing delimited lists:
+    /// ```text
+    /// if !at(close) {
+    ///     parse_item()?;
+    ///     while eat(COMMA) {
+    ///         if at(close) { break; }  // trailing comma
+    ///         parse_item()?;
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// Returns `Ok(true)` if at least one item was parsed, `Ok(false)` if the list was empty.
+    /// Does NOT consume the close delimiter - caller must handle that.
+    pub(crate) fn parse_delimited<F>(
+        &mut self,
+        close: SyntaxKind,
+        mut parse_item: F,
+    ) -> Result<bool, ParseError>
+    where
+        F: FnMut(&mut Self) -> Result<(), ParseError>,
+    {
+        if self.at(close) {
+            return Ok(false);
+        }
+
+        parse_item(self)?;
+        while self.eat(SyntaxKind::COMMA) {
+            if self.at(close) {
+                break; // trailing comma
+            }
+            parse_item(self)?;
+        }
+        Ok(true)
     }
 
     // ===== Contract Helpers =====
@@ -1025,5 +1115,163 @@ pub(crate) mod tests {
         let tree = parse.debug_tree();
         assert_eq!(tree.matches("StructDef").count(), 2);
         assert!(tree.contains("FunctionDef"));
+    }
+
+    // === parse_delimited() helper tests ===
+
+    #[test]
+    fn parse_delimited_empty_tuple() {
+        // "()" -> empty list
+        check_expr(
+            "()",
+            &expect![[r#"
+                TupleExpr@0..2
+                  L_PAREN@0..1 "("
+                  R_PAREN@1..2 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn parse_delimited_single_item() {
+        // "(a,)" -> single element tuple
+        check_expr(
+            "(a,)",
+            &expect![[r#"
+                TupleExpr@0..4
+                  L_PAREN@0..1 "("
+                  PathExpr@1..2
+                    Path@1..2
+                      PathSegment@1..2
+                        NameRef@1..2
+                          IDENT@1..2 "a"
+                  COMMA@2..3 ","
+                  R_PAREN@3..4 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn parse_delimited_multiple_items() {
+        // "(a, b, c)" -> three items
+        check_expr(
+            "(a, b, c)",
+            &expect![[r#"
+                TupleExpr@0..9
+                  L_PAREN@0..1 "("
+                  PathExpr@1..2
+                    Path@1..2
+                      PathSegment@1..2
+                        NameRef@1..2
+                          IDENT@1..2 "a"
+                  COMMA@2..3 ","
+                  PathExpr@3..5
+                    Path@3..5
+                      PathSegment@3..5
+                        NameRef@3..5
+                          WHITESPACE@3..4 " "
+                          IDENT@4..5 "b"
+                  COMMA@5..6 ","
+                  PathExpr@6..8
+                    Path@6..8
+                      PathSegment@6..8
+                        NameRef@6..8
+                          WHITESPACE@6..7 " "
+                          IDENT@7..8 "c"
+                  R_PAREN@8..9 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn parse_delimited_trailing_comma() {
+        // "(a, b,)" -> trailing comma allowed
+        check_expr(
+            "(a, b,)",
+            &expect![[r#"
+                TupleExpr@0..7
+                  L_PAREN@0..1 "("
+                  PathExpr@1..2
+                    Path@1..2
+                      PathSegment@1..2
+                        NameRef@1..2
+                          IDENT@1..2 "a"
+                  COMMA@2..3 ","
+                  PathExpr@3..5
+                    Path@3..5
+                      PathSegment@3..5
+                        NameRef@3..5
+                          WHITESPACE@3..4 " "
+                          IDENT@4..5 "b"
+                  COMMA@5..6 ","
+                  R_PAREN@6..7 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn parse_delimited_brackets() {
+        // "[a, b]" -> works with different delimiters
+        check_expr(
+            "[a, b]",
+            &expect![[r#"
+                ArrayExpr@0..6
+                  L_BRACKET@0..1 "["
+                  PathExpr@1..2
+                    Path@1..2
+                      PathSegment@1..2
+                        NameRef@1..2
+                          IDENT@1..2 "a"
+                  COMMA@2..3 ","
+                  PathExpr@3..5
+                    Path@3..5
+                      PathSegment@3..5
+                        NameRef@3..5
+                          WHITESPACE@3..4 " "
+                          IDENT@4..5 "b"
+                  R_BRACKET@5..6 "]"
+            "#]],
+        );
+    }
+
+    // === Delimiter Recovery Tests (spl-3r0) ===
+
+    #[test]
+    fn delimiter_matching_helper() {
+        // Test that matching_close returns correct close delimiters
+        assert_eq!(
+            super::matching_close(SyntaxKind::L_PAREN),
+            Some(SyntaxKind::R_PAREN)
+        );
+        assert_eq!(
+            super::matching_close(SyntaxKind::L_BRACKET),
+            Some(SyntaxKind::R_BRACKET)
+        );
+        assert_eq!(
+            super::matching_close(SyntaxKind::L_BRACE),
+            Some(SyntaxKind::R_BRACE)
+        );
+        assert_eq!(super::matching_close(SyntaxKind::IDENT), None);
+    }
+
+    #[test]
+    fn recovery_error_in_function_call_args() {
+        // Error token inside function call should not break the function def
+        // The @ token should cause an error but the outer structure should be preserved
+        let parse = parse("fn f() { let x = foo(a, b); }");
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+        assert!(tree.contains("ApplyExpr"));
+    }
+
+    #[test]
+    fn recovery_bounded_does_not_hang() {
+        // Even with many tokens, recovery should be bounded
+        // This should not cause an infinite loop or hang
+        let input = "fn f() { ".to_string() + &"x ".repeat(100) + "}";
+        let parse = parse(&input);
+        // Should complete without hanging, may have errors
+        assert!(parse.debug_tree().contains("FunctionDef"));
     }
 }

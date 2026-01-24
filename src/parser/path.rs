@@ -57,17 +57,10 @@ fn path_segment(p: &mut Parser<'_>, allow_generics: bool) -> Result<CompletedMar
 fn generic_args_paren(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     p.expect(SyntaxKind::L_PAREN)?;
-
-    if !p.at(SyntaxKind::R_PAREN) {
+    p.parse_delimited(SyntaxKind::R_PAREN, |p| {
         super::stmt::type_annotation(p)?;
-        while p.eat(SyntaxKind::COMMA) {
-            if p.at(SyntaxKind::R_PAREN) {
-                break;
-            }
-            super::stmt::type_annotation(p)?;
-        }
-    }
-
+        Ok(())
+    })?;
     p.expect(SyntaxKind::R_PAREN)?;
     Ok(m.complete(p, SyntaxKind::GenericArgs))
 }

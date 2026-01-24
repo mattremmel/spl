@@ -153,17 +153,10 @@ fn enum_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
 /// Parse enum pattern arguments: `(pattern, ...)`
 fn parse_enum_args(p: &mut Parser<'_>) -> Result<(), ParseError> {
     p.expect(SyntaxKind::L_PAREN)?;
-
-    if !p.at(SyntaxKind::R_PAREN) {
+    p.parse_delimited(SyntaxKind::R_PAREN, |p| {
         pattern(p)?;
-        while p.eat(SyntaxKind::COMMA) {
-            if p.at(SyntaxKind::R_PAREN) {
-                break;
-            }
-            pattern(p)?;
-        }
-    }
-
+        Ok(())
+    })?;
     p.expect(SyntaxKind::R_PAREN)?;
     Ok(())
 }
@@ -179,17 +172,10 @@ fn struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
 /// Parse struct pattern fields: `(x: a, y: b)`, `(x, y, ..)`
 fn parse_struct_fields(p: &mut Parser<'_>) -> Result<(), ParseError> {
     p.expect(SyntaxKind::L_PAREN)?;
-
-    if !p.at(SyntaxKind::R_PAREN) {
+    p.parse_delimited(SyntaxKind::R_PAREN, |p| {
         struct_pat_field(p)?;
-        while p.eat(SyntaxKind::COMMA) {
-            if p.at(SyntaxKind::R_PAREN) {
-                break;
-            }
-            struct_pat_field(p)?;
-        }
-    }
-
+        Ok(())
+    })?;
     p.expect(SyntaxKind::R_PAREN)?;
     Ok(())
 }
@@ -248,17 +234,10 @@ fn literal_or_range_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseErro
 fn tuple_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     p.bump(); // consume `(`
-
-    if !p.at(SyntaxKind::R_PAREN) {
+    p.parse_delimited(SyntaxKind::R_PAREN, |p| {
         pattern(p)?;
-        while p.eat(SyntaxKind::COMMA) {
-            if p.at(SyntaxKind::R_PAREN) {
-                break;
-            }
-            pattern(p)?;
-        }
-    }
-
+        Ok(())
+    })?;
     p.expect(SyntaxKind::R_PAREN)?;
     Ok(m.complete(p, SyntaxKind::TuplePat))
 }
@@ -267,17 +246,10 @@ fn tuple_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
 fn slice_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     p.bump(); // consume `[`
-
-    if !p.at(SyntaxKind::R_BRACKET) {
+    p.parse_delimited(SyntaxKind::R_BRACKET, |p| {
         pattern(p)?;
-        while p.eat(SyntaxKind::COMMA) {
-            if p.at(SyntaxKind::R_BRACKET) {
-                break;
-            }
-            pattern(p)?;
-        }
-    }
-
+        Ok(())
+    })?;
     p.expect(SyntaxKind::R_BRACKET)?;
     Ok(m.complete(p, SyntaxKind::SlicePat))
 }
