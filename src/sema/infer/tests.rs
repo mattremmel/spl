@@ -3779,3 +3779,59 @@ fn strref_len_is_usize() {
         "i32", // last binding is x; if len() didn't return usize, there'd be an error
     );
 }
+
+// -----------------------------------------------------------------------------
+// Phase 3: Occurs Check Tests
+// -----------------------------------------------------------------------------
+// Note: Source-level self-referential tests like `let x = (x,);` are caught by
+// the resolver as "cannot find `x`" before inference runs. The occurs check is
+// tested at the unit level in unify.rs with tests like unify_err_occurs_check_tuple.
+
+// -----------------------------------------------------------------------------
+// Phase 5: SelfType Error Diagnostic Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn self_type_outside_impl_return_error() {
+    // Using Self in a free function return type should error with a helpful message
+    check_err(
+        r#"fn foo(): Self {}"#,
+        &["`Self` is only valid inside impl blocks"],
+    );
+}
+
+#[test]
+fn self_type_outside_impl_param_error() {
+    // Using Self in a free function parameter should error
+    check_err(
+        r#"fn foo(x: Self) {}"#,
+        &["`Self` is only valid inside impl blocks"],
+    );
+}
+
+#[test]
+fn self_type_outside_impl_let_error() {
+    // Using Self in a let binding type should error
+    check_err(
+        r#"fn main() { let x: Self = 1; }"#,
+        &["`Self` is only valid inside impl blocks"],
+    );
+}
+
+#[test]
+fn self_type_inside_impl_ok() {
+    // Using Self inside impl block should work
+    // This checks that Self resolves to the impl'd type (Foo)
+    check(
+        r#"
+        struct Foo(value: i32)
+        impl Foo {
+            fn new(v: i32): Self { Foo(value: v) }
+        }
+        fn main() {
+            let x = Foo.new(v: 42);
+        }
+        "#,
+        "Foo",
+    );
+}

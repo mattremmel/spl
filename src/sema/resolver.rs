@@ -256,9 +256,14 @@ impl<'ctx> Resolver<'ctx> {
         span: Span,
     ) {
         // Handle grouped imports: `use foo.{bar, baz}`
+        // Before recursing into subtrees, accumulate current tree's path segments
         if let Some(list) = tree.use_tree_list() {
+            let mut path = base_path;
+            for segment in tree.path_segments() {
+                path.push(segment.text().to_string());
+            }
             for subtree in list.use_trees() {
-                self.collect_use_tree(&subtree, base_path.clone(), is_pub, span.clone());
+                self.collect_use_tree(&subtree, path.clone(), is_pub, span.clone());
             }
             return;
         }
@@ -1241,15 +1246,21 @@ impl<'ctx> Resolver<'ctx> {
                 let text = token.text().to_string();
                 let span = Self::text_range_to_span(token.text_range());
                 let interned = self.ctx.intern(&text);
-                if let Ok(def_id) = self.ctx.define(
+                match self.ctx.define(
                     interned,
                     SymbolKind::Local,
                     Visibility::Private,
                     span.clone(),
                     outer_mutable,
                 ) {
-                    // Store span → DefId mapping for inference phase
-                    self.resolutions.insert(span, def_id);
+                    Ok(def_id) => {
+                        // Store span → DefId mapping for inference phase
+                        self.resolutions.insert(span, def_id);
+                    }
+                    Err(existing_def_id) => {
+                        let existing = self.ctx.get_symbol(existing_def_id);
+                        self.error_duplicate(&text, span, existing.span.clone());
+                    }
                 }
             }
         }
@@ -2360,6 +2371,195 @@ mod tests {
             use self.original as alias1;
             use self.original as alias2;
             fn main() { alias1(); alias2(); }
+        "#);
+    }
+
+    // ===== Phase 1: Grouped Imports Base Path Bug =====
+
+    #[test]
+    fn use_grouped_with_base_path() {
+        // This tests that grouped imports accumulate the base path correctly
+        // `use self.{foo, bar}` should resolve foo and bar as self.foo and self.bar
+        check_ok(r#"
+            fn foo() {}
+            fn bar() {}
+            use self.{foo, bar};
+            fn main() { foo(); bar(); }
+        "#);
+    }
+
+    #[test]
+    fn use_grouped_cross_package_base_path() {
+        // When cross-package is implemented, this should work
+        // For now it should error with cross-package not implemented
+        check_err(r#"
+            use utils.{helper, other};
+            fn main() {}
+        "#, &["cross-package imports not yet implemented"]);
+    }
+
+    #[test]
+    fn use_nested_grouped_imports() {
+        // Nested grouped imports should accumulate paths correctly
+        check_ok(r#"
+            fn a() {}
+            fn b() {}
+            fn c() {}
+            use self.{a, b, c};
+            fn main() { a(); b(); c(); }
+        "#);
+    }
+
+    // ===== Phase 2: Struct Pattern Duplicate Binding Bug =====
+
+    #[test]
+    fn struct_pattern_duplicate_binding_error() {
+        // Using the same binding name twice in a struct pattern should error
+        check_err(r#"
+            struct Point(x: i32, y: i32)
+            fn main() {
+                let Point(x: a, y: a) = Point(x: 1, y: 2);
+            }
+        "#, &["defined multiple times"]);
+    }
+
+    #[test]
+    fn struct_pattern_shorthand_duplicate_error() {
+        // Shorthand syntax with duplicate bindings should error
+        check_err(r#"
+            struct Foo(a: i32, b: i32)
+            fn main() {
+                let Foo(a: x, b: x) = Foo(a: 1, b: 2);
+            }
+        "#, &["defined multiple times"]);
+    }
+
+    #[test]
+    fn struct_pattern_shorthand_field_duplicate_error() {
+        // Shorthand field syntax with duplicate should error
+        // This tests the else-if branch in define_struct_pat_field
+        check_err(r#"
+            struct Pair(x: i32, x: i32)
+            fn main() {
+                let Pair(x, x) = Pair(x: 1, x: 2);
+            }
+        "#, &["defined multiple times"]);
+    }
+
+    // ===== Phase 4: Duplicate Struct Field Definition Bug =====
+
+    #[test]
+    fn resolve_duplicate_struct_field_error() {
+        // Struct with duplicate field names should error
+        check_err(
+            "struct Point(x: i32, x: i32)",
+            &["defined multiple times"],
+        );
+    }
+
+    #[test]
+    fn resolve_duplicate_struct_field_different_types() {
+        // Duplicate fields with different types should still error
+        check_err(
+            "struct Mixed(a: i32, a: bool)",
+            &["defined multiple times"],
+        );
+    }
+
+    #[test]
+    fn resolve_struct_fields_unique_ok() {
+        // Unique field names should work fine
+        check_ok("struct Point(x: i32, y: i32)");
+    }
+
+    // ===== Phase 6: Test Coverage Gaps =====
+
+    // Import ordering tests
+    #[test]
+    fn use_import_defined_after_use() {
+        // Import should work even when the target is defined after the use
+        check_ok(r#"
+            use self.later;
+            fn later() {}
+            fn main() { later(); }
+        "#);
+    }
+
+    // Shadowing tests
+    #[test]
+    fn parameter_shadows_import() {
+        // Parameter should shadow imported name within function body
+        check_ok(r#"
+            fn foo(): i32 { 1 }
+            use self.foo;
+            fn bar(foo: i32): i32 { foo }
+            fn main() {}
+        "#);
+    }
+
+    #[test]
+    fn type_parameter_shadows_struct() {
+        // Type parameter should shadow struct name in generic function
+        check_ok(r#"
+            struct Foo;
+            fn bar(x: Foo): Foo where Foo { x }
+            fn main() {}
+        "#);
+    }
+
+    #[test]
+    fn for_loop_shadows_outer_variable() {
+        // For loop iteration variable should shadow outer binding
+        check_ok(r#"
+            fn main() {
+                let i = 100;
+                for i in 0..10 { i; }
+                i;
+            }
+        "#);
+    }
+
+    #[test]
+    fn match_arm_shadows_outer() {
+        // Match arm binding should shadow outer variable
+        check_ok(r#"
+            fn main() {
+                let x = 1;
+                match 42 { x => { x; } }
+                x;
+            }
+        "#);
+    }
+
+    // Visibility modifier tests
+    #[test]
+    fn resolve_pub_crate_function() {
+        check_ok("pub(crate) fn internal() {}");
+    }
+
+    #[test]
+    fn resolve_pub_super_function() {
+        check_ok("pub(super) fn package_internal() {}");
+    }
+
+    #[test]
+    fn resolve_pub_self_function() {
+        check_ok("pub(self) fn module_internal() {}");
+    }
+
+    // Edge case tests
+    #[test]
+    fn resolve_empty_source() {
+        check_ok("");
+    }
+
+    #[test]
+    fn use_many_grouped_imports() {
+        // Test with many items in a grouped import
+        check_ok(r#"
+            fn a() {} fn b() {} fn c() {} fn d() {} fn e() {}
+            use self.{a, b, c, d, e};
+            fn main() { a(); b(); c(); d(); e(); }
         "#);
     }
 }

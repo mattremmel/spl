@@ -2805,7 +2805,12 @@ impl<'a> InferEngine<'a> {
                                     if let Some(self_ty) = self.current_self_type {
                                         return self_ty;
                                     }
-                                    // Self used outside impl block - error
+                                    // Self used outside impl block - emit diagnostic and return error
+                                    let span = text_range_to_span(token.text_range());
+                                    self.diagnostics.push(
+                                        Diagnostic::error("`Self` is only valid inside impl blocks")
+                                            .with_label(span, "not inside an impl block"),
+                                    );
                                     return self.types.error();
                                 }
 

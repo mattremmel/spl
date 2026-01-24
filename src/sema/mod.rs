@@ -274,6 +274,12 @@ impl SemanticContext {
 
     /// Look up a symbol in a specific scope only (not parent scopes).
     pub fn lookup_in_scope(&self, name: Spur, scope_id: ScopeId) -> Option<DefId> {
+        debug_assert!(
+            self.is_valid_scope_id(scope_id),
+            "precondition: scope_id {} must be valid (< {})",
+            scope_id.0,
+            self.scopes.len()
+        );
         self.scopes[scope_id.0 as usize].lookup(name)
     }
 

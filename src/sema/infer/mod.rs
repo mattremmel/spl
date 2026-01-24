@@ -48,6 +48,10 @@ pub enum UnifyError {
 
     /// Constrained variable violated (Int var vs non-integer).
     ConstraintViolation { kind: InferKind, actual: TypeId },
+
+    /// Occurs check failed: would create an infinite type.
+    /// E.g., trying to unify ?T with (?T,) would create ?T = (?T,) = ((?T,),) = ...
+    InfiniteType { var: TypeId, ty: TypeId },
 }
 
 /// Result of type inference.

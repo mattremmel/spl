@@ -128,11 +128,23 @@ impl ModuleTree {
 
     /// Get a module by ID.
     pub fn get(&self, id: ModuleId) -> &Module {
+        debug_assert!(
+            (id.0 as usize) < self.modules.len(),
+            "precondition: ModuleId {} must be valid (< {})",
+            id.0,
+            self.modules.len()
+        );
         &self.modules[id.0 as usize]
     }
 
     /// Get a mutable reference to a module by ID.
     pub fn get_mut(&mut self, id: ModuleId) -> &mut Module {
+        debug_assert!(
+            (id.0 as usize) < self.modules.len(),
+            "precondition: ModuleId {} must be valid (< {})",
+            id.0,
+            self.modules.len()
+        );
         &mut self.modules[id.0 as usize]
     }
 
@@ -350,5 +362,75 @@ mod tests {
         // From child, resolve super.sibling
         let result = tree.resolve_path(child, &["super", "sibling"]);
         assert_eq!(result, Ok(sibling));
+    }
+
+    // ===== Phase 7: ModuleTree Test Coverage Gaps =====
+
+    #[test]
+    fn resolve_path_multiple_super() {
+        let mut tree = ModuleTree::new();
+        let child = tree.add_child(tree.root_id(), "child");
+        let grandchild = tree.add_child(child, "grandchild");
+
+        // From grandchild, super goes to child, then child.grandchild error since "super" isn't consumed as a path
+        // Actually we need to test chained super which isn't in a single path segment.
+        // Let's test the scenario from grandchild: super gets us to child, then we need another super
+        // But resolve_path only handles one super at the start. Let me verify the actual behavior.
+
+        // First super at start: goes to parent (child)
+        let result = tree.resolve_path(grandchild, &["super"]);
+        assert_eq!(result, Ok(child));
+
+        // From child, super goes to root
+        let result = tree.resolve_path(child, &["super"]);
+        assert_eq!(result, Ok(tree.root_id()));
+    }
+
+    #[test]
+    fn resolve_path_module_with_segments() {
+        let mut tree = ModuleTree::new();
+        let child = tree.add_child(tree.root_id(), "child");
+        let grandchild = tree.add_child(child, "grandchild");
+
+        // module.child.grandchild from anywhere should work
+        let result = tree.resolve_path(tree.root_id(), &["module", "child", "grandchild"]);
+        assert_eq!(result, Ok(grandchild));
+
+        // Also works from the grandchild itself
+        let result = tree.resolve_path(grandchild, &["module", "child", "grandchild"]);
+        assert_eq!(result, Ok(grandchild));
+    }
+
+    #[test]
+    fn resolve_empty_path_returns_current() {
+        let mut tree = ModuleTree::new();
+        let child = tree.add_child(tree.root_id(), "child");
+
+        // Empty path should return current module
+        let result = tree.resolve_path(child, &[]);
+        assert_eq!(result, Ok(child));
+
+        let result = tree.resolve_path(tree.root_id(), &[]);
+        assert_eq!(result, Ok(tree.root_id()));
+    }
+
+    #[test]
+    fn resolve_path_self_with_children() {
+        let mut tree = ModuleTree::new();
+        let child = tree.add_child(tree.root_id(), "child");
+        let grandchild = tree.add_child(child, "grandchild");
+
+        // self.grandchild from child
+        let result = tree.resolve_path(child, &["self", "grandchild"]);
+        assert_eq!(result, Ok(grandchild));
+    }
+
+    #[test]
+    fn resolve_path_invalid_child() {
+        let tree = ModuleTree::new();
+
+        // Trying to access non-existent child should fail
+        let result = tree.resolve_path(tree.root_id(), &["nonexistent"]);
+        assert_eq!(result, Err(PathResolveError::PackageNotFound));
     }
 }

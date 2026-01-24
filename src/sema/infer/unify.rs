@@ -125,6 +125,34 @@ impl<'a> InferEngine<'a> {
         }
     }
 
+    /// Check if a type variable occurs within a type.
+    ///
+    /// This is the "occurs check" that prevents creation of infinite types.
+    /// For example, unifying ?T with (?T,) would create ?T = (?T,) = ((?T,),) = ...
+    ///
+    /// Returns true if `var` appears anywhere within `type_id`.
+    fn occurs_in(&self, var: TypeVar, type_id: TypeId) -> bool {
+        let resolved = self.resolve_type(type_id);
+        let ty = self.types.get(resolved);
+        match ty {
+            Type::Infer(v, _) => *v == var,
+            Type::Tuple(tys) => tys.iter().any(|t| self.occurs_in(var, *t)),
+            Type::Array(elem, _) => self.occurs_in(var, *elem),
+            Type::Slice(elem) => self.occurs_in(var, *elem),
+            Type::Ref(_, inner) => self.occurs_in(var, *inner),
+            Type::RawPtr(_, pointee) => self.occurs_in(var, *pointee),
+            Type::Struct(_, args) => args.iter().any(|t| self.occurs_in(var, *t)),
+            Type::Alias(_, args) => args.iter().any(|t| self.occurs_in(var, *t)),
+            Type::FnPtr { params, ret } => {
+                params.iter().any(|t| self.occurs_in(var, *t)) || self.occurs_in(var, *ret)
+            }
+            // Primitives, error, str ref, params, self type don't contain type variables
+            Type::Primitive(_) | Type::Error | Type::StrRef | Type::Param(_) | Type::SelfType => {
+                false
+            }
+        }
+    }
+
     // =========================================================================
     // Type Resolution
     // =========================================================================
@@ -222,28 +250,38 @@ impl<'a> InferEngine<'a> {
             (Type::Primitive(PrimitiveKind::Never), _)
             | (_, Type::Primitive(PrimitiveKind::Never)) => Ok(()),
 
-            // General type variable binds to anything
+            // General type variable binds to anything (with occurs check)
             (Type::Infer(var, InferKind::General), _) => {
+                if self.occurs_in(*var, b) {
+                    return Err(UnifyError::InfiniteType { var: a, ty: b });
+                }
                 self.substitution.insert(*var, b);
                 Ok(())
             }
             (_, Type::Infer(var, InferKind::General)) => {
+                if self.occurs_in(*var, a) {
+                    return Err(UnifyError::InfiniteType { var: b, ty: a });
+                }
                 self.substitution.insert(*var, a);
                 Ok(())
             }
 
-            // Int variable binds to any integer type or another int variable
+            // Int variable binds to any integer type or another int variable (with occurs check)
             (Type::Infer(var, InferKind::Int), Type::Primitive(prim)) if is_integer_type(*prim) => {
+                // No occurs check needed - primitives can't contain type variables
                 self.substitution.insert(*var, b);
                 Ok(())
             }
             (Type::Primitive(prim), Type::Infer(var, InferKind::Int)) if is_integer_type(*prim) => {
+                // No occurs check needed - primitives can't contain type variables
                 self.substitution.insert(*var, a);
                 Ok(())
             }
-            (Type::Infer(var1, InferKind::Int), Type::Infer(_, InferKind::Int)) => {
-                // Bind one to the other
-                self.substitution.insert(*var1, b);
+            (Type::Infer(var1, InferKind::Int), Type::Infer(var2, InferKind::Int)) => {
+                // Bind one to the other (same variable is OK - identity)
+                if var1 != var2 {
+                    self.substitution.insert(*var1, b);
+                }
                 Ok(())
             }
             // Int variable vs non-integer type
@@ -256,17 +294,22 @@ impl<'a> InferEngine<'a> {
                 actual: a,
             }),
 
-            // Float variable binds to any float type or another float variable
+            // Float variable binds to any float type or another float variable (with occurs check)
             (Type::Infer(var, InferKind::Float), Type::Primitive(prim)) if is_float_type(*prim) => {
+                // No occurs check needed - primitives can't contain type variables
                 self.substitution.insert(*var, b);
                 Ok(())
             }
             (Type::Primitive(prim), Type::Infer(var, InferKind::Float)) if is_float_type(*prim) => {
+                // No occurs check needed - primitives can't contain type variables
                 self.substitution.insert(*var, a);
                 Ok(())
             }
-            (Type::Infer(var1, InferKind::Float), Type::Infer(_, InferKind::Float)) => {
-                self.substitution.insert(*var1, b);
+            (Type::Infer(var1, InferKind::Float), Type::Infer(var2, InferKind::Float)) => {
+                // Bind one to the other (same variable is OK - identity)
+                if var1 != var2 {
+                    self.substitution.insert(*var1, b);
+                }
                 Ok(())
             }
             // Float variable vs non-float type
@@ -1125,5 +1168,88 @@ mod tests {
 
         let result = engine.unify(int_var, i64_ty);
         assert!(result.is_ok());
+    }
+
+    // =========================================================================
+    // Phase 3: Occurs Check Tests
+    // =========================================================================
+
+    #[test]
+    fn unify_err_occurs_check_tuple() {
+        // ?T vs (?T,) should fail with InfiniteType
+        // Unifying these would create ?T = (?T,) = ((?T,),) = ...
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let var = engine.fresh_type_var();
+        let tuple_containing_var = engine.types.mk_tuple(vec![var]);
+
+        let result = engine.unify(var, tuple_containing_var);
+        assert!(
+            matches!(result, Err(UnifyError::InfiniteType { .. })),
+            "expected InfiniteType error, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn unify_err_occurs_check_array() {
+        // ?T vs [?T; 5] should fail with InfiniteType
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let var = engine.fresh_type_var();
+        let array_containing_var = engine.types.mk_array(var, 5);
+
+        let result = engine.unify(var, array_containing_var);
+        assert!(
+            matches!(result, Err(UnifyError::InfiniteType { .. })),
+            "expected InfiniteType error, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn unify_err_occurs_check_ref() {
+        // ?T vs &?T should fail with InfiniteType
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let var = engine.fresh_type_var();
+        let ref_to_var = engine.types.mk_ref(Mutability::Shared, var);
+
+        let result = engine.unify(var, ref_to_var);
+        assert!(
+            matches!(result, Err(UnifyError::InfiniteType { .. })),
+            "expected InfiniteType error, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn unify_err_occurs_check_nested() {
+        // ?T vs ((?T,),) should fail with InfiniteType (nested occurrence)
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let var = engine.fresh_type_var();
+        let inner_tuple = engine.types.mk_tuple(vec![var]);
+        let outer_tuple = engine.types.mk_tuple(vec![inner_tuple]);
+
+        let result = engine.unify(var, outer_tuple);
+        assert!(
+            matches!(result, Err(UnifyError::InfiniteType { .. })),
+            "expected InfiniteType error, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn unify_ok_different_vars_in_tuple() {
+        // ?T vs (?U,) should succeed - different type variables
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let var_t = engine.fresh_type_var();
+        let var_u = engine.fresh_type_var();
+        let tuple_containing_u = engine.types.mk_tuple(vec![var_u]);
+
+        let result = engine.unify(var_t, tuple_containing_u);
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
     }
 }
