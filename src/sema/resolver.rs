@@ -310,62 +310,163 @@ impl<'ctx> Resolver<'ctx> {
 
     /// Resolve pending imports after pass 1.
     ///
-    /// For now, this only handles same-package imports (items visible in current scope).
-    /// Cross-package imports will be added when package tree integration is complete.
+    /// Handles path prefixes: `module.`, `self.`, `super.`
+    /// - `module.` and `self.` resolve from the root/current package
+    /// - `super.` is an error at the root package
     fn resolve_imports(&mut self) {
         let imports = std::mem::take(&mut self.pending_imports);
 
         for import in imports {
             if import.is_glob {
-                // Glob imports are handled separately (Phase 4)
+                self.resolve_glob_import(&import);
                 continue;
             }
 
-            // For now, we only handle single-segment paths (same-package items)
-            // Multi-segment paths require package tree integration
-            if import.path.len() == 1 {
-                let name = &import.path[0];
-                let interned = self.ctx.intern(name);
+            self.resolve_single_import(&import);
+        }
+    }
 
-                if let Some(def_id) = self.ctx.lookup(interned) {
-                    // Create alias if import name differs from original
-                    if import.local_name != *name {
-                        let alias_interned = self.ctx.intern(&import.local_name);
-                        // Add alias to current scope
-                        let _ = self.ctx.define(
-                            alias_interned,
-                            SymbolKind::Function, // Will be overwritten with correct kind
-                            if import.is_pub {
-                                Visibility::Public
-                            } else {
-                                Visibility::Private
-                            },
-                            import.span.clone(),
-                            false,
-                        );
-                        self.resolutions.insert(import.span.clone(), def_id);
-                    }
-                    // If names match, the item is already in scope
-                } else {
-                    self.diagnostics.push(
-                        Diagnostic::error(format!("cannot find `{}` in this scope", name))
-                            .with_label(import.span, "not found"),
-                    );
-                }
-            } else if import.path.len() > 1 {
-                // Multi-segment path: `utils.helper` or `module.utils.helper`
-                // For now, report as unimplemented
-                // This will be implemented when package tree is integrated
-                let path_str = import.path.join(".");
+    fn resolve_single_import(&mut self, import: &PendingImport) {
+        if import.path.is_empty() {
+            return;
+        }
+
+        // Handle path prefixes
+        let (resolved_path, skip_prefix) = self.resolve_path_prefix(&import.path, &import.span);
+        if resolved_path.is_none() {
+            return; // Error already reported
+        }
+        let path = resolved_path.unwrap();
+
+        // After stripping prefix, we should have the item name
+        if path.is_empty() {
+            self.diagnostics.push(
+                Diagnostic::error("expected item name after path prefix".to_string())
+                    .with_label(import.span.clone(), "missing item name"),
+            );
+            return;
+        }
+
+        // For now, we handle same-package imports (single segment after prefix)
+        // Multi-segment paths (subpackage access) require package tree integration
+        if path.len() == 1 {
+            let name = &path[0];
+            let interned = self.ctx.intern(name);
+
+            if let Some(def_id) = self.ctx.lookup(interned) {
+                // Check visibility if needed (for now, all items in same package are visible)
+                self.add_import_binding(import, def_id, name);
+            } else {
                 self.diagnostics.push(
-                    Diagnostic::error(format!(
-                        "cross-package imports not yet implemented: `{}`",
-                        path_str
-                    ))
-                    .with_label(import.span, "cross-package import"),
+                    Diagnostic::error(format!("cannot find `{}` in this scope", name))
+                        .with_label(import.span.clone(), "not found"),
                 );
             }
+        } else {
+            // Multi-segment path: subpackage access like `utils.helper`
+            // Requires package tree integration for cross-package resolution
+            let path_str = if skip_prefix {
+                import.path.join(".")
+            } else {
+                path.join(".")
+            };
+            self.diagnostics.push(
+                Diagnostic::error(format!(
+                    "cross-package imports not yet implemented: `{}`",
+                    path_str
+                ))
+                .with_label(import.span.clone(), "cross-package import"),
+            );
         }
+    }
+
+    /// Resolve path prefix (module, self, super) and return remaining path.
+    /// Returns None if an error occurred (e.g., super at root).
+    fn resolve_path_prefix(
+        &mut self,
+        path: &[String],
+        span: &Span,
+    ) -> (Option<Vec<String>>, bool) {
+        if path.is_empty() {
+            return (Some(Vec::new()), false);
+        }
+
+        match path[0].as_str() {
+            "module" => {
+                // `module.` prefix: resolve from module root
+                // For single-file, this is the same as current scope
+                (Some(path[1..].to_vec()), true)
+            }
+            "self" => {
+                // `self.` prefix: resolve from current package
+                // For single-file, this is the same as current scope
+                (Some(path[1..].to_vec()), true)
+            }
+            "super" => {
+                // `super.` prefix: resolve from parent package
+                // At root, this is an error
+                self.diagnostics.push(
+                    Diagnostic::error("cannot use `super` at package root".to_string())
+                        .with_label(span.clone(), "no parent package"),
+                );
+                (None, true)
+            }
+            _ => {
+                // No prefix, resolve as-is
+                (Some(path.to_vec()), false)
+            }
+        }
+    }
+
+    /// Add an import binding to the current scope.
+    fn add_import_binding(&mut self, import: &PendingImport, def_id: DefId, original_name: &str) {
+        // If renaming (use foo as bar), create a new binding
+        if import.local_name != original_name {
+            let alias_interned = self.ctx.intern(&import.local_name);
+            let symbol = self.ctx.get_symbol(def_id);
+            let kind = symbol.kind;
+
+            let _ = self.ctx.define(
+                alias_interned,
+                kind,
+                if import.is_pub {
+                    Visibility::Public
+                } else {
+                    Visibility::Private
+                },
+                import.span.clone(),
+                false,
+            );
+        }
+        // Record the resolution for the import span
+        self.resolutions.insert(import.span.clone(), def_id);
+    }
+
+    /// Resolve a glob import (use foo.*).
+    fn resolve_glob_import(&mut self, import: &PendingImport) {
+        // Handle path prefix
+        let (resolved_path, _) = self.resolve_path_prefix(&import.path, &import.span);
+        if resolved_path.is_none() {
+            return; // Error already reported
+        }
+        let path = resolved_path.unwrap();
+
+        if path.is_empty() {
+            // `use self.*` or `use module.*` - import all from current package
+            // For now, this is a no-op since all items are already in scope
+            // In a multi-package setup, this would import all public items
+            return;
+        }
+
+        // Glob import from a subpackage requires package tree integration
+        let full_path = import.path.join(".");
+        self.diagnostics.push(
+            Diagnostic::error(format!(
+                "cross-package glob imports not yet implemented: `{}.*`",
+                full_path
+            ))
+            .with_label(import.span.clone(), "cross-package glob import"),
+        );
     }
 
     fn collect_function(&mut self, func: &FunctionDef) {
@@ -2049,5 +2150,162 @@ mod tests {
             "use module.utils.helper; fn main() {}",
             &["cross-package imports not yet implemented"],
         );
+    }
+
+    // ===== Phase 3: Path Prefix Tests =====
+
+    #[test]
+    fn use_self_prefix_resolves() {
+        // `use self.foo` should resolve to foo in current package
+        check_ok("fn foo() {} use self.foo; fn main() { foo(); }");
+    }
+
+    #[test]
+    fn use_module_prefix_resolves() {
+        // `use module.foo` should resolve to foo at module root
+        check_ok("fn foo() {} use module.foo; fn main() { foo(); }");
+    }
+
+    #[test]
+    fn use_super_at_root_error() {
+        // `use super.foo` at root should error
+        check_err(
+            "fn foo() {} use super.foo; fn main() {}",
+            &["cannot use `super` at package root"],
+        );
+    }
+
+    #[test]
+    fn use_self_prefix_with_rename() {
+        // `use self.foo as bar` should create alias
+        let (_resolutions, ctx, diagnostics) = resolve_source(
+            "fn original() {} use self.original as renamed; fn main() { renamed(); }",
+        );
+        assert!(
+            diagnostics.is_empty(),
+            "expected no errors, got: {:?}",
+            diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+        // Both 'original' and 'renamed' should be resolvable
+        let original = ctx.interner.get("original");
+        let renamed = ctx.interner.get("renamed");
+        assert!(original.is_some(), "original should be interned");
+        assert!(renamed.is_some(), "renamed should be interned");
+    }
+
+    #[test]
+    fn use_module_prefix_undefined_error() {
+        check_err(
+            "use module.nonexistent; fn main() {}",
+            &["cannot find `nonexistent`"],
+        );
+    }
+
+    #[test]
+    fn use_self_prefix_undefined_error() {
+        check_err(
+            "use self.nonexistent; fn main() {}",
+            &["cannot find `nonexistent`"],
+        );
+    }
+
+    #[test]
+    fn use_self_glob_no_error() {
+        // `use self.*` should be a no-op (all items already in scope)
+        check_ok("fn foo() {} use self.*; fn main() { foo(); }");
+    }
+
+    #[test]
+    fn use_module_glob_no_error() {
+        // `use module.*` should be a no-op (all items already in scope)
+        check_ok("fn foo() {} use module.*; fn main() { foo(); }");
+    }
+
+    // ===== Phase 4: Glob Import Tests =====
+
+    #[test]
+    fn use_glob_cross_package_not_implemented() {
+        check_err(
+            "use utils.*; fn main() {}",
+            &["cross-package glob imports not yet implemented"],
+        );
+    }
+
+    // ===== Phase 5: Grouped Import Tests =====
+
+    #[test]
+    fn use_grouped_imports() {
+        // `use self.{a, b}` should import both a and b
+        check_ok("fn a() {} fn b() {} use self.{a, b}; fn main() { a(); b(); }");
+    }
+
+    #[test]
+    fn use_grouped_with_rename() {
+        // `use self.{a, b as c}` should import a and rename b to c
+        check_ok("fn a() {} fn b() {} use self.{a, b as renamed}; fn main() { a(); renamed(); }");
+    }
+
+    #[test]
+    fn use_grouped_undefined_error() {
+        check_err(
+            "fn a() {} use self.{a, nonexistent}; fn main() {}",
+            &["cannot find `nonexistent`"],
+        );
+    }
+
+    #[test]
+    fn use_multiple_imports() {
+        // Multiple use statements should work together
+        check_ok("fn a() {} fn b() {} use self.a; use self.b; fn main() { a(); b(); }");
+    }
+
+    // ===== Phase 6: Re-export Tests =====
+
+    #[test]
+    fn pub_use_creates_public_binding() {
+        // `pub use self.foo` should make foo visible
+        // For now, just verify it parses and resolves without error
+        check_ok("fn internal() {} pub use self.internal; fn main() { internal(); }");
+    }
+
+    // ===== Phase 7: Resolution Order Tests =====
+
+    #[test]
+    fn local_shadows_import() {
+        // Local variable should shadow imported function
+        check_ok(r#"
+            fn foo(): i32 { 1 }
+            use self.foo;
+            fn main() {
+                let foo = 42;
+                foo;  // This is the local variable
+            }
+        "#);
+    }
+
+    #[test]
+    fn local_function_shadows_import() {
+        // Local function definition should shadow imported function
+        // Since we don't have inline modules, test that same-name functions are handled
+        check_ok(r#"
+            fn helper(): i32 { 1 }
+            use self.helper;
+            fn main() {
+                helper();
+            }
+        "#);
+    }
+
+    #[test]
+    fn import_visible_after_local_scope() {
+        // Import should still be visible after local scope ends
+        check_ok(r#"
+            fn foo(): i32 { 1 }
+            use self.foo;
+            fn main() {
+                { let foo = 1; }
+                foo();  // Import is visible again
+            }
+        "#);
     }
 }
