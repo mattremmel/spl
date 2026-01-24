@@ -2,44 +2,43 @@
 //!
 //! # Genuine Intrinsics
 //!
-//! Only operations requiring special instructions or output:
-//!
-//! - `__debug_print_int`: Debug output to stderr
-//! - `__debug_print_ptr`: Debug output to stderr (hex format)
 //! - `__breakpoint`: Debugger interrupt instruction (int3/brk)
 //!
 //! # Stdlib Candidates
 //!
-//! Assertions are just conditionals + abort, easily written in SPL:
+//! Debug printing and assertions can be implemented in SPL:
 //!
 //! ```text
-//! fn assert(condition: Bool, msg: String) {
-//!     if !condition {
-//!         __eprint_str("Assertion failed: ")
-//!         __eprint_str(msg)
-//!         __eprint_newline()
-//!         __abort()
-//!     }
+//! fn debug_print_int(value: Int) {
+//!     __eprint_str("[DEBUG] int: ");
+//!     let s = int_to_string(value);
+//!     __eprint_str(s.ptr, s.len);
+//!     __eprint_str("\n", 1);
+//!     __free(s.ptr);
 //! }
 //!
-//! fn assert_eq(a: Int, b: Int) {
-//!     if a != b {
-//!         __eprint_str("Assertion failed: ")
-//!         __eprint_int(a)
-//!         __eprint_str(" != ")
-//!         __eprint_int(b)
-//!         __eprint_newline()
-//!         __abort()
+//! fn debug_print_ptr(ptr: Int) {
+//!     __eprint_str("[DEBUG] ptr: 0x");
+//!     let s = int_to_hex_string(ptr);
+//!     __eprint_str(s.ptr, s.len);
+//!     __eprint_str("\n", 1);
+//!     __free(s.ptr);
+//! }
+//!
+//! fn assert(condition: Bool, msg: String) {
+//!     if !condition {
+//!         __eprint_str("Assertion failed: ", 18);
+//!         __eprint_str(msg.ptr, msg.len);
+//!         __eprint_str("\n", 1);
+//!         __abort();
 //!     }
 //! }
 //!
 //! fn unreachable() -> ! {
-//!     __eprint_str("unreachable code reached\n")
-//!     __abort()
+//!     __eprint_str("unreachable code reached\n", 25);
+//!     __abort();
 //! }
 //! ```
-
-use cranelift_codegen::ir::types;
 
 use super::{Runtime, default_call_conv, make_signature};
 
@@ -47,40 +46,12 @@ use super::{Runtime, default_call_conv, make_signature};
 pub fn register(runtime: &mut Runtime) {
     let call_conv = default_call_conv();
 
-    // __debug_print_int: (I64) -> () - prints to stderr with label
-    runtime.register(
-        "__debug_print_int",
-        __debug_print_int as *const u8,
-        make_signature(call_conv, &[types::I64], &[]),
-    );
-
-    // __debug_print_ptr: (I64) -> () - prints pointer in hex to stderr
-    runtime.register(
-        "__debug_print_ptr",
-        __debug_print_ptr as *const u8,
-        make_signature(call_conv, &[types::I64], &[]),
-    );
-
     // __breakpoint: () -> () - debugger breakpoint (if debugger attached)
     runtime.register(
         "__breakpoint",
         __breakpoint as *const u8,
         make_signature(call_conv, &[], &[]),
     );
-}
-
-/// Print an integer to stderr for debugging.
-///
-/// Useful for quick debug output that doesn't interfere with stdout.
-pub extern "C" fn __debug_print_int(value: i64) {
-    eprintln!("[DEBUG] int: {value}");
-}
-
-/// Print a pointer value in hexadecimal to stderr.
-///
-/// Useful for debugging memory issues.
-pub extern "C" fn __debug_print_ptr(ptr: i64) {
-    eprintln!("[DEBUG] ptr: {ptr:#018x}");
 }
 
 /// Trigger a debugger breakpoint.
@@ -113,53 +84,13 @@ pub extern "C" fn __breakpoint() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cranelift_codegen::ir::types;
 
     #[test]
-    fn debug_print_int_does_not_panic() {
-        __debug_print_int(42);
-        __debug_print_int(-1);
-        __debug_print_int(i64::MAX);
-        __debug_print_int(i64::MIN);
-    }
-
-    #[test]
-    fn debug_print_ptr_does_not_panic() {
-        __debug_print_ptr(0);
-        __debug_print_ptr(0x1234_5678_9ABC_DEF0);
-        __debug_print_ptr(-1);
-    }
-
-    #[test]
-    fn register_adds_debug_intrinsics() {
+    fn register_adds_breakpoint() {
         let mut runtime = Runtime::new();
         register(&mut runtime);
 
-        assert!(runtime.contains("__debug_print_int"));
-        assert!(runtime.contains("__debug_print_ptr"));
         assert!(runtime.contains("__breakpoint"));
-    }
-
-    #[test]
-    fn debug_print_int_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__debug_print_int").unwrap();
-        assert_eq!(func.signature.params.len(), 1);
-        assert_eq!(func.signature.params[0].value_type, types::I64);
-        assert!(func.signature.returns.is_empty());
-    }
-
-    #[test]
-    fn debug_print_ptr_signature() {
-        let mut runtime = Runtime::new();
-        register(&mut runtime);
-
-        let func = runtime.get("__debug_print_ptr").unwrap();
-        assert_eq!(func.signature.params.len(), 1);
-        assert_eq!(func.signature.params[0].value_type, types::I64);
-        assert!(func.signature.returns.is_empty());
     }
 
     #[test]
