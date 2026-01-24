@@ -55,22 +55,24 @@ mod primitives {
 mod constants {
     use super::*;
 
+    const DUMMY_TY: TypeId = TypeId(0);
+
     #[test]
     fn const_int() {
         let printer = MirPrinter::new();
-        assert_eq!(printer.print_constant(&Constant::Int(42)), "const 42");
+        assert_eq!(printer.print_constant(&Constant::Int(42, DUMMY_TY)), "const 42_ty0");
     }
 
     #[test]
     fn const_int_negative() {
         let printer = MirPrinter::new();
-        assert_eq!(printer.print_constant(&Constant::Int(-1)), "const -1");
+        assert_eq!(printer.print_constant(&Constant::Int(-1, DUMMY_TY)), "const -1_ty0");
     }
 
     #[test]
     fn const_float() {
         let printer = MirPrinter::new();
-        assert_eq!(printer.print_constant(&Constant::Float(2.5)), "const 2.5");
+        assert_eq!(printer.print_constant(&Constant::Float(2.5, DUMMY_TY)), "const 2.5_ty0");
     }
 
     #[test]
@@ -133,6 +135,8 @@ mod constants {
 mod operands {
     use super::*;
 
+    const DUMMY_TY: TypeId = TypeId(0);
+
     #[test]
     fn operand_copy() {
         let printer = MirPrinter::new();
@@ -151,8 +155,8 @@ mod operands {
     fn operand_constant() {
         let printer = MirPrinter::new();
         assert_eq!(
-            printer.print_operand(&Operand::Constant(Constant::Int(5))),
-            "const 5"
+            printer.print_operand(&Operand::Constant(Constant::Int(5, DUMMY_TY))),
+            "const 5_ty0"
         );
     }
 }
@@ -293,6 +297,8 @@ mod operators {
 mod rvalues {
     use super::*;
 
+    const DUMMY_TY: TypeId = TypeId(0);
+
     #[test]
     fn rvalue_use() {
         let printer = MirPrinter::new();
@@ -303,28 +309,28 @@ mod rvalues {
     #[test]
     fn rvalue_ref_shared() {
         let printer = MirPrinter::new();
-        let rvalue = Rvalue::Ref(BorrowKind::Shared, Place::from_local(Local(1)));
+        let rvalue = Rvalue::Ref(BorrowKind::Shared, Place::from_local(Local(1)), DUMMY_TY);
         assert_eq!(printer.print_rvalue(&rvalue), "&_1");
     }
 
     #[test]
     fn rvalue_ref_mut() {
         let printer = MirPrinter::new();
-        let rvalue = Rvalue::Ref(BorrowKind::Mut, Place::from_local(Local(1)));
+        let rvalue = Rvalue::Ref(BorrowKind::Mut, Place::from_local(Local(1)), DUMMY_TY);
         assert_eq!(printer.print_rvalue(&rvalue), "&mut _1");
     }
 
     #[test]
     fn rvalue_address_of() {
         let printer = MirPrinter::new();
-        let rvalue = Rvalue::AddressOf(Mutability::Shared, Place::from_local(Local(1)));
+        let rvalue = Rvalue::AddressOf(Mutability::Shared, Place::from_local(Local(1)), DUMMY_TY);
         assert_eq!(printer.print_rvalue(&rvalue), "&raw const _1");
     }
 
     #[test]
     fn rvalue_address_of_mut() {
         let printer = MirPrinter::new();
-        let rvalue = Rvalue::AddressOf(Mutability::Mutable, Place::from_local(Local(1)));
+        let rvalue = Rvalue::AddressOf(Mutability::Mutable, Place::from_local(Local(1)), DUMMY_TY);
         assert_eq!(printer.print_rvalue(&rvalue), "&raw mut _1");
     }
 
@@ -374,8 +380,8 @@ mod rvalues {
     #[test]
     fn rvalue_repeat() {
         let printer = MirPrinter::new();
-        let rvalue = Rvalue::Repeat(Operand::Constant(Constant::Int(0)), 5);
-        assert_eq!(printer.print_rvalue(&rvalue), "[const 0; 5]");
+        let rvalue = Rvalue::Repeat(Operand::Constant(Constant::Int(0, DUMMY_TY)), 5);
+        assert_eq!(printer.print_rvalue(&rvalue), "[const 0_ty0; 5]");
     }
 
     #[test]
@@ -423,15 +429,17 @@ mod rvalues {
 mod statements {
     use super::*;
 
+    const DUMMY_TY: TypeId = TypeId(0);
+
     #[test]
     fn stmt_assign() {
         let printer = MirPrinter::new();
         let stmt = Statement::assign(
             Place::from_local(Local(1)),
-            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
             0..0,
         );
-        assert_eq!(printer.print_statement(&stmt), "_1 = const 42");
+        assert_eq!(printer.print_statement(&stmt), "_1 = const 42_ty0");
     }
 
     #[test]
@@ -593,6 +601,8 @@ mod terminators {
 mod basic_blocks {
     use super::*;
 
+    const DUMMY_TY: TypeId = TypeId(0);
+
     #[test]
     fn block_empty() {
         let mut printer = MirPrinter::new();
@@ -616,7 +626,7 @@ mod basic_blocks {
         let mut block = BasicBlockData::new();
         block.push_statement(Statement::assign(
             Place::from_local(Local(1)),
-            Rvalue::Use(Operand::Constant(Constant::Int(1))),
+            Rvalue::Use(Operand::Constant(Constant::Int(1, DUMMY_TY))),
             0..0,
         ));
         block.set_terminator(Terminator::return_(0..0));
@@ -627,7 +637,7 @@ mod basic_blocks {
             &printer.finish(),
             &expect![[r#"
                 bb0:
-                    _1 = const 1
+                    _1 = const 1_ty0
                     return
             "#]],
         );
@@ -639,13 +649,15 @@ mod basic_blocks {
 mod function_bodies {
     use super::*;
 
+    const DUMMY_TY: TypeId = TypeId(0);
+
     #[test]
     fn body_simple() {
         let mut body = Body::new(TypeId(1)); // return type
         let bb = body.alloc_block();
         body.block_mut(bb).push_statement(Statement::assign(
             Place::from_local(Local(0)),
-            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
             0..0,
         ));
         body.block_mut(bb).set_terminator(Terminator::return_(0..0));
@@ -656,7 +668,7 @@ mod function_bodies {
             &expect![[r#"
                 fn simple() -> ty1 {
                     bb0:
-                        _0 = const 42
+                        _0 = const 42_ty0
                         return
                 }
             "#]],
@@ -702,7 +714,7 @@ mod function_bodies {
         // bb0: goto bb1
         body.block_mut(bb0).push_statement(Statement::assign(
             Place::from_local(temp),
-            Rvalue::Use(Operand::Constant(Constant::Int(1))),
+            Rvalue::Use(Operand::Constant(Constant::Int(1, DUMMY_TY))),
             0..0,
         ));
         body.block_mut(bb0)
@@ -729,7 +741,7 @@ mod function_bodies {
                     let mut _2: ty1;
 
                     bb0:
-                        _2 = const 1
+                        _2 = const 1_ty0
                         goto -> bb1
                     bb1:
                         _0 = Add(copy _1, copy _2)
@@ -784,7 +796,7 @@ mod function_bodies {
         // then: _0 = 1; goto join
         body.block_mut(then_bb).push_statement(Statement::assign(
             Place::from_local(Local(0)),
-            Rvalue::Use(Operand::Constant(Constant::Int(1))),
+            Rvalue::Use(Operand::Constant(Constant::Int(1, DUMMY_TY))),
             0..0,
         ));
         body.block_mut(then_bb)
@@ -793,7 +805,7 @@ mod function_bodies {
         // else: _0 = 2; goto join
         body.block_mut(else_bb).push_statement(Statement::assign(
             Place::from_local(Local(0)),
-            Rvalue::Use(Operand::Constant(Constant::Int(2))),
+            Rvalue::Use(Operand::Constant(Constant::Int(2, DUMMY_TY))),
             0..0,
         ));
         body.block_mut(else_bb)
@@ -811,10 +823,10 @@ mod function_bodies {
                     bb0:
                         switchInt(copy _1) -> [0: bb2, otherwise: bb1]
                     bb1:
-                        _0 = const 1
+                        _0 = const 1_ty0
                         goto -> bb3
                     bb2:
-                        _0 = const 2
+                        _0 = const 2_ty0
                         goto -> bb3
                     bb3:
                         return
@@ -829,6 +841,8 @@ mod function_bodies {
 mod integration {
     use super::*;
 
+    const DUMMY_TY: TypeId = TypeId(0);
+
     #[test]
     fn integration_simple_return() {
         // fn simple() -> i32 { 42 }
@@ -837,7 +851,7 @@ mod integration {
 
         body.block_mut(bb).push_statement(Statement::assign(
             Place::from_local(Local(0)),
-            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
             0..0,
         ));
         body.block_mut(bb).set_terminator(Terminator::return_(0..0));
@@ -848,7 +862,7 @@ mod integration {
             &expect![[r#"
                 fn simple() -> ty1 {
                     bb0:
-                        _0 = const 42
+                        _0 = const 42_ty0
                         return
                 }
             "#]],
@@ -896,8 +910,8 @@ mod integration {
             TerminatorKind::Call {
                 func: Operand::Constant(Constant::FnDef(DefId(10))),
                 args: vec![
-                    Operand::Constant(Constant::Int(1)),
-                    Operand::Constant(Constant::Int(2)),
+                    Operand::Constant(Constant::Int(1, DUMMY_TY)),
+                    Operand::Constant(Constant::Int(2, DUMMY_TY)),
                 ],
                 destination: Place::from_local(Local(0)),
                 target: Some(ret_bb),
@@ -914,7 +928,7 @@ mod integration {
             &expect![[r#"
                 fn caller() -> ty1 {
                     bb0:
-                        _0 = call const fn_10(const 1, const 2) -> bb1
+                        _0 = call const fn_10(const 1_ty0, const 2_ty0) -> bb1
                     bb1:
                         return
                 }
@@ -932,7 +946,7 @@ mod integration {
             .push_statement(Statement::storage_live(temp, 0..0));
         body.block_mut(bb).push_statement(Statement::assign(
             Place::from_local(temp),
-            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
             0..0,
         ));
         body.block_mut(bb)
@@ -948,7 +962,7 @@ mod integration {
 
                     bb0:
                         StorageLive(_1)
-                        _1 = const 42
+                        _1 = const 42_ty0
                         StorageDead(_1)
                         return
                 }
@@ -966,7 +980,7 @@ mod integration {
         // _2 = &_1
         body.block_mut(bb).push_statement(Statement::assign(
             Place::from_local(ref_local),
-            Rvalue::Ref(BorrowKind::Shared, Place::from_local(Local(1))),
+            Rvalue::Ref(BorrowKind::Shared, Place::from_local(Local(1)), DUMMY_TY),
             0..0,
         ));
 

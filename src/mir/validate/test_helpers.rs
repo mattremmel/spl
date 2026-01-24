@@ -4,6 +4,7 @@
 //! in tests without requiring the full compilation pipeline.
 
 use crate::mir::body::{BasicBlockData, Body, LocalDecl};
+use crate::mir::operand::{Constant, Operand};
 use crate::mir::statement::Statement;
 use crate::mir::terminator::{BasicBlock, Terminator};
 use crate::mir::types::Local;
@@ -84,12 +85,41 @@ impl MirTestBuilder {
     pub fn num_blocks(&self) -> usize {
         self.body.num_blocks()
     }
+
+    /// Create an i32-typed integer constant operand (convenience for tests).
+    pub fn const_i32(&self, value: i128) -> Operand {
+        Operand::Constant(Constant::Int(value, self.types.i32()))
+    }
+
+    /// Create an i64-typed integer constant operand (convenience for tests).
+    #[allow(dead_code)]
+    pub fn const_i64(&self, value: i128) -> Operand {
+        Operand::Constant(Constant::Int(value, self.types.i64()))
+    }
+
+    /// Create a typed integer constant operand.
+    #[allow(dead_code)]
+    pub fn const_int(&self, value: i128, ty: TypeId) -> Operand {
+        Operand::Constant(Constant::Int(value, ty))
+    }
+
+    /// Create a typed float constant operand.
+    #[allow(dead_code)]
+    pub fn const_float(&self, value: f64, ty: TypeId) -> Operand {
+        Operand::Constant(Constant::Float(value, ty))
+    }
+
+    /// Create an f64-typed float constant operand (convenience for tests).
+    #[allow(dead_code)]
+    pub fn const_f64(&self, value: f64) -> Operand {
+        Operand::Constant(Constant::Float(value, self.types.f64()))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mir::operand::{Operand, Rvalue};
+    use crate::mir::operand::Rvalue;
     use crate::mir::statement::Statement;
     use crate::mir::terminator::Terminator;
     use crate::mir::types::Place;
@@ -159,7 +189,7 @@ mod tests {
             bb,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(42)),
+                Rvalue::Use(builder.const_i32(42)),
                 0..0,
             ),
         );

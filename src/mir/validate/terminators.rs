@@ -117,8 +117,8 @@ fn get_operand_type(operand: &Operand, body: &Body, types: &TypeInterner) -> Typ
     match operand {
         Operand::Copy(place) | Operand::Move(place) => get_place_type(place, body, types),
         Operand::Constant(constant) => match constant {
-            Constant::Int(_) => types.i32(),
-            Constant::Float(_) => types.f64(),
+            Constant::Int(_, ty) => *ty,
+            Constant::Float(_, ty) => *ty,
             Constant::Bool(_) => types.bool(),
             Constant::Char(_) => types.char(),
             Constant::String(_) => types.str_ref(),

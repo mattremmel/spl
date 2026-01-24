@@ -199,6 +199,9 @@ mod tests {
     use crate::mir::operand::Constant;
     use crate::mir::types::Local;
     use crate::sema::symbol::DefId;
+    use crate::sema::types::TypeId;
+
+    const DUMMY_TY: TypeId = TypeId(0);
 
     #[test]
     fn basic_block_id_is_copy_and_eq() {
@@ -326,7 +329,7 @@ mod tests {
     #[test]
     fn terminator_call() {
         let func = Operand::Constant(Constant::FnDef(DefId(1)));
-        let args = vec![Operand::const_int(42)];
+        let args = vec![Operand::const_int(42, DUMMY_TY)];
         let destination = Place::from_local(Local(2));
         let target = Some(BasicBlock(3));
 
@@ -462,7 +465,7 @@ mod tests {
             SwitchTargets::new(vec![(1, BasicBlock(1)), (2, BasicBlock(2))], BasicBlock(0));
         let term = Terminator::new(
             TerminatorKind::SwitchInt {
-                discr: Operand::const_int(0),
+                discr: Operand::const_int(0, DUMMY_TY),
                 targets,
             },
             0..0,

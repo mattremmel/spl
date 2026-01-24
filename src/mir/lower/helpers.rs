@@ -4,20 +4,20 @@ use crate::hir::{BinOp as HirBinOp, HirDatabase, Literal, UnaryOp as HirUnaryOp}
 use crate::mir::operand::{BinOp, CastKind, Constant, Operand, UnOp};
 use crate::sema::types::{PrimitiveKind, Type, TypeId};
 
-/// Convert an HIR literal to a MIR Constant.
-pub fn lower_literal(lit: &Literal) -> Constant {
+/// Convert an HIR literal to a MIR Constant with the specified type.
+pub fn lower_literal(lit: &Literal, ty: TypeId) -> Constant {
     match lit {
-        Literal::Int(v) => Constant::Int(*v),
-        Literal::Float(v) => Constant::Float(*v),
+        Literal::Int(v) => Constant::Int(*v, ty),
+        Literal::Float(v) => Constant::Float(*v, ty),
         Literal::Bool(v) => Constant::Bool(*v),
         Literal::Char(v) => Constant::Char(*v),
         Literal::String(v) => Constant::String(v.clone()),
     }
 }
 
-/// Convert an HIR literal to a MIR Operand.
-pub fn literal_to_operand(lit: &Literal) -> Operand {
-    Operand::Constant(lower_literal(lit))
+/// Convert an HIR literal to a MIR Operand with the specified type.
+pub fn literal_to_operand(lit: &Literal, ty: TypeId) -> Operand {
+    Operand::Constant(lower_literal(lit, ty))
 }
 
 /// Convert an HIR binary operator to a MIR binary operator.

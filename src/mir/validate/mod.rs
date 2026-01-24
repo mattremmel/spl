@@ -77,7 +77,7 @@ mod integration_tests {
             bb0,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(42)),
+                Rvalue::Use(builder.const_i32(42)),
                 0..0,
             ),
         );
@@ -119,7 +119,7 @@ mod integration_tests {
             bb_then,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(1)),
+                Rvalue::Use(builder.const_i32(1)),
                 0..0,
             ),
         );
@@ -130,7 +130,7 @@ mod integration_tests {
             bb_else,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(2)),
+                Rvalue::Use(builder.const_i32(2)),
                 0..0,
             ),
         );

@@ -66,8 +66,8 @@ fn validate_rvalue_locals(rvalue: &Rvalue, num_locals: usize, context: &dyn Fn()
         Rvalue::Use(operand) => {
             validate_operand_locals(operand, num_locals, context);
         }
-        Rvalue::Ref(_, place)
-        | Rvalue::AddressOf(_, place)
+        Rvalue::Ref(_, place, _)
+        | Rvalue::AddressOf(_, place, _)
         | Rvalue::Len(place)
         | Rvalue::Discriminant(place) => {
             validate_place_locals(place, num_locals, context);
@@ -147,6 +147,10 @@ mod tests {
     use crate::mir::terminator::{SwitchTargets, Terminator, TerminatorKind};
     use crate::mir::types::FieldIdx;
     use crate::sema::symbol::DefId;
+    use crate::sema::types::TypeId;
+
+    // Dummy type ID for structural tests (not validation)
+    const DUMMY_TY: TypeId = TypeId(0);
 
     #[test]
     fn local_valid_reference() {
@@ -159,7 +163,7 @@ mod tests {
             bb,
             Statement::assign(
                 Place::from_local(local1),
-                Rvalue::Use(Operand::const_int(42)),
+                Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
                 0..0,
             ),
         );
@@ -178,7 +182,7 @@ mod tests {
             bb,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(42)),
+                Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
                 0..0,
             ),
         );
@@ -298,7 +302,7 @@ mod tests {
             bb,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Ref(BorrowKind::Shared, Place::from_local(local)),
+                Rvalue::Ref(BorrowKind::Shared, Place::from_local(local), DUMMY_TY),
                 0..0,
             ),
         );
@@ -421,7 +425,7 @@ mod tests {
             bb,
             Statement::assign(
                 Place::from_local(Local(99)),
-                Rvalue::Use(Operand::const_int(42)),
+                Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
                 0..0,
             ),
         );

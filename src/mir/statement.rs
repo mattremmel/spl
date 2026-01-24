@@ -73,11 +73,14 @@ impl Statement {
 mod tests {
     use super::*;
     use crate::mir::operand::Operand;
+    use crate::sema::types::TypeId;
+
+    const DUMMY_TY: TypeId = TypeId(0);
 
     #[test]
     fn statement_assign() {
         let place = Place::from_local(Local(1));
-        let rvalue = Rvalue::Use(Operand::const_int(42));
+        let rvalue = Rvalue::Use(Operand::const_int(42, DUMMY_TY));
         let stmt = Statement::assign(place.clone(), rvalue.clone(), 0..10);
 
         match stmt.kind {
@@ -131,15 +134,15 @@ mod tests {
     fn statement_kind_equality() {
         let assign1 = StatementKind::Assign(
             Place::from_local(Local(1)),
-            Rvalue::Use(Operand::const_int(1)),
+            Rvalue::Use(Operand::const_int(1, DUMMY_TY)),
         );
         let assign2 = StatementKind::Assign(
             Place::from_local(Local(1)),
-            Rvalue::Use(Operand::const_int(1)),
+            Rvalue::Use(Operand::const_int(1, DUMMY_TY)),
         );
         let assign3 = StatementKind::Assign(
             Place::from_local(Local(2)),
-            Rvalue::Use(Operand::const_int(1)),
+            Rvalue::Use(Operand::const_int(1, DUMMY_TY)),
         );
 
         assert_eq!(assign1, assign2);

@@ -20,10 +20,10 @@ pub enum BorrowKind {
 /// A constant value in MIR.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Constant {
-    /// An integer literal.
-    Int(i128),
-    /// A floating-point literal.
-    Float(f64),
+    /// An integer literal with its type.
+    Int(i128, TypeId),
+    /// A floating-point literal with its type.
+    Float(f64, TypeId),
     /// A boolean literal.
     Bool(bool),
     /// A character literal.
@@ -60,9 +60,9 @@ impl Operand {
         Operand::Move(Place::from_local(local))
     }
 
-    /// Create an integer constant operand.
-    pub fn const_int(value: i128) -> Self {
-        Operand::Constant(Constant::Int(value))
+    /// Create an integer constant operand with the specified type.
+    pub fn const_int(value: i128, ty: TypeId) -> Self {
+        Operand::Constant(Constant::Int(value, ty))
     }
 
     /// Create a boolean constant operand.
@@ -136,10 +136,10 @@ pub enum AggregateKind {
 pub enum Rvalue {
     /// Use an operand directly.
     Use(Operand),
-    /// Create a reference to a place.
-    Ref(BorrowKind, Place),
-    /// Get the address of a place (raw pointer).
-    AddressOf(Mutability, Place),
+    /// Create a reference to a place. Includes the resulting reference type.
+    Ref(BorrowKind, Place, TypeId),
+    /// Get the address of a place (raw pointer). Includes the resulting pointer type.
+    AddressOf(Mutability, Place, TypeId),
     /// Binary operation.
     BinaryOp(BinOp, Operand, Operand),
     /// Unary operation.
@@ -162,30 +162,33 @@ impl Rvalue {
         Rvalue::Use(operand)
     }
 
-    /// Create a shared reference.
-    pub fn ref_shared(place: Place) -> Self {
-        Rvalue::Ref(BorrowKind::Shared, place)
+    /// Create a shared reference with the specified type.
+    pub fn ref_shared(place: Place, ty: TypeId) -> Self {
+        Rvalue::Ref(BorrowKind::Shared, place, ty)
     }
 
-    /// Create a mutable reference.
-    pub fn ref_mut(place: Place) -> Self {
-        Rvalue::Ref(BorrowKind::Mut, place)
+    /// Create a mutable reference with the specified type.
+    pub fn ref_mut(place: Place, ty: TypeId) -> Self {
+        Rvalue::Ref(BorrowKind::Mut, place, ty)
     }
 
-    /// Create a shared raw pointer.
-    pub fn address_of_shared(place: Place) -> Self {
-        Rvalue::AddressOf(Mutability::Shared, place)
+    /// Create a shared raw pointer with the specified type.
+    pub fn address_of_shared(place: Place, ty: TypeId) -> Self {
+        Rvalue::AddressOf(Mutability::Shared, place, ty)
     }
 
-    /// Create a mutable raw pointer.
-    pub fn address_of_mut(place: Place) -> Self {
-        Rvalue::AddressOf(Mutability::Mutable, place)
+    /// Create a mutable raw pointer with the specified type.
+    pub fn address_of_mut(place: Place, ty: TypeId) -> Self {
+        Rvalue::AddressOf(Mutability::Mutable, place, ty)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Dummy type IDs for structural tests (not validation)
+    const DUMMY_TY: TypeId = TypeId(0);
 
     #[test]
     fn operand_copy_from_place() {
@@ -211,10 +214,10 @@ mod tests {
 
     #[test]
     fn operand_constant_int() {
-        let op = Operand::Constant(Constant::Int(42));
+        let op = Operand::Constant(Constant::Int(42, DUMMY_TY));
 
         match op {
-            Operand::Constant(Constant::Int(v)) => assert_eq!(v, 42),
+            Operand::Constant(Constant::Int(v, _)) => assert_eq!(v, 42),
             _ => panic!("expected Constant::Int"),
         }
     }
@@ -259,18 +262,18 @@ mod tests {
 
     #[test]
     fn operand_helper_const_int() {
-        let op = Operand::const_int(-100);
+        let op = Operand::const_int(-100, DUMMY_TY);
 
         match op {
-            Operand::Constant(Constant::Int(v)) => assert_eq!(v, -100),
+            Operand::Constant(Constant::Int(v, _)) => assert_eq!(v, -100),
             _ => panic!("expected Constant::Int"),
         }
     }
 
     #[test]
     fn rvalue_binary_op() {
-        let lhs = Operand::const_int(10);
-        let rhs = Operand::const_int(20);
+        let lhs = Operand::const_int(10, DUMMY_TY);
+        let rhs = Operand::const_int(20, DUMMY_TY);
         let rv = Rvalue::BinaryOp(BinOp::Add, lhs.clone(), rhs.clone());
 
         match rv {
@@ -285,10 +288,10 @@ mod tests {
     #[test]
     fn rvalue_ref_shared() {
         let place = Place::from_local(Local(1));
-        let rv = Rvalue::Ref(BorrowKind::Shared, place.clone());
+        let rv = Rvalue::Ref(BorrowKind::Shared, place.clone(), DUMMY_TY);
 
         match rv {
-            Rvalue::Ref(BorrowKind::Shared, p) => assert_eq!(p, place),
+            Rvalue::Ref(BorrowKind::Shared, p, _) => assert_eq!(p, place),
             _ => panic!("expected Ref(Shared, _)"),
         }
     }
@@ -296,10 +299,10 @@ mod tests {
     #[test]
     fn rvalue_ref_mutable() {
         let place = Place::from_local(Local(1));
-        let rv = Rvalue::Ref(BorrowKind::Mut, place.clone());
+        let rv = Rvalue::Ref(BorrowKind::Mut, place.clone(), DUMMY_TY);
 
         match rv {
-            Rvalue::Ref(BorrowKind::Mut, p) => assert_eq!(p, place),
+            Rvalue::Ref(BorrowKind::Mut, p, _) => assert_eq!(p, place),
             _ => panic!("expected Ref(Mut, _)"),
         }
     }
@@ -307,10 +310,10 @@ mod tests {
     #[test]
     fn rvalue_helper_ref_shared() {
         let place = Place::from_local(Local(3));
-        let rv = Rvalue::ref_shared(place.clone());
+        let rv = Rvalue::ref_shared(place.clone(), DUMMY_TY);
 
         match rv {
-            Rvalue::Ref(BorrowKind::Shared, p) => assert_eq!(p, place),
+            Rvalue::Ref(BorrowKind::Shared, p, _) => assert_eq!(p, place),
             _ => panic!("expected Ref(Shared, _)"),
         }
     }
@@ -318,17 +321,17 @@ mod tests {
     #[test]
     fn rvalue_helper_ref_mut() {
         let place = Place::from_local(Local(3));
-        let rv = Rvalue::ref_mut(place.clone());
+        let rv = Rvalue::ref_mut(place.clone(), DUMMY_TY);
 
         match rv {
-            Rvalue::Ref(BorrowKind::Mut, p) => assert_eq!(p, place),
+            Rvalue::Ref(BorrowKind::Mut, p, _) => assert_eq!(p, place),
             _ => panic!("expected Ref(Mut, _)"),
         }
     }
 
     #[test]
     fn rvalue_unary_op() {
-        let operand = Operand::const_int(5);
+        let operand = Operand::const_int(5, DUMMY_TY);
         let rv = Rvalue::UnaryOp(UnOp::Neg, operand.clone());
 
         match rv {
@@ -388,10 +391,10 @@ mod tests {
 
     #[test]
     fn constant_float() {
-        let constant = Constant::Float(2.5);
+        let constant = Constant::Float(2.5, DUMMY_TY);
 
         match constant {
-            Constant::Float(f) => assert!((f - 2.5).abs() < f64::EPSILON),
+            Constant::Float(f, _) => assert!((f - 2.5).abs() < f64::EPSILON),
             _ => panic!("expected Float"),
         }
     }
@@ -426,7 +429,7 @@ mod tests {
 
     #[test]
     fn rvalue_cast() {
-        let operand = Operand::const_int(42);
+        let operand = Operand::const_int(42, DUMMY_TY);
         let target_ty = TypeId(5);
         let rv = Rvalue::Cast(CastKind::IntToFloat, operand.clone(), target_ty);
 
@@ -466,10 +469,10 @@ mod tests {
         use crate::sema::types::Mutability;
 
         let place = Place::from_local(Local(1));
-        let rv = Rvalue::AddressOf(Mutability::Mutable, place.clone());
+        let rv = Rvalue::AddressOf(Mutability::Mutable, place.clone(), DUMMY_TY);
 
         match rv {
-            Rvalue::AddressOf(mutability, p) => {
+            Rvalue::AddressOf(mutability, p, _) => {
                 assert_eq!(mutability, Mutability::Mutable);
                 assert_eq!(p, place);
             }
@@ -502,7 +505,7 @@ mod tests {
 
     #[test]
     fn rvalue_aggregate_tuple() {
-        let ops = vec![Operand::const_int(1), Operand::const_bool(true)];
+        let ops = vec![Operand::const_int(1, DUMMY_TY), Operand::const_bool(true)];
         let rv = Rvalue::Aggregate(AggregateKind::Tuple, ops.clone());
 
         match rv {
@@ -516,7 +519,7 @@ mod tests {
     #[test]
     fn rvalue_aggregate_struct() {
         let def_id = DefId(5);
-        let ops = vec![Operand::const_int(42)];
+        let ops = vec![Operand::const_int(42, DUMMY_TY)];
         let rv = Rvalue::Aggregate(AggregateKind::Adt(def_id), ops);
 
         match rv {
@@ -640,9 +643,9 @@ mod tests {
     #[test]
     fn rvalue_aggregate_array() {
         let ops = vec![
-            Operand::const_int(1),
-            Operand::const_int(2),
-            Operand::const_int(3),
+            Operand::const_int(1, DUMMY_TY),
+            Operand::const_int(2, DUMMY_TY),
+            Operand::const_int(3, DUMMY_TY),
         ];
         let rv = Rvalue::Aggregate(AggregateKind::Array, ops);
 
@@ -656,8 +659,8 @@ mod tests {
 
     #[test]
     fn rvalue_all_binop_variants() {
-        let lhs = Operand::const_int(10);
-        let rhs = Operand::const_int(3);
+        let lhs = Operand::const_int(10, DUMMY_TY);
+        let rhs = Operand::const_int(3, DUMMY_TY);
 
         // Test a few more binary ops
         let sub = Rvalue::BinaryOp(BinOp::Sub, lhs.clone(), rhs.clone());
@@ -681,10 +684,10 @@ mod tests {
         use crate::sema::types::Mutability;
 
         let place = Place::from_local(Local(1));
-        let rv = Rvalue::AddressOf(Mutability::Shared, place.clone());
+        let rv = Rvalue::AddressOf(Mutability::Shared, place.clone(), DUMMY_TY);
 
         match rv {
-            Rvalue::AddressOf(mutability, p) => {
+            Rvalue::AddressOf(mutability, p, _) => {
                 assert_eq!(mutability, Mutability::Shared);
                 assert_eq!(p, place);
             }
@@ -697,10 +700,10 @@ mod tests {
         use crate::sema::types::Mutability;
 
         let place = Place::from_local(Local(3));
-        let rv = Rvalue::address_of_shared(place.clone());
+        let rv = Rvalue::address_of_shared(place.clone(), DUMMY_TY);
 
         match rv {
-            Rvalue::AddressOf(Mutability::Shared, p) => assert_eq!(p, place),
+            Rvalue::AddressOf(Mutability::Shared, p, _) => assert_eq!(p, place),
             _ => panic!("expected AddressOf(Shared, _)"),
         }
     }
@@ -710,10 +713,10 @@ mod tests {
         use crate::sema::types::Mutability;
 
         let place = Place::from_local(Local(3));
-        let rv = Rvalue::address_of_mut(place.clone());
+        let rv = Rvalue::address_of_mut(place.clone(), DUMMY_TY);
 
         match rv {
-            Rvalue::AddressOf(Mutability::Mutable, p) => assert_eq!(p, place),
+            Rvalue::AddressOf(Mutability::Mutable, p, _) => assert_eq!(p, place),
             _ => panic!("expected AddressOf(Mutable, _)"),
         }
     }

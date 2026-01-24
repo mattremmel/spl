@@ -113,6 +113,10 @@ mod tests {
     use crate::mir::statement::Statement;
     use crate::mir::terminator::Terminator;
     use crate::mir::types::{Local, Place};
+    use crate::sema::types::TypeId;
+
+    const DUMMY_TY: TypeId = TypeId(0);
+
     #[test]
     fn codegen_context_creates() {
         let ctx = CodegenContext::new_jit();
@@ -141,7 +145,7 @@ mod tests {
         let entry = body.alloc_block();
         body.block_mut(entry).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(42)),
+            Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(entry)

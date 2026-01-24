@@ -6,7 +6,7 @@
 use crate::mir::Body;
 use crate::mir::operand::{BinOp, Constant, Operand, Rvalue};
 use crate::mir::statement::StatementKind;
-use crate::sema::types::TypeInterner;
+use crate::sema::types::{TypeId, TypeInterner};
 
 use super::{OptimizationPass, PassResult};
 
@@ -62,30 +62,30 @@ fn extract_constant(operand: &Operand) -> Option<&Constant> {
 /// Fold a binary operation on two constants.
 fn fold_binop(op: BinOp, lhs: &Constant, rhs: &Constant) -> Option<Constant> {
     match (lhs, rhs) {
-        // Integer operations
-        (Constant::Int(a), Constant::Int(b)) => fold_int_binop(op, *a, *b),
+        // Integer operations - preserve the type from lhs
+        (Constant::Int(a, ty), Constant::Int(b, _)) => fold_int_binop(op, *a, *b, *ty),
 
         // Boolean operations
         (Constant::Bool(a), Constant::Bool(b)) => fold_bool_binop(op, *a, *b),
 
-        // Float operations
-        (Constant::Float(a), Constant::Float(b)) => fold_float_binop(op, *a, *b),
+        // Float operations - preserve the type from lhs
+        (Constant::Float(a, ty), Constant::Float(b, _)) => fold_float_binop(op, *a, *b, *ty),
 
         _ => None,
     }
 }
 
 /// Fold an integer binary operation.
-fn fold_int_binop(op: BinOp, a: i128, b: i128) -> Option<Constant> {
+fn fold_int_binop(op: BinOp, a: i128, b: i128, ty: TypeId) -> Option<Constant> {
     match op {
-        BinOp::Add => Some(Constant::Int(a.wrapping_add(b))),
-        BinOp::Sub => Some(Constant::Int(a.wrapping_sub(b))),
-        BinOp::Mul => Some(Constant::Int(a.wrapping_mul(b))),
-        BinOp::Div if b != 0 => Some(Constant::Int(a / b)),
-        BinOp::Rem if b != 0 => Some(Constant::Int(a % b)),
-        BinOp::BitAnd => Some(Constant::Int(a & b)),
-        BinOp::BitOr => Some(Constant::Int(a | b)),
-        BinOp::BitXor => Some(Constant::Int(a ^ b)),
+        BinOp::Add => Some(Constant::Int(a.wrapping_add(b), ty)),
+        BinOp::Sub => Some(Constant::Int(a.wrapping_sub(b), ty)),
+        BinOp::Mul => Some(Constant::Int(a.wrapping_mul(b), ty)),
+        BinOp::Div if b != 0 => Some(Constant::Int(a / b, ty)),
+        BinOp::Rem if b != 0 => Some(Constant::Int(a % b, ty)),
+        BinOp::BitAnd => Some(Constant::Int(a & b, ty)),
+        BinOp::BitOr => Some(Constant::Int(a | b, ty)),
+        BinOp::BitXor => Some(Constant::Int(a ^ b, ty)),
         BinOp::Eq => Some(Constant::Bool(a == b)),
         BinOp::Ne => Some(Constant::Bool(a != b)),
         BinOp::Lt => Some(Constant::Bool(a < b)),
@@ -94,11 +94,11 @@ fn fold_int_binop(op: BinOp, a: i128, b: i128) -> Option<Constant> {
         BinOp::Ge => Some(Constant::Bool(a >= b)),
         BinOp::Shl => {
             let shift = b as u32;
-            Some(Constant::Int(a.wrapping_shl(shift)))
+            Some(Constant::Int(a.wrapping_shl(shift), ty))
         }
         BinOp::Shr => {
             let shift = b as u32;
-            Some(Constant::Int(a.wrapping_shr(shift)))
+            Some(Constant::Int(a.wrapping_shr(shift), ty))
         }
         _ => None,
     }
@@ -117,13 +117,13 @@ fn fold_bool_binop(op: BinOp, a: bool, b: bool) -> Option<Constant> {
 }
 
 /// Fold a float binary operation.
-fn fold_float_binop(op: BinOp, a: f64, b: f64) -> Option<Constant> {
+fn fold_float_binop(op: BinOp, a: f64, b: f64, ty: TypeId) -> Option<Constant> {
     match op {
-        BinOp::Add => Some(Constant::Float(a + b)),
-        BinOp::Sub => Some(Constant::Float(a - b)),
-        BinOp::Mul => Some(Constant::Float(a * b)),
-        BinOp::Div => Some(Constant::Float(a / b)),
-        BinOp::Rem => Some(Constant::Float(a % b)),
+        BinOp::Add => Some(Constant::Float(a + b, ty)),
+        BinOp::Sub => Some(Constant::Float(a - b, ty)),
+        BinOp::Mul => Some(Constant::Float(a * b, ty)),
+        BinOp::Div => Some(Constant::Float(a / b, ty)),
+        BinOp::Rem => Some(Constant::Float(a % b, ty)),
         BinOp::Eq => Some(Constant::Bool(a == b)),
         BinOp::Ne => Some(Constant::Bool(a != b)),
         BinOp::Lt => Some(Constant::Bool(a < b)),
@@ -141,6 +141,10 @@ mod tests {
     use crate::mir::terminator::Terminator;
     use crate::mir::types::Place;
     use crate::mir::validate::test_helpers::MirTestBuilder;
+    use crate::sema::types::TypeId;
+
+    // Dummy type ID for tests that don't use MirTestBuilder for constructing operands
+    const DUMMY_TY: TypeId = TypeId(0);
 
     // =========================================================================
     // Phase 5: ConstantFolding Pass Tests
@@ -154,11 +158,13 @@ mod tests {
         let temp = builder.add_local(i32_ty, true);
 
         let bb = builder.add_block();
+        let const_2 = builder.const_i32(2);
+        let const_3 = builder.const_i32(3);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp),
-                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(2), Operand::const_int(3)),
+                Rvalue::BinaryOp(BinOp::Add, const_2, const_3),
                 0..0,
             ),
         );
@@ -174,7 +180,7 @@ mod tests {
         // Check that the statement was folded
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(5)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(5, _)))) => {}
             other => panic!("expected folded int constant, got {:?}", other),
         }
     }
@@ -186,11 +192,13 @@ mod tests {
         let temp = builder.add_local(i32_ty, true);
 
         let bb = builder.add_block();
+        let const_10 = builder.const_i32(10);
+        let const_3 = builder.const_i32(3);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp),
-                Rvalue::BinaryOp(BinOp::Sub, Operand::const_int(10), Operand::const_int(3)),
+                Rvalue::BinaryOp(BinOp::Sub, const_10, const_3),
                 0..0,
             ),
         );
@@ -205,7 +213,7 @@ mod tests {
 
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(7)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(7, _)))) => {}
             other => panic!("expected folded int constant 7, got {:?}", other),
         }
     }
@@ -217,11 +225,13 @@ mod tests {
         let temp = builder.add_local(i32_ty, true);
 
         let bb = builder.add_block();
+        let const_4 = builder.const_i32(4);
+        let const_5 = builder.const_i32(5);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp),
-                Rvalue::BinaryOp(BinOp::Mul, Operand::const_int(4), Operand::const_int(5)),
+                Rvalue::BinaryOp(BinOp::Mul, const_4, const_5),
                 0..0,
             ),
         );
@@ -236,7 +246,7 @@ mod tests {
 
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(20)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(20, _)))) => {}
             other => panic!("expected folded int constant 20, got {:?}", other),
         }
     }
@@ -248,11 +258,13 @@ mod tests {
         let temp = builder.add_local(i32_ty, true);
 
         let bb = builder.add_block();
+        let const_10 = builder.const_i32(10);
+        let const_3 = builder.const_i32(3);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp),
-                Rvalue::BinaryOp(BinOp::Div, Operand::const_int(10), Operand::const_int(3)),
+                Rvalue::BinaryOp(BinOp::Div, const_10, const_3),
                 0..0,
             ),
         );
@@ -267,7 +279,7 @@ mod tests {
 
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(3)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(3, _)))) => {}
             other => panic!("expected folded int constant 3, got {:?}", other),
         }
     }
@@ -279,11 +291,13 @@ mod tests {
         let temp = builder.add_local(i32_ty, true);
 
         let bb = builder.add_block();
+        let const_10 = builder.const_i32(10);
+        let const_0 = builder.const_i32(0);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp),
-                Rvalue::BinaryOp(BinOp::Div, Operand::const_int(10), Operand::const_int(0)),
+                Rvalue::BinaryOp(BinOp::Div, const_10, const_0),
                 0..0,
             ),
         );
@@ -378,11 +392,13 @@ mod tests {
         let temp = builder.add_local(bool_ty, true);
 
         let bb = builder.add_block();
+        let const_5 = builder.const_i32(5);
+        let const_10 = builder.const_i32(10);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp),
-                Rvalue::BinaryOp(BinOp::Lt, Operand::const_int(5), Operand::const_int(10)),
+                Rvalue::BinaryOp(BinOp::Lt, const_5, const_10),
                 0..0,
             ),
         );
@@ -411,15 +427,12 @@ mod tests {
         let temp2 = builder.add_local(i32_ty, true);
 
         let bb = builder.add_block();
+        let const_3 = builder.const_i32(3);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp2),
-                Rvalue::BinaryOp(
-                    BinOp::Add,
-                    Operand::copy_local(temp1),
-                    Operand::const_int(3),
-                ),
+                Rvalue::BinaryOp(BinOp::Add, Operand::copy_local(temp1), const_3),
                 0..0,
             ),
         );
@@ -445,35 +458,36 @@ mod tests {
         let bb = builder.add_block();
 
         // _1 = Add(const 1, const 2) - foldable
+        let const_1 = builder.const_i32(1);
+        let const_2 = builder.const_i32(2);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp1),
-                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(1), Operand::const_int(2)),
+                Rvalue::BinaryOp(BinOp::Add, const_1, const_2),
                 0..0,
             ),
         );
 
         // _2 = Add(_1, const 3) - NOT foldable
+        let const_3 = builder.const_i32(3);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp2),
-                Rvalue::BinaryOp(
-                    BinOp::Add,
-                    Operand::copy_local(temp1),
-                    Operand::const_int(3),
-                ),
+                Rvalue::BinaryOp(BinOp::Add, Operand::copy_local(temp1), const_3),
                 0..0,
             ),
         );
 
         // _3 = Mul(const 4, const 5) - foldable
+        let const_4 = builder.const_i32(4);
+        let const_5 = builder.const_i32(5);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp3),
-                Rvalue::BinaryOp(BinOp::Mul, Operand::const_int(4), Operand::const_int(5)),
+                Rvalue::BinaryOp(BinOp::Mul, const_4, const_5),
                 0..0,
             ),
         );
@@ -489,7 +503,7 @@ mod tests {
 
         // Check first statement was folded
         match &body.block(bb).statements[0].kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(3)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(3, _)))) => {}
             other => panic!("expected folded constant 3, got {:?}", other),
         }
 
@@ -501,7 +515,7 @@ mod tests {
 
         // Check third statement was folded
         match &body.block(bb).statements[2].kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(20)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(20, _)))) => {}
             other => panic!("expected folded constant 20, got {:?}", other),
         }
     }
@@ -525,13 +539,10 @@ mod tests {
         let temp = builder.add_local(i32_ty, true);
 
         let bb = builder.add_block();
+        let const_42 = builder.const_i32(42);
         builder.add_statement(
             bb,
-            Statement::assign(
-                Place::from_local(temp),
-                Rvalue::Use(Operand::const_int(42)),
-                0..0,
-            ),
+            Statement::assign(Place::from_local(temp), Rvalue::Use(const_42), 0..0),
         );
         builder.set_terminator(bb, Terminator::return_(0..0));
 
@@ -551,15 +562,13 @@ mod tests {
 
         let bb = builder.add_block();
         // 0b1100 & 0b1010 = 0b1000 = 8
+        let const_12 = builder.const_i32(0b1100);
+        let const_10 = builder.const_i32(0b1010);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp),
-                Rvalue::BinaryOp(
-                    BinOp::BitAnd,
-                    Operand::const_int(0b1100),
-                    Operand::const_int(0b1010),
-                ),
+                Rvalue::BinaryOp(BinOp::BitAnd, const_12, const_10),
                 0..0,
             ),
         );
@@ -574,7 +583,7 @@ mod tests {
 
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(8)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(8, _)))) => {}
             other => panic!("expected folded int constant 8, got {:?}", other),
         }
     }
@@ -593,11 +602,13 @@ mod tests {
         builder = builder.with_return_ty(i32_ty);
 
         let bb = builder.add_block();
+        let const_100 = builder.const_i32(100);
+        let const_200 = builder.const_i32(200);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(100), Operand::const_int(200)),
+                Rvalue::BinaryOp(BinOp::Add, const_100, const_200),
                 0..0,
             ),
         );
@@ -625,15 +636,13 @@ mod tests {
 
         let bb = builder.add_block();
         // i128::MAX + 1 should wrap
+        let const_max = builder.const_i32(i128::MAX);
+        let const_1 = builder.const_i32(1);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp),
-                Rvalue::BinaryOp(
-                    BinOp::Add,
-                    Operand::const_int(i128::MAX),
-                    Operand::const_int(1),
-                ),
+                Rvalue::BinaryOp(BinOp::Add, const_max, const_1),
                 0..0,
             ),
         );
@@ -647,7 +656,7 @@ mod tests {
         assert!(result.changed);
         // Should wrap to i128::MIN
         match &body.block(bb).statements[0].kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(v)))) => {
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(v, _)))) => {
                 assert_eq!(*v, i128::MIN);
             }
             other => panic!("expected wrapped int constant, got {:?}", other),
@@ -661,11 +670,13 @@ mod tests {
         let temp = builder.add_local(i32_ty, true);
 
         let bb = builder.add_block();
+        let const_10 = builder.const_i32(10);
+        let const_0 = builder.const_i32(0);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp),
-                Rvalue::BinaryOp(BinOp::Rem, Operand::const_int(10), Operand::const_int(0)),
+                Rvalue::BinaryOp(BinOp::Rem, const_10, const_0),
                 0..0,
             ),
         );
@@ -690,21 +701,25 @@ mod tests {
         let bb = builder.add_block();
 
         // 1 << 4 = 16
+        let const_1 = builder.const_i32(1);
+        let const_4 = builder.const_i32(4);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp1),
-                Rvalue::BinaryOp(BinOp::Shl, Operand::const_int(1), Operand::const_int(4)),
+                Rvalue::BinaryOp(BinOp::Shl, const_1, const_4),
                 0..0,
             ),
         );
 
         // 64 >> 2 = 16
+        let const_64 = builder.const_i32(64);
+        let const_2 = builder.const_i32(2);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp2),
-                Rvalue::BinaryOp(BinOp::Shr, Operand::const_int(64), Operand::const_int(2)),
+                Rvalue::BinaryOp(BinOp::Shr, const_64, const_2),
                 0..0,
             ),
         );
@@ -719,12 +734,12 @@ mod tests {
         assert!(result.changed);
 
         match &body.block(bb).statements[0].kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(16)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(16, _)))) => {}
             other => panic!("expected folded constant 16, got {:?}", other),
         }
 
         match &body.block(bb).statements[1].kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(16)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(16, _)))) => {}
             other => panic!("expected folded constant 16, got {:?}", other),
         }
     }
@@ -743,61 +758,73 @@ mod tests {
         let bb = builder.add_block();
 
         // 5 == 5 => true
+        let const_5a = builder.const_i32(5);
+        let const_5b = builder.const_i32(5);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(t1),
-                Rvalue::BinaryOp(BinOp::Eq, Operand::const_int(5), Operand::const_int(5)),
+                Rvalue::BinaryOp(BinOp::Eq, const_5a, const_5b),
                 0..0,
             ),
         );
 
         // 5 != 3 => true
+        let const_5c = builder.const_i32(5);
+        let const_3a = builder.const_i32(3);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(t2),
-                Rvalue::BinaryOp(BinOp::Ne, Operand::const_int(5), Operand::const_int(3)),
+                Rvalue::BinaryOp(BinOp::Ne, const_5c, const_3a),
                 0..0,
             ),
         );
 
         // 3 < 5 => true
+        let const_3b = builder.const_i32(3);
+        let const_5d = builder.const_i32(5);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(t3),
-                Rvalue::BinaryOp(BinOp::Lt, Operand::const_int(3), Operand::const_int(5)),
+                Rvalue::BinaryOp(BinOp::Lt, const_3b, const_5d),
                 0..0,
             ),
         );
 
         // 5 <= 5 => true
+        let const_5e = builder.const_i32(5);
+        let const_5f = builder.const_i32(5);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(t4),
-                Rvalue::BinaryOp(BinOp::Le, Operand::const_int(5), Operand::const_int(5)),
+                Rvalue::BinaryOp(BinOp::Le, const_5e, const_5f),
                 0..0,
             ),
         );
 
         // 7 > 3 => true
+        let const_7 = builder.const_i32(7);
+        let const_3c = builder.const_i32(3);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(t5),
-                Rvalue::BinaryOp(BinOp::Gt, Operand::const_int(7), Operand::const_int(3)),
+                Rvalue::BinaryOp(BinOp::Gt, const_7, const_3c),
                 0..0,
             ),
         );
 
         // 5 >= 5 => true
+        let const_5g = builder.const_i32(5);
+        let const_5h = builder.const_i32(5);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(t6),
-                Rvalue::BinaryOp(BinOp::Ge, Operand::const_int(5), Operand::const_int(5)),
+                Rvalue::BinaryOp(BinOp::Ge, const_5g, const_5h),
                 0..0,
             ),
         );
@@ -909,11 +936,13 @@ mod tests {
 
         let bb = builder.add_block();
         // -5 + 3 = -2
+        let const_neg5 = builder.const_i32(-5);
+        let const_3 = builder.const_i32(3);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp),
-                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(-5), Operand::const_int(3)),
+                Rvalue::BinaryOp(BinOp::Add, const_neg5, const_3),
                 0..0,
             ),
         );
@@ -926,7 +955,7 @@ mod tests {
 
         assert!(result.changed);
         match &body.block(bb).statements[0].kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(-2)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(-2, _)))) => {}
             other => panic!("expected folded constant -2, got {:?}", other),
         }
     }
@@ -949,7 +978,7 @@ mod tests {
             bb,
             Statement::assign(
                 Place::from_local(Local(2)),
-                Rvalue::Ref(BorrowKind::Shared, Place::from_local(temp)),
+                Rvalue::Ref(BorrowKind::Shared, Place::from_local(temp), DUMMY_TY),
                 0..0,
             ),
         );
@@ -977,22 +1006,26 @@ mod tests {
         let bb1 = builder.add_block();
 
         // bb0: _1 = 1 + 2
+        let const_1 = builder.const_i32(1);
+        let const_2 = builder.const_i32(2);
         builder.add_statement(
             bb0,
             Statement::assign(
                 Place::from_local(t1),
-                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(1), Operand::const_int(2)),
+                Rvalue::BinaryOp(BinOp::Add, const_1, const_2),
                 0..0,
             ),
         );
         builder.set_terminator(bb0, Terminator::goto(bb1, 0..0));
 
         // bb1: _2 = 3 * 4
+        let const_3 = builder.const_i32(3);
+        let const_4 = builder.const_i32(4);
         builder.add_statement(
             bb1,
             Statement::assign(
                 Place::from_local(t2),
-                Rvalue::BinaryOp(BinOp::Mul, Operand::const_int(3), Operand::const_int(4)),
+                Rvalue::BinaryOp(BinOp::Mul, const_3, const_4),
                 0..0,
             ),
         );
@@ -1007,11 +1040,11 @@ mod tests {
 
         // Both blocks should have folded constants
         match &body.block(bb0).statements[0].kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(3)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(3, _)))) => {}
             other => panic!("expected 3, got {:?}", other),
         }
         match &body.block(bb1).statements[0].kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(12)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(12, _)))) => {}
             other => panic!("expected 12, got {:?}", other),
         }
     }
@@ -1030,11 +1063,13 @@ mod tests {
         builder.add_statement(bb, Statement::storage_live(temp, 0..0));
 
         // This should be folded
+        let const_1a = builder.const_i32(1);
+        let const_1b = builder.const_i32(1);
         builder.add_statement(
             bb,
             Statement::assign(
                 Place::from_local(temp),
-                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(1), Operand::const_int(1)),
+                Rvalue::BinaryOp(BinOp::Add, const_1a, const_1b),
                 0..0,
             ),
         );
@@ -1059,7 +1094,7 @@ mod tests {
 
         // Check assignment was folded
         match &body.block(bb).statements[1].kind {
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2)))) => {}
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2, _)))) => {}
             other => panic!("expected folded 2, got {:?}", other),
         }
 

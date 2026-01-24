@@ -271,8 +271,8 @@ fn get_constant_type(constant: &crate::mir::operand::Constant, types: &TypeInter
     use crate::mir::operand::Constant;
 
     match constant {
-        Constant::Int(_) => types.i32(),   // Default int type
-        Constant::Float(_) => types.f64(), // Default float type
+        Constant::Int(_, ty) => *ty,
+        Constant::Float(_, ty) => *ty,
         Constant::Bool(_) => types.bool(),
         Constant::Char(_) => types.char(),
         Constant::String(_) => types.str_ref(),
@@ -286,22 +286,8 @@ fn get_constant_type(constant: &crate::mir::operand::Constant, types: &TypeInter
 fn get_rvalue_type(rvalue: &Rvalue, body: &Body, types: &TypeInterner) -> TypeId {
     match rvalue {
         Rvalue::Use(operand) => get_operand_type(operand, body, types),
-        Rvalue::Ref(borrow_kind, place) => {
-            let inner_ty = get_place_type(place, body, types);
-            let mutability = match borrow_kind {
-                crate::mir::operand::BorrowKind::Shared => crate::sema::types::Mutability::Shared,
-                crate::mir::operand::BorrowKind::Mut => crate::sema::types::Mutability::Mutable,
-            };
-            // Note: Can't create new types without mutable interner
-            // For validation, we just check compatibility
-            // Return inner type as approximation (real impl would need mutable interner)
-            let _ = mutability;
-            inner_ty
-        }
-        Rvalue::AddressOf(_, place) => {
-            // Raw pointer - similar issue as Ref
-            get_place_type(place, body, types)
-        }
+        Rvalue::Ref(_, _, ref_ty) => *ref_ty,
+        Rvalue::AddressOf(_, _, ptr_ty) => *ptr_ty,
         Rvalue::BinaryOp(op, lhs, _) => match op {
             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => types.bool(),
             _ => get_operand_type(lhs, body, types),
@@ -340,6 +326,9 @@ mod tests {
     use crate::mir::terminator::Terminator;
     use crate::mir::types::Local;
 
+    // Dummy type ID for structural tests (not validation)
+    const DUMMY_TY: TypeId = TypeId(0);
+
     #[test]
     fn type_valid_int_assignment() {
         let mut builder = MirTestBuilder::new();
@@ -351,7 +340,7 @@ mod tests {
             bb,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(42)),
+                Rvalue::Use(builder.const_i32(42)),
                 0..0,
             ),
         );
@@ -395,7 +384,7 @@ mod tests {
             bb,
             Statement::assign(
                 Place::from_local(local1),
-                Rvalue::Use(Operand::const_int(42)),
+                Rvalue::Use(builder.const_i32(42)),
                 0..0,
             ),
         );
@@ -722,7 +711,9 @@ mod tests {
         // (Full ref type validation requires mutable interner)
         let mut builder = MirTestBuilder::new();
         let i32_ty = builder.types.i32();
-        builder = builder.with_return_ty(i32_ty); // Simplified
+        // Create a reference type to use for the Rvalue::Ref
+        let ref_i32_ty = builder.types.mk_ref(crate::sema::types::Mutability::Shared, i32_ty);
+        builder = builder.with_return_ty(ref_i32_ty);
         let local1 = builder.add_local(i32_ty, false);
 
         let bb = builder.add_block();
@@ -733,6 +724,7 @@ mod tests {
                 Rvalue::Ref(
                     crate::mir::operand::BorrowKind::Shared,
                     Place::from_local(local1),
+                    ref_i32_ty,
                 ),
                 0..0,
             ),
@@ -756,7 +748,7 @@ mod tests {
             bb,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(42)),
+                Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
                 0..0,
             ),
         );
@@ -826,5 +818,112 @@ mod tests {
             let (body, types) = builder.build();
             validate_types(&body, &types);
         }
+    }
+
+    // ===== spl-812: Typed constants tests =====
+
+    #[test]
+    fn type_valid_i64_constant_to_i64_place() {
+        // i64 constant assigned to i64 return place - should pass
+        let mut builder = MirTestBuilder::new();
+        let i64_ty = builder.types.i64();
+        builder = builder.with_return_ty(i64_ty);
+
+        let bb = builder.add_block();
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(42, i64_ty))),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (body, types) = builder.build();
+        validate_types(&body, &types);
+    }
+
+    #[test]
+    #[should_panic(expected = "type mismatch")]
+    fn type_invalid_i64_constant_to_i32_place() {
+        // i64 constant assigned to i32 return place - should FAIL
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let i64_ty = builder.types.i64();
+        builder = builder.with_return_ty(i32_ty);
+
+        let bb = builder.add_block();
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(42, i64_ty))),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (body, types) = builder.build();
+        validate_types(&body, &types);
+    }
+
+    // ===== spl-ii5: Reference types tests =====
+
+    #[test]
+    fn type_valid_ref_to_ref_place() {
+        // &i32 assigned to &i32 place - should pass
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let ref_ty = builder.types.mk_ref(crate::sema::types::Mutability::Shared, i32_ty);
+        builder = builder.with_return_ty(ref_ty);
+        let local = builder.add_local(i32_ty, false);
+
+        let bb = builder.add_block();
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::Ref(
+                    crate::mir::operand::BorrowKind::Shared,
+                    Place::from_local(local),
+                    ref_ty,
+                ),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (body, types) = builder.build();
+        validate_types(&body, &types);
+    }
+
+    #[test]
+    #[should_panic(expected = "type mismatch")]
+    fn type_invalid_ref_to_non_ref_place() {
+        // &i32 assigned to i32 place - should FAIL
+        let mut builder = MirTestBuilder::new();
+        let i32_ty = builder.types.i32();
+        let ref_ty = builder.types.mk_ref(crate::sema::types::Mutability::Shared, i32_ty);
+        builder = builder.with_return_ty(i32_ty); // NOT &i32
+        let local = builder.add_local(i32_ty, false);
+
+        let bb = builder.add_block();
+        builder.add_statement(
+            bb,
+            Statement::assign(
+                Place::from_local(Local::RETURN_PLACE),
+                Rvalue::Ref(
+                    crate::mir::operand::BorrowKind::Shared,
+                    Place::from_local(local),
+                    ref_ty,
+                ),
+                0..0,
+            ),
+        );
+        builder.set_terminator(bb, Terminator::return_(0..0));
+
+        let (body, types) = builder.build();
+        validate_types(&body, &types);
     }
 }

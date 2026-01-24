@@ -124,7 +124,7 @@ impl<'hir> MirLoweringContext<'hir> {
                 // Allocate a temp for the literal
                 let temp = builder.alloc_temp(ty);
                 let place = Place::from_local(temp);
-                let constant = lower_literal(lit);
+                let constant = lower_literal(lit, ty);
                 let stmt = Statement::assign(
                     place.clone(),
                     Rvalue::Use(Operand::Constant(constant)),
@@ -349,9 +349,10 @@ impl<'hir> MirLoweringContext<'hir> {
                 };
                 let temp = builder.alloc_temp(ty);
                 let place = Place::from_local(temp);
+                // ty is already the reference type (&T or &mut T) from HIR type inference
                 builder.push_statement(Statement::assign(
                     place.clone(),
-                    Rvalue::Ref(borrow_kind, operand_place),
+                    Rvalue::Ref(borrow_kind, operand_place, ty),
                     span,
                 ));
                 place
@@ -917,11 +918,12 @@ impl<'hir> MirLoweringContext<'hir> {
     /// Lower an expression as an operand (no temp allocation for simple cases).
     pub fn lower_expr_as_operand(&mut self, builder: &mut MirBuilder, expr_id: ExprId) -> Operand {
         let expr = self.hir.expr(expr_id);
+        let ty = expr.ty;
 
         match &expr.kind {
             HirExprKind::Literal(lit) => {
                 // Literals can be operands directly
-                literal_to_operand(lit)
+                literal_to_operand(lit, ty)
             }
             HirExprKind::Var(def_id) => {
                 // Variables can be operands directly (copy from their place)
@@ -929,7 +931,8 @@ impl<'hir> MirLoweringContext<'hir> {
                     Operand::Copy(Place::from_local(local))
                 } else {
                     // Variable not found - return a zero constant as fallback
-                    Operand::Constant(Constant::Int(0))
+                    let i32_ty = self.hir.types.i32();
+                    Operand::Constant(Constant::Int(0, i32_ty))
                 }
             }
             _ => {

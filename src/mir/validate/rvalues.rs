@@ -217,8 +217,8 @@ fn get_operand_type(
     match operand {
         Operand::Copy(place) | Operand::Move(place) => get_place_type(place, body, types),
         Operand::Constant(constant) => match constant {
-            Constant::Int(_) => types.i32(),
-            Constant::Float(_) => types.f64(),
+            Constant::Int(_, ty) => *ty,
+            Constant::Float(_, ty) => *ty,
             Constant::Bool(_) => types.bool(),
             Constant::Char(_) => types.char(),
             Constant::String(_) => types.str_ref(),
@@ -356,7 +356,7 @@ mod tests {
                 Place::from_local(Local::RETURN_PLACE),
                 Rvalue::Aggregate(
                     AggregateKind::Tuple,
-                    vec![Operand::const_int(42), Operand::const_bool(true)],
+                    vec![builder.const_i32(42), Operand::const_bool(true)],
                 ),
                 0..0,
             ),
@@ -382,9 +382,9 @@ mod tests {
                 Rvalue::Aggregate(
                     AggregateKind::Array,
                     vec![
-                        Operand::const_int(1),
-                        Operand::const_int(2),
-                        Operand::const_int(3),
+                        builder.const_i32(1),
+                        builder.const_i32(2),
+                        builder.const_i32(3),
                     ],
                 ),
                 0..0,
@@ -551,7 +551,7 @@ mod tests {
             bb,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Aggregate(AggregateKind::Tuple, vec![Operand::const_int(42)]),
+                Rvalue::Aggregate(AggregateKind::Tuple, vec![builder.const_i32(42)]),
                 0..0,
             ),
         );
@@ -577,7 +577,7 @@ mod tests {
                 Place::from_local(Local::RETURN_PLACE),
                 Rvalue::Aggregate(
                     AggregateKind::Array,
-                    vec![Operand::const_int(1), Operand::const_int(2)],
+                    vec![builder.const_i32(1), builder.const_i32(2)],
                 ),
                 0..0,
             ),

@@ -121,32 +121,34 @@ fn test_mir_builder_finish() {
 
 // ========== Phase 2: Literal Conversion ==========
 
+const DUMMY_TY: TypeId = TypeId(0);
+
 #[test]
 fn test_lower_int_literal() {
     let lit = Literal::Int(42);
-    let constant = lower_literal(&lit);
+    let constant = lower_literal(&lit, DUMMY_TY);
 
-    assert_eq!(constant, Constant::Int(42));
+    assert_eq!(constant, Constant::Int(42, DUMMY_TY));
 }
 
 #[test]
 fn test_lower_float_literal() {
     let lit = Literal::Float(2.5);
-    let constant = lower_literal(&lit);
+    let constant = lower_literal(&lit, DUMMY_TY);
 
-    assert_eq!(constant, Constant::Float(2.5));
+    assert_eq!(constant, Constant::Float(2.5, DUMMY_TY));
 }
 
 #[test]
 fn test_lower_bool_literal() {
-    assert_eq!(lower_literal(&Literal::Bool(true)), Constant::Bool(true));
-    assert_eq!(lower_literal(&Literal::Bool(false)), Constant::Bool(false));
+    assert_eq!(lower_literal(&Literal::Bool(true), DUMMY_TY), Constant::Bool(true));
+    assert_eq!(lower_literal(&Literal::Bool(false), DUMMY_TY), Constant::Bool(false));
 }
 
 #[test]
 fn test_lower_char_literal() {
     let lit = Literal::Char('x');
-    let constant = lower_literal(&lit);
+    let constant = lower_literal(&lit, DUMMY_TY);
 
     assert_eq!(constant, Constant::Char('x'));
 }
@@ -154,7 +156,7 @@ fn test_lower_char_literal() {
 #[test]
 fn test_lower_string_literal() {
     let lit = Literal::String("hello".to_string());
-    let constant = lower_literal(&lit);
+    let constant = lower_literal(&lit, DUMMY_TY);
 
     assert_eq!(constant, Constant::String("hello".to_string()));
 }
@@ -162,9 +164,9 @@ fn test_lower_string_literal() {
 #[test]
 fn test_literal_to_operand() {
     let lit = Literal::Int(42);
-    let operand = literal_to_operand(&lit);
+    let operand = literal_to_operand(&lit, DUMMY_TY);
 
-    assert!(matches!(operand, Operand::Constant(Constant::Int(42))));
+    assert!(matches!(operand, Operand::Constant(Constant::Int(42, _))));
 }
 
 // ========== Phase 3: MirLoweringContext ==========
@@ -202,7 +204,7 @@ fn test_lower_literal_expr() {
 
     let stmt = &builder.current_block().statements[0];
     match &stmt.kind {
-        StatementKind::Assign(p, Rvalue::Use(Operand::Constant(Constant::Int(42)))) => {
+        StatementKind::Assign(p, Rvalue::Use(Operand::Constant(Constant::Int(42, _)))) => {
             assert_eq!(*p, place);
         }
         _ => panic!("Expected assignment of constant"),
@@ -225,7 +227,7 @@ fn test_lower_literal_as_operand() {
     let operand = ctx.lower_expr_as_operand(&mut builder, expr_id);
 
     // Literals should become operands directly without temp
-    assert!(matches!(operand, Operand::Constant(Constant::Int(42))));
+    assert!(matches!(operand, Operand::Constant(Constant::Int(42, _))));
     assert_eq!(builder.locals.len(), 1); // Only return place
 }
 
@@ -279,7 +281,7 @@ fn test_lower_function_returning_constant() {
     assert_eq!(block.statements.len(), 1);
 
     match &block.statements[0].kind {
-        StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(42)))) => {
+        StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(42, _)))) => {
             assert_eq!(place.local, Local(0)); // Return place
             assert!(place.projection.is_empty());
         }
@@ -319,7 +321,7 @@ fn test_lower_function_returning_float() {
     let body = &bodies[0];
 
     match &body.basic_blocks[0].statements[0].kind {
-        StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Float(f)))) => {
+        StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Float(f, _)))) => {
             assert!((f - 1.23456).abs() < 0.00001);
         }
         _ => panic!("Expected float constant"),
@@ -516,7 +518,7 @@ fn test_lower_negative_int() {
     let body = &bodies[0];
 
     match &body.basic_blocks[0].statements[0].kind {
-        StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(-42)))) => {}
+        StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(-42, _)))) => {}
         _ => panic!("Expected negative int constant"),
     }
 }
@@ -769,8 +771,8 @@ fn test_lower_binary_add_literals() {
             place,
             Rvalue::BinaryOp(
                 BinOp::Add,
-                Operand::Constant(Constant::Int(1)),
-                Operand::Constant(Constant::Int(2)),
+                Operand::Constant(Constant::Int(1, _)),
+                Operand::Constant(Constant::Int(2, _)),
             ),
         ) => {
             assert_eq!(place.local, Local(1)); // First temp
@@ -1079,7 +1081,7 @@ fn test_lower_nested_binary() {
         StatementKind::Assign(place, Rvalue::BinaryOp(BinOp::Mul, lhs, rhs)) => {
             assert_eq!(place.local, Local(2));
             assert!(matches!(lhs, Operand::Copy(p) if p.local == Local(1)));
-            assert!(matches!(rhs, Operand::Constant(Constant::Int(3))));
+            assert!(matches!(rhs, Operand::Constant(Constant::Int(3, _))));
         }
         _ => panic!("Expected Mul"),
     }
@@ -1483,7 +1485,7 @@ fn lower_let_binding_simple() {
             StatementKind::StorageLive(local) if *local == Local(1) => {
                 found_storage_live = true;
             }
-            StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(42))))
+            StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(42, _))))
                 if place.local == Local(1) =>
             {
                 found_assign_42 = true;
@@ -1635,7 +1637,7 @@ fn lower_let_wildcard() {
     let found_42 = block.statements.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42))))
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42, _))))
         )
     });
     assert!(found_42, "Expected 42 to be evaluated (for side effects)");
@@ -1644,7 +1646,7 @@ fn lower_let_wildcard() {
     let found_0_somewhere = block.statements.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(0))))
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(0, _))))
         )
     });
     assert!(found_0_somewhere, "Expected 0 to be assigned somewhere");
@@ -1765,14 +1767,14 @@ fn lower_block_multiple_stmts() {
     let found_1 = block.statements.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(1))))
+            StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(1, _))))
             if place.local == Local(1)
         )
     });
     let found_2 = block.statements.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(2))))
+            StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(2, _))))
             if place.local == Local(2)
         )
     });
@@ -1855,7 +1857,7 @@ fn lower_block_no_tail() {
     let found_x = block.statements.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1))))
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1, _))))
         )
     });
     assert!(found_x, "Expected x = 1");
@@ -2124,7 +2126,7 @@ fn lower_expr_stmt_with_semi() {
     let found_42 = block.statements.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42))))
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42, _))))
         )
     });
     assert!(found_42, "Expected 42 to be assigned");
@@ -2426,7 +2428,7 @@ fn lower_shadowing() {
     let found_x1 = block.statements.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(1))))
+            StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(1, _))))
             if place.local == Local(1)
         )
     });
@@ -2435,7 +2437,7 @@ fn lower_shadowing() {
     let found_x2 = block.statements.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(2))))
+            StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(2, _))))
             if place.local == Local(2)
         )
     });
@@ -2569,13 +2571,13 @@ fn lower_block_as_operand() {
     let found_1 = block.statements.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1))))
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1, _))))
         )
     });
     let found_2 = block.statements.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2))))
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2, _))))
         )
     });
     let found_add = block.statements.iter().any(|stmt| {
@@ -2632,7 +2634,7 @@ fn lower_block_tail_only() {
     let found_42 = block.statements.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42))))
+            StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42, _))))
         )
     });
     assert!(found_42, "Expected 42 to be assigned");
@@ -2902,7 +2904,7 @@ fn lower_let_uses_previous_binding() {
     let found_add_using_a = block.statements.iter().any(|stmt| {
             matches!(
                 &stmt.kind,
-                StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, Operand::Copy(src), Operand::Constant(Constant::Int(1))))
+                StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, Operand::Copy(src), Operand::Constant(Constant::Int(1, _))))
                 if src.local == Local(1)
             )
         });
@@ -3121,7 +3123,7 @@ fn lower_return_literal() {
     let found_assign = block.statements.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(42))))
+            StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(42, _))))
             if place.local == Local(0)
         )
     });
@@ -3579,10 +3581,10 @@ fn lower_if_else_literals() {
     for block in &body.basic_blocks {
         for stmt in &block.statements {
             match &stmt.kind {
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1)))) => {
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1, _)))) => {
                     found_1 = true;
                 }
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2)))) => {
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2, _)))) => {
                     found_2 = true;
                 }
                 _ => {}
@@ -3839,7 +3841,7 @@ fn lower_loop_with_break() {
         for stmt in &block.statements {
             if matches!(
                 &stmt.kind,
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42))))
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42, _))))
             ) {
                 found_42 = true;
             }
@@ -4102,7 +4104,7 @@ fn lower_conditional_break() {
         for stmt in &block.statements {
             if matches!(
                 &stmt.kind,
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1))))
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1, _))))
             ) {
                 found_1 = true;
             }
@@ -4228,7 +4230,7 @@ fn lower_nested_break_inner() {
         for stmt in &block.statements {
             if matches!(
                 &stmt.kind,
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1))))
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1, _))))
             ) {
                 found_1 = true;
             }
@@ -4372,7 +4374,7 @@ fn lower_nested_loop_values() {
         block.statements.iter().any(|stmt| {
             matches!(
                 &stmt.kind,
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(10))))
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(10, _))))
             )
         })
     });
@@ -4466,7 +4468,7 @@ fn lower_return_in_loop() {
         block.statements.iter().any(|stmt| {
             matches!(
                 &stmt.kind,
-                StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(42))))
+                StatementKind::Assign(place, Rvalue::Use(Operand::Constant(Constant::Int(42, _))))
                 if place.local == Local(0)
             )
         })
@@ -4610,7 +4612,7 @@ fn lower_if_else_breaks() {
         block.statements.iter().any(|stmt| {
             matches!(
                 &stmt.kind,
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1))))
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1, _))))
             )
         })
     });
@@ -4618,7 +4620,7 @@ fn lower_if_else_breaks() {
         block.statements.iter().any(|stmt| {
             matches!(
                 &stmt.kind,
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2))))
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2, _))))
             )
         })
     });
@@ -4851,8 +4853,8 @@ fn test_lower_call_with_args() {
         {
             assert_eq!(args.len(), 2, "Expected 2 arguments");
             // Check args are constants 1 and 2
-            assert!(matches!(&args[0], Operand::Constant(Constant::Int(1))));
-            assert!(matches!(&args[1], Operand::Constant(Constant::Int(2))));
+            assert!(matches!(&args[0], Operand::Constant(Constant::Int(1, _))));
+            assert!(matches!(&args[1], Operand::Constant(Constant::Int(2, _))));
             found_call_with_args = true;
         }
     }
@@ -5164,8 +5166,8 @@ fn test_lower_method_call_with_args() {
             // 1 (receiver) + 2 (explicit args) = 3 total
             assert_eq!(args.len(), 3, "Expected 3 arguments (receiver + 2)");
             // Check that args[1] is 10 and args[2] is 20
-            assert!(matches!(&args[1], Operand::Constant(Constant::Int(10))));
-            assert!(matches!(&args[2], Operand::Constant(Constant::Int(20))));
+            assert!(matches!(&args[1], Operand::Constant(Constant::Int(10, _))));
+            assert!(matches!(&args[2], Operand::Constant(Constant::Int(20, _))));
             found_call_with_args = true;
         }
     }
@@ -5726,7 +5728,7 @@ fn test_lower_ref_placeholder() {
         block.statements.iter().any(|stmt| {
             matches!(
                 &stmt.kind,
-                StatementKind::Assign(_, Rvalue::Ref(BorrowKind::Shared, _))
+                StatementKind::Assign(_, Rvalue::Ref(BorrowKind::Shared, _, _))
             )
         })
     });
@@ -6449,7 +6451,7 @@ fn test_lower_deeply_nested_blocks() {
         block.statements.iter().any(|stmt| {
             matches!(
                 &stmt.kind,
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42))))
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42, _))))
             )
         })
     });
@@ -6749,7 +6751,7 @@ fn test_lower_if_in_loop() {
         block.statements.iter().any(|stmt| {
             matches!(
                 &stmt.kind,
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1))))
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(1, _))))
             )
         })
     });
@@ -6757,7 +6759,7 @@ fn test_lower_if_in_loop() {
         block.statements.iter().any(|stmt| {
             matches!(
                 &stmt.kind,
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2))))
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2, _))))
             )
         })
     });
@@ -7001,7 +7003,7 @@ fn test_lower_return_in_if_branch() {
                 &stmt.kind,
                 StatementKind::Assign(
                     place,
-                    Rvalue::Use(Operand::Constant(Constant::Int(1)))
+                    Rvalue::Use(Operand::Constant(Constant::Int(1, _)))
                 ) if place.local == Local(0)
             )
         })
@@ -7010,7 +7012,7 @@ fn test_lower_return_in_if_branch() {
         block.statements.iter().any(|stmt| {
             matches!(
                 &stmt.kind,
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2))))
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2, _))))
             )
         })
     });

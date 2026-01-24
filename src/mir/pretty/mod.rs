@@ -61,8 +61,8 @@ impl MirPrinter {
     /// Format a constant value.
     pub fn print_constant(&self, constant: &Constant) -> String {
         match constant {
-            Constant::Int(v) => format!("const {v}"),
-            Constant::Float(v) => format!("const {v}"),
+            Constant::Int(v, ty) => format!("const {v}_ty{}", ty.0),
+            Constant::Float(v, ty) => format!("const {v}_ty{}", ty.0),
             Constant::Bool(v) => format!("const {v}"),
             Constant::Char(c) => format!("const '{c}'"),
             Constant::String(s) => format!("const \"{s}\""),
@@ -163,12 +163,12 @@ impl MirPrinter {
     pub fn print_rvalue(&self, rvalue: &Rvalue) -> String {
         match rvalue {
             Rvalue::Use(operand) => self.print_operand(operand),
-            Rvalue::Ref(BorrowKind::Shared, place) => format!("&{}", self.print_place(place)),
-            Rvalue::Ref(BorrowKind::Mut, place) => format!("&mut {}", self.print_place(place)),
-            Rvalue::AddressOf(Mutability::Shared, place) => {
+            Rvalue::Ref(BorrowKind::Shared, place, _) => format!("&{}", self.print_place(place)),
+            Rvalue::Ref(BorrowKind::Mut, place, _) => format!("&mut {}", self.print_place(place)),
+            Rvalue::AddressOf(Mutability::Shared, place, _) => {
                 format!("&raw const {}", self.print_place(place))
             }
-            Rvalue::AddressOf(Mutability::Mutable, place) => {
+            Rvalue::AddressOf(Mutability::Mutable, place, _) => {
                 format!("&raw mut {}", self.print_place(place))
             }
             Rvalue::BinaryOp(op, lhs, rhs) => {

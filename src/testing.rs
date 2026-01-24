@@ -407,7 +407,7 @@ fn rvalue_has_const(rvalue: &Rvalue, value: i64) -> bool {
 
 /// Helper to check if an operand contains a specific integer constant.
 fn operand_has_const(operand: &Operand, value: i64) -> bool {
-    matches!(operand, Operand::Constant(Constant::Int(v)) if *v == value as i128)
+    matches!(operand, Operand::Constant(Constant::Int(v, _)) if *v == value as i128)
 }
 
 /// Inspector for a single basic block.

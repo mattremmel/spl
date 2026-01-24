@@ -14,7 +14,10 @@ use crate::mir::statement::Statement;
 use crate::mir::terminator::{SwitchTargets, Terminator, TerminatorKind};
 use crate::mir::types::{FieldIdx, Local, Place, PlaceElem};
 use crate::sema::symbol::DefId;
-use crate::sema::types::{Mutability, PrimitiveKind, TypeInterner};
+use crate::sema::types::{Mutability, PrimitiveKind, TypeId, TypeInterner};
+
+/// Dummy type ID for tests that don't need a real type.
+const DUMMY_TY: TypeId = TypeId(0);
 
 use super::FunctionLowerer;
 
@@ -65,7 +68,7 @@ fn lower_return_int_constant() {
     // _0 = 42
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(42))),
+        Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
         0..0,
     ));
 
@@ -142,7 +145,7 @@ fn lower_local_variable_copy() {
     // _1 = 42
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local(1)),
-        Rvalue::Use(Operand::Constant(Constant::Int(42))),
+        Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
         0..0,
     ));
 
@@ -177,14 +180,14 @@ fn lower_multiple_locals() {
     // _1 = 10
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local(1)),
-        Rvalue::Use(Operand::Constant(Constant::Int(10))),
+        Rvalue::Use(Operand::Constant(Constant::Int(10, DUMMY_TY))),
         0..0,
     ));
 
     // _2 = 20
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local(2)),
-        Rvalue::Use(Operand::Constant(Constant::Int(20))),
+        Rvalue::Use(Operand::Constant(Constant::Int(20, DUMMY_TY))),
         0..0,
     ));
 
@@ -219,7 +222,7 @@ fn lower_operand_move() {
     // _1 = 42
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local(1)),
-        Rvalue::Use(Operand::Constant(Constant::Int(42))),
+        Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
         0..0,
     ));
 
@@ -864,7 +867,7 @@ fn lower_goto() {
     // bb1: _0 = 42; return
     body.block_mut(bb1).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(42))),
+        Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(bb1)
@@ -898,7 +901,7 @@ fn lower_goto_chain() {
     // bb2: _0 = 42; return
     body.block_mut(bb2).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(42))),
+        Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(bb2)
@@ -938,7 +941,7 @@ fn lower_switch_bool() {
     // then_block: _0 = 1; return
     body.block_mut(then_block).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(1))),
+        Rvalue::Use(Operand::Constant(Constant::Int(1, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(then_block)
@@ -947,7 +950,7 @@ fn lower_switch_bool() {
     // else_block: _0 = 2; return
     body.block_mut(else_block).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(2))),
+        Rvalue::Use(Operand::Constant(Constant::Int(2, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(else_block)
@@ -984,7 +987,7 @@ fn lower_switch_int() {
     // case_0: _0 = 10; return
     body.block_mut(case_0).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(10))),
+        Rvalue::Use(Operand::Constant(Constant::Int(10, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(case_0)
@@ -993,7 +996,7 @@ fn lower_switch_int() {
     // case_1: _0 = 20; return
     body.block_mut(case_1).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(20))),
+        Rvalue::Use(Operand::Constant(Constant::Int(20, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(case_1)
@@ -1002,7 +1005,7 @@ fn lower_switch_int() {
     // default: _0 = 30; return
     body.block_mut(default).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(30))),
+        Rvalue::Use(Operand::Constant(Constant::Int(30, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(default)
@@ -1042,7 +1045,7 @@ fn lower_loop_countdown() {
     // entry: _2 = 0; goto loop_header
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local(2)),
-        Rvalue::Use(Operand::Constant(Constant::Int(0))),
+        Rvalue::Use(Operand::Constant(Constant::Int(0, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(entry)
@@ -1055,7 +1058,7 @@ fn lower_loop_countdown() {
             Rvalue::BinaryOp(
                 BinOp::Gt,
                 Operand::Copy(Place::from_local(Local(1))),
-                Operand::Constant(Constant::Int(0)),
+                Operand::Constant(Constant::Int(0, DUMMY_TY)),
             ),
             0..0,
         ));
@@ -1082,7 +1085,7 @@ fn lower_loop_countdown() {
         Rvalue::BinaryOp(
             BinOp::Sub,
             Operand::Copy(Place::from_local(Local(1))),
-            Operand::Constant(Constant::Int(1)),
+            Operand::Constant(Constant::Int(1, DUMMY_TY)),
         ),
         0..0,
     ));
@@ -1389,7 +1392,7 @@ fn lower_storage_markers() {
     // _1 = 42
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(local),
-        Rvalue::Use(Operand::Constant(Constant::Int(42))),
+        Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
         0..0,
     ));
 
@@ -1430,7 +1433,7 @@ fn lower_return_float_constant() {
     // _0 = 1.234
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Float(1.234))),
+        Rvalue::Use(Operand::Constant(Constant::Float(1.234, DUMMY_TY))),
         0..0,
     ));
 
@@ -1838,12 +1841,12 @@ fn lower_nested_loops() {
     // bb0 (entry): sum=0, i=1, goto outer_header
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local(1)),
-        Rvalue::Use(Operand::Constant(Constant::Int(0))),
+        Rvalue::Use(Operand::Constant(Constant::Int(0, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local(2)),
-        Rvalue::Use(Operand::Constant(Constant::Int(1))),
+        Rvalue::Use(Operand::Constant(Constant::Int(1, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(entry)
@@ -1856,7 +1859,7 @@ fn lower_nested_loops() {
             Rvalue::BinaryOp(
                 BinOp::Le,
                 Operand::Copy(Place::from_local(Local(2))),
-                Operand::Constant(Constant::Int(2)),
+                Operand::Constant(Constant::Int(2, DUMMY_TY)),
             ),
             0..0,
         ));
@@ -1864,7 +1867,7 @@ fn lower_nested_loops() {
     body.block_mut(outer_header)
         .push_statement(Statement::assign(
             Place::from_local(Local(3)),
-            Rvalue::Use(Operand::Constant(Constant::Int(1))),
+            Rvalue::Use(Operand::Constant(Constant::Int(1, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(outer_header).set_terminator(Terminator::new(
@@ -1882,7 +1885,7 @@ fn lower_nested_loops() {
             Rvalue::BinaryOp(
                 BinOp::Le,
                 Operand::Copy(Place::from_local(Local(3))),
-                Operand::Constant(Constant::Int(3)),
+                Operand::Constant(Constant::Int(3, DUMMY_TY)),
             ),
             0..0,
         ));
@@ -1918,7 +1921,7 @@ fn lower_nested_loops() {
         Rvalue::BinaryOp(
             BinOp::Add,
             Operand::Copy(Place::from_local(Local(3))),
-            Operand::Constant(Constant::Int(1)),
+            Operand::Constant(Constant::Int(1, DUMMY_TY)),
         ),
         0..0,
     ));
@@ -1931,7 +1934,7 @@ fn lower_nested_loops() {
         Rvalue::BinaryOp(
             BinOp::Add,
             Operand::Copy(Place::from_local(Local(2))),
-            Operand::Constant(Constant::Int(1)),
+            Operand::Constant(Constant::Int(1, DUMMY_TY)),
         ),
         0..0,
     ));
@@ -1968,7 +1971,7 @@ fn lower_drop_terminator() {
     // entry: _1 = 42; drop(_1) -> after_drop
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(local),
-        Rvalue::Use(Operand::Constant(Constant::Int(42))),
+        Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(entry).set_terminator(Terminator::new(
@@ -1982,7 +1985,7 @@ fn lower_drop_terminator() {
     // after_drop: _0 = 42; return
     body.block_mut(after_drop).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(42))),
+        Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(after_drop)
@@ -2025,7 +2028,7 @@ fn lower_assert_terminator() {
     body.block_mut(after_assert)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::Int(99))),
+            Rvalue::Use(Operand::Constant(Constant::Int(99, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(after_assert)
@@ -2051,7 +2054,7 @@ fn lower_nop_statement() {
     body.block_mut(entry).push_statement(Statement::nop(0..0));
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(77))),
+        Rvalue::Use(Operand::Constant(Constant::Int(77, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(entry).push_statement(Statement::nop(0..0));
@@ -2087,7 +2090,7 @@ fn lower_switch_empty_targets() {
     body.block_mut(default_block)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::Int(100))),
+            Rvalue::Use(Operand::Constant(Constant::Int(100, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(default_block)
@@ -2137,7 +2140,7 @@ fn lower_negative_int_constant() {
 
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(-42))),
+        Rvalue::Use(Operand::Constant(Constant::Int(-42, DUMMY_TY))),
         0..0,
     ));
 
@@ -2161,7 +2164,7 @@ fn lower_negative_float_constant() {
 
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Float(-2.5))),
+        Rvalue::Use(Operand::Constant(Constant::Float(-2.5, DUMMY_TY))),
         0..0,
     ));
 
@@ -2346,7 +2349,7 @@ fn lower_many_basic_blocks() {
     // bb0: _1 = 1; goto bb1
     body.block_mut(bb0).push_statement(Statement::assign(
         Place::from_local(temp),
-        Rvalue::Use(Operand::Constant(Constant::Int(1))),
+        Rvalue::Use(Operand::Constant(Constant::Int(1, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(bb0)
@@ -2358,7 +2361,7 @@ fn lower_many_basic_blocks() {
         Rvalue::BinaryOp(
             BinOp::Add,
             Operand::Copy(Place::from_local(temp)),
-            Operand::Constant(Constant::Int(2)),
+            Operand::Constant(Constant::Int(2, DUMMY_TY)),
         ),
         0..0,
     ));
@@ -2371,7 +2374,7 @@ fn lower_many_basic_blocks() {
         Rvalue::BinaryOp(
             BinOp::Add,
             Operand::Copy(Place::from_local(temp)),
-            Operand::Constant(Constant::Int(4)),
+            Operand::Constant(Constant::Int(4, DUMMY_TY)),
         ),
         0..0,
     ));
@@ -2384,7 +2387,7 @@ fn lower_many_basic_blocks() {
         Rvalue::BinaryOp(
             BinOp::Add,
             Operand::Copy(Place::from_local(temp)),
-            Operand::Constant(Constant::Int(8)),
+            Operand::Constant(Constant::Int(8, DUMMY_TY)),
         ),
         0..0,
     ));
@@ -2397,7 +2400,7 @@ fn lower_many_basic_blocks() {
         Rvalue::BinaryOp(
             BinOp::Add,
             Operand::Copy(Place::from_local(temp)),
-            Operand::Constant(Constant::Int(16)),
+            Operand::Constant(Constant::Int(16, DUMMY_TY)),
         ),
         0..0,
     ));
@@ -2438,7 +2441,7 @@ fn lower_diamond_control_flow() {
     // then_block: _2 = 100; goto merge
     body.block_mut(then_block).push_statement(Statement::assign(
         Place::from_local(result),
-        Rvalue::Use(Operand::Constant(Constant::Int(100))),
+        Rvalue::Use(Operand::Constant(Constant::Int(100, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(then_block)
@@ -2447,7 +2450,7 @@ fn lower_diamond_control_flow() {
     // else_block: _2 = 200; goto merge
     body.block_mut(else_block).push_statement(Statement::assign(
         Place::from_local(result),
-        Rvalue::Use(Operand::Constant(Constant::Int(200))),
+        Rvalue::Use(Operand::Constant(Constant::Int(200, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(else_block)
@@ -2483,8 +2486,8 @@ fn lower_constant_in_binop() {
         Place::from_local(Local::RETURN_PLACE),
         Rvalue::BinaryOp(
             BinOp::Add,
-            Operand::Constant(Constant::Int(10)),
-            Operand::Constant(Constant::Int(32)),
+            Operand::Constant(Constant::Int(10, DUMMY_TY)),
+            Operand::Constant(Constant::Int(32, DUMMY_TY)),
         ),
         0..0,
     ));
@@ -2623,7 +2626,7 @@ fn lower_string_constant() {
     // _0 = 42
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(42))),
+        Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
         0..0,
     ));
 
@@ -2658,7 +2661,7 @@ fn lower_string_constant_empty() {
 
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(1))),
+        Rvalue::Use(Operand::Constant(Constant::Int(1, DUMMY_TY))),
         0..0,
     ));
 
@@ -2699,7 +2702,7 @@ fn lower_string_constant_deduplication() {
 
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::Constant(Constant::Int(2))),
+        Rvalue::Use(Operand::Constant(Constant::Int(2, DUMMY_TY))),
         0..0,
     ));
 
@@ -2727,7 +2730,7 @@ fn lower_fn_def_constant() {
         .block_mut(target_entry)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(42)),
+            Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
             0..0,
         ));
     target_body
@@ -2801,7 +2804,7 @@ fn lower_call_no_args() {
         .block_mut(callee_entry)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(42)),
+            Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
             0..0,
         ));
     callee_body
@@ -2875,7 +2878,7 @@ fn lower_call_with_args() {
         .set_terminator(Terminator::new(
             TerminatorKind::Call {
                 func: Operand::Constant(Constant::FnDef(DefId(1))), // add
-                args: vec![Operand::const_int(10), Operand::const_int(32)],
+                args: vec![Operand::const_int(10, DUMMY_TY), Operand::const_int(32, DUMMY_TY)],
                 destination: Place::from_local(Local::RETURN_PLACE),
                 target: Some(after_call),
             },
@@ -2933,7 +2936,7 @@ fn lower_recursive_call() {
         Rvalue::BinaryOp(
             BinOp::Le,
             Operand::copy_local(Local(1)),
-            Operand::const_int(1),
+            Operand::const_int(1, DUMMY_TY),
         ),
         0..0,
     ));
@@ -2949,7 +2952,7 @@ fn lower_recursive_call() {
     // bb1: then - return 1
     body.block_mut(then_block).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::const_int(1)),
+        Rvalue::Use(Operand::const_int(1, DUMMY_TY)),
         0..0,
     ));
     body.block_mut(then_block)
@@ -2961,7 +2964,7 @@ fn lower_recursive_call() {
         Rvalue::BinaryOp(
             BinOp::Sub,
             Operand::copy_local(Local(1)),
-            Operand::const_int(1),
+            Operand::const_int(1, DUMMY_TY),
         ),
         0..0,
     ));
@@ -3040,7 +3043,7 @@ fn lower_mutual_recursion() {
             Rvalue::BinaryOp(
                 BinOp::Eq,
                 Operand::copy_local(Local(1)),
-                Operand::const_int(0),
+                Operand::const_int(0, DUMMY_TY),
             ),
             0..0,
         ));
@@ -3059,7 +3062,7 @@ fn lower_mutual_recursion() {
         .block_mut(even_then)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(1)),
+            Rvalue::Use(Operand::const_int(1, DUMMY_TY)),
             0..0,
         ));
     even_body
@@ -3074,7 +3077,7 @@ fn lower_mutual_recursion() {
             Rvalue::BinaryOp(
                 BinOp::Sub,
                 Operand::copy_local(Local(1)),
-                Operand::const_int(1),
+                Operand::const_int(1, DUMMY_TY),
             ),
             0..0,
         ));
@@ -3119,7 +3122,7 @@ fn lower_mutual_recursion() {
             Rvalue::BinaryOp(
                 BinOp::Eq,
                 Operand::copy_local(Local(1)),
-                Operand::const_int(0),
+                Operand::const_int(0, DUMMY_TY),
             ),
             0..0,
         ));
@@ -3138,7 +3141,7 @@ fn lower_mutual_recursion() {
         .block_mut(odd_then)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(0)),
+            Rvalue::Use(Operand::const_int(0, DUMMY_TY)),
             0..0,
         ));
     odd_body
@@ -3153,7 +3156,7 @@ fn lower_mutual_recursion() {
             Rvalue::BinaryOp(
                 BinOp::Sub,
                 Operand::copy_local(Local(1)),
-                Operand::const_int(1),
+                Operand::const_int(1, DUMMY_TY),
             ),
             0..0,
         ));
@@ -3273,10 +3276,10 @@ fn lower_call_multiple_args() {
             TerminatorKind::Call {
                 func: Operand::Constant(Constant::FnDef(DefId(1))),
                 args: vec![
-                    Operand::const_int(1),
-                    Operand::const_int(2),
-                    Operand::const_int(3),
-                    Operand::const_int(4),
+                    Operand::const_int(1, DUMMY_TY),
+                    Operand::const_int(2, DUMMY_TY),
+                    Operand::const_int(3, DUMMY_TY),
+                    Operand::const_int(4, DUMMY_TY),
                 ],
                 destination: Place::from_local(Local::RETURN_PLACE),
                 target: Some(after_call),
@@ -3310,7 +3313,7 @@ fn lower_call_chain() {
     let a_entry = a_body.alloc_block();
     a_body.block_mut(a_entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Use(Operand::const_int(1)),
+        Rvalue::Use(Operand::const_int(1, DUMMY_TY)),
         0..0,
     ));
     a_body
@@ -3340,7 +3343,7 @@ fn lower_call_chain() {
             Rvalue::BinaryOp(
                 BinOp::Add,
                 Operand::copy_local(Local(1)),
-                Operand::const_int(10),
+                Operand::const_int(10, DUMMY_TY),
             ),
             0..0,
         ));
@@ -3371,7 +3374,7 @@ fn lower_call_chain() {
             Rvalue::BinaryOp(
                 BinOp::Add,
                 Operand::copy_local(Local(1)),
-                Operand::const_int(100),
+                Operand::const_int(100, DUMMY_TY),
             ),
             0..0,
         ));
@@ -3405,7 +3408,7 @@ fn lower_rvalue_ref() {
     // _0 = &_1
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Ref(BorrowKind::Shared, Place::from_local(Local(1))),
+        Rvalue::Ref(BorrowKind::Shared, Place::from_local(Local(1)), DUMMY_TY),
         0..0,
     ));
 
@@ -3428,7 +3431,7 @@ fn lower_rvalue_address_of() {
     // _0 = &raw const _1
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::AddressOf(Mutability::Shared, Place::from_local(Local(1))),
+        Rvalue::AddressOf(Mutability::Shared, Place::from_local(Local(1)), DUMMY_TY),
         0..0,
     ));
 
@@ -3480,8 +3483,8 @@ fn lower_rvalue_aggregate_tuple() {
         Rvalue::Aggregate(
             AggregateKind::Tuple,
             vec![
-                Operand::Constant(Constant::Int(1)),
-                Operand::Constant(Constant::Int(2)),
+                Operand::Constant(Constant::Int(1, DUMMY_TY)),
+                Operand::Constant(Constant::Int(2, DUMMY_TY)),
             ],
         ),
         0..0,
@@ -3508,9 +3511,9 @@ fn lower_rvalue_aggregate_array() {
         Rvalue::Aggregate(
             AggregateKind::Array,
             vec![
-                Operand::Constant(Constant::Int(1)),
-                Operand::Constant(Constant::Int(2)),
-                Operand::Constant(Constant::Int(3)),
+                Operand::Constant(Constant::Int(1, DUMMY_TY)),
+                Operand::Constant(Constant::Int(2, DUMMY_TY)),
+                Operand::Constant(Constant::Int(3, DUMMY_TY)),
             ],
         ),
         0..0,
@@ -3577,7 +3580,7 @@ fn lower_rvalue_repeat() {
     // _0 = [0; 10] - repeat expression
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Repeat(Operand::Constant(Constant::Int(0)), 10),
+        Rvalue::Repeat(Operand::Constant(Constant::Int(0, DUMMY_TY)), 10),
         0..0,
     ));
 
@@ -3674,7 +3677,7 @@ fn assert_succeeds_when_true() {
     body.block_mut(after_assert)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(after_assert)
@@ -3723,7 +3726,7 @@ fn assert_traps_when_condition_fails() {
     body.block_mut(after_assert)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(after_assert)
@@ -3768,7 +3771,7 @@ fn assert_expected_false_succeeds() {
     body.block_mut(after_assert)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(after_assert)
@@ -3817,7 +3820,7 @@ fn assert_expected_false_traps() {
     body.block_mut(after_assert)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(after_assert)
@@ -3846,7 +3849,7 @@ fn assert_with_integer_condition_nonzero() {
     // entry: _1 = 42; assert(_1, expected=true) -> after_assert
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local(1)),
-        Rvalue::Use(Operand::Constant(Constant::Int(42))),
+        Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(entry).set_terminator(Terminator::new(
@@ -3861,7 +3864,7 @@ fn assert_with_integer_condition_nonzero() {
     body.block_mut(after_assert)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::Int(100))),
+            Rvalue::Use(Operand::Constant(Constant::Int(100, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(after_assert)
@@ -3888,7 +3891,7 @@ fn assert_with_integer_condition_zero() {
     // entry: _1 = 0; assert(_1, expected=false) -> after_assert
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local(1)),
-        Rvalue::Use(Operand::Constant(Constant::Int(0))),
+        Rvalue::Use(Operand::Constant(Constant::Int(0, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(entry).set_terminator(Terminator::new(
@@ -3903,7 +3906,7 @@ fn assert_with_integer_condition_zero() {
     body.block_mut(after_assert)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::Int(100))),
+            Rvalue::Use(Operand::Constant(Constant::Int(100, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(after_assert)
@@ -3929,7 +3932,7 @@ fn assert_with_negative_integer() {
 
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local(1)),
-        Rvalue::Use(Operand::Constant(Constant::Int(-1))),
+        Rvalue::Use(Operand::Constant(Constant::Int(-1, DUMMY_TY))),
         0..0,
     ));
     body.block_mut(entry).set_terminator(Terminator::new(
@@ -3944,7 +3947,7 @@ fn assert_with_negative_integer() {
     body.block_mut(after_assert)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::Int(100))),
+            Rvalue::Use(Operand::Constant(Constant::Int(100, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(after_assert)
@@ -4005,7 +4008,7 @@ fn multiple_asserts_in_sequence_all_pass() {
     body.block_mut(after_second)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(after_second)
@@ -4036,7 +4039,7 @@ fn assert_with_computed_condition() {
         Rvalue::BinaryOp(
             BinOp::Gt,
             Operand::Copy(Place::from_local(Local(1))),
-            Operand::Constant(Constant::Int(0)),
+            Operand::Constant(Constant::Int(0, DUMMY_TY)),
         ),
         0..0,
     ));
@@ -4052,7 +4055,7 @@ fn assert_with_computed_condition() {
     body.block_mut(after_assert)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::Int(42))),
+            Rvalue::Use(Operand::Constant(Constant::Int(42, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(after_assert)
@@ -4100,7 +4103,7 @@ fn assert_with_bool_from_comparison() {
     body.block_mut(after_assert)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::Int(1))),
+            Rvalue::Use(Operand::Constant(Constant::Int(1, DUMMY_TY))),
             0..0,
         ));
     body.block_mut(after_assert)

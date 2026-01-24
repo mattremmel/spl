@@ -435,7 +435,10 @@ mod tests {
     use crate::mir::statement::Statement;
     use crate::mir::terminator::{Terminator, TerminatorKind};
     use crate::mir::types::{Local, Place};
+    use crate::sema::types::TypeId;
     use object::{Object, ObjectSymbol};
+
+    const DUMMY_TY: TypeId = TypeId(0);
 
     #[test]
     fn compile_single_function() {
@@ -447,7 +450,7 @@ mod tests {
         let entry = body.alloc_block();
         body.block_mut(entry).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(42)),
+            Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(entry)
@@ -473,7 +476,7 @@ mod tests {
         let entry1 = body1.alloc_block();
         body1.block_mut(entry1).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(1)),
+            Rvalue::Use(Operand::const_int(1, DUMMY_TY)),
             0..0,
         ));
         body1
@@ -485,7 +488,7 @@ mod tests {
         let entry2 = body2.alloc_block();
         body2.block_mut(entry2).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(2)),
+            Rvalue::Use(Operand::const_int(2, DUMMY_TY)),
             0..0,
         ));
         body2
@@ -522,7 +525,7 @@ mod tests {
             .block_mut(callee_entry)
             .push_statement(Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(42)),
+                Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
                 0..0,
             ));
         callee_body
@@ -598,7 +601,7 @@ mod tests {
             .set_terminator(Terminator::new(
                 TerminatorKind::Call {
                     func: Operand::Constant(Constant::FnDef(DefId(1))), // add
-                    args: vec![Operand::const_int(10), Operand::const_int(32)],
+                    args: vec![Operand::const_int(10, DUMMY_TY), Operand::const_int(32, DUMMY_TY)],
                     destination: Place::from_local(Local::RETURN_PLACE),
                     target: Some(after_call),
                 },
@@ -630,7 +633,7 @@ mod tests {
         let entry = body.alloc_block();
         body.block_mut(entry).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(42)),
+            Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(entry)
@@ -681,7 +684,7 @@ mod tests {
         let entry = body.alloc_block();
         body.block_mut(entry).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(42)),
+            Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(entry)
@@ -704,7 +707,7 @@ mod tests {
         let entry = body.alloc_block();
         body.block_mut(entry).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(1)),
+            Rvalue::Use(Operand::const_int(1, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(entry)
@@ -731,7 +734,7 @@ mod tests {
         let entry = body.alloc_block();
         body.block_mut(entry).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(100)),
+            Rvalue::Use(Operand::const_int(100, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(entry)
@@ -791,7 +794,7 @@ mod tests {
         let entry = body.alloc_block();
         body.block_mut(entry).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(42)),
+            Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(entry)
@@ -816,7 +819,7 @@ mod tests {
         let entry1 = body1.alloc_block();
         body1.block_mut(entry1).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(1)),
+            Rvalue::Use(Operand::const_int(1, DUMMY_TY)),
             0..0,
         ));
         body1
@@ -828,7 +831,7 @@ mod tests {
         let entry2 = body2.alloc_block();
         body2.block_mut(entry2).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(2)),
+            Rvalue::Use(Operand::const_int(2, DUMMY_TY)),
             0..0,
         ));
         body2
@@ -840,7 +843,7 @@ mod tests {
         let entry3 = body3.alloc_block();
         body3.block_mut(entry3).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(3)),
+            Rvalue::Use(Operand::const_int(3, DUMMY_TY)),
             0..0,
         ));
         body3
@@ -873,7 +876,7 @@ mod tests {
         let entry1 = body1.alloc_block();
         body1.block_mut(entry1).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(100)),
+            Rvalue::Use(Operand::const_int(100, DUMMY_TY)),
             0..0,
         ));
         body1
@@ -884,7 +887,7 @@ mod tests {
         let entry2 = body2.alloc_block();
         body2.block_mut(entry2).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(200)),
+            Rvalue::Use(Operand::const_int(200, DUMMY_TY)),
             0..0,
         ));
         body2
@@ -920,7 +923,7 @@ mod tests {
         let entry = body.alloc_block();
         body.block_mut(entry).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(0)),
+            Rvalue::Use(Operand::const_int(0, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(entry)
@@ -941,7 +944,7 @@ mod tests {
         let entry = body.alloc_block();
         body.block_mut(entry).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(-42)),
+            Rvalue::Use(Operand::const_int(-42, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(entry)
@@ -967,7 +970,7 @@ mod tests {
         let entry = body.alloc_block();
         body.block_mut(entry).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(42)),
+            Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(entry)
@@ -1002,7 +1005,7 @@ mod tests {
             Rvalue::BinaryOp(
                 crate::mir::operand::BinOp::Add,
                 Operand::copy_local(Local(1)),
-                Operand::const_int(1),
+                Operand::const_int(1, DUMMY_TY),
             ),
             0..0,
         ));
@@ -1043,7 +1046,7 @@ mod tests {
         // Then: _0 = 1
         body.block_mut(then_block).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(1)),
+            Rvalue::Use(Operand::const_int(1, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(then_block)
@@ -1052,7 +1055,7 @@ mod tests {
         // Else: _0 = 0
         body.block_mut(else_block).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(0)),
+            Rvalue::Use(Operand::const_int(0, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(else_block)
@@ -1079,7 +1082,7 @@ mod tests {
         let entry1 = body1.alloc_block();
         body1.block_mut(entry1).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(1)),
+            Rvalue::Use(Operand::const_int(1, DUMMY_TY)),
             0..0,
         ));
         body1
@@ -1091,7 +1094,7 @@ mod tests {
         let entry2 = body2.alloc_block();
         body2.block_mut(entry2).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(2)),
+            Rvalue::Use(Operand::const_int(2, DUMMY_TY)),
             0..0,
         ));
         body2
@@ -1127,7 +1130,7 @@ mod tests {
             .block_mut(callee_entry)
             .push_statement(Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(42)),
+                Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
                 0..0,
             ));
         callee_body
@@ -1180,7 +1183,7 @@ mod tests {
             let entry = body.alloc_block();
             body.block_mut(entry).push_statement(Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(i)),
+                Rvalue::Use(Operand::const_int(i, DUMMY_TY)),
                 0..0,
             ));
             body.block_mut(entry)

@@ -405,15 +405,13 @@ mod tests {
         let bb2 = builder.add_block();
 
         // bb0: _0 = Add(const 2, const 3); goto bb1
+        let const_2 = builder.const_i32(2);
+        let const_3 = builder.const_i32(3);
         builder.add_statement(
             bb0,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::BinaryOp(
-                    crate::mir::operand::BinOp::Add,
-                    Operand::const_int(2),
-                    Operand::const_int(3),
-                ),
+                Rvalue::BinaryOp(crate::mir::operand::BinOp::Add, const_2, const_3),
                 0..0,
             ),
         );
@@ -440,7 +438,7 @@ mod tests {
         match &body.block(bb0).statements[0].kind {
             crate::mir::statement::StatementKind::Assign(
                 _,
-                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(5))),
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(5, _))),
             ) => {}
             other => panic!("expected folded constant 5, got {:?}", other),
         }
@@ -460,15 +458,13 @@ mod tests {
         let bb1 = builder.add_block();
 
         // bb0: _0 = Mul(const 6, const 7); goto bb1
+        let const_6 = builder.const_i32(6);
+        let const_7 = builder.const_i32(7);
         builder.add_statement(
             bb0,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::BinaryOp(
-                    crate::mir::operand::BinOp::Mul,
-                    Operand::const_int(6),
-                    Operand::const_int(7),
-                ),
+                Rvalue::BinaryOp(crate::mir::operand::BinOp::Mul, const_6, const_7),
                 0..0,
             ),
         );
@@ -486,7 +482,7 @@ mod tests {
         match &body.block(bb0).statements[0].kind {
             crate::mir::statement::StatementKind::Assign(
                 _,
-                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(42))),
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(42, _))),
             ) => {}
             other => panic!("expected folded constant 42, got {:?}", other),
         }
@@ -520,11 +516,13 @@ mod tests {
         let bb_exit = builder.add_block();
 
         // entry: _1 = 1 + 1; switch on cond
+        let const_1a = builder.const_i32(1);
+        let const_1b = builder.const_i32(1);
         builder.add_statement(
             bb_entry,
             Statement::assign(
                 Place::from_local(temp),
-                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(1), Operand::const_int(1)),
+                Rvalue::BinaryOp(BinOp::Add, const_1a, const_1b),
                 0..0,
             ),
         );
@@ -540,22 +538,26 @@ mod tests {
         );
 
         // then: _0 = 2 * 3; goto join
+        let const_2 = builder.const_i32(2);
+        let const_3 = builder.const_i32(3);
         builder.add_statement(
             bb_then,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::BinaryOp(BinOp::Mul, Operand::const_int(2), Operand::const_int(3)),
+                Rvalue::BinaryOp(BinOp::Mul, const_2, const_3),
                 0..0,
             ),
         );
         builder.set_terminator(bb_then, Terminator::goto(bb_join, 0..0));
 
         // else: _0 = 4 + 5; goto join
+        let const_4 = builder.const_i32(4);
+        let const_5 = builder.const_i32(5);
         builder.add_statement(
             bb_else,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(4), Operand::const_int(5)),
+                Rvalue::BinaryOp(BinOp::Add, const_4, const_5),
                 0..0,
             ),
         );
@@ -582,7 +584,7 @@ mod tests {
         match &body.block(bb_entry).statements[0].kind {
             crate::mir::statement::StatementKind::Assign(
                 _,
-                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(2))),
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(2, _))),
             ) => {}
             other => panic!("expected 2, got {:?}", other),
         }
@@ -590,7 +592,7 @@ mod tests {
         match &body.block(bb_then).statements[0].kind {
             crate::mir::statement::StatementKind::Assign(
                 _,
-                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(6))),
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(6, _))),
             ) => {}
             other => panic!("expected 6, got {:?}", other),
         }
@@ -598,7 +600,7 @@ mod tests {
         match &body.block(bb_else).statements[0].kind {
             crate::mir::statement::StatementKind::Assign(
                 _,
-                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(9))),
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(9, _))),
             ) => {}
             other => panic!("expected 9, got {:?}", other),
         }
@@ -627,11 +629,13 @@ mod tests {
         let bb_exit = builder.add_block();
 
         // entry: _1 = 0 + 0; goto header
+        let const_0a = builder.const_i32(0);
+        let const_0b = builder.const_i32(0);
         builder.add_statement(
             bb_entry,
             Statement::assign(
                 Place::from_local(counter),
-                Rvalue::BinaryOp(BinOp::Add, Operand::const_int(0), Operand::const_int(0)),
+                Rvalue::BinaryOp(BinOp::Add, const_0a, const_0b),
                 0..0,
             ),
         );
@@ -650,15 +654,12 @@ mod tests {
         );
 
         // body: _1 = _1 + 1 (can't fold); goto header
+        let const_1 = builder.const_i32(1);
         builder.add_statement(
             bb_body,
             Statement::assign(
                 Place::from_local(counter),
-                Rvalue::BinaryOp(
-                    BinOp::Add,
-                    Operand::copy_local(counter),
-                    Operand::const_int(1),
-                ),
+                Rvalue::BinaryOp(BinOp::Add, Operand::copy_local(counter), const_1),
                 0..0,
             ),
         );
@@ -690,7 +691,7 @@ mod tests {
         match &body.block(bb_entry).statements[0].kind {
             crate::mir::statement::StatementKind::Assign(
                 _,
-                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(0))),
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(0, _))),
             ) => {}
             other => panic!("expected 0, got {:?}", other),
         }

@@ -49,7 +49,7 @@ impl<'a> FunctionLowerer<'a> {
 
             Rvalue::Cast(kind, operand, target_ty) => self.lower_cast(*kind, operand, *target_ty),
 
-            Rvalue::Ref(_, place) | Rvalue::AddressOf(_, place) => {
+            Rvalue::Ref(_, place, _) | Rvalue::AddressOf(_, place, _) => {
                 // Both Ref and AddressOf produce a pointer to the place
                 self.lower_address_of(place)
             }
@@ -106,7 +106,9 @@ impl<'a> FunctionLowerer<'a> {
         match rvalue {
             Rvalue::Use(operand) => self.lower_operand_as(operand, expected_ty),
 
-            Rvalue::Ref(_, place) | Rvalue::AddressOf(_, place) => self.lower_address_of(place),
+            Rvalue::Ref(_, place, _) | Rvalue::AddressOf(_, place, _) => {
+                self.lower_address_of(place)
+            }
 
             Rvalue::BinaryOp(op, lhs, rhs) => {
                 // For binary ops, infer the operand type from lhs
@@ -698,9 +700,9 @@ impl<'a> FunctionLowerer<'a> {
                 .local_type(place.local)
                 .ok_or_else(|| CodegenError::Internal("ZST local".to_string())),
             Operand::Constant(constant) => match constant {
-                crate::mir::operand::Constant::Int(_) => Ok(types::I64),
+                crate::mir::operand::Constant::Int(..) => Ok(types::I64),
                 crate::mir::operand::Constant::Bool(_) => Ok(types::I8),
-                crate::mir::operand::Constant::Float(_) => Ok(types::F64),
+                crate::mir::operand::Constant::Float(..) => Ok(types::F64),
                 crate::mir::operand::Constant::Char(_) => Ok(types::I32),
                 crate::mir::operand::Constant::Unit => {
                     Err(CodegenError::Internal("unit constant".to_string()))

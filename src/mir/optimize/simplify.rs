@@ -139,11 +139,12 @@ mod tests {
         let bb0 = builder.add_block();
         let bb1 = builder.add_block();
 
+        let const_42 = builder.const_i32(42);
         builder.add_statement(
             bb0,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::const_int(42)),
+                Rvalue::Use(const_42),
                 0..0,
             ),
         );

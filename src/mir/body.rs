@@ -233,6 +233,8 @@ mod tests {
     use crate::mir::terminator::{Terminator, TerminatorKind};
     use crate::mir::types::Place;
 
+    const DUMMY_TY: TypeId = TypeId(0);
+
     #[test]
     fn local_decl_with_type() {
         let ty = TypeId(5);
@@ -465,7 +467,7 @@ mod tests {
 
         // _0 = 42
         let return_place = Place::from_local(body.return_place());
-        let assign = Statement::assign(return_place, Rvalue::Use(Operand::const_int(42)), 0..5);
+        let assign = Statement::assign(return_place, Rvalue::Use(Operand::const_int(42, DUMMY_TY)), 0..5);
         body.block_mut(entry).push_statement(assign);
 
         // return
@@ -505,7 +507,7 @@ mod tests {
         // Then: _0 = 1; goto join
         body.block_mut(then_block).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(1)),
+            Rvalue::Use(Operand::const_int(1, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(then_block)
@@ -514,7 +516,7 @@ mod tests {
         // Else: _0 = 2; goto join
         body.block_mut(else_block).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::const_int(2)),
+            Rvalue::Use(Operand::const_int(2, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(else_block)
@@ -594,7 +596,7 @@ mod tests {
             .push_statement(Statement::storage_live(temp, 0..0));
         body.block_mut(bb).push_statement(Statement::assign(
             Place::from_local(temp),
-            Rvalue::Use(Operand::const_int(42)),
+            Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
             0..0,
         ));
         body.block_mut(bb).push_statement(Statement::assign(

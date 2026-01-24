@@ -253,7 +253,7 @@ impl<'a> FunctionLowerer<'a> {
         constant: &Constant,
     ) -> Result<Option<Value>, CodegenError> {
         match constant {
-            Constant::Int(value) => {
+            Constant::Int(value, _ty) => {
                 // Default to i64 for constants; will be cast as needed
                 let val = self.builder.ins().iconst(types::I64, *value as i64);
                 Ok(Some(val))
@@ -262,7 +262,7 @@ impl<'a> FunctionLowerer<'a> {
                 let val = self.builder.ins().iconst(types::I8, *value as i64);
                 Ok(Some(val))
             }
-            Constant::Float(value) => {
+            Constant::Float(value, _ty) => {
                 let val = self.builder.ins().f64const(*value);
                 Ok(Some(val))
             }
