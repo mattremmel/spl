@@ -1993,7 +1993,10 @@ fn lower_u64_add() {
     let ptr = runner.compile(&body, "u64_add");
     let func: fn(u64, u64) -> u64 = unsafe { mem::transmute(ptr) };
 
-    assert_eq!(func(10_000_000_000u64, 20_000_000_000u64), 30_000_000_000u64);
+    assert_eq!(
+        func(10_000_000_000u64, 20_000_000_000u64),
+        30_000_000_000u64
+    );
 }
 
 #[test]
@@ -3116,7 +3119,10 @@ fn lower_call_with_args() {
         .set_terminator(Terminator::new(
             TerminatorKind::Call {
                 func: Operand::Constant(Constant::FnDef(DefId(1))), // add
-                args: vec![Operand::const_int(10, DUMMY_TY), Operand::const_int(32, DUMMY_TY)],
+                args: vec![
+                    Operand::const_int(10, DUMMY_TY),
+                    Operand::const_int(32, DUMMY_TY),
+                ],
                 destination: Place::from_local(Local::RETURN_PLACE),
                 target: Some(after_call),
             },

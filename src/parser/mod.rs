@@ -80,6 +80,7 @@ const ITEM_RECOVERY_SET: &[SyntaxKind] = &[
     SyntaxKind::TYPE_KW,
     SyntaxKind::IMPL_KW,
     SyntaxKind::PUB_KW,
+    SyntaxKind::USE_KW,
 ];
 
 /// Tokens that can start a new statement or end a block.
@@ -338,7 +339,9 @@ impl<'src> Parser<'src> {
 
         // Skip tokens until we hit a recovery point, EOF, or token limit
         let mut consumed = 0;
-        while !self.at_set(recovery_set) && self.current().is_some() && consumed < MAX_RECOVERY_TOKENS
+        while !self.at_set(recovery_set)
+            && self.current().is_some()
+            && consumed < MAX_RECOVERY_TOKENS
         {
             self.bump();
             consumed += 1;

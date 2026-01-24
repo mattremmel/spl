@@ -21,6 +21,7 @@
 //! assert!(!session.has_errors());
 //! ```
 
+use crate::CompileResult;
 use crate::ast::SourceFile;
 use crate::diagnostic::{Diagnostic, Severity};
 use crate::hir::HirDatabase;
@@ -28,7 +29,6 @@ use crate::mir::Body;
 use crate::parser::Parse;
 use crate::sema::infer::InferResult;
 use crate::sema::resolver::ResolveResult;
-use crate::CompileResult;
 use rowan::ast::AstNode;
 
 /// Maximum number of diagnostics to report before stopping.
@@ -170,7 +170,9 @@ impl<'src> CompileSession<'src> {
 
     /// Check if any error diagnostics have been produced.
     pub fn has_errors(&self) -> bool {
-        self.diagnostics.iter().any(|d| d.severity == Severity::Error)
+        self.diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Error)
     }
 
     /// Convert this session into a `CompileResult`.

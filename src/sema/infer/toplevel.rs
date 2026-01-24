@@ -97,6 +97,9 @@ impl<'a> InferEngine<'a> {
                         self.collect_extern_fn_signature(&extern_fn);
                     }
                 }
+                Item::Use(_) => {
+                    // Use declarations are handled during import resolution (future)
+                }
             }
         }
 

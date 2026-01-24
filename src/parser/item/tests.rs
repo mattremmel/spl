@@ -2333,3 +2333,273 @@ fn param_mixed_labels() {
         "#]],
     );
 }
+
+// === Use declaration tests ===
+
+#[test]
+fn use_simple_path() {
+    check_item(
+        "use std.vec.Vec;",
+        &expect![[r#"
+            UseDecl@0..16
+              USE_KW@0..3 "use"
+              UseTree@3..15
+                WHITESPACE@3..4 " "
+                IDENT@4..7 "std"
+                DOT@7..8 "."
+                IDENT@8..11 "vec"
+                DOT@11..12 "."
+                IDENT@12..15 "Vec"
+              SEMI@15..16 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn use_module_prefix() {
+    check_item(
+        "use module.utils.helper;",
+        &expect![[r#"
+            UseDecl@0..24
+              USE_KW@0..3 "use"
+              UseTree@3..23
+                WHITESPACE@3..4 " "
+                MODULE_KW@4..10 "module"
+                DOT@10..11 "."
+                IDENT@11..16 "utils"
+                DOT@16..17 "."
+                IDENT@17..23 "helper"
+              SEMI@23..24 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn use_super_prefix() {
+    check_item(
+        "use super.common.Config;",
+        &expect![[r#"
+            UseDecl@0..24
+              USE_KW@0..3 "use"
+              UseTree@3..23
+                WHITESPACE@3..4 " "
+                SUPER_KW@4..9 "super"
+                DOT@9..10 "."
+                IDENT@10..16 "common"
+                DOT@16..17 "."
+                IDENT@17..23 "Config"
+              SEMI@23..24 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn use_self_prefix() {
+    check_item(
+        "use self.internal.parse;",
+        &expect![[r#"
+            UseDecl@0..24
+              USE_KW@0..3 "use"
+              UseTree@3..23
+                WHITESPACE@3..4 " "
+                SELF_VALUE_KW@4..8 "self"
+                DOT@8..9 "."
+                IDENT@9..17 "internal"
+                DOT@17..18 "."
+                IDENT@18..23 "parse"
+              SEMI@23..24 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn use_with_rename() {
+    check_item(
+        "use std.collections.HashMap as Map;",
+        &expect![[r#"
+            UseDecl@0..35
+              USE_KW@0..3 "use"
+              UseTree@3..34
+                WHITESPACE@3..4 " "
+                IDENT@4..7 "std"
+                DOT@7..8 "."
+                IDENT@8..19 "collections"
+                DOT@19..20 "."
+                IDENT@20..27 "HashMap"
+                WHITESPACE@27..28 " "
+                AS_KW@28..30 "as"
+                Name@30..34
+                  WHITESPACE@30..31 " "
+                  IDENT@31..34 "Map"
+              SEMI@34..35 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn use_glob() {
+    check_item(
+        "use std.prelude.*;",
+        &expect![[r#"
+            UseDecl@0..18
+              USE_KW@0..3 "use"
+              UseTree@3..17
+                WHITESPACE@3..4 " "
+                IDENT@4..7 "std"
+                DOT@7..8 "."
+                IDENT@8..15 "prelude"
+                DOT@15..16 "."
+                STAR@16..17 "*"
+              SEMI@17..18 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn use_group_simple() {
+    check_item(
+        "use std.io.{Read, Write};",
+        &expect![[r#"
+            UseDecl@0..25
+              USE_KW@0..3 "use"
+              UseTree@3..24
+                WHITESPACE@3..4 " "
+                IDENT@4..7 "std"
+                DOT@7..8 "."
+                IDENT@8..10 "io"
+                DOT@10..11 "."
+                UseTreeList@11..24
+                  L_BRACE@11..12 "{"
+                  UseTree@12..16
+                    IDENT@12..16 "Read"
+                  COMMA@16..17 ","
+                  UseTree@17..23
+                    WHITESPACE@17..18 " "
+                    IDENT@18..23 "Write"
+                  R_BRACE@23..24 "}"
+              SEMI@24..25 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn use_nested_groups() {
+    check_item(
+        "use std.{vec.Vec, io.{Read, Write}};",
+        &expect![[r#"
+            UseDecl@0..36
+              USE_KW@0..3 "use"
+              UseTree@3..35
+                WHITESPACE@3..4 " "
+                IDENT@4..7 "std"
+                DOT@7..8 "."
+                UseTreeList@8..35
+                  L_BRACE@8..9 "{"
+                  UseTree@9..16
+                    IDENT@9..12 "vec"
+                    DOT@12..13 "."
+                    IDENT@13..16 "Vec"
+                  COMMA@16..17 ","
+                  UseTree@17..34
+                    WHITESPACE@17..18 " "
+                    IDENT@18..20 "io"
+                    DOT@20..21 "."
+                    UseTreeList@21..34
+                      L_BRACE@21..22 "{"
+                      UseTree@22..26
+                        IDENT@22..26 "Read"
+                      COMMA@26..27 ","
+                      UseTree@27..33
+                        WHITESPACE@27..28 " "
+                        IDENT@28..33 "Write"
+                      R_BRACE@33..34 "}"
+                  R_BRACE@34..35 "}"
+              SEMI@35..36 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn use_pub() {
+    check_item(
+        "pub use module.types.Type;",
+        &expect![[r#"
+            UseDecl@0..26
+              Visibility@0..3
+                PUB_KW@0..3 "pub"
+              WHITESPACE@3..4 " "
+              USE_KW@4..7 "use"
+              UseTree@7..25
+                WHITESPACE@7..8 " "
+                MODULE_KW@8..14 "module"
+                DOT@14..15 "."
+                IDENT@15..20 "types"
+                DOT@20..21 "."
+                IDENT@21..25 "Type"
+              SEMI@25..26 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn use_pub_glob() {
+    check_item(
+        "pub use module.prelude.*;",
+        &expect![[r#"
+            UseDecl@0..25
+              Visibility@0..3
+                PUB_KW@0..3 "pub"
+              WHITESPACE@3..4 " "
+              USE_KW@4..7 "use"
+              UseTree@7..24
+                WHITESPACE@7..8 " "
+                MODULE_KW@8..14 "module"
+                DOT@14..15 "."
+                IDENT@15..22 "prelude"
+                DOT@22..23 "."
+                STAR@23..24 "*"
+              SEMI@24..25 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn use_single_segment() {
+    check_item(
+        "use HashMap;",
+        &expect![[r#"
+            UseDecl@0..12
+              USE_KW@0..3 "use"
+              UseTree@3..11
+                WHITESPACE@3..4 " "
+                IDENT@4..11 "HashMap"
+              SEMI@11..12 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn use_group_trailing_comma() {
+    check_item(
+        "use std.{Read, Write,};",
+        &expect![[r#"
+            UseDecl@0..23
+              USE_KW@0..3 "use"
+              UseTree@3..22
+                WHITESPACE@3..4 " "
+                IDENT@4..7 "std"
+                DOT@7..8 "."
+                UseTreeList@8..22
+                  L_BRACE@8..9 "{"
+                  UseTree@9..13
+                    IDENT@9..13 "Read"
+                  COMMA@13..14 ","
+                  UseTree@14..20
+                    WHITESPACE@14..15 " "
+                    IDENT@15..20 "Write"
+                  COMMA@20..21 ","
+                  R_BRACE@21..22 "}"
+              SEMI@22..23 ";"
+        "#]],
+    );
+}

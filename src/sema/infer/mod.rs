@@ -35,7 +35,10 @@ pub enum UnifyError {
     TypeMismatch { expected: TypeId, actual: TypeId },
 
     /// Mutability mismatch (&T vs &mut T).
-    MutabilityMismatch { expected: Mutability, actual: Mutability },
+    MutabilityMismatch {
+        expected: Mutability,
+        actual: Mutability,
+    },
 
     /// Tuple/function arity mismatch.
     ArityMismatch { expected: usize, actual: usize },
@@ -144,7 +147,8 @@ impl InferResult {
                     let elem_str = self.type_to_string(elems[0], ctx);
                     format!("({},)", elem_str)
                 } else {
-                    let elem_strs: Vec<_> = elems.iter().map(|e| self.type_to_string(*e, ctx)).collect();
+                    let elem_strs: Vec<_> =
+                        elems.iter().map(|e| self.type_to_string(*e, ctx)).collect();
                     format!("({})", elem_strs.join(", "))
                 }
             }
@@ -153,7 +157,10 @@ impl InferResult {
                 ctx.resolve(symbol.name).to_string()
             }
             Type::FnPtr { params, ret } => {
-                let param_strs: Vec<_> = params.iter().map(|p| self.type_to_string(*p, ctx)).collect();
+                let param_strs: Vec<_> = params
+                    .iter()
+                    .map(|p| self.type_to_string(*p, ctx))
+                    .collect();
                 let ret_str = self.type_to_string(*ret, ctx);
                 format!("fn({}) -> {}", param_strs.join(", "), ret_str)
             }

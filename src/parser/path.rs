@@ -40,6 +40,7 @@ fn is_path_segment_start(token: Option<SyntaxKind>) -> bool {
             | Some(SyntaxKind::SELF_TYPE_KW)
             | Some(SyntaxKind::CRATE_KW)
             | Some(SyntaxKind::SUPER_KW)
+            | Some(SyntaxKind::MODULE_KW)
     )
 }
 
@@ -65,7 +66,7 @@ fn generic_args_paren(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError>
     Ok(m.complete(p, SyntaxKind::GenericArgs))
 }
 
-/// Parse a name reference (identifier, self, Self, crate, or super).
+/// Parse a name reference (identifier, self, Self, crate, super, or module).
 pub(crate) fn name_ref(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     if p.at(SyntaxKind::IDENT)
@@ -73,6 +74,7 @@ pub(crate) fn name_ref(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError
         || p.at(SyntaxKind::SELF_TYPE_KW)
         || p.at(SyntaxKind::CRATE_KW)
         || p.at(SyntaxKind::SUPER_KW)
+        || p.at(SyntaxKind::MODULE_KW)
     {
         p.bump();
         Ok(m.complete(p, SyntaxKind::NameRef))

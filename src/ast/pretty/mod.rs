@@ -50,7 +50,21 @@ impl AstPrinter {
             Item::Impl(i) => self.print_impl(i),
             Item::TypeAlias(t) => self.print_type_alias(t),
             Item::Extern(e) => self.print_extern_block(e),
+            Item::Use(u) => self.print_use_decl(u),
         }
+    }
+
+    fn print_use_decl(&mut self, use_decl: &crate::ast::UseDecl) {
+        // Print visibility if present
+        if use_decl.visibility().is_some() {
+            self.output.push_str("pub ");
+        }
+        // Print the use keyword and tree using the syntax text
+        self.output.push_str("use ");
+        if let Some(tree) = use_decl.use_tree() {
+            self.output.push_str(&tree.syntax().text().to_string());
+        }
+        self.output.push(';');
     }
 
     fn print_function(&mut self, func: &FunctionDef) {

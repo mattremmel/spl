@@ -176,6 +176,21 @@ fn keyword_match() {
     check_single("match", Token::Match);
 }
 
+#[test]
+fn keyword_use() {
+    check_single("use", Token::Use);
+}
+
+#[test]
+fn keyword_mod() {
+    check_single("mod", Token::Mod);
+}
+
+#[test]
+fn keyword_module() {
+    check_single("module", Token::Module);
+}
+
 // ============================================================
 // Operators - Arithmetic
 // ============================================================

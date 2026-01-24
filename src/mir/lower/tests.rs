@@ -141,8 +141,14 @@ fn test_lower_float_literal() {
 
 #[test]
 fn test_lower_bool_literal() {
-    assert_eq!(lower_literal(&Literal::Bool(true), DUMMY_TY), Constant::Bool(true));
-    assert_eq!(lower_literal(&Literal::Bool(false), DUMMY_TY), Constant::Bool(false));
+    assert_eq!(
+        lower_literal(&Literal::Bool(true), DUMMY_TY),
+        Constant::Bool(true)
+    );
+    assert_eq!(
+        lower_literal(&Literal::Bool(false), DUMMY_TY),
+        Constant::Bool(false)
+    );
 }
 
 #[test]

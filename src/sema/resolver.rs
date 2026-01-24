@@ -214,6 +214,9 @@ impl<'ctx> Resolver<'ctx> {
             Item::TypeAlias(type_alias) => self.collect_type_alias(type_alias),
             Item::Impl(impl_block) => self.collect_impl_block(impl_block),
             Item::Extern(extern_block) => self.collect_extern_block(extern_block),
+            Item::Use(_) => {
+                // Use declarations are handled during import resolution (future)
+            }
         }
     }
 
@@ -302,6 +305,9 @@ impl<'ctx> Resolver<'ctx> {
             Item::TypeAlias(type_alias) => self.resolve_type_alias(type_alias),
             Item::Impl(impl_block) => self.resolve_impl_block(impl_block),
             Item::Extern(extern_block) => self.resolve_extern_block(extern_block),
+            Item::Use(_) => {
+                // Use declarations are handled during import resolution (future)
+            }
         }
     }
 

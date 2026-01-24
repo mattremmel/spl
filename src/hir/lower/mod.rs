@@ -205,6 +205,10 @@ impl LoweringContext {
                 }
                 None // Don't return the extern block itself as an item
             }
+            Item::Use(_) => {
+                // Use declarations are handled during import resolution, not HIR lowering
+                None
+            }
         }
     }
 
@@ -224,7 +228,8 @@ impl LoweringContext {
         debug_assert!(
             def_id.is_valid(),
             "Function '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this name",
-            name, name_span
+            name,
+            name_span
         );
 
         // Lower type parameters
@@ -277,7 +282,8 @@ impl LoweringContext {
         debug_assert!(
             def_id.is_valid(),
             "Extern function '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this name",
-            name, name_span
+            name,
+            name_span
         );
 
         // No type parameters for extern functions (currently)
@@ -331,7 +337,8 @@ impl LoweringContext {
         debug_assert!(
             def_id.is_valid(),
             "Parameter '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this binding",
-            _name, name_span
+            _name,
+            name_span
         );
 
         let ty = self.get_binding_type(def_id);
@@ -370,7 +377,8 @@ impl LoweringContext {
         debug_assert!(
             def_id.is_valid(),
             "Struct '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this type",
-            name, name_span
+            name,
+            name_span
         );
 
         let type_params = Vec::new(); // TODO
@@ -410,7 +418,8 @@ impl LoweringContext {
         debug_assert!(
             def_id.is_valid(),
             "Field '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this field",
-            name, name_span
+            name,
+            name_span
         );
 
         let ty = self.get_binding_type(def_id);
@@ -440,7 +449,8 @@ impl LoweringContext {
         debug_assert!(
             def_id.is_valid(),
             "Type alias '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this alias",
-            name, name_span
+            name,
+            name_span
         );
 
         let ty = self.get_type(&span);

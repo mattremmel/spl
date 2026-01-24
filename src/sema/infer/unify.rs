@@ -771,8 +771,8 @@ mod tests {
     use crate::ast::SourceFile;
     use crate::parser::parse;
     use crate::sema::infer::UnifyError;
-    use crate::sema::resolver::resolve;
     use crate::sema::resolver::ResolveResult;
+    use crate::sema::resolver::resolve;
     use crate::sema::symbol::DefId;
     use rowan::ast::AstNode;
 

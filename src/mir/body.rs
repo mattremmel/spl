@@ -467,7 +467,11 @@ mod tests {
 
         // _0 = 42
         let return_place = Place::from_local(body.return_place());
-        let assign = Statement::assign(return_place, Rvalue::Use(Operand::const_int(42, DUMMY_TY)), 0..5);
+        let assign = Statement::assign(
+            return_place,
+            Rvalue::Use(Operand::const_int(42, DUMMY_TY)),
+            0..5,
+        );
         body.block_mut(entry).push_statement(assign);
 
         // return

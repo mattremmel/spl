@@ -1856,10 +1856,15 @@ fn binding_patterns_have_valid_def_ids() {
 fn struct_pattern_has_valid_def_id() {
     // Test struct patterns in destructuring - these should have valid DefIds
     // because they resolve to bindings
-    let db = lower("struct Point(x: i32, y: i32) fn main() { let Point(x: a, y: b) = Point(x: 1, y: 2); }");
+    let db = lower(
+        "struct Point(x: i32, y: i32) fn main() { let Point(x: a, y: b) = Point(x: 1, y: 2); }",
+    );
     for (_, pat) in db.pats.iter() {
         if let HirPatKind::Bind { def_id, .. } = &pat.kind {
-            assert!(def_id.is_valid(), "Struct pattern binding should have valid DefId");
+            assert!(
+                def_id.is_valid(),
+                "Struct pattern binding should have valid DefId"
+            );
         }
     }
 }

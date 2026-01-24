@@ -481,7 +481,149 @@ fn extern_fn(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
     Ok(m.complete(p, SyntaxKind::ExternFn))
 }
 
-/// Parse a top-level item (function, struct, type alias, impl block, or extern block).
+/// Parse a use declaration: `[pub] use path[.{tree}|.*|as name];`
+///
+/// Examples:
+/// - `use std.vec.Vec;`
+/// - `use std.collections.HashMap as Map;`
+/// - `use std.prelude.*;`
+/// - `use std.io.{Read, Write};`
+/// - `use std.{vec.Vec, io.{Read, Write}};`
+pub(crate) fn use_decl(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    // Optional visibility
+    opt_visibility(p);
+
+    // use keyword
+    p.expect(SyntaxKind::USE_KW)?;
+
+    // Parse the use tree
+    use_tree(p)?;
+
+    // Semicolon
+    p.expect(SyntaxKind::SEMI)?;
+
+    Ok(m.complete(p, SyntaxKind::UseDecl))
+}
+
+/// Parse a use tree: path segments with optional glob, rename, or grouping.
+///
+/// UseTree = path ["as" IDENT]
+///         | path "." "*"
+///         | path "." "{" UseTreeList "}"
+///         | "{" UseTreeList "}"
+fn use_tree(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    // Check for leading group: `{...}`
+    if p.at(SyntaxKind::L_BRACE) {
+        use_tree_list(p)?;
+        return Ok(m.complete(p, SyntaxKind::UseTree));
+    }
+
+    // Parse path segments separated by dots
+    // First segment is required
+    if !is_use_path_segment_start(p.current()) {
+        m.abandon(p);
+        return Err(p.error_at_current("expected path in use declaration".to_string()));
+    }
+
+    // Parse first segment
+    use_path_segment(p)?;
+
+    // Continue parsing `.segment` until we hit a terminator
+    loop {
+        if !p.at(SyntaxKind::DOT) {
+            break;
+        }
+
+        // Look at what follows the dot
+        match p.peek(1) {
+            // Glob: `.*`
+            Some(SyntaxKind::STAR) => {
+                p.bump(); // .
+                p.bump(); // *
+                return Ok(m.complete(p, SyntaxKind::UseTree));
+            }
+            // Group: `.{...}`
+            Some(SyntaxKind::L_BRACE) => {
+                p.bump(); // .
+                use_tree_list(p)?;
+                return Ok(m.complete(p, SyntaxKind::UseTree));
+            }
+            // Another path segment
+            Some(k) if is_use_path_segment_kind(k) => {
+                p.bump(); // .
+                use_path_segment(p)?;
+            }
+            // End of path
+            _ => break,
+        }
+    }
+
+    // Check for rename: `as name`
+    if p.at(SyntaxKind::AS_KW) {
+        p.bump(); // as
+        name(p)?;
+    }
+
+    Ok(m.complete(p, SyntaxKind::UseTree))
+}
+
+/// Check if token can start a use path segment.
+fn is_use_path_segment_start(token: Option<SyntaxKind>) -> bool {
+    matches!(
+        token,
+        Some(k) if is_use_path_segment_kind(k)
+    )
+}
+
+/// Check if a SyntaxKind can be a use path segment.
+fn is_use_path_segment_kind(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::IDENT
+            | SyntaxKind::SELF_VALUE_KW
+            | SyntaxKind::SUPER_KW
+            | SyntaxKind::MODULE_KW
+            | SyntaxKind::CRATE_KW
+    )
+}
+
+/// Parse a single path segment (identifier or keyword like self/super/module).
+fn use_path_segment(p: &mut Parser<'_>) -> Result<(), crate::parser::ParseError> {
+    if is_use_path_segment_kind(p.current().unwrap_or(SyntaxKind::ERROR)) {
+        p.bump();
+        Ok(())
+    } else {
+        Err(p.error_at_current("expected path segment".to_string()))
+    }
+}
+
+/// Parse a use tree list: `{item1, item2, ...}`
+fn use_tree_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+    p.expect(SyntaxKind::L_BRACE)?;
+
+    // Parse comma-separated use trees
+    if !p.at(SyntaxKind::R_BRACE) {
+        use_tree(p)?;
+
+        while p.eat(SyntaxKind::COMMA) {
+            // Allow trailing comma
+            if p.at(SyntaxKind::R_BRACE) {
+                break;
+            }
+            use_tree(p)?;
+        }
+    }
+
+    p.expect(SyntaxKind::R_BRACE)?;
+    Ok(m.complete(p, SyntaxKind::UseTreeList))
+}
+
+/// Parse a top-level item (function, struct, type alias, impl block, extern block, or use decl).
 pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     // Check for visibility modifier and calculate lookahead
     let has_pub = p.at(SyntaxKind::PUB_KW);
@@ -493,9 +635,11 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser:
         Some(SyntaxKind::TYPE_KW) => type_alias(p),
         Some(SyntaxKind::IMPL_KW) if !has_pub => impl_block(p),
         Some(SyntaxKind::EXTERN_KW) if !has_pub => extern_block(p),
+        Some(SyntaxKind::USE_KW) => use_decl(p),
         _ => {
-            let err =
-                p.error_at_current("expected item (fn, struct, type, impl, or extern)".to_string());
+            let err = p.error_at_current(
+                "expected item (fn, struct, type, impl, extern, or use)".to_string(),
+            );
             Err(err)
         }
     }

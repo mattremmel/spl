@@ -28,6 +28,11 @@ pub fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
                 ident_or_struct_pat(p)
             }
         },
+        // Path-starting keywords that can begin qualified patterns (module.Type, super.Type, etc.)
+        MODULE_KW | SUPER_KW | SELF_VALUE_KW | CRATE_KW => {
+            // These keywords can start paths in patterns (e.g., module.Point(x: x))
+            path_or_struct_or_enum_pat(p)
+        },
         // Rest pattern: ..
         DOT_DOT => rest_pat(p),
         // Literal patterns (may be range pattern if followed by ..)
@@ -1039,7 +1044,7 @@ mod tests {
                           PathSegment@5..12
                             NameRef@5..12
                               WHITESPACE@5..6 " "
-                              IDENT@6..12 "module"
+                              MODULE_KW@6..12 "module"
                           DOT@12..13 "."
                           PathSegment@13..18
                             NameRef@13..18

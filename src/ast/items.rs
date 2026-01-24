@@ -10,6 +10,9 @@ ast_node!(ImplBlock);
 ast_node!(TypeAlias);
 ast_node!(ExternBlock);
 ast_node!(ExternFn);
+ast_node!(UseDecl);
+ast_node!(UseTree);
+ast_node!(UseTreeList);
 ast_node!(ParamList);
 ast_node!(Param);
 ast_node!(SelfParam);
@@ -33,13 +36,14 @@ impl SourceFile {
 }
 
 ast_enum!(
-    /// Top-level item (function, struct, impl, type alias, extern block).
+    /// Top-level item (function, struct, impl, type alias, extern block, use decl).
     Item {
         Function(FunctionDef),
         Struct(StructDef),
         Impl(ImplBlock),
         TypeAlias(TypeAlias),
         Extern(ExternBlock),
+        Use(UseDecl),
     }
 );
 
@@ -158,6 +162,61 @@ impl ExternFn {
 
     pub fn ret_type(&self) -> Option<Type> {
         child(&self.0)
+    }
+}
+
+impl UseDecl {
+    pub fn visibility(&self) -> Option<Visibility> {
+        child(&self.0)
+    }
+
+    pub fn use_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::USE_KW)
+    }
+
+    pub fn use_tree(&self) -> Option<UseTree> {
+        child(&self.0)
+    }
+}
+
+impl UseTree {
+    /// Get nested use tree list if this is a grouped import: `{A, B}`.
+    pub fn use_tree_list(&self) -> Option<UseTreeList> {
+        child(&self.0)
+    }
+
+    /// Get the rename if present: `as Name`.
+    pub fn rename(&self) -> Option<Name> {
+        child(&self.0)
+    }
+
+    /// Check if this is a glob import: `*`.
+    pub fn is_glob(&self) -> bool {
+        token(&self.0, SyntaxKind::STAR).is_some()
+    }
+
+    /// Get all path segments (NameRef tokens).
+    pub fn path_segments(&self) -> impl Iterator<Item = SyntaxToken> {
+        self.0
+            .children_with_tokens()
+            .filter_map(|child| child.into_token())
+            .filter(|token| {
+                matches!(
+                    token.kind(),
+                    SyntaxKind::IDENT
+                        | SyntaxKind::MODULE_KW
+                        | SyntaxKind::SUPER_KW
+                        | SyntaxKind::SELF_VALUE_KW
+                        | SyntaxKind::CRATE_KW
+                )
+            })
+    }
+}
+
+impl UseTreeList {
+    /// Get the use trees in this list.
+    pub fn use_trees(&self) -> impl Iterator<Item = UseTree> {
+        children(&self.0)
     }
 }
 

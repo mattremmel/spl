@@ -47,7 +47,7 @@ myproject/
 // In myproject/main.spl
 fn main() {
     let helper = utils_function();  // Same module, direct access
-    let client = network::Client::new();  // Submodule access
+    let client = network.Client.new();  // Submodule access
 }
 
 // In myproject/utils.spl
@@ -82,22 +82,20 @@ myproject/
 **`_module.spl` contents:**
 
 ```spl
-// Declare submodules
+// Declare submodules (optional, for re-exports or explicit ordering)
 mod network;        // Looks for network/_module.spl or network.spl
 
 // Re-export items
-pub use network::Client;
+pub use network.Client;
 
-// Note: Files in the same directory are only included if there's
-// a corresponding mod declaration, OR if no _module.spl exists
+// All .spl files in the same directory are auto-included
 ```
 
 **Rules:**
-- When `_module.spl` exists, it controls the module structure
-- Only declared items (`mod name;`) are included
-- `pub mod name;` declares and exports a submodule
-- `pub use path::item;` re-exports items
-- Files without corresponding `mod` declarations are ignored
+- All `.spl` files in a directory are automatically part of the module
+- `_module.spl` provides re-exports and explicit ordering, not file inclusion
+- `pub mod name;` declares and exports a submodule publicly
+- `pub use path.item;` re-exports items
 - **Scope**: `_module.spl` only affects the current directory, not children
 
 ### Mode Inheritance
@@ -138,9 +136,9 @@ For `mod name;` declarations, SPL looks for:
 ```ebnf
 UseDecl = "use" UsePath ";" ;
 
-UsePath = PathPrefix [ "::" UseTree ] ;
+UsePath = PathPrefix [ "." UseTree ] ;
 
-PathPrefix = IDENTIFIER { "::" IDENTIFIER } ;
+PathPrefix = IDENTIFIER { "." IDENTIFIER } ;
 
 UseTree = "*"                                    (* glob import *)
         | "{" UseTreeList "}"                    (* grouped import *)
@@ -153,35 +151,35 @@ UseTreeList = UseTree { "," UseTree } [ "," ] ;
 
 ```spl
 // Import single item
-use std::vec::Vec;
+use std.vec.Vec;
 
 // Import with rename
-use std::collections::HashMap as Map;
+use std.collections.HashMap as Map;
 
 // Import module (use qualified access)
-use std::io;
-let reader = io::BufReader::new(file);
+use std.io;
+let reader = io.BufReader.new(file);
 
 // Grouped imports
-use std::collections::{HashMap, HashSet};
+use std.collections.{HashMap, HashSet};
 
 // Glob import (use sparingly)
-use std::prelude::*;
+use std.prelude.*;
 
 // Nested groups
-use std::{vec::Vec, io::{Read, Write}};
+use std.{vec.Vec, io.{Read, Write}};
 
 // Full qualified path (no import needed)
-let v = std::vec::Vec::<i32>::new();
+let v = std.vec.Vec(i32).new();
 
-// Crate root reference
-use crate::utils::helper;
+// Module root reference
+use module.utils.helper;
 
 // Parent module reference
-use super::common::Config;
+use super.common.Config;
 
 // Current module (explicit)
-use self::internal::parse;
+use self.internal.parse;
 ```
 
 ### Module Declarations
@@ -262,7 +260,7 @@ Planned visibility modifiers for finer control:
 // Future syntax
 pub(crate) fn crate_internal() { }
 pub(super) fn parent_accessible() { }
-pub(in crate::api) fn api_only() { }
+pub(in module.api) fn api_only() { }
 ```
 
 ---
@@ -273,11 +271,11 @@ pub(in crate::api) fn api_only() { }
 
 | Path | Description | Example |
 |------|-------------|---------|
-| Absolute | From crate root | `crate::module::item` |
-| Relative | From current module | `submodule::item` |
-| Self | Current module | `self::item` |
-| Super | Parent module | `super::item` |
-| External | External crate | `cratename::item` |
+| Absolute | From module root | `module.submod.item` |
+| Relative | From current module | `submodule.item` |
+| Self | Current module | `self.item` |
+| Super | Parent module | `super.item` |
+| External | External crate | `cratename.item` |
 
 ### Resolution Rules
 
@@ -287,26 +285,26 @@ pub(in crate::api) fn api_only() { }
    - Prelude items
 
 2. **Qualified paths** resolve:
-   - `crate::` from the crate root
-   - `self::` from the current module
-   - `super::` from the parent module
+   - `module.` from the module root
+   - `self.` from the current module
+   - `super.` from the parent module
    - Other identifiers from current scope or imports
 
 ```spl
-use crate::utils;           // Absolute: from crate root
-use self::internal;         // Explicit current module
-use super::common;          // Parent module
-use std::collections::HashMap;  // External crate (future)
+use module.utils;           // Absolute: from module root
+use self.internal;          // Explicit current module
+use super.common;           // Parent module
+use std.collections.HashMap;  // External crate (future)
 
 fn example() {
     // Relative path
-    let x = submodule::function();
+    let x = submodule.function();
 
     // Absolute path
-    let y = crate::other::function();
+    let y = module.other.function();
 
     // Super path
-    let z = super::sibling();
+    let z = super.sibling();
 }
 ```
 
@@ -316,10 +314,10 @@ Imports can shadow prelude items:
 
 ```spl
 // Option and Result are in prelude, but can be shadowed
-use custom_types::Option;  // Now 'Option' refers to custom_types::Option
+use custom_types.Option;  // Now 'Option' refers to custom_types.Option
 
 // Original still accessible via full path
-let x: std::option::Option<i32> = Some(42);
+let x: std.option.Option(i32) = Some(42);
 ```
 
 ---
@@ -381,7 +379,7 @@ The module system adds these reserved keywords:
 |---------|-------------|
 | `use` | Import declaration |
 | `mod` | Module declaration |
-| `crate` | Root module reference |
+| `module` | Root module reference |
 | `super` | Parent module reference |
 
 Note: `self` and `pub` are already keywords for other purposes.
@@ -458,16 +456,16 @@ pub mod handlers;
 pub mod models;
 
 // main.spl
-use crate::handlers::auth;
-use crate::models::User;
+use module.handlers.auth;
+use module.models.User;
 
 fn main() {
-    let user = User::new("alice");
-    auth::login(&user);
+    let user = User.new("alice");
+    auth.login(&user);
 }
 
 // handlers/auth.spl
-use crate::models::User;
+use module.models.User;
 
 pub fn login(user: &User) {
     // ...
@@ -477,8 +475,8 @@ pub fn login(user: &User) {
 mod user;
 mod session;
 
-pub use user::User;
-pub use session::Session;
+pub use user.User;
+pub use session.Session;
 
 // models/user.spl
 pub struct User {
@@ -486,8 +484,8 @@ pub struct User {
 }
 
 impl User {
-    pub fn new(name: &str) -> User {
-        User { name: String::from(name) }
+    pub fn new(name: &str): User {
+        User { name: String.from(name) }
     }
 }
 ```
@@ -500,16 +498,16 @@ mod internal;
 mod details;
 
 // Re-export public API
-pub use internal::Parser;
-pub use internal::Lexer;
-pub use details::Config;
+pub use internal.Parser;
+pub use internal.Lexer;
+pub use details.Config;
 
 // Users can now write:
-// use mylib::{Parser, Lexer, Config};
+// use mylib.{Parser, Lexer, Config};
 // instead of:
-// use mylib::internal::Parser;
-// use mylib::internal::Lexer;
-// use mylib::details::Config;
+// use mylib.internal.Parser;
+// use mylib.internal.Lexer;
+// use mylib.details.Config;
 ```
 
 ---
@@ -520,8 +518,8 @@ pub use details::Config;
 |---------|-----|------|----|----|
 | File = module | Dir-based | File-based | Dir-based | File-based |
 | Explicit mod decl | Optional | Required | No | No |
-| Import syntax | `use path::item` | `use path::item` | `import "path"` | `from x import y` |
-| Glob import | `use path::*` | `use path::*` | `.` import | `from x import *` |
+| Import syntax | `use path.item` | `use path::item` | `import "path"` | `from x import y` |
+| Glob import | `use path.*` | `use path::*` | `.` import | `from x import *` |
 | Visibility default | Private | Private | Capitalization | Public |
 | Re-exports | `pub use` | `pub use` | No | `__all__` |
 | Prelude | Yes | Yes | No | builtins |
@@ -537,36 +535,36 @@ pub use details::Config;
 | Module | Collection of items (functions, types, etc.) |
 | Crate | Compilation unit (root module + submodules) |
 | Item | Named entity: function, struct, type, etc. |
-| Path | Route to an item: `crate::mod::item` |
+| Path | Route to an item: `module.submod.item` |
 | Visibility | Who can access an item: `pub` or private |
 
 ### Quick Reference
 
 ```spl
 // Import single item
-use std::vec::Vec;
+use std.vec.Vec;
 
 // Import with rename
-use std::collections::HashMap as Map;
+use std.collections.HashMap as Map;
 
 // Grouped import
-use std::{vec::Vec, io::{Read, Write}};
+use std.{vec.Vec, io.{Read, Write}};
 
 // Glob import
-use std::prelude::*;
+use std.prelude.*;
 
 // Absolute path
-use crate::module::item;
+use module.submod.item;
 
 // Parent module
-use super::item;
+use super.item;
 
 // Module declaration (in _module.spl)
 mod submodule;
 pub mod public_submodule;
 
 // Re-export
-pub use internal::PublicApi;
+pub use internal.PublicApi;
 ```
 
 ### Design Rationale

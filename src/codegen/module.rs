@@ -606,7 +606,10 @@ mod tests {
             .set_terminator(Terminator::new(
                 TerminatorKind::Call {
                     func: Operand::Constant(Constant::FnDef(DefId(1))), // add
-                    args: vec![Operand::const_int(10, DUMMY_TY), Operand::const_int(32, DUMMY_TY)],
+                    args: vec![
+                        Operand::const_int(10, DUMMY_TY),
+                        Operand::const_int(32, DUMMY_TY),
+                    ],
                     destination: Place::from_local(Local::RETURN_PLACE),
                     target: Some(after_call),
                 },

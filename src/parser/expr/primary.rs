@@ -21,8 +21,8 @@ pub(super) fn primary_expr(
         INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL | TRUE_KW | FALSE_KW => {
             literal_expr(p)
         },
-        // Identifier / path
-        IDENT | SELF_VALUE_KW | SELF_TYPE_KW => {
+        // Identifier / path (including path-starting keywords like module, super, crate)
+        IDENT | SELF_VALUE_KW | SELF_TYPE_KW | MODULE_KW | SUPER_KW | CRATE_KW => {
             if allow_struct {
                 path_or_struct_expr(p)
             } else {
@@ -847,7 +847,7 @@ mod tests {
                   Path@0..12
                     PathSegment@0..6
                       NameRef@0..6
-                        IDENT@0..6 "module"
+                        MODULE_KW@0..6 "module"
                     DOT@6..7 "."
                     PathSegment@7..12
                       NameRef@7..12

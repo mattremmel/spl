@@ -712,7 +712,9 @@ mod tests {
         let mut builder = MirTestBuilder::new();
         let i32_ty = builder.types.i32();
         // Create a reference type to use for the Rvalue::Ref
-        let ref_i32_ty = builder.types.mk_ref(crate::sema::types::Mutability::Shared, i32_ty);
+        let ref_i32_ty = builder
+            .types
+            .mk_ref(crate::sema::types::Mutability::Shared, i32_ty);
         builder = builder.with_return_ty(ref_i32_ty);
         let local1 = builder.add_local(i32_ty, false);
 
@@ -834,7 +836,9 @@ mod tests {
             bb,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(42, i64_ty))),
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(
+                    42, i64_ty,
+                ))),
                 0..0,
             ),
         );
@@ -858,7 +862,9 @@ mod tests {
             bb,
             Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
-                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(42, i64_ty))),
+                Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(
+                    42, i64_ty,
+                ))),
                 0..0,
             ),
         );
@@ -875,7 +881,9 @@ mod tests {
         // &i32 assigned to &i32 place - should pass
         let mut builder = MirTestBuilder::new();
         let i32_ty = builder.types.i32();
-        let ref_ty = builder.types.mk_ref(crate::sema::types::Mutability::Shared, i32_ty);
+        let ref_ty = builder
+            .types
+            .mk_ref(crate::sema::types::Mutability::Shared, i32_ty);
         builder = builder.with_return_ty(ref_ty);
         let local = builder.add_local(i32_ty, false);
 
@@ -904,7 +912,9 @@ mod tests {
         // &i32 assigned to i32 place - should FAIL
         let mut builder = MirTestBuilder::new();
         let i32_ty = builder.types.i32();
-        let ref_ty = builder.types.mk_ref(crate::sema::types::Mutability::Shared, i32_ty);
+        let ref_ty = builder
+            .types
+            .mk_ref(crate::sema::types::Mutability::Shared, i32_ty);
         builder = builder.with_return_ty(i32_ty); // NOT &i32
         let local = builder.add_local(i32_ty, false);
 

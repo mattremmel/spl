@@ -84,6 +84,12 @@ pub enum Token {
     Match,
     #[token("extern")]
     Extern,
+    #[token("use")]
+    Use,
+    #[token("mod")]
+    Mod,
+    #[token("module")]
+    Module,
 
     // === Operators ===
     // Arithmetic

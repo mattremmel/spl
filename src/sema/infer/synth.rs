@@ -9,8 +9,8 @@ use crate::ast::{
 use crate::ast::{Block, LetStmt, LiteralExpr, Stmt};
 use crate::diagnostic::Diagnostic;
 use crate::hir::{LoweredExpr, lower::try_lower_expr};
-use crate::sema::types::{InferKind, Mutability, PrimitiveKind, Type, TypeId};
 use crate::sema::SymbolKind;
+use crate::sema::types::{InferKind, Mutability, PrimitiveKind, Type, TypeId};
 use crate::syntax::SyntaxKind;
 use rowan::ast::AstNode;
 use rustc_hash::FxHashMap;

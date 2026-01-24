@@ -60,19 +60,28 @@ mod constants {
     #[test]
     fn const_int() {
         let printer = MirPrinter::new();
-        assert_eq!(printer.print_constant(&Constant::Int(42, DUMMY_TY)), "const 42_ty0");
+        assert_eq!(
+            printer.print_constant(&Constant::Int(42, DUMMY_TY)),
+            "const 42_ty0"
+        );
     }
 
     #[test]
     fn const_int_negative() {
         let printer = MirPrinter::new();
-        assert_eq!(printer.print_constant(&Constant::Int(-1, DUMMY_TY)), "const -1_ty0");
+        assert_eq!(
+            printer.print_constant(&Constant::Int(-1, DUMMY_TY)),
+            "const -1_ty0"
+        );
     }
 
     #[test]
     fn const_float() {
         let printer = MirPrinter::new();
-        assert_eq!(printer.print_constant(&Constant::Float(2.5, DUMMY_TY)), "const 2.5_ty0");
+        assert_eq!(
+            printer.print_constant(&Constant::Float(2.5, DUMMY_TY)),
+            "const 2.5_ty0"
+        );
     }
 
     #[test]
