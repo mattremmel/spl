@@ -419,25 +419,44 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     /// Add an import binding to the current scope.
-    fn add_import_binding(&mut self, import: &PendingImport, def_id: DefId, original_name: &str) {
-        // If renaming (use foo as bar), create a new binding
-        if import.local_name != original_name {
-            let alias_interned = self.ctx.intern(&import.local_name);
-            let symbol = self.ctx.get_symbol(def_id);
-            let kind = symbol.kind;
+    ///
+    /// For imports with rename (`use foo as bar`), creates an alias that references
+    /// the original DefId. For same-name imports (`use self.foo`), creates a binding
+    /// only if one doesn't already exist in the current scope.
+    fn add_import_binding(&mut self, import: &PendingImport, def_id: DefId, _original_name: &str) {
+        let local_interned = self.ctx.intern(&import.local_name);
 
-            let _ = self.ctx.define(
-                alias_interned,
-                kind,
-                if import.is_pub {
-                    Visibility::Public
-                } else {
-                    Visibility::Private
-                },
-                import.span.clone(),
-                false,
+        // Check if this name already exists in the current scope
+        if let Some(existing_def_id) = self.ctx.lookup_in_scope(local_interned, self.ctx.current_scope_id()) {
+            // If it's the same DefId, this is a redundant import (no-op)
+            if existing_def_id == def_id {
+                // Redundant import, just record the resolution
+                self.resolutions.insert(import.span.clone(), def_id);
+                return;
+            }
+            // Different DefId means duplicate definition
+            let existing = self.ctx.get_symbol(existing_def_id);
+            self.diagnostics.push(
+                Diagnostic::error(format!("the name `{}` is defined multiple times", import.local_name))
+                    .with_label(import.span.clone(), "imported here")
+                    .with_secondary_label(existing.span.clone(), "first definition here"),
             );
+            return;
         }
+
+        // Create an import binding that references the original DefId
+        // We use SymbolKind::Import to track that this is an alias
+        let visibility = if import.is_pub {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        };
+
+        // For imports, we want the lookup to resolve to the original DefId,
+        // so we use define_alias which creates a name binding to an existing DefId.
+        // We already checked for duplicates above, so this shouldn't fail.
+        let _ = self.ctx.define_alias(local_interned, def_id, visibility, import.span.clone());
+
         // Record the resolution for the import span
         self.resolutions.insert(import.span.clone(), def_id);
     }
@@ -2306,6 +2325,41 @@ mod tests {
                 { let foo = 1; }
                 foo();  // Import is visible again
             }
+        "#);
+    }
+
+    // ===== Duplicate Import Tests =====
+
+    #[test]
+    fn use_duplicate_import_renamed_error() {
+        // Importing with a rename that conflicts with existing name
+        check_err(r#"
+            fn existing() {}
+            fn other() {}
+            use self.other as existing;
+            fn main() {}
+        "#, &["defined multiple times"]);
+    }
+
+    #[test]
+    fn use_redundant_import_no_error() {
+        // Importing the same function twice with same name is a no-op
+        check_ok(r#"
+            fn foo() {}
+            use self.foo;
+            use self.foo;
+            fn main() { foo(); }
+        "#);
+    }
+
+    #[test]
+    fn use_same_item_different_aliases_ok() {
+        // Importing the same function with different aliases is ok
+        check_ok(r#"
+            fn original() {}
+            use self.original as alias1;
+            use self.original as alias2;
+            fn main() { alias1(); alias2(); }
         "#);
     }
 }

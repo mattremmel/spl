@@ -111,7 +111,8 @@ use lasso::{Rodeo, Spur};
 ///
 /// Owns the string interner, symbol table, scope hierarchy, and type interner.
 pub struct SemanticContext {
-    interner: Rodeo,
+    /// String interner for symbol names.
+    pub interner: Rodeo,
     symbols: Vec<Symbol>,
     scopes: Vec<Scope>,
     current_scope: ScopeId,
@@ -221,6 +222,32 @@ impl SemanticContext {
         self.symbols.push(symbol);
 
         Ok(def_id)
+    }
+
+    /// Define an alias (import binding) to an existing DefId in the current scope.
+    ///
+    /// Unlike `define`, this doesn't create a new symbol. Instead, it creates a
+    /// name binding that resolves to an existing DefId. This is used for imports
+    /// where we want `use foo as bar` to make `bar` resolve to the same DefId as `foo`.
+    ///
+    /// Returns `Ok(())` if the alias was created, or `Err(DefId)` if the name
+    /// already exists in the current scope.
+    pub fn define_alias(
+        &mut self,
+        name: Spur,
+        target_def_id: DefId,
+        _visibility: Visibility,
+        _span: Span,
+    ) -> Result<(), DefId> {
+        debug_assert!(
+            self.is_valid_def_id(target_def_id),
+            "precondition: target_def_id {} must be valid (< {})",
+            target_def_id.0,
+            self.symbols.len()
+        );
+
+        let scope = &mut self.scopes[self.current_scope.0 as usize];
+        scope.define(name, target_def_id)
     }
 
     /// Look up a symbol by name, searching the current scope and all parent scopes.
