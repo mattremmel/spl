@@ -23,6 +23,14 @@ target-lexicon = "0.13"
 # Object file parsing (for AOT validation)
 object = "0.36"
 
+# Stdlib embedding at compile time
+include_dir = "0.7"
+
 [dev-dependencies]
+datatest-stable = { version = "0.3.3", features = ["include-dir"] }
 pretty_assertions = "1.4"
 expect-test = "1.5"
+
+[[test]]
+name = "stdlib_tests"
+harness = false

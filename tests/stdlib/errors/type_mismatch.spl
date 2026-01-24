@@ -1,0 +1,6 @@
+//@ compile-fail
+//@ expect-error: type mismatch
+
+fn main() {
+    let x: bool = 42;
+}

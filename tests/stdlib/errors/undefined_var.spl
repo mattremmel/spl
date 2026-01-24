@@ -1,0 +1,6 @@
+//@ compile-fail
+//@ expect-error: cannot find
+
+fn main() {
+    undefined_variable;
+}

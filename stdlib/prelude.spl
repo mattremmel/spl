@@ -1,0 +1,8 @@
+// SPL Prelude - automatically imported into all SPL programs.
+//
+// This file will eventually contain:
+// - pub fn print(s: str)
+// - pub fn println(s: str)
+// - Other common utilities
+//
+// For now, this is a placeholder.
