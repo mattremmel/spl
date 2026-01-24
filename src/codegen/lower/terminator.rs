@@ -7,7 +7,6 @@ use crate::codegen::error::{CodegenError, TRAP_ASSERT_FAILED, TRAP_RESUME, TRAP_
 use crate::mir::operand::{Constant, Operand};
 use crate::mir::terminator::{Terminator, TerminatorKind};
 use crate::mir::types::Local;
-use crate::sema::types::Type;
 
 use super::FunctionLowerer;
 
@@ -126,28 +125,33 @@ impl<'a> FunctionLowerer<'a> {
                 let func_ref = module.declare_func_in_func(func_info.func_id, self.builder.func);
 
                 // Lower arguments, coercing to the expected parameter types
-                // StrRef arguments are passed as two values (ptr, len)
+                // Fat pointer arguments are passed as multiple values
                 let mut arg_values = Vec::with_capacity(args.len() * 2);
                 let mut param_idx = 0;
                 for arg in args {
-                    // Check if this argument is a StrRef (string constant or str-typed place)
+                    // Check if this argument is a fat pointer (string constant or fat-pointer typed place)
                     // Note: We must check the RESULT type after projections, not just the base local
-                    let is_strref = match arg {
-                        Operand::Constant(Constant::String(_)) => true,
+                    let arg_ty = match arg {
+                        Operand::Constant(Constant::String(_)) => {
+                            // String constants are always StrRef type
+                            Some(self.types.str_ref())
+                        }
                         Operand::Copy(place) | Operand::Move(place) => {
                             // Get the result type after applying all projections
-                            let result_ty = self.compute_place_result_type(place);
-                            matches!(self.types.get(result_ty), Type::StrRef)
+                            Some(self.compute_place_result_type(place))
                         }
-                        _ => false,
+                        _ => None,
                     };
 
-                    if is_strref {
-                        // StrRef is passed as two values (ptr, len)
-                        let (ptr, len) = self.lower_strref_operand(arg)?;
+                    let is_fat_pointer =
+                        arg_ty.is_some_and(|ty| self.type_mapper.is_fat_pointer(ty, self.types));
+
+                    if is_fat_pointer {
+                        // Fat pointer is passed as two values (ptr, len)
+                        let (ptr, len) = self.lower_fat_pointer_operand(arg)?;
                         arg_values.push(ptr);
                         arg_values.push(len);
-                        param_idx += 2; // StrRef takes 2 parameter slots
+                        param_idx += 2; // Fat pointer takes 2 parameter slots
                     } else {
                         // Get the expected parameter type from the callee's signature
                         let expected_ty = if param_idx < func_info.signature.params.len() {
@@ -175,12 +179,33 @@ impl<'a> FunctionLowerer<'a> {
                 // Emit the call instruction
                 let call_inst = self.builder.ins().call(func_ref, &arg_values);
 
-                // Store the return value in the destination (if not ZST)
-                // TODO: Handle StrRef return values (would need to store 2 values)
-                let results = self.builder.inst_results(call_inst);
-                if !results.is_empty() {
-                    let return_val = results[0];
-                    self.def_var(destination.local, return_val);
+                // Store the return value in the destination
+                // Copy results to avoid borrow conflict with later mutable operations
+                let results: Vec<_> = self.builder.inst_results(call_inst).to_vec();
+                let dest_ty = self.body.local_decl(destination.local).ty;
+
+                if self.type_mapper.is_fat_pointer(dest_ty, self.types) {
+                    // Fat pointer return: store both values to stack slot
+                    let addr = self.local_stack_addr(destination.local).ok_or_else(|| {
+                        CodegenError::Internal(
+                            "fat pointer return requires stack slot destination".to_string(),
+                        )
+                    })?;
+
+                    // Get field offsets from layout
+                    let field_0_offset = self.layout.field_offset(dest_ty, 0) as i32;
+                    let field_1_offset = self.layout.field_offset(dest_ty, 1) as i32;
+
+                    let flags = MemFlags::trusted();
+                    self.builder
+                        .ins()
+                        .store(flags, results[0], addr, field_0_offset);
+                    self.builder
+                        .ins()
+                        .store(flags, results[1], addr, field_1_offset);
+                } else if !results.is_empty() {
+                    // Scalar return: define the variable
+                    self.def_var(destination.local, results[0]);
                 }
 
                 // Jump to the target block (if Some, i.e., non-diverging call)
@@ -251,11 +276,14 @@ impl<'a> FunctionLowerer<'a> {
         }
     }
 
-    /// Lower a StrRef operand to its component values (ptr, len).
+    /// Lower a fat pointer operand to its component values.
     ///
-    /// StrRef is a fat pointer that must be passed as two separate values
-    /// at the ABI level.
-    fn lower_strref_operand(&mut self, operand: &Operand) -> Result<(Value, Value), CodegenError> {
+    /// Fat pointers (StrRef, slices) must be passed as separate values
+    /// at the ABI level. Currently supports 2-field fat pointers.
+    fn lower_fat_pointer_operand(
+        &mut self,
+        operand: &Operand,
+    ) -> Result<(Value, Value), CodegenError> {
         let ptr_ty = self.type_mapper.pointer_type();
 
         match operand {
@@ -267,24 +295,25 @@ impl<'a> FunctionLowerer<'a> {
                 Ok((str_ptr, str_len))
             }
             Operand::Copy(place) | Operand::Move(place) => {
-                // Load both fields from the StrRef in memory
+                // Get the type after projections to use for layout
+                let place_ty = self.compute_place_result_type(place);
+
+                // Load both fields from the fat pointer in memory
                 let (addr, _) = self.compute_place_address(place)?;
 
-                // Load ptr (field 0) and len (field 1)
+                // Get field offsets from layout
+                let field_0_offset = self.layout.field_offset(place_ty, 0) as i32;
+                let field_1_offset = self.layout.field_offset(place_ty, 1) as i32;
+
+                // Load field 0 (ptr) and field 1 (len)
                 let flags = MemFlags::trusted();
-                let str_ptr = self.builder.ins().load(ptr_ty, flags, addr, 0);
+                let field_0 = self.builder.ins().load(ptr_ty, flags, addr, field_0_offset);
+                let field_1 = self.builder.ins().load(ptr_ty, flags, addr, field_1_offset);
 
-                let ptr_size = if ptr_ty == cranelift_codegen::ir::types::I64 {
-                    8
-                } else {
-                    4
-                };
-                let str_len = self.builder.ins().load(ptr_ty, flags, addr, ptr_size);
-
-                Ok((str_ptr, str_len))
+                Ok((field_0, field_1))
             }
             _ => Err(CodegenError::Internal(
-                "unexpected operand for StrRef".to_string(),
+                "unexpected operand for fat pointer".to_string(),
             )),
         }
     }

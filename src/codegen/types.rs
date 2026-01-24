@@ -4,10 +4,29 @@
 //! Cranelift IR types. Some types map directly to Cranelift types, while
 //! others (like compound types) require stack allocation.
 
+use cranelift_codegen::ir::AbiParam;
 use cranelift_codegen::ir::Type as ClifType;
 use cranelift_codegen::ir::types;
 
 use crate::sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
+
+/// How a type is represented at ABI boundaries.
+///
+/// This abstraction generalizes handling of different type categories
+/// for function signatures, call lowering, and argument passing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AbiRepr {
+    /// Single register value (primitives, thin pointers).
+    Scalar(ClifType),
+    /// Zero-sized type, no runtime representation.
+    Zst,
+    /// Fat pointer: multiple pointer-sized fields (StrRef, slices).
+    /// `num_fields` indicates how many pointer-sized values make up this type.
+    FatPointer { num_fields: usize },
+    /// Passed by reference (large structs, arrays).
+    /// Not yet implemented, reserved for future use.
+    Indirect,
+}
 
 /// Maps SPL types to Cranelift types.
 ///
@@ -147,6 +166,90 @@ impl TypeMapper {
     pub fn pointer_type(&self) -> ClifType {
         self.pointer_type
     }
+
+    /// Get the ABI representation for a type.
+    ///
+    /// This determines how a type should be passed at function call boundaries:
+    /// - `Scalar`: passed in a single register
+    /// - `Zst`: not passed at all (zero-sized)
+    /// - `FatPointer`: passed as multiple pointer-sized values
+    /// - `Indirect`: passed by reference (not yet implemented)
+    pub fn abi_repr(&self, type_id: TypeId, interner: &TypeInterner) -> AbiRepr {
+        // Check if it maps to a scalar type first
+        if let Some(clif_ty) = self.map_type(type_id, interner) {
+            return AbiRepr::Scalar(clif_ty);
+        }
+
+        // Check if it's a ZST
+        if self.is_zst(type_id, interner) {
+            return AbiRepr::Zst;
+        }
+
+        // Check for fat pointer types
+        let ty = interner.get(type_id);
+        match ty {
+            Type::StrRef => AbiRepr::FatPointer { num_fields: 2 },
+            Type::Slice(_) => AbiRepr::FatPointer { num_fields: 2 },
+            // Everything else that's not scalar or ZST is passed indirectly
+            _ => AbiRepr::Indirect,
+        }
+    }
+
+    /// Get ABI parameters for a type in function signatures.
+    ///
+    /// Returns the list of `AbiParam` values needed to represent this type
+    /// in a Cranelift function signature.
+    pub fn abi_params(&self, type_id: TypeId, interner: &TypeInterner) -> Vec<AbiParam> {
+        match self.abi_repr(type_id, interner) {
+            AbiRepr::Scalar(clif_ty) => vec![AbiParam::new(clif_ty)],
+            AbiRepr::Zst => vec![],
+            AbiRepr::FatPointer { num_fields } => {
+                // Each field is pointer-sized
+                (0..num_fields)
+                    .map(|_| AbiParam::new(self.pointer_type))
+                    .collect()
+            }
+            AbiRepr::Indirect => {
+                // Passed as a pointer to the value
+                vec![AbiParam::new(self.pointer_type)]
+            }
+        }
+    }
+
+    /// Check if a type is a fat pointer (StrRef, slice, etc.).
+    ///
+    /// Fat pointers are compound types that are passed as multiple
+    /// pointer-sized values at the ABI level.
+    pub fn is_fat_pointer(&self, type_id: TypeId, interner: &TypeInterner) -> bool {
+        matches!(self.abi_repr(type_id, interner), AbiRepr::FatPointer { .. })
+    }
+}
+
+/// Build a Cranelift signature for a MIR body.
+///
+/// This is the shared implementation used by both JIT and AOT compilers.
+/// It handles all type representations including fat pointers.
+pub fn build_signature(
+    call_conv: cranelift_codegen::isa::CallConv,
+    type_mapper: &TypeMapper,
+    body: &crate::mir::body::Body,
+    types: &TypeInterner,
+) -> cranelift_codegen::ir::Signature {
+    let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
+
+    // Add return type parameters
+    for param in type_mapper.abi_params(body.return_ty(), types) {
+        sig.returns.push(param);
+    }
+
+    // Add argument parameters
+    for arg in body.args() {
+        for param in type_mapper.abi_params(body.local_decl(arg).ty, types) {
+            sig.params.push(param);
+        }
+    }
+
+    sig
 }
 
 #[cfg(test)]
@@ -477,5 +580,148 @@ mod tests {
 
         assert_eq!(mapper_64.pointer_type(), types::I64);
         assert_eq!(mapper_32.pointer_type(), types::I32);
+    }
+
+    // ABI representation tests
+
+    #[test]
+    fn abi_repr_scalar() {
+        let mapper = mapper_64();
+        let interner = TypeInterner::new();
+
+        assert_eq!(
+            mapper.abi_repr(interner.i32(), &interner),
+            AbiRepr::Scalar(types::I32)
+        );
+        assert_eq!(
+            mapper.abi_repr(interner.bool(), &interner),
+            AbiRepr::Scalar(types::I8)
+        );
+    }
+
+    #[test]
+    fn abi_repr_zst() {
+        let mapper = mapper_64();
+        let interner = TypeInterner::new();
+
+        assert_eq!(mapper.abi_repr(interner.unit(), &interner), AbiRepr::Zst);
+        assert_eq!(mapper.abi_repr(interner.never(), &interner), AbiRepr::Zst);
+    }
+
+    #[test]
+    fn abi_repr_fat_pointer_strref() {
+        let mapper = mapper_64();
+        let interner = TypeInterner::new();
+
+        assert_eq!(
+            mapper.abi_repr(interner.str_ref(), &interner),
+            AbiRepr::FatPointer { num_fields: 2 }
+        );
+    }
+
+    #[test]
+    fn abi_repr_fat_pointer_slice() {
+        let mapper = mapper_64();
+        let mut interner = TypeInterner::new();
+
+        let slice = interner.mk_slice(interner.i32());
+        assert_eq!(
+            mapper.abi_repr(slice, &interner),
+            AbiRepr::FatPointer { num_fields: 2 }
+        );
+    }
+
+    #[test]
+    fn abi_repr_indirect_array() {
+        let mapper = mapper_64();
+        let mut interner = TypeInterner::new();
+
+        let arr = interner.mk_array(interner.i32(), 10);
+        assert_eq!(mapper.abi_repr(arr, &interner), AbiRepr::Indirect);
+    }
+
+    #[test]
+    fn abi_params_scalar() {
+        let mapper = mapper_64();
+        let interner = TypeInterner::new();
+
+        let params = mapper.abi_params(interner.i32(), &interner);
+        assert_eq!(params.len(), 1);
+        assert_eq!(params[0].value_type, types::I32);
+    }
+
+    #[test]
+    fn abi_params_zst_empty() {
+        let mapper = mapper_64();
+        let interner = TypeInterner::new();
+
+        let params = mapper.abi_params(interner.unit(), &interner);
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn abi_params_strref_two_pointers() {
+        let mapper = mapper_64();
+        let interner = TypeInterner::new();
+
+        let params = mapper.abi_params(interner.str_ref(), &interner);
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0].value_type, types::I64);
+        assert_eq!(params[1].value_type, types::I64);
+    }
+
+    #[test]
+    fn abi_params_strref_32bit() {
+        let mapper = mapper_32();
+        let interner = TypeInterner::new();
+
+        let params = mapper.abi_params(interner.str_ref(), &interner);
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0].value_type, types::I32);
+        assert_eq!(params[1].value_type, types::I32);
+    }
+
+    #[test]
+    fn is_fat_pointer_strref() {
+        let mapper = mapper_64();
+        let interner = TypeInterner::new();
+
+        assert!(mapper.is_fat_pointer(interner.str_ref(), &interner));
+    }
+
+    #[test]
+    fn is_fat_pointer_slice() {
+        let mapper = mapper_64();
+        let mut interner = TypeInterner::new();
+
+        let slice = interner.mk_slice(interner.i32());
+        assert!(mapper.is_fat_pointer(slice, &interner));
+    }
+
+    #[test]
+    fn is_not_fat_pointer_scalar() {
+        let mapper = mapper_64();
+        let interner = TypeInterner::new();
+
+        assert!(!mapper.is_fat_pointer(interner.i32(), &interner));
+        assert!(!mapper.is_fat_pointer(interner.bool(), &interner));
+    }
+
+    #[test]
+    fn is_not_fat_pointer_zst() {
+        let mapper = mapper_64();
+        let interner = TypeInterner::new();
+
+        assert!(!mapper.is_fat_pointer(interner.unit(), &interner));
+    }
+
+    #[test]
+    fn is_not_fat_pointer_reference() {
+        let mapper = mapper_64();
+        let mut interner = TypeInterner::new();
+
+        use crate::sema::types::Mutability;
+        let ref_ty = interner.mk_ref(Mutability::Shared, interner.i32());
+        assert!(!mapper.is_fat_pointer(ref_ty, &interner));
     }
 }

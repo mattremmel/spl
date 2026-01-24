@@ -234,25 +234,31 @@ impl<'a> FunctionLowerer<'a> {
 
         for arg in self.body.args() {
             let decl = self.body.local_decl(arg);
-            let ty = self.types.get(decl.ty);
 
-            // Handle StrRef arguments specially - they are passed as 2 values (ptr, len)
-            if matches!(ty, crate::sema::types::Type::StrRef) {
+            // Handle fat pointer arguments - they are passed as 2 values (ptr, len)
+            if self.type_mapper.is_fat_pointer(decl.ty, self.types) {
                 if let Some(LocalStorage::StackSlot(slot)) = self.local_map.get(arg) {
                     let ptr_ty = self.type_mapper.pointer_type();
-                    let ptr_size: i32 = if ptr_ty == types::I64 { 8 } else { 4 };
+
+                    // Get field offsets from layout instead of hardcoding
+                    let field_0_offset = self.layout.field_offset(decl.ty, 0) as i32;
+                    let field_1_offset = self.layout.field_offset(decl.ty, 1) as i32;
 
                     // Get the stack slot address
                     let addr = self.builder.ins().stack_addr(ptr_ty, slot, 0);
 
-                    // Store ptr at offset 0
+                    // Store ptr at field 0 offset
                     let ptr_val = block_params[param_idx];
                     let flags = MemFlags::trusted();
-                    self.builder.ins().store(flags, ptr_val, addr, 0);
+                    self.builder
+                        .ins()
+                        .store(flags, ptr_val, addr, field_0_offset);
 
-                    // Store len at offset ptr_size
+                    // Store len at field 1 offset
                     let len_val = block_params[param_idx + 1];
-                    self.builder.ins().store(flags, len_val, addr, ptr_size);
+                    self.builder
+                        .ins()
+                        .store(flags, len_val, addr, field_1_offset);
 
                     param_idx += 2;
                 }
@@ -407,6 +413,7 @@ impl<'a> FunctionLowerer<'a> {
         &mut self,
         s: &str,
         dest_addr: Value,
+        dest_ty: TypeId,
     ) -> Result<(), CodegenError> {
         let ptr_ty = self.type_mapper.pointer_type();
 
@@ -419,15 +426,20 @@ impl<'a> FunctionLowerer<'a> {
         // Create the length constant
         let str_len = self.builder.ins().iconst(ptr_ty, s.len() as i64);
 
-        // Store pointer at offset 0
-        let flags = MemFlags::trusted();
-        self.builder.ins().store(flags, str_ptr, dest_addr, 0);
+        // Get field offsets from layout
+        let field_0_offset = self.layout.field_offset(dest_ty, 0) as i32;
+        let field_1_offset = self.layout.field_offset(dest_ty, 1) as i32;
 
-        // Store length at offset ptr_size (field 1)
-        let ptr_size = if ptr_ty == types::I64 { 8 } else { 4 };
+        // Store pointer at field 0 offset
+        let flags = MemFlags::trusted();
         self.builder
             .ins()
-            .store(flags, str_len, dest_addr, ptr_size);
+            .store(flags, str_ptr, dest_addr, field_0_offset);
+
+        // Store length at field 1 offset
+        self.builder
+            .ins()
+            .store(flags, str_len, dest_addr, field_1_offset);
 
         Ok(())
     }

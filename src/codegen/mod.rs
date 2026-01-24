@@ -75,7 +75,7 @@ pub use module::{
 pub use registry::{FunctionInfo, FunctionRegistry};
 pub use runtime::{Runtime, RuntimeFunction};
 pub use target::TargetConfig;
-pub use types::TypeMapper;
+pub use types::{AbiRepr, TypeMapper, build_signature};
 
 use crate::mir::Body;
 use crate::sema::symbol::DefId;

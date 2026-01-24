@@ -29,7 +29,8 @@ impl<'a> FunctionLowerer<'a> {
                             "string constant requires stack slot destination".to_string(),
                         )
                     })?;
-                    self.lower_string_constant_to(s, dest_addr)?;
+                    let dest_ty = self.local_spl_type(dest);
+                    self.lower_string_constant_to(s, dest_addr, dest_ty)?;
                     return Ok(None); // Compound type, no single value returned
                 }
 

@@ -109,6 +109,11 @@ impl AotContext {
         TypeMapper::new(self.module.isa().pointer_type())
     }
 
+    /// Get the default calling convention for this target.
+    pub fn call_conv(&self) -> cranelift_codegen::isa::CallConv {
+        self.module.isa().default_call_conv()
+    }
+
     /// Declare a function in the module.
     ///
     /// Returns the function ID that can be used to define the function.

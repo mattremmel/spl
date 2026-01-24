@@ -3,7 +3,6 @@
 //! This module provides `ModuleCompiler` for compiling multiple MIR functions
 //! together, enabling cross-function calls.
 
-use cranelift_codegen::ir::AbiParam;
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{FuncId, Linkage};
 
@@ -13,10 +12,10 @@ use super::error::{CodegenError, RuntimeError};
 use super::lower::FunctionLowerer;
 use super::registry::{FunctionInfo, FunctionRegistry};
 use super::runtime::{Runtime, intrinsics};
-use super::types::TypeMapper;
+use super::types::build_signature;
 use crate::mir::body::Body;
 use crate::sema::symbol::DefId;
-use crate::sema::types::{Type, TypeInterner};
+use crate::sema::types::TypeInterner;
 
 /// A function definition with its DefId and MIR body.
 pub struct FunctionDef<'a> {
@@ -185,10 +184,11 @@ impl ModuleCompiler {
         types: &TypeInterner,
     ) -> Result<Vec<FuncId>, CodegenError> {
         let type_mapper = self.ctx.type_mapper();
+        let call_conv = self.ctx.call_conv();
         let mut func_ids = Vec::with_capacity(functions.len());
 
         for func_def in functions {
-            let sig = Self::build_signature(&self.ctx, &type_mapper, func_def.body, types);
+            let sig = build_signature(call_conv, &type_mapper, func_def.body, types);
 
             // Extern functions (intrinsics) are imported, regular functions are exported
             let linkage = if func_def.name.starts_with("__") {
@@ -236,7 +236,8 @@ impl ModuleCompiler {
         func_id: FuncId,
     ) -> Result<(), CodegenError> {
         let type_mapper = self.ctx.type_mapper();
-        let sig = Self::build_signature(&self.ctx, &type_mapper, func_def.body, types);
+        let call_conv = self.ctx.call_conv();
+        let sig = build_signature(call_conv, &type_mapper, func_def.body, types);
 
         // Set up the function
         self.ctx.compilation_context().func.signature = sig;
@@ -256,42 +257,6 @@ impl ModuleCompiler {
         self.ctx.define_function(func_id)?;
 
         Ok(())
-    }
-
-    /// Build the Cranelift signature for a MIR body.
-    fn build_signature(
-        ctx: &CodegenContext,
-        type_mapper: &TypeMapper,
-        body: &Body,
-        types: &TypeInterner,
-    ) -> cranelift_codegen::ir::Signature {
-        let mut sig = ctx.new_signature();
-
-        // Add return type (if not ZST)
-        let return_ty = body.return_ty();
-        // Handle StrRef return specially - return as two values (ptr, len)
-        if matches!(types.get(return_ty), Type::StrRef) {
-            let ptr_ty = type_mapper.pointer_type();
-            sig.returns.push(AbiParam::new(ptr_ty)); // ptr
-            sig.returns.push(AbiParam::new(ptr_ty)); // len
-        } else if let Some(clif_ty) = type_mapper.map_type(return_ty, types) {
-            sig.returns.push(AbiParam::new(clif_ty));
-        }
-
-        // Add parameter types
-        for arg in body.args() {
-            let arg_ty = body.local_decl(arg).ty;
-            // Handle StrRef params specially - pass as two values (ptr, len)
-            if matches!(types.get(arg_ty), Type::StrRef) {
-                let ptr_ty = type_mapper.pointer_type();
-                sig.params.push(AbiParam::new(ptr_ty)); // ptr
-                sig.params.push(AbiParam::new(ptr_ty)); // len
-            } else if let Some(clif_ty) = type_mapper.map_type(arg_ty, types) {
-                sig.params.push(AbiParam::new(clif_ty));
-            }
-        }
-
-        sig
     }
 }
 
@@ -402,10 +367,11 @@ impl AotModuleCompiler {
         types: &TypeInterner,
     ) -> Result<Vec<FuncId>, CodegenError> {
         let type_mapper = self.ctx.type_mapper();
+        let call_conv = self.ctx.call_conv();
         let mut func_ids = Vec::with_capacity(functions.len());
 
         for func_def in functions {
-            let sig = Self::build_signature(&self.ctx, &type_mapper, func_def.body, types);
+            let sig = build_signature(call_conv, &type_mapper, func_def.body, types);
             let func_id = self.ctx.declare_function(&func_def.name, &sig)?;
 
             self.registry
@@ -437,7 +403,8 @@ impl AotModuleCompiler {
         func_id: FuncId,
     ) -> Result<(), CodegenError> {
         let type_mapper = self.ctx.type_mapper();
-        let sig = Self::build_signature(&self.ctx, &type_mapper, func_def.body, types);
+        let call_conv = self.ctx.call_conv();
+        let sig = build_signature(call_conv, &type_mapper, func_def.body, types);
 
         // Set up the function
         self.ctx.compilation_context().func.signature = sig;
@@ -457,42 +424,6 @@ impl AotModuleCompiler {
         self.ctx.define_function(func_id)?;
 
         Ok(())
-    }
-
-    /// Build the Cranelift signature for a MIR body.
-    fn build_signature(
-        ctx: &AotContext,
-        type_mapper: &TypeMapper,
-        body: &Body,
-        types: &TypeInterner,
-    ) -> cranelift_codegen::ir::Signature {
-        let mut sig = ctx.new_signature();
-
-        // Add return type (if not ZST)
-        let return_ty = body.return_ty();
-        // Handle StrRef return specially - return as two values (ptr, len)
-        if matches!(types.get(return_ty), Type::StrRef) {
-            let ptr_ty = type_mapper.pointer_type();
-            sig.returns.push(AbiParam::new(ptr_ty)); // ptr
-            sig.returns.push(AbiParam::new(ptr_ty)); // len
-        } else if let Some(clif_ty) = type_mapper.map_type(return_ty, types) {
-            sig.returns.push(AbiParam::new(clif_ty));
-        }
-
-        // Add parameter types
-        for arg in body.args() {
-            let arg_ty = body.local_decl(arg).ty;
-            // Handle StrRef params specially - pass as two values (ptr, len)
-            if matches!(types.get(arg_ty), Type::StrRef) {
-                let ptr_ty = type_mapper.pointer_type();
-                sig.params.push(AbiParam::new(ptr_ty)); // ptr
-                sig.params.push(AbiParam::new(ptr_ty)); // len
-            } else if let Some(clif_ty) = type_mapper.map_type(arg_ty, types) {
-                sig.params.push(AbiParam::new(clif_ty));
-            }
-        }
-
-        sig
     }
 }
 
