@@ -121,7 +121,7 @@ fn get_operand_type(operand: &Operand, body: &Body, types: &TypeInterner) -> Typ
             Constant::Float(_) => types.f64(),
             Constant::Bool(_) => types.bool(),
             Constant::Char(_) => types.char(),
-            Constant::String(_) => types.string(),
+            Constant::String(_) => types.str_ref(),
             Constant::Unit => types.unit(),
             Constant::FnDef(_) => types.error(),
             Constant::Zeroed(ty) => *ty,

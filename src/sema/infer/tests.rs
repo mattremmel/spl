@@ -197,7 +197,7 @@ fn char_literal() {
 
 #[test]
 fn string_literal() {
-    check("fn main() { let x = \"hello\"; }", "String");
+    check("fn main() { let x = \"hello\"; }", "str");
 }
 
 // =============================================================================

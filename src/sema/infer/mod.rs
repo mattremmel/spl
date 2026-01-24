@@ -126,7 +126,7 @@ impl InferResult {
                 let ret_str = self.type_to_string(*ret);
                 format!("fn({}) -> {}", param_strs.join(", "), ret_str)
             }
-            Type::String => "String".to_string(),
+            Type::StrRef => "str".to_string(),
             Type::Error => "<error>".to_string(),
             Type::Alias(_, _) => "<alias>".to_string(),
             Type::Param(def_id) => {

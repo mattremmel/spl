@@ -315,8 +315,8 @@ impl InferEngine {
                 self.unify(*r1, *r2)
             }
 
-            // String type must match exactly
-            (Type::String, Type::String) => true,
+            // StrRef type must match exactly
+            (Type::StrRef, Type::StrRef) => true,
 
             // Everything else fails
             _ => false,

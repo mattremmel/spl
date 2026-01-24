@@ -104,8 +104,8 @@ impl<'a> LayoutComputer<'a> {
             // Slices are unsized, but &[T] is a fat pointer (2 pointers)
             Type::Slice(_) => TypeLayout::new(self.pointer_size * 2, self.pointer_size),
 
-            // String is pointer + length
-            Type::String => TypeLayout::new(self.pointer_size * 2, self.pointer_size),
+            // StrRef is pointer + length (like Rust's &str)
+            Type::StrRef => TypeLayout::new(self.pointer_size * 2, self.pointer_size),
 
             // These should not reach layout computation
             Type::Infer(_, _) | Type::Param(_) | Type::SelfType | Type::Alias(_, _) => {

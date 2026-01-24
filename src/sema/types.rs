@@ -209,8 +209,9 @@ pub enum Type {
     /// The `Self` type in impl blocks.
     SelfType,
 
-    /// The built-in `String` type.
-    String,
+    /// A string reference type (fat pointer: ptr + len).
+    /// Equivalent to Rust's `&str`. Points to UTF-8 data without owning it.
+    StrRef,
 
     /// An error type for error recovery during type checking.
     /// This type unifies with anything to prevent cascading errors.
@@ -239,7 +240,7 @@ pub struct TypeInterner {
     f64_id: TypeId,
     never_id: TypeId,
     error_id: TypeId,
-    string_id: TypeId,
+    str_ref_id: TypeId,
     char_id: TypeId,
     str_id: TypeId,
 }
@@ -266,7 +267,7 @@ impl TypeInterner {
             f64_id: TypeId(0),
             never_id: TypeId(0),
             error_id: TypeId(0),
-            string_id: TypeId(0),
+            str_ref_id: TypeId(0),
             char_id: TypeId(0),
             str_id: TypeId(0),
         };
@@ -280,7 +281,7 @@ impl TypeInterner {
         interner.f64_id = interner.intern(Type::Primitive(PrimitiveKind::F64));
         interner.never_id = interner.intern(Type::Primitive(PrimitiveKind::Never));
         interner.error_id = interner.intern(Type::Error);
-        interner.string_id = interner.intern(Type::String);
+        interner.str_ref_id = interner.intern(Type::StrRef);
         interner.char_id = interner.intern(Type::Primitive(PrimitiveKind::Char));
         interner.str_id = interner.intern(Type::Primitive(PrimitiveKind::Str));
 
@@ -459,9 +460,9 @@ impl TypeInterner {
         self.error_id
     }
 
-    /// Get the String type.
-    pub fn string(&self) -> TypeId {
-        self.string_id
+    /// Get the StrRef type (fat pointer to UTF-8 data, like Rust's `&str`).
+    pub fn str_ref(&self) -> TypeId {
+        self.str_ref_id
     }
 
     /// Get the char type.
@@ -784,8 +785,8 @@ mod tests {
     fn test_string_type() {
         let interner = TypeInterner::new();
 
-        let string_ty = interner.string();
-        assert_eq!(interner.get(string_ty), &Type::String);
+        let string_ty = interner.str_ref();
+        assert_eq!(interner.get(string_ty), &Type::StrRef);
     }
 
     #[test]
@@ -1013,7 +1014,7 @@ mod tests {
             &Type::Primitive(PrimitiveKind::Str)
         );
         assert_eq!(interner.get(interner.error()), &Type::Error);
-        assert_eq!(interner.get(interner.string()), &Type::String);
+        assert_eq!(interner.get(interner.str_ref()), &Type::StrRef);
     }
 
     #[test]
@@ -1344,8 +1345,8 @@ mod tests {
     fn test_string_type_interning_idempotent() {
         let interner = TypeInterner::new();
 
-        let s1 = interner.string();
-        let s2 = interner.string();
+        let s1 = interner.str_ref();
+        let s2 = interner.str_ref();
 
         assert_eq!(s1, s2);
     }

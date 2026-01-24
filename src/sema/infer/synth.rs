@@ -365,7 +365,7 @@ impl InferEngine {
             }
             SyntaxKind::TRUE_KW | SyntaxKind::FALSE_KW => self.ctx.types.bool(),
             SyntaxKind::CHAR_LITERAL => self.ctx.types.char(),
-            SyntaxKind::STRING_LITERAL => self.ctx.types.string(),
+            SyntaxKind::STRING_LITERAL => self.ctx.types.str_ref(),
             _ => self.ctx.types.error(),
         }
     }
@@ -2175,7 +2175,7 @@ impl InferEngine {
                 let ret_str = self.type_to_string(*ret);
                 format!("fn({}) -> {}", param_strs.join(", "), ret_str)
             }
-            Type::String => "String".to_string(),
+            Type::StrRef => "str".to_string(),
             Type::Error => "<error>".to_string(),
             Type::Alias(_, _) => "<alias>".to_string(),
             Type::Param(def_id) => {
@@ -2479,9 +2479,9 @@ impl InferEngine {
                                     return self.ctx.types.primitive(prim);
                                 }
 
-                                // Check for String
-                                if name == "String" {
-                                    return self.ctx.types.string();
+                                // Check for str (string reference type)
+                                if name == "str" {
+                                    return self.ctx.types.str_ref();
                                 }
 
                                 // Look up in resolutions

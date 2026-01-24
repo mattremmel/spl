@@ -67,8 +67,8 @@ impl TypeMapper {
             // Self type should be resolved before codegen
             Type::SelfType => None,
 
-            // String is a compound type (ptr + len)
-            Type::String => None,
+            // StrRef is a compound type (ptr + len), like Rust's &str
+            Type::StrRef => None,
 
             // Error types should not reach codegen
             Type::Error => None,
@@ -367,11 +367,11 @@ mod tests {
     }
 
     #[test]
-    fn map_string_is_none() {
+    fn map_str_ref_is_none() {
         let mapper = mapper_64();
         let interner = TypeInterner::new();
 
-        assert_eq!(mapper.map_type(interner.string(), &interner), None);
+        assert_eq!(mapper.map_type(interner.str_ref(), &interner), None);
     }
 
     #[test]

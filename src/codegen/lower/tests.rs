@@ -2604,7 +2604,7 @@ fn lower_string_constant() {
     // Instead, we create a string local and return a constant.
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
-    let string_ty = runner.types_mut().string();
+    let string_ty = runner.types_mut().str_ref();
 
     // fn() -> i32 { let s: String = "hello"; 42 }
     let mut body = Body::new(i32_ty);
@@ -2642,7 +2642,7 @@ fn lower_string_constant_empty() {
     // Test empty string constant
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
-    let string_ty = runner.types_mut().string();
+    let string_ty = runner.types_mut().str_ref();
 
     let mut body = Body::new(i32_ty);
     let entry = body.alloc_block();
@@ -2676,7 +2676,7 @@ fn lower_string_constant_deduplication() {
     // Test that the same string used multiple times is deduplicated
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
-    let string_ty = runner.types_mut().string();
+    let string_ty = runner.types_mut().str_ref();
 
     let mut body = Body::new(i32_ty);
     let entry = body.alloc_block();
