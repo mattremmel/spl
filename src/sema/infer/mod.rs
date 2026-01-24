@@ -28,6 +28,25 @@ use engine::InferEngine;
 
 pub use engine::IntrinsicKind;
 
+/// Error returned when unification fails.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnifyError {
+    /// Two types are fundamentally incompatible.
+    TypeMismatch { expected: TypeId, actual: TypeId },
+
+    /// Mutability mismatch (&T vs &mut T).
+    MutabilityMismatch { expected: Mutability, actual: Mutability },
+
+    /// Tuple/function arity mismatch.
+    ArityMismatch { expected: usize, actual: usize },
+
+    /// Array length mismatch.
+    ArrayLengthMismatch { expected: u64, actual: u64 },
+
+    /// Constrained variable violated (Int var vs non-integer).
+    ConstraintViolation { kind: InferKind, actual: TypeId },
+}
+
 /// Result of type inference.
 pub struct InferResult {
     /// The semantic context with symbol table and types.

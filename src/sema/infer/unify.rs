@@ -35,6 +35,7 @@ use crate::sema::symbol::DefId;
 use crate::sema::types::{InferKind, Mutability, PrimitiveKind, Type, TypeId, TypeVar};
 use rustc_hash::FxHashMap;
 
+use super::UnifyError;
 use super::engine::{FnSignature, InferEngine};
 use super::helpers::{is_float_type, is_integer_type};
 
@@ -182,7 +183,7 @@ impl InferEngine {
     // Unification
     // =========================================================================
 
-    /// Unify two types, returning true if successful.
+    /// Unify two types, returning `Ok(())` if successful or an error describing the mismatch.
     ///
     /// Implements Robinson's unification with extensions for SPL's type system:
     /// - Constrained type variables (Int, Float) with fallback defaults
@@ -191,7 +192,7 @@ impl InferEngine {
     ///
     /// The substitution is extended in-place. On failure, partial substitutions
     /// may remain (caller should handle this appropriately).
-    pub(super) fn unify(&mut self, a: TypeId, b: TypeId) -> bool {
+    pub(super) fn unify(&mut self, a: TypeId, b: TypeId) -> Result<(), UnifyError> {
         debug_assert!(
             self.is_valid_type_id(a),
             "precondition: type a ({}) must be valid",
@@ -207,65 +208,101 @@ impl InferEngine {
         let b = self.resolve_type(b);
 
         if a == b {
-            return true;
+            return Ok(());
         }
 
         let ty_a = self.ctx.types.get(a).clone();
         let ty_b = self.ctx.types.get(b).clone();
 
-        let result = match (&ty_a, &ty_b) {
+        let result: Result<(), UnifyError> = match (&ty_a, &ty_b) {
             // Error type unifies with anything
-            (Type::Error, _) | (_, Type::Error) => true,
+            (Type::Error, _) | (_, Type::Error) => Ok(()),
 
             // Never type unifies with anything (it's the bottom type)
             (Type::Primitive(PrimitiveKind::Never), _)
-            | (_, Type::Primitive(PrimitiveKind::Never)) => true,
+            | (_, Type::Primitive(PrimitiveKind::Never)) => Ok(()),
 
             // General type variable binds to anything
             (Type::Infer(var, InferKind::General), _) => {
                 self.substitution.insert(*var, b);
-                true
+                Ok(())
             }
             (_, Type::Infer(var, InferKind::General)) => {
                 self.substitution.insert(*var, a);
-                true
+                Ok(())
             }
 
             // Int variable binds to any integer type or another int variable
             (Type::Infer(var, InferKind::Int), Type::Primitive(prim)) if is_integer_type(*prim) => {
                 self.substitution.insert(*var, b);
-                true
+                Ok(())
             }
             (Type::Primitive(prim), Type::Infer(var, InferKind::Int)) if is_integer_type(*prim) => {
                 self.substitution.insert(*var, a);
-                true
+                Ok(())
             }
             (Type::Infer(var1, InferKind::Int), Type::Infer(_, InferKind::Int)) => {
                 // Bind one to the other
                 self.substitution.insert(*var1, b);
-                true
+                Ok(())
             }
+            // Int variable vs non-integer type
+            (Type::Infer(_, InferKind::Int), _) => Err(UnifyError::ConstraintViolation {
+                kind: InferKind::Int,
+                actual: b,
+            }),
+            (_, Type::Infer(_, InferKind::Int)) => Err(UnifyError::ConstraintViolation {
+                kind: InferKind::Int,
+                actual: a,
+            }),
 
             // Float variable binds to any float type or another float variable
             (Type::Infer(var, InferKind::Float), Type::Primitive(prim)) if is_float_type(*prim) => {
                 self.substitution.insert(*var, b);
-                true
+                Ok(())
             }
             (Type::Primitive(prim), Type::Infer(var, InferKind::Float)) if is_float_type(*prim) => {
                 self.substitution.insert(*var, a);
-                true
+                Ok(())
             }
             (Type::Infer(var1, InferKind::Float), Type::Infer(_, InferKind::Float)) => {
                 self.substitution.insert(*var1, b);
-                true
+                Ok(())
             }
+            // Float variable vs non-float type
+            (Type::Infer(_, InferKind::Float), _) => Err(UnifyError::ConstraintViolation {
+                kind: InferKind::Float,
+                actual: b,
+            }),
+            (_, Type::Infer(_, InferKind::Float)) => Err(UnifyError::ConstraintViolation {
+                kind: InferKind::Float,
+                actual: a,
+            }),
 
             // Primitives must match exactly
-            (Type::Primitive(p1), Type::Primitive(p2)) => p1 == p2,
+            (Type::Primitive(p1), Type::Primitive(p2)) => {
+                if p1 == p2 {
+                    Ok(())
+                } else {
+                    Err(UnifyError::TypeMismatch {
+                        expected: a,
+                        actual: b,
+                    })
+                }
+            }
 
             // Unit type is the same as empty tuple
             (Type::Primitive(PrimitiveKind::Unit), Type::Tuple(elems))
-            | (Type::Tuple(elems), Type::Primitive(PrimitiveKind::Unit)) => elems.is_empty(),
+            | (Type::Tuple(elems), Type::Primitive(PrimitiveKind::Unit)) => {
+                if elems.is_empty() {
+                    Ok(())
+                } else {
+                    Err(UnifyError::TypeMismatch {
+                        expected: a,
+                        actual: b,
+                    })
+                }
+            }
 
             // References: mutability must match or coerce, inner types must unify.
             // Coercion: &mut T -> &T is allowed (mutable can become shared),
@@ -273,7 +310,13 @@ impl InferEngine {
             (Type::Ref(m1, inner1), Type::Ref(m2, inner2)) => {
                 let mutability_ok =
                     m1 == m2 || (*m1 == Mutability::Mutable && *m2 == Mutability::Shared);
-                mutability_ok && self.unify(*inner1, *inner2)
+                if !mutability_ok {
+                    return Err(UnifyError::MutabilityMismatch {
+                        expected: *m1,
+                        actual: *m2,
+                    });
+                }
+                self.unify(*inner1, *inner2)
             }
 
             // Raw pointers: mutability must match or coerce, pointee types must unify.
@@ -282,12 +325,24 @@ impl InferEngine {
             (Type::RawPtr(m1, inner1), Type::RawPtr(m2, inner2)) => {
                 let mutability_ok =
                     m1 == m2 || (*m1 == Mutability::Mutable && *m2 == Mutability::Shared);
-                mutability_ok && self.unify(*inner1, *inner2)
+                if !mutability_ok {
+                    return Err(UnifyError::MutabilityMismatch {
+                        expected: *m1,
+                        actual: *m2,
+                    });
+                }
+                self.unify(*inner1, *inner2)
             }
 
             // Arrays must match in element type and length
             (Type::Array(elem1, len1), Type::Array(elem2, len2)) => {
-                len1 == len2 && self.unify(*elem1, *elem2)
+                if len1 != len2 {
+                    return Err(UnifyError::ArrayLengthMismatch {
+                        expected: *len1,
+                        actual: *len2,
+                    });
+                }
+                self.unify(*elem1, *elem2)
             }
 
             // Slices must match in element type
@@ -296,27 +351,35 @@ impl InferEngine {
             // Tuples must match in arity and element types
             (Type::Tuple(elems1), Type::Tuple(elems2)) => {
                 if elems1.len() != elems2.len() {
-                    return false;
+                    return Err(UnifyError::ArityMismatch {
+                        expected: elems1.len(),
+                        actual: elems2.len(),
+                    });
                 }
                 for (e1, e2) in elems1.iter().zip(elems2.iter()) {
-                    if !self.unify(*e1, *e2) {
-                        return false;
-                    }
+                    self.unify(*e1, *e2)?;
                 }
-                true
+                Ok(())
             }
 
             // Structs must have same DefId and unifiable type args
             (Type::Struct(def1, args1), Type::Struct(def2, args2)) => {
-                if def1 != def2 || args1.len() != args2.len() {
-                    return false;
+                if def1 != def2 {
+                    return Err(UnifyError::TypeMismatch {
+                        expected: a,
+                        actual: b,
+                    });
+                }
+                if args1.len() != args2.len() {
+                    return Err(UnifyError::ArityMismatch {
+                        expected: args1.len(),
+                        actual: args2.len(),
+                    });
                 }
                 for (a1, a2) in args1.iter().zip(args2.iter()) {
-                    if !self.unify(*a1, *a2) {
-                        return false;
-                    }
+                    self.unify(*a1, *a2)?;
                 }
-                true
+                Ok(())
             }
 
             // Function pointers must match in params and return type
@@ -331,26 +394,30 @@ impl InferEngine {
                 },
             ) => {
                 if p1.len() != p2.len() {
-                    return false;
+                    return Err(UnifyError::ArityMismatch {
+                        expected: p1.len(),
+                        actual: p2.len(),
+                    });
                 }
-                for (a, b) in p1.iter().zip(p2.iter()) {
-                    if !self.unify(*a, *b) {
-                        return false;
-                    }
+                for (param_a, param_b) in p1.iter().zip(p2.iter()) {
+                    self.unify(*param_a, *param_b)?;
                 }
                 self.unify(*r1, *r2)
             }
 
             // StrRef type must match exactly
-            (Type::StrRef, Type::StrRef) => true,
+            (Type::StrRef, Type::StrRef) => Ok(()),
 
             // Everything else fails
-            _ => false,
+            _ => Err(UnifyError::TypeMismatch {
+                expected: a,
+                actual: b,
+            }),
         };
 
         // Postcondition: no cycles in the substitution
         #[cfg(debug_assertions)]
-        if result {
+        if result.is_ok() {
             for &var in self.substitution.keys() {
                 debug_assert!(
                     !self.has_cycle(var),
@@ -703,7 +770,9 @@ mod tests {
     use super::*;
     use crate::ast::SourceFile;
     use crate::parser::parse;
+    use crate::sema::infer::UnifyError;
     use crate::sema::resolver::resolve;
+    use crate::sema::symbol::DefId;
     use rowan::ast::AstNode;
 
     /// Helper to create a minimal InferEngine for testing has_cycle.
@@ -866,5 +935,171 @@ mod tests {
         engine.substitution.insert(v0, v1_id);
 
         assert!(!engine.has_cycle(v2));
+    }
+
+    // =========================================================================
+    // Unification Error Tests
+    // =========================================================================
+    //
+    // These tests verify that unify() returns appropriate UnifyError variants
+    // for different type mismatch scenarios.
+
+    #[test]
+    fn unify_err_primitive_mismatch() {
+        // i32 vs bool should fail with TypeMismatch
+        let mut engine = create_test_engine();
+        let i32_ty = engine.ctx.types.i32();
+        let bool_ty = engine.ctx.types.bool();
+
+        let result = engine.unify(i32_ty, bool_ty);
+        assert!(matches!(result, Err(UnifyError::TypeMismatch { .. })));
+    }
+
+    #[test]
+    fn unify_err_mutability_shared_to_mut() {
+        // &i32 vs &mut i32 should fail (can't coerce shared to mutable)
+        let mut engine = create_test_engine();
+        let i32_ty = engine.ctx.types.i32();
+        let shared_ref = engine.ctx.types.mk_ref(Mutability::Shared, i32_ty);
+        let mut_ref = engine.ctx.types.mk_ref(Mutability::Mutable, i32_ty);
+
+        // Trying to unify &i32 (expected) with &mut i32 (actual) should fail
+        let result = engine.unify(shared_ref, mut_ref);
+        assert!(matches!(result, Err(UnifyError::MutabilityMismatch { .. })));
+    }
+
+    #[test]
+    fn unify_err_tuple_arity() {
+        // (i32, i32) vs (i32,) should fail with ArityMismatch
+        let mut engine = create_test_engine();
+        let i32_ty = engine.ctx.types.i32();
+        let tuple2 = engine.ctx.types.mk_tuple(vec![i32_ty, i32_ty]);
+        let tuple1 = engine.ctx.types.mk_tuple(vec![i32_ty]);
+
+        let result = engine.unify(tuple2, tuple1);
+        assert!(matches!(
+            result,
+            Err(UnifyError::ArityMismatch {
+                expected: 2,
+                actual: 1
+            })
+        ));
+    }
+
+    #[test]
+    fn unify_err_fn_ptr_arity() {
+        // fn(i32) vs fn(i32, i32) should fail with ArityMismatch
+        let mut engine = create_test_engine();
+        let i32_ty = engine.ctx.types.i32();
+        let unit_ty = engine.ctx.types.unit();
+        let fn1 = engine.ctx.types.mk_fn_ptr(vec![i32_ty], unit_ty);
+        let fn2 = engine.ctx.types.mk_fn_ptr(vec![i32_ty, i32_ty], unit_ty);
+
+        let result = engine.unify(fn1, fn2);
+        assert!(matches!(
+            result,
+            Err(UnifyError::ArityMismatch {
+                expected: 1,
+                actual: 2
+            })
+        ));
+    }
+
+    #[test]
+    fn unify_err_array_length() {
+        // [i32; 5] vs [i32; 10] should fail with ArrayLengthMismatch
+        let mut engine = create_test_engine();
+        let i32_ty = engine.ctx.types.i32();
+        let arr5 = engine.ctx.types.mk_array(i32_ty, 5);
+        let arr10 = engine.ctx.types.mk_array(i32_ty, 10);
+
+        let result = engine.unify(arr5, arr10);
+        assert!(matches!(
+            result,
+            Err(UnifyError::ArrayLengthMismatch {
+                expected: 5,
+                actual: 10
+            })
+        ));
+    }
+
+    #[test]
+    fn unify_err_int_var_vs_bool() {
+        // {int} vs bool should fail with ConstraintViolation
+        let mut engine = create_test_engine();
+        let int_var = engine.fresh_int_var();
+        let bool_ty = engine.ctx.types.bool();
+
+        let result = engine.unify(int_var, bool_ty);
+        assert!(matches!(
+            result,
+            Err(UnifyError::ConstraintViolation {
+                kind: InferKind::Int,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn unify_err_float_var_vs_int() {
+        // {float} vs i32 should fail with ConstraintViolation
+        let mut engine = create_test_engine();
+        let float_var = engine.fresh_float_var();
+        let i32_ty = engine.ctx.types.i32();
+
+        let result = engine.unify(float_var, i32_ty);
+        assert!(matches!(
+            result,
+            Err(UnifyError::ConstraintViolation {
+                kind: InferKind::Float,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn unify_err_struct_def_mismatch() {
+        // Foo vs Bar (different struct DefIds) should fail with TypeMismatch
+        let mut engine = create_test_engine();
+        let foo_id = DefId(1000); // Fake DefId for struct Foo
+        let bar_id = DefId(1001); // Fake DefId for struct Bar
+        let foo_ty = engine.ctx.types.mk_struct(foo_id, vec![]);
+        let bar_ty = engine.ctx.types.mk_struct(bar_id, vec![]);
+
+        let result = engine.unify(foo_ty, bar_ty);
+        assert!(matches!(result, Err(UnifyError::TypeMismatch { .. })));
+    }
+
+    #[test]
+    fn unify_ok_same_type() {
+        // i32 vs i32 should succeed
+        let mut engine = create_test_engine();
+        let i32_ty = engine.ctx.types.i32();
+
+        let result = engine.unify(i32_ty, i32_ty);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn unify_ok_mut_to_shared() {
+        // &mut i32 vs &i32 should succeed (mutable coerces to shared)
+        let mut engine = create_test_engine();
+        let i32_ty = engine.ctx.types.i32();
+        let mut_ref = engine.ctx.types.mk_ref(Mutability::Mutable, i32_ty);
+        let shared_ref = engine.ctx.types.mk_ref(Mutability::Shared, i32_ty);
+
+        let result = engine.unify(mut_ref, shared_ref);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn unify_ok_int_var_to_i64() {
+        // {int} vs i64 should succeed
+        let mut engine = create_test_engine();
+        let int_var = engine.fresh_int_var();
+        let i64_ty = engine.ctx.types.i64();
+
+        let result = engine.unify(int_var, i64_ty);
+        assert!(result.is_ok());
     }
 }

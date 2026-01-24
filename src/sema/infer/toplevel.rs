@@ -644,7 +644,7 @@ impl InferEngine {
             }
 
             // Check return type matches
-            if !self.unify(sig.ret, body_ty) {
+            if self.unify(sig.ret, body_ty).is_err() {
                 let body_span = text_range_to_span(body.syntax().text_range());
 
                 // Check if this is a "missing return" case:

@@ -576,7 +576,7 @@ impl InferEngine {
         // Check/unify all elements
         for expr in &exprs[1..] {
             let elem_type = self.synth_expr(expr);
-            if !self.unify(first_type, elem_type) {
+            if self.unify(first_type, elem_type).is_err() {
                 let span = text_range_to_span(expr.syntax().text_range());
                 self.diagnostics.push(
                     Diagnostic::error("type mismatch: array elements must have the same type")
@@ -672,7 +672,7 @@ impl InferEngine {
             if let Some(base_expr) = update_base.expr() {
                 let base_ty = self.synth_expr(&base_expr);
                 let expected_struct_ty = self.ctx.types.mk_struct(struct_def_id, type_args.clone());
-                if !self.unify(base_ty, expected_struct_ty) {
+                if self.unify(base_ty, expected_struct_ty).is_err() {
                     let span = text_range_to_span(base_expr.syntax().text_range());
                     self.diagnostics.push(
                         Diagnostic::error("struct update base has wrong type")
@@ -1216,7 +1216,7 @@ impl InferEngine {
             if let Some(base_expr) = update_base.expr() {
                 let base_ty = self.synth_expr(&base_expr);
                 let expected_struct_ty = self.ctx.types.mk_struct(struct_def_id, type_args.clone());
-                if !self.unify(base_ty, expected_struct_ty) {
+                if self.unify(base_ty, expected_struct_ty).is_err() {
                     let span = text_range_to_span(base_expr.syntax().text_range());
                     self.diagnostics.push(
                         Diagnostic::error("struct update base has wrong type")
@@ -1344,7 +1344,7 @@ impl InferEngine {
                     return self.ctx.types.error();
                 }
 
-                if !self.unify(lhs_ty, rhs_ty) {
+                if self.unify(lhs_ty, rhs_ty).is_err() {
                     let span = text_range_to_span(rhs.syntax().text_range());
                     self.diagnostics.push(
                         Diagnostic::error("type mismatch in binary operation")
@@ -1366,7 +1366,7 @@ impl InferEngine {
                 let lhs_ty = self.synth_expr(&lhs);
                 let rhs_ty = self.synth_expr(&rhs);
 
-                if !self.unify(lhs_ty, rhs_ty) {
+                if self.unify(lhs_ty, rhs_ty).is_err() {
                     let span = text_range_to_span(rhs.syntax().text_range());
                     self.diagnostics.push(
                         Diagnostic::error("type mismatch in comparison")
@@ -1383,14 +1383,14 @@ impl InferEngine {
                 let rhs_ty = self.synth_expr(&rhs);
                 let bool_ty = self.ctx.types.bool();
 
-                if !self.unify(lhs_ty, bool_ty) {
+                if self.unify(lhs_ty, bool_ty).is_err() {
                     let span = text_range_to_span(lhs.syntax().text_range());
                     self.diagnostics.push(
                         Diagnostic::error("type mismatch: expected bool for logical operator")
                             .with_label(span, "not a bool"),
                     );
                 }
-                if !self.unify(rhs_ty, bool_ty) {
+                if self.unify(rhs_ty, bool_ty).is_err() {
                     let span = text_range_to_span(rhs.syntax().text_range());
                     self.diagnostics.push(
                         Diagnostic::error("type mismatch: expected bool for logical operator")
@@ -1418,7 +1418,7 @@ impl InferEngine {
                         .push(Diagnostic::error(err_msg).with_label(span, "cannot assign to this"));
                 }
 
-                if !self.unify(lhs_ty, rhs_ty) {
+                if self.unify(lhs_ty, rhs_ty).is_err() {
                     let span = text_range_to_span(rhs.syntax().text_range());
                     self.diagnostics.push(
                         Diagnostic::error("type mismatch in assignment")
@@ -1468,7 +1468,7 @@ impl InferEngine {
             SyntaxKind::BANG => {
                 // Logical not is valid for bool
                 let bool_ty = self.ctx.types.bool();
-                if !self.unify(inner_ty, bool_ty) {
+                if self.unify(inner_ty, bool_ty).is_err() {
                     let span = text_range_to_span(inner.syntax().text_range());
                     self.diagnostics.push(
                         Diagnostic::error("cannot apply unary `!` to non-bool type")
@@ -2016,7 +2016,7 @@ impl InferEngine {
         if let Some(cond) = if_expr.condition() {
             let cond_ty = self.synth_expr(&cond);
             let bool_ty = self.ctx.types.bool();
-            if !self.unify(cond_ty, bool_ty) {
+            if self.unify(cond_ty, bool_ty).is_err() {
                 let span = text_range_to_span(cond.syntax().text_range());
                 self.diagnostics.push(
                     Diagnostic::error("if condition must be bool")
@@ -2046,7 +2046,7 @@ impl InferEngine {
         };
 
         // Unify branches
-        if !self.unify(then_ty, else_ty) {
+        if self.unify(then_ty, else_ty).is_err() {
             let span = text_range_to_span(if_expr.syntax().text_range());
             self.diagnostics.push(
                 Diagnostic::error("type mismatch between if branches")
@@ -2062,7 +2062,7 @@ impl InferEngine {
         if let Some(cond) = while_expr.condition() {
             let cond_ty = self.synth_expr(&cond);
             let bool_ty = self.ctx.types.bool();
-            if !self.unify(cond_ty, bool_ty) {
+            if self.unify(cond_ty, bool_ty).is_err() {
                 let span = text_range_to_span(cond.syntax().text_range());
                 self.diagnostics.push(
                     Diagnostic::error("while condition must be bool")
@@ -2170,7 +2170,7 @@ impl InferEngine {
 
             let value_ty = self.synth_expr(&value);
             if let Some(break_ty) = self.current_loop_break_type
-                && !self.unify(break_ty, value_ty)
+                && self.unify(break_ty, value_ty).is_err()
             {
                 let value_span = text_range_to_span(value.syntax().text_range());
                 self.diagnostics.push(
@@ -2208,7 +2208,7 @@ impl InferEngine {
         };
 
         if let Some(ret_ty) = self.current_return_type
-            && !self.unify(ret_ty, value_ty)
+            && self.unify(ret_ty, value_ty).is_err()
         {
             let span = text_range_to_span(return_expr.syntax().text_range());
             self.diagnostics.push(
@@ -2396,7 +2396,7 @@ impl InferEngine {
             if let Some(guard) = arm.guard() {
                 let guard_ty = self.synth_expr(&guard);
                 let bool_ty = self.ctx.types.bool();
-                if !self.unify(guard_ty, bool_ty) {
+                if self.unify(guard_ty, bool_ty).is_err() {
                     let span = text_range_to_span(guard.syntax().text_range());
                     self.diagnostics.push(
                         Diagnostic::error("match guard must be bool, expected bool")
@@ -2421,7 +2421,7 @@ impl InferEngine {
 
         let result_ty = arm_types[0];
         for (i, &arm_ty) in arm_types.iter().enumerate().skip(1) {
-            if !self.unify(result_ty, arm_ty) {
+            if self.unify(result_ty, arm_ty).is_err() {
                 let span = text_range_to_span(match_expr.syntax().text_range());
                 self.diagnostics.push(
                     Diagnostic::error(format!(
@@ -2475,7 +2475,7 @@ impl InferEngine {
                         _ => self.ctx.types.error(),
                     };
 
-                    if !self.unify(lit_ty, expected_ty) {
+                    if self.unify(lit_ty, expected_ty).is_err() {
                         let span = text_range_to_span(token.text_range());
                         self.diagnostics.push(
                             Diagnostic::error("type mismatch in pattern")
@@ -2633,7 +2633,7 @@ impl InferEngine {
     /// Check an expression against an expected type.
     pub(super) fn check_expr(&mut self, expr: &Expr, expected: TypeId) {
         let actual = self.synth_expr(expr);
-        if !self.unify(actual, expected) {
+        if self.unify(actual, expected).is_err() {
             let span = text_range_to_span(expr.syntax().text_range());
             self.diagnostics
                 .push(Diagnostic::error("type mismatch").with_label(span, "mismatched types"));
