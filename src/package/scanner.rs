@@ -1,7 +1,7 @@
 //! Directory scanning for package source files.
 //!
 //! Provides functions to scan a directory for `.spl` source files and detect
-//! potential subpackages.
+//! potential child modules.
 
 use std::path::{Path, PathBuf};
 use std::{fmt, io};
@@ -69,7 +69,7 @@ pub fn scan_directory(path: &Path) -> Result<Vec<PathBuf>, ScanError> {
     Ok(files)
 }
 
-/// Finds subdirectories that could be subpackages.
+/// Finds subdirectories that could be child modules.
 ///
 /// Returns paths to all immediate subdirectories, sorted alphabetically.
 /// Does not check whether subdirectories contain `.spl` files.
@@ -78,7 +78,7 @@ pub fn scan_directory(path: &Path) -> Result<Vec<PathBuf>, ScanError> {
 ///
 /// Returns `ScanError::NotADirectory` if the path is not a directory.
 /// Returns `ScanError::Io` for other I/O errors.
-pub fn find_subpackages(path: &Path) -> Result<Vec<PathBuf>, ScanError> {
+pub fn find_modules(path: &Path) -> Result<Vec<PathBuf>, ScanError> {
     if !path.is_dir() {
         return Err(ScanError::NotADirectory(path.to_path_buf()));
     }
@@ -99,9 +99,9 @@ pub fn find_subpackages(path: &Path) -> Result<Vec<PathBuf>, ScanError> {
     Ok(dirs)
 }
 
-/// Checks whether a directory has a `_package.spl` configuration file.
-pub fn has_package_config(path: &Path) -> bool {
-    path.join("_package.spl").is_file()
+/// Checks whether a directory has a `_module.spl` configuration file.
+pub fn has_module_config(path: &Path) -> bool {
+    path.join("_module.spl").is_file()
 }
 
 #[cfg(test)]
@@ -149,7 +149,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_finds_package_spl() {
+    fn scan_finds_module_spl() {
         let path = test_packages_path("configured");
         let files = scan_directory(&path).unwrap();
 
@@ -159,14 +159,14 @@ mod tests {
             .filter_map(|n| n.to_str())
             .collect();
 
-        assert!(names.contains(&"_package.spl"));
+        assert!(names.contains(&"_module.spl"));
         assert!(names.contains(&"lib.spl"));
     }
 
     #[test]
-    fn scan_detects_subpackages() {
+    fn scan_detects_modules() {
         let path = test_packages_path("nested");
-        let subdirs = find_subpackages(&path).unwrap();
+        let subdirs = find_modules(&path).unwrap();
 
         let names: Vec<_> = subdirs
             .iter()
@@ -200,15 +200,15 @@ mod tests {
     }
 
     #[test]
-    fn has_package_config_true() {
+    fn has_module_config_true() {
         let path = test_packages_path("configured");
-        assert!(has_package_config(&path));
+        assert!(has_module_config(&path));
     }
 
     #[test]
-    fn has_package_config_false() {
+    fn has_module_config_false() {
         let path = test_packages_path("simple");
-        assert!(!has_package_config(&path));
+        assert!(!has_module_config(&path));
     }
 
     #[test]

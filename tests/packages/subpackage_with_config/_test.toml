@@ -1,3 +1,3 @@
 mode = "load-pass"
 expect_items = 1
-expect_subpackages = 1
+expect_modules = 1

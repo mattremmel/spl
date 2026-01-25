@@ -19,8 +19,8 @@ struct TestConfig {
     expect_files: Option<usize>,
     /// Expected package name (for load-pass)
     expect_name: Option<String>,
-    /// Expected subpackage count (for load-pass)
-    expect_subpackages: Option<usize>,
+    /// Expected module count (for load-pass)
+    expect_modules: Option<usize>,
     /// Expected error pattern (for load-fail)
     expect_error: Option<String>,
     /// Expected compile error pattern (for compile-fail)
@@ -84,12 +84,12 @@ fn run_package_test(path: &Path) -> datatest_stable::Result<()> {
                 }
             }
 
-            // Check expected subpackage count
-            if let Some(expected) = config.expect_subpackages {
-                let actual = pkg.subpackages().count();
+            // Check expected module count
+            if let Some(expected) = config.expect_modules {
+                let actual = pkg.modules().count();
                 if actual != expected {
                     return Err(format!(
-                        "{}: expected {} subpackages, got {}",
+                        "{}: expected {} modules, got {}",
                         path.display(),
                         expected,
                         actual

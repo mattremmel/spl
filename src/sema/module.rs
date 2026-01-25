@@ -1,18 +1,18 @@
-//! Package tree for cross-package name resolution.
+//! Module tree for cross-module name resolution.
 //!
-//! This module provides the infrastructure for tracking package hierarchy and
-//! resolving paths across package boundaries.
+//! This module provides the infrastructure for tracking module hierarchy and
+//! resolving paths across module boundaries.
 //!
 //! # Terminology
 //!
-//! In SPL:
-//! - **Module** = The whole project/compilation unit (like Go's module)
-//! - **Package** = A directory of source files (like Go's package)
+//! In SPL (per docs/module-system.md):
+//! - **Package** = The whole project/compilation unit (like Rust's crate)
+//! - **Module** = A directory of source files (like Rust's module)
 //!
-//! # Package Hierarchy
+//! # Module Hierarchy
 //!
-//! Packages form a tree rooted at the module root. Each package can contain:
-//! - Child packages (subdirectories)
+//! Modules form a tree rooted at the package root. Each module can contain:
+//! - Child modules (subdirectories)
 //! - Items (functions, structs, type aliases, etc.)
 //! - Exports (publicly visible items)
 //!
@@ -105,10 +105,10 @@ impl Default for ModuleTree {
 }
 
 impl ModuleTree {
-    /// Create a new package tree with a root package (module root).
+    /// Create a new module tree with a root module (package root).
     pub fn new() -> Self {
         let mut interner = lasso::Rodeo::default();
-        // The root package represents the module (project) root
+        // The root module represents the package (project) root
         let root_name = interner.get_or_intern("module");
         let root = Module::new(ModuleId(0), root_name, None);
 
@@ -200,9 +200,9 @@ impl ModuleTree {
     /// Resolve a path with possible prefix (module, super, self).
     ///
     /// Returns the target package and whether resolution succeeded.
-    /// - `module` → jump to module root (project root)
-    /// - `super` → jump to parent package (error if at root)
-    /// - `self` → stay at current package
+    /// - `module` → jump to package root (project root)
+    /// - `super` → jump to parent module (error if at root)
+    /// - `self` → stay at current module
     pub fn resolve_path(
         &self,
         from: ModuleId,
@@ -228,7 +228,7 @@ impl ModuleTree {
         // Resolve remaining segments as child path
         let string_segments: Vec<&str> = rest.to_vec();
         self.resolve_child_path(start, &string_segments)
-            .ok_or(PathResolveError::PackageNotFound)
+            .ok_or(PathResolveError::ModuleNotFound)
     }
 
     /// Intern a string.
@@ -243,7 +243,7 @@ impl ModuleTree {
 
     /// Build a ModuleTree from a Package hierarchy.
     ///
-    /// Creates module nodes for each package. Items and exports are populated
+    /// Creates module nodes for each child module. Items and exports are populated
     /// later during resolution after DefIds are assigned.
     pub fn from_package_structure(package: &Package) -> Self {
         let mut tree = Self::new();
@@ -253,10 +253,10 @@ impl ModuleTree {
     }
 
     fn build_module_structure(tree: &mut ModuleTree, parent_id: ModuleId, package: &Package) {
-        // Recursively create child modules for subpackages
-        for subpkg in package.subpackages() {
-            let child_id = tree.add_child(parent_id, subpkg.name());
-            Self::build_module_structure(tree, child_id, subpkg);
+        // Recursively create child modules for child modules
+        for child_mod in package.modules() {
+            let child_id = tree.add_child(parent_id, child_mod.name());
+            Self::build_module_structure(tree, child_id, child_mod);
         }
     }
 }
@@ -264,10 +264,10 @@ impl ModuleTree {
 /// Errors that can occur during path resolution.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PathResolveError {
-    /// Cannot use `super` at the module root.
+    /// Cannot use `super` at the package root.
     SuperAtRoot,
-    /// Package not found in path.
-    PackageNotFound,
+    /// Module not found in path.
+    ModuleNotFound,
 }
 
 #[cfg(test)]
@@ -452,6 +452,6 @@ mod tests {
 
         // Trying to access non-existent child should fail
         let result = tree.resolve_path(tree.root_id(), &["nonexistent"]);
-        assert_eq!(result, Err(PathResolveError::PackageNotFound));
+        assert_eq!(result, Err(PathResolveError::ModuleNotFound));
     }
 }

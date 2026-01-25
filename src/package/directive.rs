@@ -1,10 +1,10 @@
-//! Parsing of `_package.spl` directives.
+//! Parsing of `_module.spl` directives.
 //!
-//! Package configuration is specified via inner attributes in a `_package.spl` file:
+//! Module configuration is specified via inner attributes in a `_module.spl` file:
 //!
 //! ```text
-//! // Package metadata
-//! #![name("my_package")]
+//! // Module metadata
+//! #![name("my_module")]
 //!
 //! // File inclusion directives
 //! #![no_auto_include]
@@ -13,12 +13,12 @@
 //! #![include_if(debug, "debug.spl")]
 //! #![exclude_if(prod, "test_utils.spl")]
 //!
-//! // Subpackage inclusion directives
-//! #![no_auto_include_packages]
-//! #![include_package("utils")]
-//! #![exclude_package("benchmarks")]
-//! #![include_package_if(debug, "debug_tools")]
-//! #![exclude_package_if(prod, "dev_utils")]
+//! // Child module inclusion directives
+//! #![no_auto_include_modules]
+//! #![include_module("utils")]
+//! #![exclude_module("benchmarks")]
+//! #![include_module_if(debug, "debug_tools")]
+//! #![exclude_module_if(prod, "dev_utils")]
 //! ```
 
 use crate::ast::{InnerAttribute, SourceFile};
@@ -26,10 +26,10 @@ use crate::parser;
 use rowan::ast::AstNode;
 use std::fmt;
 
-/// Errors that can occur when parsing package directives.
+/// Errors that can occur when parsing module directives.
 #[derive(Debug, Clone)]
 pub enum DirectiveError {
-    /// Parse error in the _package.spl file.
+    /// Parse error in the _module.spl file.
     ParseError(String),
     /// Malformed directive (e.g., missing argument).
     MalformedDirective { directive: String, reason: String },
@@ -48,10 +48,10 @@ impl fmt::Display for DirectiveError {
 
 impl std::error::Error for DirectiveError {}
 
-/// Parsed package directives from a `_package.spl` file.
+/// Parsed module directives from a `_module.spl` file.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct PackageDirectives {
-    /// Package name override.
+    /// Module name override.
     pub name: Option<String>,
     /// If true, no files are auto-included; all must be explicitly listed.
     pub no_auto_include: bool,
@@ -64,17 +64,17 @@ pub struct PackageDirectives {
     /// Conditional excludes: (condition, file).
     pub conditional_excludes: Vec<(String, String)>,
 
-    // --- Subpackage directives ---
-    /// If true, no subpackages are auto-included; all must be explicitly listed.
-    pub no_auto_include_packages: bool,
-    /// Subpackages to explicitly include.
-    pub package_includes: Vec<String>,
-    /// Subpackages to exclude from auto-include.
-    pub package_excludes: Vec<String>,
-    /// Conditional subpackage includes: (condition, package).
-    pub conditional_package_includes: Vec<(String, String)>,
-    /// Conditional subpackage excludes: (condition, package).
-    pub conditional_package_excludes: Vec<(String, String)>,
+    // --- Child module directives ---
+    /// If true, no child modules are auto-included; all must be explicitly listed.
+    pub no_auto_include_modules: bool,
+    /// Child modules to explicitly include.
+    pub module_includes: Vec<String>,
+    /// Child modules to exclude from auto-include.
+    pub module_excludes: Vec<String>,
+    /// Conditional child module includes: (condition, module).
+    pub conditional_module_includes: Vec<(String, String)>,
+    /// Conditional child module excludes: (condition, module).
+    pub conditional_module_excludes: Vec<(String, String)>,
 }
 
 /// Parse package directives from source text.
@@ -139,29 +139,29 @@ fn process_attribute(
             directives.conditional_excludes.push((condition, file));
         }
 
-        // Subpackage directives
-        "no_auto_include_packages" => {
-            directives.no_auto_include_packages = true;
+        // Child module directives
+        "no_auto_include_modules" => {
+            directives.no_auto_include_modules = true;
         }
-        "include_package" => {
-            let value = get_single_string_arg(attr, "include_package")?;
-            directives.package_includes.push(value);
+        "include_module" => {
+            let value = get_single_string_arg(attr, "include_module")?;
+            directives.module_includes.push(value);
         }
-        "exclude_package" => {
-            let value = get_single_string_arg(attr, "exclude_package")?;
-            directives.package_excludes.push(value);
+        "exclude_module" => {
+            let value = get_single_string_arg(attr, "exclude_module")?;
+            directives.module_excludes.push(value);
         }
-        "include_package_if" => {
-            let (condition, pkg) = get_conditional_args(attr, "include_package_if")?;
+        "include_module_if" => {
+            let (condition, mod_name) = get_conditional_args(attr, "include_module_if")?;
             directives
-                .conditional_package_includes
-                .push((condition, pkg));
+                .conditional_module_includes
+                .push((condition, mod_name));
         }
-        "exclude_package_if" => {
-            let (condition, pkg) = get_conditional_args(attr, "exclude_package_if")?;
+        "exclude_module_if" => {
+            let (condition, mod_name) = get_conditional_args(attr, "exclude_module_if")?;
             directives
-                .conditional_package_excludes
-                .push((condition, pkg));
+                .conditional_module_excludes
+                .push((condition, mod_name));
         }
 
         _ => {
@@ -410,84 +410,84 @@ mod tests {
         assert!(err.to_string().contains("missing arg"));
     }
 
-    // --- Subpackage directive tests ---
+    // --- Child module directive tests ---
 
     #[test]
-    fn parse_no_auto_include_packages_directive() {
-        let source = r#"#![no_auto_include_packages]"#;
+    fn parse_no_auto_include_modules_directive() {
+        let source = r#"#![no_auto_include_modules]"#;
         let directives = parse_package_directives(source).unwrap();
 
-        assert!(directives.no_auto_include_packages);
+        assert!(directives.no_auto_include_modules);
     }
 
     #[test]
-    fn parse_include_package_directive() {
-        let source = r#"#![include_package("child")]"#;
+    fn parse_include_module_directive() {
+        let source = r#"#![include_module("child")]"#;
         let directives = parse_package_directives(source).unwrap();
 
-        assert_eq!(directives.package_includes, vec!["child"]);
+        assert_eq!(directives.module_includes, vec!["child"]);
     }
 
     #[test]
-    fn parse_multiple_include_packages() {
+    fn parse_multiple_include_modules() {
         let source = r#"
-            #![include_package("utils")]
-            #![include_package("core")]
-            #![include_package("tests")]
+            #![include_module("utils")]
+            #![include_module("core")]
+            #![include_module("tests")]
         "#;
         let directives = parse_package_directives(source).unwrap();
 
-        assert_eq!(directives.package_includes, vec!["utils", "core", "tests"]);
+        assert_eq!(directives.module_includes, vec!["utils", "core", "tests"]);
     }
 
     #[test]
-    fn parse_exclude_package_directive() {
-        let source = r#"#![exclude_package("tests")]"#;
+    fn parse_exclude_module_directive() {
+        let source = r#"#![exclude_module("tests")]"#;
         let directives = parse_package_directives(source).unwrap();
 
-        assert_eq!(directives.package_excludes, vec!["tests"]);
+        assert_eq!(directives.module_excludes, vec!["tests"]);
     }
 
     #[test]
-    fn parse_include_package_if_directive() {
-        let source = r#"#![include_package_if(debug, "debug_tools")]"#;
+    fn parse_include_module_if_directive() {
+        let source = r#"#![include_module_if(debug, "debug_tools")]"#;
         let directives = parse_package_directives(source).unwrap();
 
         assert_eq!(
-            directives.conditional_package_includes,
+            directives.conditional_module_includes,
             vec![("debug".to_string(), "debug_tools".to_string())]
         );
     }
 
     #[test]
-    fn parse_exclude_package_if_directive() {
-        let source = r#"#![exclude_package_if(prod, "dev_utils")]"#;
+    fn parse_exclude_module_if_directive() {
+        let source = r#"#![exclude_module_if(prod, "dev_utils")]"#;
         let directives = parse_package_directives(source).unwrap();
 
         assert_eq!(
-            directives.conditional_package_excludes,
+            directives.conditional_module_excludes,
             vec![("prod".to_string(), "dev_utils".to_string())]
         );
     }
 
     #[test]
-    fn parse_combined_file_and_package_directives() {
+    fn parse_combined_file_and_module_directives() {
         let source = r#"
-            #![name("mypackage")]
+            #![name("mymodule")]
             #![include("main.spl")]
             #![exclude("test.spl")]
-            #![include_package("utils")]
-            #![exclude_package("benchmarks")]
-            #![no_auto_include_packages]
+            #![include_module("utils")]
+            #![exclude_module("benchmarks")]
+            #![no_auto_include_modules]
         "#;
         let directives = parse_package_directives(source).unwrap();
 
-        assert_eq!(directives.name, Some("mypackage".to_string()));
+        assert_eq!(directives.name, Some("mymodule".to_string()));
         assert_eq!(directives.includes, vec!["main.spl"]);
         assert_eq!(directives.excludes, vec!["test.spl"]);
-        assert_eq!(directives.package_includes, vec!["utils"]);
-        assert_eq!(directives.package_excludes, vec!["benchmarks"]);
-        assert!(directives.no_auto_include_packages);
+        assert_eq!(directives.module_includes, vec!["utils"]);
+        assert_eq!(directives.module_excludes, vec!["benchmarks"]);
+        assert!(directives.no_auto_include_modules);
     }
 
     // --- Empty string validation tests ---
@@ -538,14 +538,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_include_package_empty_string_errors() {
-        let source = r#"#![include_package("")]"#;
+    fn parse_include_module_empty_string_errors() {
+        let source = r#"#![include_module("")]"#;
         let result = parse_package_directives(source);
 
         assert!(result.is_err());
         match result.unwrap_err() {
             DirectiveError::MalformedDirective { directive, reason } => {
-                assert_eq!(directive, "include_package");
+                assert_eq!(directive, "include_module");
                 assert!(reason.contains("empty"));
             }
             e => panic!("expected MalformedDirective, got {:?}", e),
@@ -553,14 +553,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_exclude_package_empty_string_errors() {
-        let source = r#"#![exclude_package("")]"#;
+    fn parse_exclude_module_empty_string_errors() {
+        let source = r#"#![exclude_module("")]"#;
         let result = parse_package_directives(source);
 
         assert!(result.is_err());
         match result.unwrap_err() {
             DirectiveError::MalformedDirective { directive, reason } => {
-                assert_eq!(directive, "exclude_package");
+                assert_eq!(directive, "exclude_module");
                 assert!(reason.contains("empty"));
             }
             e => panic!("expected MalformedDirective, got {:?}", e),

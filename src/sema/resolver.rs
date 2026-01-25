@@ -363,8 +363,8 @@ impl<'ctx> Resolver<'ctx> {
             return;
         }
 
-        // For now, we handle same-package imports (single segment after prefix)
-        // Multi-segment paths (subpackage access) require package tree integration
+        // For now, we handle same-module imports (single segment after prefix)
+        // Multi-segment paths (child module access) require module tree integration
         if path.len() == 1 {
             let name = &path[0];
             let interned = self.ctx.intern(name);
@@ -379,8 +379,8 @@ impl<'ctx> Resolver<'ctx> {
                 );
             }
         } else {
-            // Multi-segment path: subpackage access like `utils.helper`
-            self.resolve_cross_package_import(import, &path);
+            // Multi-segment path: child module access like `utils.helper`
+            self.resolve_cross_module_import(import, &path);
         }
     }
 
@@ -398,15 +398,15 @@ impl<'ctx> Resolver<'ctx> {
                 (Some(path[1..].to_vec()), true)
             }
             "self" => {
-                // `self.` prefix: resolve from current package
+                // `self.` prefix: resolve from current module
                 // For single-file, this is the same as current scope
                 (Some(path[1..].to_vec()), true)
             }
             "super" => {
-                // `super.` prefix: resolve from parent package
+                // `super.` prefix: resolve from parent module
                 // At root, this is an error
                 self.diagnostics.push(
-                    Diagnostic::error("cannot use `super` at package root".to_string())
+                    Diagnostic::error("cannot use `super` at module root".to_string())
                         .with_label(span.clone(), "no parent package"),
                 );
                 (None, true)
@@ -470,7 +470,7 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     /// Resolve a cross-package import like `use utils.helper`.
-    fn resolve_cross_package_import(&mut self, import: &PendingImport, path: &[String]) {
+    fn resolve_cross_module_import(&mut self, import: &PendingImport, path: &[String]) {
         let Some(tree) = &self.ctx.module_tree else {
             // Single-file mode, no cross-package possible
             self.diagnostics.push(
@@ -501,10 +501,10 @@ impl<'ctx> Resolver<'ctx> {
                 );
                 return;
             }
-            Err(crate::sema::PathResolveError::PackageNotFound) => {
+            Err(crate::sema::PathResolveError::ModuleNotFound) => {
                 self.diagnostics.push(
-                    Diagnostic::error(format!("package `{}` not found", pkg_path.join(".")))
-                        .with_label(import.span.clone(), "unknown package"),
+                    Diagnostic::error(format!("module `{}` not found", pkg_path.join(".")))
+                        .with_label(import.span.clone(), "unknown module"),
                 );
                 return;
             }
@@ -599,14 +599,14 @@ impl<'ctx> Resolver<'ctx> {
             }
             Err(crate::sema::PathResolveError::SuperAtRoot) => {
                 self.diagnostics.push(
-                    Diagnostic::error("cannot use `super` at package root")
+                    Diagnostic::error("cannot use `super` at module root")
                         .with_label(import.span.clone(), "invalid super"),
                 );
             }
-            Err(crate::sema::PathResolveError::PackageNotFound) => {
+            Err(crate::sema::PathResolveError::ModuleNotFound) => {
                 self.diagnostics.push(
-                    Diagnostic::error(format!("package `{}` not found", path.join(".")))
-                        .with_label(import.span.clone(), "unknown package"),
+                    Diagnostic::error(format!("module `{}` not found", path.join(".")))
+                        .with_label(import.span.clone(), "unknown module"),
                 );
             }
         }
@@ -1627,20 +1627,20 @@ fn collect_all_items_through_resolver(
     // Populate module tree with items from this package
     populate_module_tree_from_scope(package, resolver, module_id);
 
-    // Recurse into subpackages
-    for subpkg in package.subpackages() {
+    // Recurse into child modules
+    for child_mod in package.modules() {
         let child_id = {
             let tree = resolver.ctx.module_tree.as_ref().unwrap();
             let module = tree.get(module_id);
-            let name_spur = tree.interner.get(subpkg.name());
+            let name_spur = tree.interner.get(child_mod.name());
             name_spur
                 .and_then(|spur| module.children().get(&spur).copied())
-                .expect("subpackage module should exist in tree")
+                .expect("child module should exist in tree")
         };
-        collect_all_items_through_resolver(subpkg, resolver, child_id, module_scopes);
+        collect_all_items_through_resolver(child_mod, resolver, child_id, module_scopes);
     }
 
-    // Exit this package's scope
+    // Exit this module's scope
     resolver.ctx.exit_scope();
 }
 
@@ -1745,17 +1745,17 @@ fn resolve_all_imports(
     // Resolve imports
     resolver.resolve_imports();
 
-    // Recurse into subpackages
-    for subpkg in package.subpackages() {
+    // Recurse into child modules
+    for child_mod in package.modules() {
         let child_id = {
             let tree = resolver.ctx.module_tree.as_ref().unwrap();
             let module = tree.get(module_id);
-            let name_spur = tree.interner.get(subpkg.name());
+            let name_spur = tree.interner.get(child_mod.name());
             name_spur
                 .and_then(|spur| module.children().get(&spur).copied())
-                .expect("subpackage module should exist in tree")
+                .expect("child module should exist in tree")
         };
-        resolve_all_imports(subpkg, resolver, child_id, module_scopes);
+        resolve_all_imports(child_mod, resolver, child_id, module_scopes);
     }
 }
 
@@ -1778,17 +1778,17 @@ fn resolve_all_bodies(
         resolver.resolve_source_file(&source_file);
     }
 
-    // Recurse into subpackages
-    for subpkg in package.subpackages() {
+    // Recurse into child modules
+    for child_mod in package.modules() {
         let child_id = {
             let tree = resolver.ctx.module_tree.as_ref().unwrap();
             let module = tree.get(module_id);
-            let name_spur = tree.interner.get(subpkg.name());
+            let name_spur = tree.interner.get(child_mod.name());
             name_spur
                 .and_then(|spur| module.children().get(&spur).copied())
-                .expect("subpackage module should exist in tree")
+                .expect("child module should exist in tree")
         };
-        resolve_all_bodies(subpkg, resolver, child_id, module_scopes);
+        resolve_all_bodies(child_mod, resolver, child_id, module_scopes);
     }
 }
 
@@ -2567,7 +2567,7 @@ mod tests {
     }
 
     #[test]
-    fn use_cross_package_requires_multifile() {
+    fn use_cross_module_requires_multifile() {
         check_err(
             "use utils.helper; fn main() {}",
             &["cross-package imports require multi-file compilation"],
@@ -2601,7 +2601,7 @@ mod tests {
         // `use super.foo` at root should error
         check_err(
             "fn foo() {} use super.foo; fn main() {}",
-            &["cannot use `super` at package root"],
+            &["cannot use `super` at module root"],
         );
     }
 
@@ -2654,7 +2654,7 @@ mod tests {
     // ===== Phase 4: Glob Import Tests =====
 
     #[test]
-    fn use_glob_cross_package_requires_multifile() {
+    fn use_glob_cross_module_requires_multifile() {
         check_err(
             "use utils.*; fn main() {}",
             &["cross-package glob imports require multi-file compilation"],
@@ -2804,7 +2804,7 @@ mod tests {
     }
 
     #[test]
-    fn use_grouped_cross_package_requires_multifile() {
+    fn use_grouped_cross_module_requires_multifile() {
         // When cross-package is implemented with a module tree, this should work
         // For now it should error with cross-package not implemented
         check_err(
@@ -3007,7 +3007,7 @@ mod tests {
 
         let mut tree = ModuleTree::new();
 
-        // Create a subpackage "utils"
+        // Create a child module "utils"
         let utils_id = tree.add_child(tree.root_id(), "utils");
 
         // We need to add items to the tree. Since DefIds come from the SemanticContext,
@@ -3051,7 +3051,7 @@ mod tests {
     }
 
     #[test]
-    fn cross_package_import_resolves_exported_item() {
+    fn cross_module_import_resolves_exported_item() {
         // Test that cross-package imports work when a ModuleTree is provided
         let ctx = create_context_with_module_tree();
 
@@ -3086,7 +3086,7 @@ mod tests {
     }
 
     #[test]
-    fn cross_package_import_private_item_error() {
+    fn cross_module_import_private_item_error() {
         // Test that importing a private item produces an error
         let ctx = create_context_with_module_tree();
 
@@ -3122,7 +3122,7 @@ mod tests {
     }
 
     #[test]
-    fn cross_package_import_missing_item_error() {
+    fn cross_module_import_missing_item_error() {
         // Test that importing a non-existent item produces an error
         let ctx = create_context_with_module_tree();
 
@@ -3158,7 +3158,7 @@ mod tests {
     }
 
     #[test]
-    fn cross_package_import_missing_package_error() {
+    fn cross_module_import_missing_package_error() {
         // Test that importing from a non-existent package produces an error
         let ctx = create_context_with_module_tree();
 
@@ -3194,7 +3194,7 @@ mod tests {
     }
 
     #[test]
-    fn cross_package_glob_imports_all_exports() {
+    fn cross_module_glob_imports_all_exports() {
         // Test that glob imports bring in all exported items
         let ctx = create_context_with_module_tree();
 
@@ -3233,7 +3233,7 @@ mod tests {
     }
 
     #[test]
-    fn cross_package_glob_skips_private() {
+    fn cross_module_glob_skips_private() {
         // Test that glob imports do NOT bring in private items
         let ctx = create_context_with_module_tree();
 

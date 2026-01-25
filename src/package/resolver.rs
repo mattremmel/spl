@@ -1,7 +1,7 @@
-//! File inclusion resolution based on package directives.
+//! File inclusion resolution based on module directives.
 //!
-//! Resolves which files should be included in a package based on:
-//! - Auto-include (default: all `.spl` files except `_package.spl`)
+//! Resolves which files should be included in a module based on:
+//! - Auto-include (default: all `.spl` files except `_module.spl`)
 //! - Explicit includes via `#![include("file")]`
 //! - Excludes via `#![exclude("file")]`
 //! - Conditional includes/excludes via `#![include_if(cond, "file")]`
@@ -15,15 +15,15 @@ use std::fmt;
 pub enum ResolveError {
     /// An explicitly included file was not found.
     FileNotFound(String),
-    /// An explicitly included package was not found.
-    PackageNotFound(String),
+    /// An explicitly included module was not found.
+    ModuleNotFound(String),
 }
 
 impl fmt::Display for ResolveError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ResolveError::FileNotFound(file) => write!(f, "file not found: {}", file),
-            ResolveError::PackageNotFound(pkg) => write!(f, "package not found: {}", pkg),
+            ResolveError::ModuleNotFound(mod_name) => write!(f, "module not found: {}", mod_name),
         }
     }
 }
@@ -91,10 +91,10 @@ pub fn resolve_includes<S1: AsRef<str>, S2: AsRef<str>>(
         // Start with empty set, add only explicit includes
         HashSet::new()
     } else {
-        // Start with all files except _package.spl
+        // Start with all files except _module.spl
         available_set
             .iter()
-            .filter(|&&f| f != "_package.spl")
+            .filter(|&&f| f != "_module.spl")
             .copied()
             .collect::<HashSet<&str>>()
     };
@@ -166,21 +166,21 @@ pub fn try_resolve_includes<S1: AsRef<str>, S2: AsRef<str>>(
     Ok(resolve_includes(available, directives, enabled_conditions))
 }
 
-/// Resolve which subpackages to include based on directives.
+/// Resolve which child modules to include based on directives.
 ///
-/// This is a non-failing version that ignores missing packages.
-/// Use [`try_resolve_packages`] for strict validation.
+/// This is a non-failing version that ignores missing modules.
+/// Use [`try_resolve_modules`] for strict validation.
 ///
 /// # Arguments
 ///
-/// * `available` - List of available subpackage names (directory names)
-/// * `directives` - Parsed package directives
+/// * `available` - List of available child module names (directory names)
+/// * `directives` - Parsed module directives
 /// * `enabled_conditions` - List of enabled condition names (e.g., "debug", "test")
 ///
 /// # Returns
 ///
-/// Sorted list of subpackage names to include.
-pub fn resolve_packages<S1: AsRef<str>, S2: AsRef<str>>(
+/// Sorted list of child module names to include.
+pub fn resolve_modules<S1: AsRef<str>, S2: AsRef<str>>(
     available: &[S1],
     directives: &PackageDirectives,
     enabled_conditions: &[S2],
@@ -188,37 +188,37 @@ pub fn resolve_packages<S1: AsRef<str>, S2: AsRef<str>>(
     let available_set: HashSet<&str> = available.iter().map(|s| s.as_ref()).collect();
     let enabled_set: HashSet<&str> = enabled_conditions.iter().map(|s| s.as_ref()).collect();
 
-    let mut result = if directives.no_auto_include_packages {
+    let mut result = if directives.no_auto_include_modules {
         // Start with empty set, add only explicit includes
         HashSet::new()
     } else {
-        // Start with all available subpackages
+        // Start with all available child modules
         available_set.iter().copied().collect::<HashSet<&str>>()
     };
 
-    // Add explicit package includes
-    for inc in &directives.package_includes {
+    // Add explicit module includes
+    for inc in &directives.module_includes {
         if available_set.contains(inc.as_str()) {
             result.insert(inc.as_str());
         }
     }
 
-    // Add conditional package includes if condition is enabled
-    for (condition, pkg) in &directives.conditional_package_includes {
-        if enabled_set.contains(condition.as_str()) && available_set.contains(pkg.as_str()) {
-            result.insert(pkg.as_str());
+    // Add conditional module includes if condition is enabled
+    for (condition, mod_name) in &directives.conditional_module_includes {
+        if enabled_set.contains(condition.as_str()) && available_set.contains(mod_name.as_str()) {
+            result.insert(mod_name.as_str());
         }
     }
 
-    // Remove package excludes
-    for exc in &directives.package_excludes {
+    // Remove module excludes
+    for exc in &directives.module_excludes {
         result.remove(exc.as_str());
     }
 
-    // Remove conditional package excludes if condition is enabled
-    for (condition, pkg) in &directives.conditional_package_excludes {
+    // Remove conditional module excludes if condition is enabled
+    for (condition, mod_name) in &directives.conditional_module_excludes {
         if enabled_set.contains(condition.as_str()) {
-            result.remove(pkg.as_str());
+            result.remove(mod_name.as_str());
         }
     }
 
@@ -228,20 +228,20 @@ pub fn resolve_packages<S1: AsRef<str>, S2: AsRef<str>>(
     sorted
 }
 
-/// Resolve packages with strict validation.
+/// Resolve modules with strict validation.
 ///
-/// Returns an error if any explicitly included package is not found.
+/// Returns an error if any explicitly included module is not found.
 ///
 /// # Arguments
 ///
-/// * `available` - List of available subpackage names
-/// * `directives` - Parsed package directives
+/// * `available` - List of available child module names
+/// * `directives` - Parsed module directives
 /// * `enabled_conditions` - List of enabled condition names
 ///
 /// # Errors
 ///
-/// Returns `ResolveError::PackageNotFound` if an explicit include references a missing package.
-pub fn try_resolve_packages<S1: AsRef<str>, S2: AsRef<str>>(
+/// Returns `ResolveError::ModuleNotFound` if an explicit include references a missing module.
+pub fn try_resolve_modules<S1: AsRef<str>, S2: AsRef<str>>(
     available: &[S1],
     directives: &PackageDirectives,
     enabled_conditions: &[S2],
@@ -249,18 +249,18 @@ pub fn try_resolve_packages<S1: AsRef<str>, S2: AsRef<str>>(
     let available_set: HashSet<&str> = available.iter().map(|s| s.as_ref()).collect();
     let enabled_set: HashSet<&str> = enabled_conditions.iter().map(|s| s.as_ref()).collect();
 
-    validate_explicit_includes(&directives.package_includes, &available_set, |p| {
-        ResolveError::PackageNotFound(p.clone())
+    validate_explicit_includes(&directives.module_includes, &available_set, |m| {
+        ResolveError::ModuleNotFound(m.clone())
     })?;
 
     validate_conditional_includes(
-        &directives.conditional_package_includes,
+        &directives.conditional_module_includes,
         &available_set,
         &enabled_set,
-        |p| ResolveError::PackageNotFound(p.clone()),
+        |m| ResolveError::ModuleNotFound(m.clone()),
     )?;
 
-    Ok(resolve_packages(available, directives, enabled_conditions))
+    Ok(resolve_modules(available, directives, enabled_conditions))
 }
 
 #[cfg(test)]
@@ -278,14 +278,14 @@ mod tests {
     }
 
     #[test]
-    fn default_mode_excludes_package_spl() {
-        let available = vec!["main.spl", "_package.spl"];
+    fn default_mode_excludes_module_spl() {
+        let available = vec!["main.spl", "_module.spl"];
         let directives = PackageDirectives::default();
 
         let result = resolve_includes(&available, &directives, &[] as &[&str]);
 
         assert_eq!(result, vec!["main.spl"]);
-        assert!(!result.contains(&"_package.spl".to_string()));
+        assert!(!result.contains(&"_module.spl".to_string()));
     }
 
     #[test]
@@ -436,161 +436,161 @@ mod tests {
         assert!(err.to_string().contains("test.spl"));
         assert!(err.to_string().contains("not found"));
 
-        let err = ResolveError::PackageNotFound("missing".to_string());
+        let err = ResolveError::ModuleNotFound("missing".to_string());
         assert!(err.to_string().contains("missing"));
-        assert!(err.to_string().contains("package not found"));
+        assert!(err.to_string().contains("module not found"));
     }
 
-    // --- Package resolution tests ---
+    // --- Module resolution tests ---
 
     #[test]
-    fn default_mode_includes_all_packages() {
+    fn default_mode_includes_all_modules() {
         let available = vec!["utils", "core", "tests"];
         let directives = PackageDirectives::default();
 
-        let result = resolve_packages(&available, &directives, &[] as &[&str]);
+        let result = resolve_modules(&available, &directives, &[] as &[&str]);
 
         assert_eq!(result, vec!["core", "tests", "utils"]);
     }
 
     #[test]
-    fn no_auto_include_packages_requires_explicit() {
+    fn no_auto_include_modules_requires_explicit() {
         let available = vec!["utils", "core", "tests"];
         let directives = PackageDirectives {
-            no_auto_include_packages: true,
-            package_includes: vec!["core".to_string()],
+            no_auto_include_modules: true,
+            module_includes: vec!["core".to_string()],
             ..Default::default()
         };
 
-        let result = resolve_packages(&available, &directives, &[] as &[&str]);
+        let result = resolve_modules(&available, &directives, &[] as &[&str]);
 
         assert_eq!(result, vec!["core"]);
     }
 
     #[test]
-    fn exclude_package_removes_from_auto_include() {
+    fn exclude_module_removes_from_auto_include() {
         let available = vec!["utils", "core", "tests"];
         let directives = PackageDirectives {
-            package_excludes: vec!["tests".to_string()],
+            module_excludes: vec!["tests".to_string()],
             ..Default::default()
         };
 
-        let result = resolve_packages(&available, &directives, &[] as &[&str]);
+        let result = resolve_modules(&available, &directives, &[] as &[&str]);
 
         assert_eq!(result, vec!["core", "utils"]);
         assert!(!result.contains(&"tests".to_string()));
     }
 
     #[test]
-    fn include_package_if_enabled_condition() {
+    fn include_module_if_enabled_condition() {
         let available = vec!["core", "debug_tools"];
         let directives = PackageDirectives {
-            no_auto_include_packages: true,
-            package_includes: vec!["core".to_string()],
-            conditional_package_includes: vec![("debug".to_string(), "debug_tools".to_string())],
+            no_auto_include_modules: true,
+            module_includes: vec!["core".to_string()],
+            conditional_module_includes: vec![("debug".to_string(), "debug_tools".to_string())],
             ..Default::default()
         };
 
-        let result = resolve_packages(&available, &directives, &["debug"]);
+        let result = resolve_modules(&available, &directives, &["debug"]);
 
         assert_eq!(result, vec!["core", "debug_tools"]);
     }
 
     #[test]
-    fn include_package_if_disabled_condition() {
+    fn include_module_if_disabled_condition() {
         let available = vec!["core", "debug_tools"];
         let directives = PackageDirectives {
-            no_auto_include_packages: true,
-            package_includes: vec!["core".to_string()],
-            conditional_package_includes: vec![("debug".to_string(), "debug_tools".to_string())],
+            no_auto_include_modules: true,
+            module_includes: vec!["core".to_string()],
+            conditional_module_includes: vec![("debug".to_string(), "debug_tools".to_string())],
             ..Default::default()
         };
 
         // Condition not enabled
-        let result = resolve_packages(&available, &directives, &[] as &[&str]);
+        let result = resolve_modules(&available, &directives, &[] as &[&str]);
 
         assert_eq!(result, vec!["core"]);
         assert!(!result.contains(&"debug_tools".to_string()));
     }
 
     #[test]
-    fn exclude_package_if_enabled_condition() {
+    fn exclude_module_if_enabled_condition() {
         let available = vec!["core", "tests"];
         let directives = PackageDirectives {
-            conditional_package_excludes: vec![("release".to_string(), "tests".to_string())],
+            conditional_module_excludes: vec![("release".to_string(), "tests".to_string())],
             ..Default::default()
         };
 
-        let result = resolve_packages(&available, &directives, &["release"]);
+        let result = resolve_modules(&available, &directives, &["release"]);
 
         assert_eq!(result, vec!["core"]);
     }
 
     #[test]
-    fn exclude_package_if_disabled_keeps_package() {
+    fn exclude_module_if_disabled_keeps_module() {
         let available = vec!["core", "tests"];
         let directives = PackageDirectives {
-            conditional_package_excludes: vec![("release".to_string(), "tests".to_string())],
+            conditional_module_excludes: vec![("release".to_string(), "tests".to_string())],
             ..Default::default()
         };
 
         // release not enabled
-        let result = resolve_packages(&available, &directives, &[] as &[&str]);
+        let result = resolve_modules(&available, &directives, &[] as &[&str]);
 
         assert_eq!(result, vec!["core", "tests"]);
     }
 
     #[test]
-    fn include_package_missing_returns_error() {
+    fn include_module_missing_returns_error() {
         let available = vec!["core"];
         let directives = PackageDirectives {
-            package_includes: vec!["missing".to_string()],
+            module_includes: vec!["missing".to_string()],
             ..Default::default()
         };
 
-        let result = try_resolve_packages(&available, &directives, &[] as &[&str]);
+        let result = try_resolve_modules(&available, &directives, &[] as &[&str]);
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            ResolveError::PackageNotFound(p) => assert_eq!(p, "missing"),
-            e => panic!("expected PackageNotFound, got {:?}", e),
+            ResolveError::ModuleNotFound(m) => assert_eq!(m, "missing"),
+            e => panic!("expected ModuleNotFound, got {:?}", e),
         }
     }
 
     #[test]
-    fn conditional_include_package_missing_when_enabled_returns_error() {
+    fn conditional_include_module_missing_when_enabled_returns_error() {
         let available = vec!["core"];
         let directives = PackageDirectives {
-            conditional_package_includes: vec![("debug".to_string(), "missing".to_string())],
+            conditional_module_includes: vec![("debug".to_string(), "missing".to_string())],
             ..Default::default()
         };
 
-        let result = try_resolve_packages(&available, &directives, &["debug"]);
+        let result = try_resolve_modules(&available, &directives, &["debug"]);
 
         assert!(result.is_err());
     }
 
     #[test]
-    fn conditional_include_package_missing_when_disabled_ok() {
+    fn conditional_include_module_missing_when_disabled_ok() {
         let available = vec!["core"];
         let directives = PackageDirectives {
-            conditional_package_includes: vec![("debug".to_string(), "missing".to_string())],
+            conditional_module_includes: vec![("debug".to_string(), "missing".to_string())],
             ..Default::default()
         };
 
-        // debug not enabled, so missing package is ok
-        let result = try_resolve_packages(&available, &directives, &[] as &[&str]);
+        // debug not enabled, so missing module is ok
+        let result = try_resolve_modules(&available, &directives, &[] as &[&str]);
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), vec!["core"]);
     }
 
     #[test]
-    fn package_results_are_sorted() {
+    fn module_results_are_sorted() {
         let available = vec!["zebra", "alpha", "middle"];
         let directives = PackageDirectives::default();
 
-        let result = resolve_packages(&available, &directives, &[] as &[&str]);
+        let result = resolve_modules(&available, &directives, &[] as &[&str]);
 
         assert_eq!(result, vec!["alpha", "middle", "zebra"]);
     }
@@ -614,15 +614,15 @@ mod tests {
     }
 
     #[test]
-    fn include_and_exclude_same_package_exclude_wins() {
+    fn include_and_exclude_same_module_exclude_wins() {
         let available = vec!["core", "conflict"];
         let directives = PackageDirectives {
-            package_includes: vec!["conflict".to_string()],
-            package_excludes: vec!["conflict".to_string()],
+            module_includes: vec!["conflict".to_string()],
+            module_excludes: vec!["conflict".to_string()],
             ..Default::default()
         };
 
-        let result = resolve_packages(&available, &directives, &[] as &[&str]);
+        let result = resolve_modules(&available, &directives, &[] as &[&str]);
 
         // Exclude should win - conflict NOT included
         assert!(!result.contains(&"conflict".to_string()));

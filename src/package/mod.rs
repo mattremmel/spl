@@ -1,12 +1,12 @@
 //! Multi-file package loading for SPL.
 //!
 //! This module provides functionality for loading SPL packages from directories,
-//! supporting multiple source files, `_package.spl` configuration, and subpackages.
+//! supporting multiple source files, `_module.spl` configuration, and child modules.
 //!
 //! # Overview
 //!
 //! A package is a directory containing `.spl` source files. Packages can optionally
-//! have a `_package.spl` configuration file that controls how files are included.
+//! have a `_module.spl` configuration file that controls how files are included.
 //!
 //! # Basic Usage
 //!
@@ -30,9 +30,9 @@ pub use compilation_unit::CompilationUnit;
 pub use compile::compile_package;
 pub use directive::{DirectiveError, PackageDirectives, parse_package_directives};
 pub use resolver::{
-    ResolveError, resolve_includes, resolve_packages, try_resolve_includes, try_resolve_packages,
+    ResolveError, resolve_includes, resolve_modules, try_resolve_includes, try_resolve_modules,
 };
-pub use scanner::{ScanError, find_subpackages, has_package_config, scan_directory};
+pub use scanner::{ScanError, find_modules, has_module_config, scan_directory};
 pub use source_map::{FileId, SourceMap};
 
 use crate::ast::Item;
@@ -49,7 +49,7 @@ pub enum PackageError {
     NotADirectory(PathBuf),
     /// The directory contains no source files.
     NoSourceFiles(PathBuf),
-    /// Error parsing _package.spl directives.
+    /// Error parsing _module.spl directives.
     DirectiveError(DirectiveError),
     /// Parse errors in source files.
     ///
@@ -130,9 +130,9 @@ impl From<ScanError> for PackageError {
 /// but may require attention.
 #[derive(Debug, Clone)]
 pub enum PackageWarning {
-    /// A subpackage failed to load.
-    SubpackageLoadFailed {
-        /// Name of the failed subpackage.
+    /// A child module failed to load.
+    ModuleLoadFailed {
+        /// Name of the failed module.
         name: String,
         /// Error message describing the failure.
         error: String,
@@ -142,8 +142,8 @@ pub enum PackageWarning {
 impl fmt::Display for PackageWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PackageWarning::SubpackageLoadFailed { name, error } => {
-                write!(f, "failed to load subpackage '{}': {}", name, error)
+            PackageWarning::ModuleLoadFailed { name, error } => {
+                write!(f, "failed to load module '{}': {}", name, error)
             }
         }
     }
@@ -154,14 +154,14 @@ impl fmt::Display for PackageWarning {
 /// A package represents a directory of SPL source files that have been parsed
 /// and combined into a compilation unit.
 pub struct Package {
-    /// Package name (from _package.spl or derived from directory name).
+    /// Package name (from _module.spl or derived from directory name).
     name: String,
     /// Root directory of the package.
     root: PathBuf,
     /// The compilation unit containing all parsed files.
     compilation_unit: CompilationUnit,
-    /// Subpackages (subdirectories with .spl files).
-    subpackages: Vec<Package>,
+    /// Child modules (subdirectories with .spl files).
+    modules: Vec<Package>,
     /// Warnings encountered during loading.
     warnings: Vec<PackageWarning>,
 }
@@ -169,7 +169,7 @@ pub struct Package {
 impl Package {
     /// Load a package from a directory.
     ///
-    /// Scans the directory for `.spl` files, parses the optional `_package.spl`
+    /// Scans the directory for `.spl` files, parses the optional `_module.spl`
     /// configuration, and loads all source files.
     ///
     /// # Errors
@@ -177,7 +177,7 @@ impl Package {
     /// Returns an error if:
     /// - The path is not a directory
     /// - The directory contains no source files
-    /// - The `_package.spl` file has syntax errors
+    /// - The `_module.spl` file has syntax errors
     /// - Any source file has parse errors
     /// - An explicitly included file is not found
     pub fn load(path: impl AsRef<Path>) -> Result<Self, PackageError> {
@@ -186,7 +186,7 @@ impl Package {
 
     /// Load a package with enabled conditions.
     ///
-    /// Conditions are used for conditional includes/excludes in `_package.spl`:
+    /// Conditions are used for conditional includes/excludes in `_module.spl`:
     /// - `#![include_if(debug, "debug.spl")]` - include if "debug" condition is enabled
     /// - `#![exclude_if(release, "test.spl")]` - exclude if "release" condition is enabled
     pub fn load_with_conditions(
@@ -202,9 +202,9 @@ impl Package {
         // Scan directory for .spl files
         let all_files = scan_directory(&root)?;
 
-        // Parse _package.spl if it exists
-        let directives = if has_package_config(&root) {
-            let config_path = root.join("_package.spl");
+        // Parse _module.spl if it exists
+        let directives = if has_module_config(&root) {
+            let config_path = root.join("_module.spl");
             let config_content = fs::read_to_string(&config_path)?;
             parse_package_directives(&config_content)?
         } else {
@@ -279,11 +279,11 @@ impl Package {
             return Err(PackageError::ParseErrors { errors: all_errors });
         }
 
-        // Find and load subpackages
-        let subdirs = find_subpackages(&root)?;
+        // Find and load child modules
+        let subdirs = find_modules(&root)?;
 
-        // Get subpackage names and filter to those with .spl files
-        let available_packages: Vec<String> = subdirs
+        // Get module names and filter to those with .spl files
+        let available_modules: Vec<String> = subdirs
             .iter()
             .filter(|subdir| {
                 scan_directory(subdir)
@@ -295,20 +295,20 @@ impl Package {
             .map(String::from)
             .collect();
 
-        // Resolve which packages to include
-        let included_packages = try_resolve_packages(&available_packages, &directives, conditions)?;
+        // Resolve which modules to include
+        let included_modules = try_resolve_modules(&available_modules, &directives, conditions)?;
 
-        let mut subpackages = Vec::new();
+        let mut modules = Vec::new();
         let mut warnings = Vec::new();
 
-        for pkg_name in &included_packages {
-            let subdir = root.join(pkg_name);
-            // Attempt to load, but don't fail the parent if subpackage fails
+        for mod_name in &included_modules {
+            let subdir = root.join(mod_name);
+            // Attempt to load, but don't fail the parent if child module fails
             match Self::load_with_conditions(&subdir, conditions) {
-                Ok(subpkg) => subpackages.push(subpkg),
+                Ok(child_mod) => modules.push(child_mod),
                 Err(e) => {
-                    warnings.push(PackageWarning::SubpackageLoadFailed {
-                        name: pkg_name.clone(),
+                    warnings.push(PackageWarning::ModuleLoadFailed {
+                        name: mod_name.clone(),
                         error: e.to_string(),
                     });
                 }
@@ -319,7 +319,7 @@ impl Package {
             name,
             root,
             compilation_unit,
-            subpackages,
+            modules,
             warnings,
         })
     }
@@ -344,9 +344,9 @@ impl Package {
         self.compilation_unit.items()
     }
 
-    /// Returns an iterator over subpackages.
-    pub fn subpackages(&self) -> impl Iterator<Item = &Package> {
-        self.subpackages.iter()
+    /// Returns an iterator over child modules.
+    pub fn modules(&self) -> impl Iterator<Item = &Package> {
+        self.modules.iter()
     }
 
     /// Returns the number of source files in this package.
@@ -356,7 +356,7 @@ impl Package {
 
     /// Returns warnings encountered during loading.
     ///
-    /// Warnings indicate non-fatal issues such as subpackages that failed to load.
+    /// Warnings indicate non-fatal issues such as child modules that failed to load.
     pub fn warnings(&self) -> &[PackageWarning] {
         &self.warnings
     }
@@ -397,13 +397,13 @@ mod tests {
     }
 
     #[test]
-    fn package_discovers_subpackages() {
+    fn package_discovers_modules() {
         let path = test_packages_path("nested");
         let pkg = Package::load(&path).unwrap();
 
-        let subpackages: Vec<_> = pkg.subpackages().collect();
-        assert_eq!(subpackages.len(), 1);
-        assert_eq!(subpackages[0].name(), "child");
+        let modules: Vec<_> = pkg.modules().collect();
+        assert_eq!(modules.len(), 1);
+        assert_eq!(modules[0].name(), "child");
     }
 
     #[test]
@@ -474,35 +474,32 @@ mod tests {
     }
 
     #[test]
-    fn subpackage_respects_own_config() {
+    fn module_respects_own_config() {
         let path = test_packages_path("subpackage_with_config");
         let pkg = Package::load(&path).unwrap();
 
-        let child = pkg.subpackages().next().expect("expected a subpackage");
-        // Child has its own _package.spl with #![name("custom_child")]
+        let child = pkg.modules().next().expect("expected a child module");
+        // Child has its own _module.spl with #![name("custom_child")]
         assert_eq!(child.name(), "custom_child");
     }
 
     #[test]
-    fn deep_subpackage_nesting() {
+    fn deep_module_nesting() {
         let path = test_packages_path("deep_nesting");
         let pkg = Package::load(&path).unwrap();
 
-        let l1 = pkg
-            .subpackages()
-            .next()
-            .expect("expected level1 subpackage");
+        let l1 = pkg.modules().next().expect("expected level1 module");
         assert_eq!(l1.name(), "level1");
 
-        let l2 = l1.subpackages().next().expect("expected level2 subpackage");
+        let l2 = l1.modules().next().expect("expected level2 module");
         assert_eq!(l2.name(), "level2");
 
-        let l3 = l2.subpackages().next().expect("expected level3 subpackage");
+        let l3 = l2.modules().next().expect("expected level3 module");
         assert_eq!(l3.name(), "level3");
     }
 
     #[test]
-    fn subpackage_load_failure_produces_warning() {
+    fn module_load_failure_produces_warning() {
         let path = test_packages_path("subpackage_error");
         let pkg = Package::load(&path).unwrap();
 
@@ -510,15 +507,15 @@ mod tests {
         assert_eq!(pkg.name(), "subpackage_error");
         assert_eq!(pkg.file_count(), 1);
 
-        // No subpackages loaded (broken_child failed)
-        assert_eq!(pkg.subpackages().count(), 0);
+        // No child modules loaded (broken_child failed)
+        assert_eq!(pkg.modules().count(), 0);
 
         // But we should have a warning about the failure
         assert!(pkg.has_warnings());
         assert_eq!(pkg.warnings().len(), 1);
 
         match &pkg.warnings()[0] {
-            PackageWarning::SubpackageLoadFailed { name, error } => {
+            PackageWarning::ModuleLoadFailed { name, error } => {
                 assert_eq!(name, "broken_child");
                 // Error is from missing include file
                 assert!(error.contains("not found"));
@@ -528,7 +525,7 @@ mod tests {
 
     #[test]
     fn package_warning_display() {
-        let warning = PackageWarning::SubpackageLoadFailed {
+        let warning = PackageWarning::ModuleLoadFailed {
             name: "child".to_string(),
             error: "parse error".to_string(),
         };

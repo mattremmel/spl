@@ -1,2 +1,2 @@
 mode = "load-pass"
-expect_subpackages = 1
+expect_modules = 1

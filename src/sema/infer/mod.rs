@@ -197,7 +197,7 @@ pub fn infer(source_file: &SourceFile, resolve_result: &ResolveResult) -> InferR
 
 /// Run type inference on a multi-file package.
 ///
-/// Like `infer`, but processes all source files in the package and its subpackages
+/// Like `infer`, but processes all source files in the package and its modules
 /// using a shared type interner.
 ///
 /// Uses a two-phase approach:
@@ -239,8 +239,8 @@ fn collect_all_signatures(package: &crate::package::Package, engine: &mut InferE
         }
     }
 
-    // Recurse into subpackages
-    for subpkg in package.subpackages() {
+    // Recurse into modules
+    for subpkg in package.modules() {
         collect_all_signatures(subpkg, engine);
     }
 }
@@ -259,8 +259,8 @@ fn infer_all_bodies(package: &crate::package::Package, engine: &mut InferEngine)
         }
     }
 
-    // Recurse into subpackages
-    for subpkg in package.subpackages() {
+    // Recurse into modules
+    for subpkg in package.modules() {
         infer_all_bodies(subpkg, engine);
     }
 }

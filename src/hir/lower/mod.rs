@@ -90,7 +90,7 @@ pub fn lower_to_hir(source_file: &SourceFile, infer_result: &InferResult) -> Hir
 /// Lower a multi-file package to HIR.
 ///
 /// Like `lower_to_hir`, but processes all source files in the package and its
-/// subpackages.
+/// modules.
 pub fn lower_package_to_hir(
     package: &crate::package::Package,
     infer_result: &InferResult,
@@ -107,8 +107,8 @@ fn lower_package_files(package: &crate::package::Package, ctx: &mut LoweringCont
         ctx.lower_source_file(&source_file);
     }
 
-    // Recurse into subpackages
-    for subpkg in package.subpackages() {
+    // Recurse into modules
+    for subpkg in package.modules() {
         lower_package_files(subpkg, ctx);
     }
 }

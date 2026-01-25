@@ -27,7 +27,7 @@ fn has_errors(diagnostics: &[Diagnostic]) -> bool {
 /// Compile a package through the full pipeline.
 ///
 /// Runs resolution, type inference, HIR lowering, and MIR lowering
-/// across all files in the package and its subpackages.
+/// across all files in the package and its child modules.
 ///
 /// # Example
 ///
