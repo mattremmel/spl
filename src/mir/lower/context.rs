@@ -966,9 +966,8 @@ impl<'hir> MirLoweringContext<'hir> {
                 if let Some(&local) = self.local_map.get(def_id) {
                     Operand::Copy(Place::from_local(local))
                 } else {
-                    // Variable not found - return a zero constant as fallback
-                    let i32_ty = self.hir.types.i32();
-                    Operand::Constant(Constant::Int(0, i32_ty))
+                    // Variable not found - return a zeroed constant as fallback
+                    Operand::Constant(Constant::Zeroed(ty))
                 }
             }
             _ => {
