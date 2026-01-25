@@ -129,10 +129,7 @@ fn run_package_test(path: &Path) -> datatest_stable::Result<()> {
             let compile_result = spl::package::compile_package(&pkg);
 
             if compile_result.is_err() {
-                let errors: Vec<_> = compile_result
-                    .errors()
-                    .map(|d| d.message.clone())
-                    .collect();
+                let errors: Vec<_> = compile_result.errors().map(|d| d.message.clone()).collect();
                 return Err(format!(
                     "{}: compilation failed:\n{}",
                     path.display(),
@@ -161,10 +158,8 @@ fn run_package_test(path: &Path) -> datatest_stable::Result<()> {
                     .errors()
                     .any(|d| d.message.to_lowercase().contains(&pattern.to_lowercase()));
                 if !has_match {
-                    let errors: Vec<_> = compile_result
-                        .errors()
-                        .map(|d| d.message.clone())
-                        .collect();
+                    let errors: Vec<_> =
+                        compile_result.errors().map(|d| d.message.clone()).collect();
                     return Err(format!(
                         "{}: expected error containing '{}', got:\n{}",
                         path.display(),

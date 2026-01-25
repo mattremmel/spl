@@ -92,6 +92,9 @@ impl TypeMapper {
 
             // Error types should not reach codegen
             Type::Error => None,
+
+            // Module types are for namespace access, not runtime values
+            Type::Module(_) => None,
         }
     }
 

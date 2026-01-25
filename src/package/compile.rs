@@ -4,7 +4,7 @@
 //! HIR lowering, and MIR lowering.
 
 use super::Package;
-use crate::{hir, mir, sema, CompileResult, Diagnostic, Severity};
+use crate::{CompileResult, Diagnostic, Severity, hir, mir, sema};
 
 /// Maximum number of diagnostics to report before stopping.
 const MAX_DIAGNOSTICS: usize = 100;

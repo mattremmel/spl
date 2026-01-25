@@ -179,6 +179,10 @@ pub(super) struct InferEngine<'a> {
     /// Names of builtin methods (DefId → name).
     /// Used during method resolution since builtins aren't in the symbol table.
     pub(super) builtin_method_names: FxHashMap<DefId, String>,
+
+    /// Map from module DefId to its scope ID (for qualified module access).
+    /// Used to look up items within inline modules, e.g., `module.Item`.
+    pub(super) module_scopes: FxHashMap<DefId, crate::sema::ScopeId>,
 }
 
 impl<'a> InferEngine<'a> {
@@ -206,6 +210,7 @@ impl<'a> InferEngine<'a> {
             primitive_methods: FxHashMap::default(),
             intrinsic_methods: FxHashMap::default(),
             builtin_method_names: FxHashMap::default(),
+            module_scopes: resolve_result.module_scopes.clone(),
         };
         engine.register_builtin_primitive_methods();
         engine

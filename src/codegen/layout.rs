@@ -123,9 +123,11 @@ impl<'a> LayoutComputer<'a> {
             Type::StrRef => TypeLayout::new(self.pointer_size * 2, self.pointer_size),
 
             // These should not reach layout computation
-            Type::Infer(_, _) | Type::Param(_) | Type::SelfType | Type::Alias(_, _) => {
-                TypeLayout::zst()
-            }
+            Type::Infer(_, _)
+            | Type::Param(_)
+            | Type::SelfType
+            | Type::Alias(_, _)
+            | Type::Module(_) => TypeLayout::zst(),
 
             // Error type
             Type::Error => TypeLayout::zst(),

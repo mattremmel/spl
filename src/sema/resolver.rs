@@ -54,6 +54,8 @@ pub struct ResolveResult {
     pub resolutions: FxHashMap<Span, DefId>,
     /// Diagnostics produced during resolution.
     pub diagnostics: Vec<Diagnostic>,
+    /// Map from module DefId to its scope ID (for qualified module access).
+    pub module_scopes: FxHashMap<DefId, crate::sema::ScopeId>,
 }
 
 /// A pending import from a use declaration.
@@ -96,11 +98,15 @@ impl<'ctx> Resolver<'ctx> {
 
     /// Resolve names in a source file.
     ///
-    /// Returns the resolutions map and diagnostics.
+    /// Returns the resolutions map, diagnostics, and module scopes.
     pub fn resolve(
         mut self,
         source_file: &SourceFile,
-    ) -> (FxHashMap<Span, DefId>, Vec<Diagnostic>) {
+    ) -> (
+        FxHashMap<Span, DefId>,
+        Vec<Diagnostic>,
+        FxHashMap<DefId, crate::sema::ScopeId>,
+    ) {
         // Pass 1: Collect top-level definitions and use declarations
         self.collect_source_file(source_file);
 
@@ -119,7 +125,7 @@ impl<'ctx> Resolver<'ctx> {
             self.resolutions.len()
         );
 
-        (self.resolutions, self.diagnostics)
+        (self.resolutions, self.diagnostics, self.module_scopes)
     }
 
     // ===== Helper Methods =====
@@ -1521,12 +1527,13 @@ pub fn resolve(source_file: &SourceFile) -> ResolveResult {
     define_builtins(&mut ctx);
 
     let resolver = Resolver::new(&mut ctx);
-    let (resolutions, diagnostics) = resolver.resolve(source_file);
+    let (resolutions, diagnostics, module_scopes) = resolver.resolve(source_file);
 
     ResolveResult {
         ctx,
         resolutions,
         diagnostics,
+        module_scopes,
     }
 }
 
@@ -1556,7 +1563,7 @@ pub fn resolve_package(package: &Package) -> ResolveResult {
     define_builtins(&mut ctx);
 
     // Use a single Resolver for the entire package hierarchy
-    let (resolutions, diagnostics) = {
+    let (resolutions, diagnostics, inline_module_scopes) = {
         let mut resolver = Resolver::new(&mut ctx);
 
         // Map from ModuleId to ScopeId (populated during item collection)
@@ -1571,13 +1578,18 @@ pub fn resolve_package(package: &Package) -> ResolveResult {
         // Phase 3: Resolve bodies for all packages
         resolve_all_bodies(package, &mut resolver, root_id, &module_scopes);
 
-        (resolver.resolutions, resolver.diagnostics)
+        (
+            resolver.resolutions,
+            resolver.diagnostics,
+            resolver.module_scopes,
+        )
     };
 
     ResolveResult {
         ctx,
         resolutions,
         diagnostics,
+        module_scopes: inline_module_scopes,
     }
 }
 
@@ -3303,8 +3315,6 @@ mod tests {
     #[test]
     fn resolve_inline_module_with_impl() {
         // Module can contain impl blocks
-        check_ok(
-            "module m { pub struct S() impl S { pub fn new(): S { S() } } } fn main() {}",
-        );
+        check_ok("module m { pub struct S() impl S { pub fn new(): S { S() } } } fn main() {}");
     }
 }

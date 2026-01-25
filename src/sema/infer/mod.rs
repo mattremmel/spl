@@ -171,6 +171,10 @@ impl InferResult {
             Type::StrRef => "str".to_string(),
             Type::Error => "<error>".to_string(),
             Type::Alias(_, _) => "<alias>".to_string(),
+            Type::Module(def_id) => {
+                let symbol = ctx.get_symbol(*def_id);
+                format!("module {}", ctx.resolve(symbol.name))
+            }
             Type::Param(def_id) => {
                 let symbol = ctx.get_symbol(*def_id);
                 ctx.resolve(symbol.name).to_string()

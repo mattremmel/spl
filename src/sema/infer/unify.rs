@@ -146,10 +146,13 @@ impl<'a> InferEngine<'a> {
             Type::FnPtr { params, ret } => {
                 params.iter().any(|t| self.occurs_in(var, *t)) || self.occurs_in(var, *ret)
             }
-            // Primitives, error, str ref, params, self type don't contain type variables
-            Type::Primitive(_) | Type::Error | Type::StrRef | Type::Param(_) | Type::SelfType => {
-                false
-            }
+            // Primitives, error, str ref, params, self type, modules don't contain type variables
+            Type::Primitive(_)
+            | Type::Error
+            | Type::StrRef
+            | Type::Param(_)
+            | Type::SelfType
+            | Type::Module(_) => false,
         }
     }
 

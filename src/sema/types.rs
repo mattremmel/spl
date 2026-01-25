@@ -216,6 +216,10 @@ pub enum Type {
     /// Equivalent to Rust's `&str`. Points to UTF-8 data without owning it.
     StrRef,
 
+    /// A module namespace type for qualified access (e.g., `module.Item`).
+    /// Used when a path expression resolves to a module definition.
+    Module(DefId),
+
     /// An error type for error recovery during type checking.
     /// This type unifies with anything to prevent cascading errors.
     Error,
@@ -419,6 +423,11 @@ impl TypeInterner {
     /// Create a type parameter reference.
     pub fn mk_param(&mut self, def_id: DefId) -> TypeId {
         self.intern(Type::Param(def_id))
+    }
+
+    /// Create a module type for qualified access.
+    pub fn mk_module(&mut self, def_id: DefId) -> TypeId {
+        self.intern(Type::Module(def_id))
     }
 
     /// Intern a primitive type by kind.

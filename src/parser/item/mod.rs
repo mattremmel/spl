@@ -967,7 +967,10 @@ pub(crate) fn module_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
     while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
         if let Err(err) = item(p) {
             // Recover to next item in module
-            p.recover_with_error(err, &[SyntaxKind::FN_KW, SyntaxKind::PUB_KW, SyntaxKind::R_BRACE]);
+            p.recover_with_error(
+                err,
+                &[SyntaxKind::FN_KW, SyntaxKind::PUB_KW, SyntaxKind::R_BRACE],
+            );
         }
     }
 

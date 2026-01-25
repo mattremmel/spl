@@ -3912,5 +3912,86 @@ fn infer_inline_module_nested() {
     );
 }
 
-// Note: External module access (e.g., `module.Item`) requires additional implementation
-// in type inference to handle qualified paths. This is tracked for future work.
+// ===== Qualified Module Access Tests =====
+
+#[test]
+fn module_qualified_function_call() {
+    // Basic module.function() access
+    check(
+        r#"
+        module m { pub fn f(): i32 { 42 } }
+        fn main() { let x = m.f(); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn module_qualified_function_with_args() {
+    check(
+        r#"
+        module math { pub fn add(a: i32, b: i32): i32 { a + b } }
+        fn main() { let x = math.add(a: 1, b: 2); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn module_qualified_struct_construction() {
+    check(
+        r#"
+        module types { pub struct Point(pub x: i32, pub y: i32) }
+        fn main() { let p = types.Point(x: 1, y: 2); }
+        "#,
+        "Point",
+    );
+}
+
+#[test]
+fn module_nested_access() {
+    check(
+        r#"
+        module outer { pub module inner { pub fn deep(): i32 { 42 } } }
+        fn main() { let x = outer.inner.deep(); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn module_struct_method_chain() {
+    check(
+        r#"
+        module m {
+            pub struct S()
+            impl S { pub fn value(&self): i32 { 42 } }
+        }
+        fn main() { let x = m.S().value(); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn module_private_item_error() {
+    // Private functions in modules should not be accessible externally
+    check_err(
+        r#"
+        module m { fn private(): i32 { 42 } }
+        fn main() { m.private() }
+        "#,
+        &["private", "not accessible"],
+    );
+}
+
+#[test]
+fn module_item_not_found_error() {
+    check_err(
+        r#"
+        module m { pub fn a(): i32 { 1 } }
+        fn main() { m.nonexistent() }
+        "#,
+        &["cannot find"],
+    );
+}

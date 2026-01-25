@@ -150,7 +150,8 @@ impl<'a> InferEngine<'a> {
                         .iter()
                         .map(|&def_id| self.types.mk_param(def_id))
                         .collect();
-                    let struct_ty = struct_def_id.map(|id| self.types.mk_struct(id, type_args.clone()));
+                    let struct_ty =
+                        struct_def_id.map(|id| self.types.mk_struct(id, type_args.clone()));
                     self.current_self_type = struct_ty;
                     for inner_item in impl_block.items() {
                         if let Item::Function(func) = inner_item {

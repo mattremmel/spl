@@ -9,8 +9,8 @@ use crate::ast::{
 use crate::ast::{Block, LetStmt, LiteralExpr, Stmt};
 use crate::diagnostic::Diagnostic;
 use crate::hir::{LoweredExpr, lower::try_lower_expr};
-use crate::sema::SymbolKind;
 use crate::sema::types::{InferKind, Mutability, PrimitiveKind, Type, TypeId};
+use crate::sema::{SymbolKind, Visibility};
 use crate::syntax::SyntaxKind;
 use rowan::ast::AstNode;
 use rustc_hash::FxHashMap;
@@ -425,7 +425,33 @@ impl<'a> InferEngine<'a> {
             None => return self.types.error(),
         };
 
-        // Get the type of the first segment
+        // Check if this is a module - if so, return Type::Module
+        let symbol = self.resolve_ctx.get_symbol(def_id);
+        if symbol.kind == SymbolKind::Module {
+            let mut current_type = self.types.mk_module(def_id);
+
+            // If there's only one segment, we're done (just the module name)
+            if segments.len() == 1 {
+                return current_type;
+            }
+
+            // Multi-segment path through module: treat as field accesses
+            for segment in segments.iter().skip(1) {
+                let field_name = match segment.name() {
+                    Some(n) => match n.token() {
+                        Some(t) => t.text().to_string(),
+                        None => return self.types.error(),
+                    },
+                    None => return self.types.error(),
+                };
+
+                current_type = self.synth_field_access(current_type, &field_name, segment);
+            }
+
+            return current_type;
+        }
+
+        // Get the type of the first segment (for non-module paths)
         let mut current_type = if let Some(&type_id) = self.binding_types.get(&def_id) {
             type_id
         } else if let Some(sig) = self.fn_signatures.get(&def_id).cloned() {
@@ -485,6 +511,96 @@ impl<'a> InferEngine<'a> {
             }
             let inner_resolved = self.resolve_type(*inner);
             base_type_val = self.types.get(inner_resolved).clone();
+        }
+
+        // Handle module item access (e.g., module.Item)
+        if let Type::Module(module_def_id) = &base_type_val {
+            let module_def_id = *module_def_id;
+
+            // Look up the field name in the module's scope
+            if let Some(&scope_id) = self.module_scopes.get(&module_def_id) {
+                let Some(interned) = self.resolve_ctx.try_get_interned(field_name) else {
+                    // Name wasn't interned, so it definitely doesn't exist in the module
+                    let span = text_range_to_span(segment.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("cannot find `{}` in module", field_name))
+                            .with_label(span, "not found in module"),
+                    );
+                    return self.types.error();
+                };
+                if let Some(item_def_id) = self.resolve_ctx.lookup_in_scope(interned, scope_id) {
+                    let item_symbol = self.resolve_ctx.get_symbol(item_def_id);
+
+                    // Check visibility
+                    if item_symbol.visibility == Visibility::Private {
+                        let span = text_range_to_span(segment.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "`{}` is private and not accessible from this module",
+                                field_name
+                            ))
+                            .with_label(span, "private item, not accessible"),
+                        );
+                        return self.types.error();
+                    }
+
+                    // Store the resolution for this path segment
+                    let seg_span = text_range_to_span(segment.syntax().text_range());
+                    self.resolutions.insert(seg_span, item_def_id);
+
+                    // Determine what kind of item it is and return appropriate type
+                    match item_symbol.kind {
+                        SymbolKind::Module => {
+                            // Nested module access (outer.inner)
+                            return self.types.mk_module(item_def_id);
+                        }
+                        SymbolKind::Struct => {
+                            // Struct access for construction (types.Point)
+                            return self.types.mk_struct(item_def_id, vec![]);
+                        }
+                        SymbolKind::Function => {
+                            // Function reference - return function pointer type
+                            if let Some(sig) = self.fn_signatures.get(&item_def_id).cloned() {
+                                let (param_types, ret_ty) = self.instantiate_signature(&sig);
+                                return self.types.mk_fn_ptr(param_types, ret_ty);
+                            }
+                            return self.types.error();
+                        }
+                        SymbolKind::TypeAlias => {
+                            // Type alias - similar to struct
+                            return self.types.mk_alias(item_def_id, vec![]);
+                        }
+                        _ => {
+                            // Other kinds (Local, Param, Field, TypeParam) shouldn't be in module scope
+                            let span = text_range_to_span(segment.syntax().text_range());
+                            self.diagnostics.push(
+                                Diagnostic::error(format!(
+                                    "`{}` is not a valid item in module",
+                                    field_name
+                                ))
+                                .with_label(span, "unexpected item kind"),
+                            );
+                            return self.types.error();
+                        }
+                    }
+                }
+
+                // Item not found in module
+                let span = text_range_to_span(segment.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error(format!("cannot find `{}` in module", field_name))
+                        .with_label(span, "not found in module"),
+                );
+                return self.types.error();
+            }
+
+            // Module scope not found (shouldn't happen for valid modules)
+            let span = text_range_to_span(segment.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error("internal error: module scope not found")
+                    .with_label(span, "module scope missing"),
+            );
+            return self.types.error();
         }
 
         // Handle struct field access
@@ -835,6 +951,12 @@ impl<'a> InferEngine<'a> {
             return self.synth_instance_method_call(apply_expr, segments, binding_type);
         }
 
+        // Check if the first segment is a module (qualified function call like `module.func()`)
+        let first_symbol = self.resolve_ctx.get_symbol(first_def_id);
+        if first_symbol.kind == SymbolKind::Module {
+            return self.synth_module_qualified_call(apply_expr, segments, first_def_id);
+        }
+
         // Otherwise, try to resolve as a type (associated function call like `S.new()`)
         let struct_def_id = if self.struct_fields.contains_key(&first_def_id) {
             first_def_id
@@ -898,6 +1020,150 @@ impl<'a> InferEngine<'a> {
                 .with_label(method_span, "unknown method"),
         );
         self.types.error()
+    }
+
+    /// Handle module-qualified calls like `module.func()` or `outer.inner.func()`
+    fn synth_module_qualified_call(
+        &mut self,
+        apply_expr: &ApplyExpr,
+        segments: &[crate::ast::PathSegment],
+        initial_module_def_id: crate::sema::symbol::DefId,
+    ) -> TypeId {
+        // Navigate through nested modules until we reach the final item
+        let mut current_module_def_id = initial_module_def_id;
+
+        // Process all segments except the last (which is the function name)
+        for segment in segments.iter().take(segments.len() - 1).skip(1) {
+            let segment_name = match segment.name() {
+                Some(n) => match n.token() {
+                    Some(t) => t.text().to_string(),
+                    None => return self.types.error(),
+                },
+                None => return self.types.error(),
+            };
+
+            // Look up in the current module's scope
+            if let Some(&scope_id) = self.module_scopes.get(&current_module_def_id) {
+                let Some(interned) = self.resolve_ctx.try_get_interned(&segment_name) else {
+                    let span = text_range_to_span(segment.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("cannot find `{}` in module", segment_name))
+                            .with_label(span, "not found in module"),
+                    );
+                    return self.types.error();
+                };
+
+                if let Some(item_def_id) = self.resolve_ctx.lookup_in_scope(interned, scope_id) {
+                    let item_symbol = self.resolve_ctx.get_symbol(item_def_id);
+
+                    // Check visibility
+                    if item_symbol.visibility == Visibility::Private {
+                        let span = text_range_to_span(segment.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "`{}` is private and not accessible",
+                                segment_name
+                            ))
+                            .with_label(span, "private item, not accessible"),
+                        );
+                        return self.types.error();
+                    }
+
+                    // Must be a module for intermediate segments
+                    if item_symbol.kind != SymbolKind::Module {
+                        let span = text_range_to_span(segment.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(format!("`{}` is not a module", segment_name))
+                                .with_label(span, "expected module"),
+                        );
+                        return self.types.error();
+                    }
+
+                    current_module_def_id = item_def_id;
+                } else {
+                    let span = text_range_to_span(segment.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("cannot find `{}` in module", segment_name))
+                            .with_label(span, "not found in module"),
+                    );
+                    return self.types.error();
+                }
+            } else {
+                return self.types.error();
+            }
+        }
+
+        // Now handle the final segment (the function/struct being called)
+        let last_segment = &segments[segments.len() - 1];
+        let last_name = match last_segment.name() {
+            Some(n) => match n.token() {
+                Some(t) => t.text().to_string(),
+                None => return self.types.error(),
+            },
+            None => return self.types.error(),
+        };
+
+        // Look up the final item in the current module's scope
+        let Some(&scope_id) = self.module_scopes.get(&current_module_def_id) else {
+            return self.types.error();
+        };
+
+        let Some(interned) = self.resolve_ctx.try_get_interned(&last_name) else {
+            let span = text_range_to_span(last_segment.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error(format!("cannot find `{}` in module", last_name))
+                    .with_label(span, "not found in module"),
+            );
+            return self.types.error();
+        };
+
+        let Some(item_def_id) = self.resolve_ctx.lookup_in_scope(interned, scope_id) else {
+            let span = text_range_to_span(last_segment.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error(format!("cannot find `{}` in module", last_name))
+                    .with_label(span, "not found in module"),
+            );
+            return self.types.error();
+        };
+
+        let item_symbol = self.resolve_ctx.get_symbol(item_def_id);
+
+        // Check visibility
+        if item_symbol.visibility == Visibility::Private {
+            let span = text_range_to_span(last_segment.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error(format!("`{}` is private and not accessible", last_name))
+                    .with_label(span, "private item, not accessible"),
+            );
+            return self.types.error();
+        }
+
+        // Handle based on item kind
+        match item_symbol.kind {
+            SymbolKind::Function => {
+                // It's a function - call it
+                if let Some(sig) = self.fn_signatures.get(&item_def_id).cloned() {
+                    // Store resolution for HIR lowering
+                    let method_span = text_range_to_span(last_segment.syntax().text_range());
+                    self.method_resolutions.insert(method_span, item_def_id);
+
+                    return self.synth_apply_as_call(apply_expr, &sig);
+                }
+                self.types.error()
+            }
+            SymbolKind::Struct => {
+                // It's a struct - instantiate it
+                self.synth_apply_as_struct(apply_expr, item_def_id)
+            }
+            _ => {
+                let span = text_range_to_span(last_segment.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error(format!("`{}` is not a function or struct", last_name))
+                        .with_label(span, "expected function or struct"),
+                );
+                self.types.error()
+            }
+        }
     }
 
     /// Handle instance method calls like `instance.method()`
@@ -1590,6 +1856,92 @@ impl<'a> InferEngine<'a> {
             return self.types.error();
         }
 
+        // Handle module item access (e.g., module.Struct)
+        if let Type::Module(module_def_id) = &base_type {
+            let module_def_id = *module_def_id;
+
+            // Look up the field name in the module's scope
+            if let Some(&scope_id) = self.module_scopes.get(&module_def_id) {
+                let Some(interned) = self.resolve_ctx.try_get_interned(&field_name) else {
+                    // Name wasn't interned, so it definitely doesn't exist in the module
+                    let span = text_range_to_span(field.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("cannot find `{}` in module", field_name))
+                            .with_label(span, "not found in module"),
+                    );
+                    return self.types.error();
+                };
+                if let Some(item_def_id) = self.resolve_ctx.lookup_in_scope(interned, scope_id) {
+                    let item_symbol = self.resolve_ctx.get_symbol(item_def_id);
+
+                    // Check visibility
+                    if item_symbol.visibility == Visibility::Private {
+                        let span = text_range_to_span(field.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "`{}` is private and not accessible from this module",
+                                field_name
+                            ))
+                            .with_label(span, "private item, not accessible"),
+                        );
+                        return self.types.error();
+                    }
+
+                    // Determine what kind of item it is and return appropriate type
+                    match item_symbol.kind {
+                        SymbolKind::Module => {
+                            // Nested module access (outer.inner)
+                            return self.types.mk_module(item_def_id);
+                        }
+                        SymbolKind::Struct => {
+                            // Struct access for construction (types.Point)
+                            return self.types.mk_struct(item_def_id, vec![]);
+                        }
+                        SymbolKind::Function => {
+                            // Function reference - return function pointer type
+                            if let Some(sig) = self.fn_signatures.get(&item_def_id).cloned() {
+                                let (param_types, ret_ty) = self.instantiate_signature(&sig);
+                                return self.types.mk_fn_ptr(param_types, ret_ty);
+                            }
+                            return self.types.error();
+                        }
+                        SymbolKind::TypeAlias => {
+                            // Type alias - similar to struct
+                            return self.types.mk_alias(item_def_id, vec![]);
+                        }
+                        _ => {
+                            // Other kinds shouldn't be in module scope
+                            let span = text_range_to_span(field.syntax().text_range());
+                            self.diagnostics.push(
+                                Diagnostic::error(format!(
+                                    "`{}` is not a valid item in module",
+                                    field_name
+                                ))
+                                .with_label(span, "unexpected item kind"),
+                            );
+                            return self.types.error();
+                        }
+                    }
+                }
+
+                // Item not found in module
+                let span = text_range_to_span(field.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error(format!("cannot find `{}` in module", field_name))
+                        .with_label(span, "not found in module"),
+                );
+                return self.types.error();
+            }
+
+            // Module scope not found (shouldn't happen for valid modules)
+            let span = text_range_to_span(field.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error("internal error: module scope not found")
+                    .with_label(span, "module scope missing"),
+            );
+            return self.types.error();
+        }
+
         // Handle struct field access
         if let Type::Struct(def_id, type_args) = &base_type {
             let def_id = *def_id;
@@ -1698,6 +2050,110 @@ impl<'a> InferEngine<'a> {
             self.diagnostics.push(
                 Diagnostic::error(format!("method `{}` not found on type `str`", method_name))
                     .with_label(span, "unknown method"),
+            );
+            return self.types.error();
+        }
+
+        // Handle module function call (e.g., math.add(1, 2))
+        if let Type::Module(module_def_id) = &receiver_type {
+            let module_def_id = *module_def_id;
+
+            // Look up the method name in the module's scope
+            if let Some(&scope_id) = self.module_scopes.get(&module_def_id) {
+                let Some(interned) = self.resolve_ctx.try_get_interned(&method_name) else {
+                    // Name wasn't interned, so it definitely doesn't exist in the module
+                    let span = text_range_to_span(method.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(format!(
+                            "cannot find function `{}` in module",
+                            method_name
+                        ))
+                        .with_label(span, "not found in module"),
+                    );
+                    return self.types.error();
+                };
+
+                if let Some(fn_def_id) = self.resolve_ctx.lookup_in_scope(interned, scope_id) {
+                    let fn_symbol = self.resolve_ctx.get_symbol(fn_def_id);
+
+                    // Check visibility
+                    if fn_symbol.visibility == Visibility::Private {
+                        let span = text_range_to_span(method.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "`{}` is private and not accessible from this module",
+                                method_name
+                            ))
+                            .with_label(span, "private item, not accessible"),
+                        );
+                        return self.types.error();
+                    }
+
+                    // Must be a function
+                    if fn_symbol.kind != SymbolKind::Function {
+                        let span = text_range_to_span(method.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(format!("`{}` is not a function", method_name))
+                                .with_label(span, "expected a function"),
+                        );
+                        return self.types.error();
+                    }
+
+                    // Look up signature and check args
+                    if let Some(sig) = self.fn_signatures.get(&fn_def_id).cloned() {
+                        // Store the resolution for HIR lowering
+                        let call_span = text_range_to_span(method.syntax().text_range());
+                        self.method_resolutions.insert(call_span, fn_def_id);
+
+                        // Instantiate the signature (handle generics)
+                        let (param_infos, ret_ty) = self.instantiate_signature(&sig);
+
+                        // Check argument count
+                        let args: Vec<_> = method
+                            .arg_list()
+                            .map(|a| a.args().collect())
+                            .unwrap_or_default();
+
+                        if args.len() != param_infos.len() {
+                            let span = text_range_to_span(method.syntax().text_range());
+                            self.diagnostics.push(
+                                Diagnostic::error(format!(
+                                    "expected {} argument{}, found {}",
+                                    param_infos.len(),
+                                    if param_infos.len() == 1 { "" } else { "s" },
+                                    args.len()
+                                ))
+                                .with_label(span, "wrong number of arguments"),
+                            );
+                            return self.types.error();
+                        }
+
+                        // Type check arguments
+                        for (arg, expected_ty) in args.iter().zip(param_infos.iter()) {
+                            self.check_expr(arg, *expected_ty);
+                        }
+
+                        return ret_ty;
+                    }
+
+                    // Signature not found (shouldn't happen for valid functions)
+                    return self.types.error();
+                }
+
+                // Function not found in module
+                let span = text_range_to_span(method.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error(format!("cannot find function `{}` in module", method_name))
+                        .with_label(span, "not found in module"),
+                );
+                return self.types.error();
+            }
+
+            // Module scope not found (shouldn't happen for valid modules)
+            let span = text_range_to_span(method.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error("internal error: module scope not found")
+                    .with_label(span, "module scope missing"),
             );
             return self.types.error();
         }
@@ -2344,6 +2800,10 @@ impl<'a> InferEngine<'a> {
                 self.resolve_ctx.resolve(symbol.name).to_string()
             }
             Type::SelfType => "Self".to_string(),
+            Type::Module(def_id) => {
+                let symbol = self.resolve_ctx.get_symbol(*def_id);
+                format!("module {}", self.resolve_ctx.resolve(symbol.name))
+            }
         }
     }
 

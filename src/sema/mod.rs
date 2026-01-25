@@ -174,6 +174,12 @@ impl SemanticContext {
         self.interner.get_or_intern(s)
     }
 
+    /// Try to get an interned string's Spur without inserting.
+    /// Returns None if the string has not been interned.
+    pub fn try_get_interned(&self, s: &str) -> Option<Spur> {
+        self.interner.get(s)
+    }
+
     /// Resolve an interned string back to its original value.
     pub fn resolve(&self, spur: Spur) -> &str {
         self.interner.resolve(&spur)

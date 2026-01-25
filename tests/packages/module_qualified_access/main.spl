@@ -1,0 +1,7 @@
+module utils {
+    pub fn helper(): i32 { 42 }
+}
+
+fn main(): i32 {
+    utils.helper()
+}
