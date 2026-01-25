@@ -51,7 +51,25 @@ impl AstPrinter {
             Item::TypeAlias(t) => self.print_type_alias(t),
             Item::Extern(e) => self.print_extern_block(e),
             Item::Use(u) => self.print_use_decl(u),
+            Item::Module(m) => self.print_module(m),
         }
+    }
+
+    fn print_module(&mut self, module: &crate::ast::ModuleDef) {
+        if module.visibility().is_some() {
+            self.output.push_str("pub ");
+        }
+        self.output.push_str("module ");
+        if let Some(name) = module.name()
+            && let Some(token) = name.ident_token()
+        {
+            self.output.push_str(token.text());
+        }
+        self.output.push_str(" {\n");
+        for item in module.items() {
+            self.print_item(&item);
+        }
+        self.output.push_str("}\n");
     }
 
     fn print_use_decl(&mut self, use_decl: &crate::ast::UseDecl) {

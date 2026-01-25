@@ -13,6 +13,7 @@ ast_node!(ExternFn);
 ast_node!(UseDecl);
 ast_node!(UseTree);
 ast_node!(UseTreeList);
+ast_node!(ModuleDef);
 ast_node!(ParamList);
 ast_node!(Param);
 ast_node!(SelfParam);
@@ -48,7 +49,7 @@ impl SourceFile {
 }
 
 ast_enum!(
-    /// Top-level item (function, struct, impl, type alias, extern block, use decl).
+    /// Top-level item (function, struct, impl, type alias, extern block, use decl, module).
     Item {
         Function(FunctionDef),
         Struct(StructDef),
@@ -56,6 +57,7 @@ ast_enum!(
         TypeAlias(TypeAlias),
         Extern(ExternBlock),
         Use(UseDecl),
+        Module(ModuleDef),
     }
 );
 
@@ -258,6 +260,29 @@ impl UseTree {
 impl UseTreeList {
     /// Get the use trees in this list.
     pub fn use_trees(&self) -> impl Iterator<Item = UseTree> {
+        children(&self.0)
+    }
+}
+
+impl ModuleDef {
+    /// Get outer attributes on this module.
+    pub fn attributes(&self) -> impl Iterator<Item = Attribute> {
+        children(&self.0)
+    }
+
+    pub fn visibility(&self) -> Option<Visibility> {
+        child(&self.0)
+    }
+
+    pub fn module_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::MODULE_KW)
+    }
+
+    pub fn name(&self) -> Option<Name> {
+        child(&self.0)
+    }
+
+    pub fn items(&self) -> impl Iterator<Item = Item> {
         children(&self.0)
     }
 }

@@ -100,6 +100,10 @@ impl<'a> InferEngine<'a> {
                 Item::Use(_) => {
                     // Use declarations are handled during import resolution (future)
                 }
+                Item::Module(module_def) => {
+                    // Collect signatures from items inside inline modules
+                    self.collect_module_signatures(module_def);
+                }
             }
         }
 
@@ -119,6 +123,100 @@ impl<'a> InferEngine<'a> {
                             self.infer_function(&func);
                         }
                     }
+                }
+                Item::Module(module_def) => {
+                    // Infer bodies for items inside inline modules
+                    self.infer_module_bodies(module_def);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Collect signatures from items inside an inline module.
+    pub(super) fn collect_module_signatures(&mut self, module_def: &crate::ast::ModuleDef) {
+        for item in module_def.items() {
+            match &item {
+                Item::Function(func) => self.collect_function_signature(func),
+                Item::Struct(struct_def) => self.collect_struct_info(struct_def),
+                Item::TypeAlias(type_alias) => self.collect_type_alias_info(type_alias),
+                Item::Impl(impl_block) => {
+                    let struct_def_id = self.get_impl_struct_def_id(impl_block);
+                    let mut impl_type_params = Vec::new();
+                    if let Some(where_clause) = impl_block.where_clause() {
+                        self.collect_type_params_from_where(&where_clause, &mut impl_type_params);
+                    }
+                    let type_args: Vec<TypeId> = impl_type_params
+                        .iter()
+                        .map(|&def_id| self.types.mk_param(def_id))
+                        .collect();
+                    let struct_ty = struct_def_id.map(|id| self.types.mk_struct(id, type_args.clone()));
+                    self.current_self_type = struct_ty;
+                    for inner_item in impl_block.items() {
+                        if let Item::Function(func) = inner_item {
+                            self.collect_function_signature(&func);
+                            if let Some(struct_id) = struct_def_id
+                                && let Some(method_def_id) = self.get_function_def_id(&func)
+                            {
+                                self.struct_methods
+                                    .entry(struct_id)
+                                    .or_default()
+                                    .push(method_def_id);
+                                if let Some(sig) = self.fn_signatures.get_mut(&method_def_id)
+                                    && let Some(ref mut sp) = sig.self_param
+                                    && let Some(sty) = struct_ty
+                                {
+                                    sp.self_ty = match sp.kind {
+                                        super::SelfParamKind::Ref => {
+                                            self.types.mk_ref(Mutability::Shared, sty)
+                                        }
+                                        super::SelfParamKind::RefMut => {
+                                            self.types.mk_ref(Mutability::Mutable, sty)
+                                        }
+                                        super::SelfParamKind::Owned => sty,
+                                    };
+                                }
+                                if let Some(sig) = self.fn_signatures.get_mut(&method_def_id) {
+                                    for &param_def_id in impl_type_params.iter().rev() {
+                                        if !sig.type_params.contains(&param_def_id) {
+                                            sig.type_params.insert(0, param_def_id);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    self.current_self_type = None;
+                }
+                Item::Extern(extern_block) => {
+                    for extern_fn in extern_block.extern_fns() {
+                        self.collect_extern_fn_signature(&extern_fn);
+                    }
+                }
+                Item::Module(nested) => {
+                    // Recursively collect from nested modules
+                    self.collect_module_signatures(nested);
+                }
+                Item::Use(_) => {}
+            }
+        }
+    }
+
+    /// Infer bodies for items inside an inline module.
+    fn infer_module_bodies(&mut self, module_def: &crate::ast::ModuleDef) {
+        for item in module_def.items() {
+            match &item {
+                Item::Function(func) => self.infer_function(func),
+                Item::Impl(impl_block) => {
+                    for inner_item in impl_block.items() {
+                        if let Item::Function(func) = inner_item {
+                            self.infer_function(&func);
+                        }
+                    }
+                }
+                Item::Module(nested) => {
+                    // Recursively infer nested modules
+                    self.infer_module_bodies(nested);
                 }
                 _ => {}
             }

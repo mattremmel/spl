@@ -64,6 +64,7 @@ pub enum SymbolKind {
     Struct,
     TypeAlias,
     Impl,
+    Module,
     Local,
     Parameter,
     Field,

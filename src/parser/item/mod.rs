@@ -87,6 +87,7 @@ fn is_item_start(kind: SyntaxKind) -> bool {
             | SyntaxKind::PUB_KW
             | SyntaxKind::USE_KW
             | SyntaxKind::EXTERN_KW
+            | SyntaxKind::MODULE_KW
     )
 }
 
@@ -934,13 +935,45 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser:
         Some(SyntaxKind::IMPL_KW) if !has_pub => impl_block(p),
         Some(SyntaxKind::EXTERN_KW) if !has_pub => extern_block(p),
         Some(SyntaxKind::USE_KW) => use_decl(p),
+        Some(SyntaxKind::MODULE_KW) => module_def(p),
         _ => {
             let err = p.error_at_current(
-                "expected item (fn, struct, type, impl, extern, or use)".to_string(),
+                "expected item (fn, struct, type, impl, extern, use, or module)".to_string(),
             );
             Err(err)
         }
     }
+}
+
+/// Parse a module definition: `[attrs] [pub] module name { items }`
+pub(crate) fn module_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+    let m = p.start();
+
+    // Optional attributes
+    opt_attributes(p);
+
+    // Optional visibility
+    opt_visibility(p);
+
+    // module keyword
+    p.expect(SyntaxKind::MODULE_KW)?;
+
+    // Module name
+    name(p)?;
+
+    // Items block
+    p.expect(SyntaxKind::L_BRACE)?;
+
+    while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
+        if let Err(err) = item(p) {
+            // Recover to next item in module
+            p.recover_with_error(err, &[SyntaxKind::FN_KW, SyntaxKind::PUB_KW, SyntaxKind::R_BRACE]);
+        }
+    }
+
+    p.expect(SyntaxKind::R_BRACE)?;
+
+    Ok(m.complete(p, SyntaxKind::ModuleDef))
 }
 
 /// Parse a source file (sequence of items).

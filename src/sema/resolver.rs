@@ -78,6 +78,8 @@ pub struct Resolver<'ctx> {
     diagnostics: Vec<Diagnostic>,
     /// Pending imports from use declarations.
     pending_imports: Vec<PendingImport>,
+    /// Map from module DefId to its scope ID (for re-entering during pass 2).
+    module_scopes: FxHashMap<DefId, crate::sema::ScopeId>,
 }
 
 impl<'ctx> Resolver<'ctx> {
@@ -88,6 +90,7 @@ impl<'ctx> Resolver<'ctx> {
             resolutions: FxHashMap::default(),
             diagnostics: Vec::new(),
             pending_imports: Vec::new(),
+            module_scopes: FxHashMap::default(),
         }
     }
 
@@ -237,6 +240,7 @@ impl<'ctx> Resolver<'ctx> {
             Item::Impl(impl_block) => self.collect_impl_block(impl_block),
             Item::Extern(extern_block) => self.collect_extern_block(extern_block),
             Item::Use(use_decl) => self.collect_use_decl(use_decl),
+            Item::Module(module_def) => self.collect_module_def(module_def),
         }
     }
 
@@ -672,6 +676,29 @@ impl<'ctx> Resolver<'ctx> {
         }
     }
 
+    fn collect_module_def(&mut self, module_def: &crate::ast::ModuleDef) {
+        let module_def_id = if let Some(name) = module_def.name() {
+            let vis = self.convert_visibility(&module_def.visibility());
+            self.define_name(&name, SymbolKind::Module, vis, false)
+        } else {
+            None
+        };
+
+        // Enter module scope and collect items inside the module
+        let scope_id = self.ctx.enter_scope(ScopeKind::Module);
+
+        // Store the scope ID so we can re-enter it during pass 2
+        if let Some(def_id) = module_def_id {
+            self.module_scopes.insert(def_id, scope_id);
+        }
+
+        for item in module_def.items() {
+            self.collect_item(&item);
+        }
+
+        self.ctx.exit_scope();
+    }
+
     // ===== Pass 2: Resolution =====
 
     fn resolve_source_file(&mut self, source_file: &SourceFile) {
@@ -690,6 +717,7 @@ impl<'ctx> Resolver<'ctx> {
             Item::Use(_) => {
                 // Use declarations are handled during import resolution (future)
             }
+            Item::Module(module_def) => self.resolve_module_def(module_def),
         }
     }
 
@@ -812,6 +840,33 @@ impl<'ctx> Resolver<'ctx> {
         }
 
         self.ctx.exit_scope();
+    }
+
+    fn resolve_module_def(&mut self, module_def: &crate::ast::ModuleDef) {
+        // Get the module's DefId to look up its scope
+        let module_def_id = module_def.name().and_then(|name| {
+            let token = Self::get_ident_token(&name)?;
+            let span = Self::text_range_to_span(token.text_range());
+            self.resolutions.get(&span).copied()
+        });
+
+        // Save current scope to restore after
+        let saved_scope = self.ctx.current_scope_id();
+
+        // Re-enter the module's scope from pass 1 (if we have it)
+        if let Some(def_id) = module_def_id
+            && let Some(&scope_id) = self.module_scopes.get(&def_id)
+        {
+            self.ctx.set_current_scope(scope_id);
+        }
+
+        // Resolve items inside the module
+        for item in module_def.items() {
+            self.resolve_item(&item);
+        }
+
+        // Restore the saved scope
+        self.ctx.set_current_scope(saved_scope);
     }
 
     fn define_where_clause(&mut self, where_clause: &WhereClause) {
@@ -1641,6 +1696,14 @@ fn get_item_name_and_visibility(item: &Item) -> Option<(String, bool)> {
             None
         }
         Item::Impl(_) | Item::Use(_) => None,
+        Item::Module(module_def) => {
+            let name = module_def.name()?;
+            let name_token = name.ident_token()?;
+            Some((
+                name_token.text().to_string(),
+                module_def.visibility().is_some(),
+            ))
+        }
     }
 }
 
@@ -3194,5 +3257,54 @@ mod tests {
                 "expected no errors for glob import"
             );
         }
+    }
+
+    // ===== Inline Module Tests =====
+
+    #[test]
+    fn resolve_inline_module_internal_access() {
+        // Items inside a module can access each other
+        check_ok("module m { fn a(): i32 { 1 } pub fn b(): i32 { a() } } fn main() {}");
+    }
+
+    #[test]
+    fn resolve_inline_module_parent_access() {
+        // Module can access parent scope items
+        check_ok("fn helper(): i32 { 1 } module m { pub fn f(): i32 { helper() } } fn main() {}");
+    }
+
+    #[test]
+    fn resolve_inline_module_shadowing() {
+        // Module item shadows parent item within the module
+        check_ok(
+            "fn x(): i32 { 1 } module m { fn x(): i32 { 2 } pub fn f(): i32 { x() } } fn main() {}",
+        );
+    }
+
+    #[test]
+    fn resolve_inline_module_duplicate_error() {
+        check_err("module foo {} module foo {}", &["defined multiple times"]);
+    }
+
+    #[test]
+    fn resolve_inline_module_nested() {
+        // Nested modules can access parent module items
+        check_ok(
+            "module outer { fn helper(): i32 { 1 } module inner { pub fn f(): i32 { helper() } } } fn main() {}",
+        );
+    }
+
+    #[test]
+    fn resolve_inline_module_with_struct() {
+        // Module can contain structs
+        check_ok("module types { pub struct Point(x: i32, y: i32) } fn main() {}");
+    }
+
+    #[test]
+    fn resolve_inline_module_with_impl() {
+        // Module can contain impl blocks
+        check_ok(
+            "module m { pub struct S() impl S { pub fn new(): S { S() } } } fn main() {}",
+        );
     }
 }

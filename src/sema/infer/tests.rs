@@ -3835,3 +3835,82 @@ fn self_type_inside_impl_ok() {
         "Foo",
     );
 }
+
+// ===== Inline Module Tests =====
+
+#[test]
+fn infer_inline_module_internal_function() {
+    // Functions inside a module can call each other and infer types correctly
+    check(
+        r#"
+        module m {
+            fn helper(): i32 { 42 }
+            pub fn f(): i32 { helper() }
+        }
+        fn main() {
+            let x = 1;
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn infer_inline_module_internal_struct() {
+    // Structs defined in modules can be used within the module
+    check(
+        r#"
+        module types {
+            pub struct Point(pub x: i32, pub y: i32)
+            pub fn origin(): Point { Point(x: 0, y: 0) }
+        }
+        fn main() {
+            let x = 1;
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn infer_inline_module_internal_method_call() {
+    // Methods on structs in modules work within the module
+    check(
+        r#"
+        module m {
+            pub struct S(pub value: i32)
+            impl S {
+                pub fn get(&self): i32 { self.value }
+            }
+            pub fn test(): i32 {
+                S(value: 42).get()
+            }
+        }
+        fn main() {
+            let x = 1;
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn infer_inline_module_nested() {
+    // Nested modules work correctly
+    check(
+        r#"
+        module outer {
+            pub module inner {
+                pub fn deep(): i32 { 42 }
+            }
+        }
+        fn main() {
+            let x = 1;
+        }
+        "#,
+        "i32",
+    );
+}
+
+// Note: External module access (e.g., `module.Item`) requires additional implementation
+// in type inference to handle qualified paths. This is tracked for future work.

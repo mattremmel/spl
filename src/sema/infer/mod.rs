@@ -229,6 +229,7 @@ fn collect_all_signatures(package: &crate::package::Package, engine: &mut InferE
                 Item::TypeAlias(type_alias) => engine.collect_type_alias_info(type_alias),
                 Item::Impl(impl_block) => engine.collect_impl_signatures(impl_block),
                 Item::Extern(extern_block) => engine.collect_extern_signatures(extern_block),
+                Item::Module(module_def) => engine.collect_module_signatures(module_def),
                 Item::Use(_) => {} // Skip use declarations
             }
         }

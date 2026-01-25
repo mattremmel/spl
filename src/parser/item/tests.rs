@@ -3226,3 +3226,256 @@ fn attribute_error_nested_unclosed() {
     // Should still parse something
     assert!(tree.contains("Attribute"));
 }
+
+// ===== Module Tests =====
+
+#[test]
+fn module_empty() {
+    check_item(
+        "module foo {}",
+        &expect![[r#"
+            ModuleDef@0..13
+              MODULE_KW@0..6 "module"
+              Name@6..10
+                WHITESPACE@6..7 " "
+                IDENT@7..10 "foo"
+              WHITESPACE@10..11 " "
+              L_BRACE@11..12 "{"
+              R_BRACE@12..13 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn module_with_function() {
+    check_item(
+        "module internal { fn helper(): i32 { 42 } }",
+        &expect![[r#"
+            ModuleDef@0..43
+              MODULE_KW@0..6 "module"
+              Name@6..15
+                WHITESPACE@6..7 " "
+                IDENT@7..15 "internal"
+              WHITESPACE@15..16 " "
+              L_BRACE@16..17 "{"
+              FunctionDef@17..41
+                WHITESPACE@17..18 " "
+                FN_KW@18..20 "fn"
+                Name@20..27
+                  WHITESPACE@20..21 " "
+                  IDENT@21..27 "helper"
+                ParamList@27..29
+                  L_PAREN@27..28 "("
+                  R_PAREN@28..29 ")"
+                COLON@29..30 ":"
+                PathType@30..34
+                  Path@30..34
+                    PathSegment@30..34
+                      NameRef@30..34
+                        WHITESPACE@30..31 " "
+                        IDENT@31..34 "i32"
+                Block@34..41
+                  WHITESPACE@34..35 " "
+                  L_BRACE@35..36 "{"
+                  LiteralExpr@36..39
+                    WHITESPACE@36..37 " "
+                    INT_LITERAL@37..39 "42"
+                  WHITESPACE@39..40 " "
+                  R_BRACE@40..41 "}"
+              WHITESPACE@41..42 " "
+              R_BRACE@42..43 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn module_pub() {
+    check_item(
+        "pub module api { pub fn endpoint() {} }",
+        &expect![[r#"
+            ModuleDef@0..39
+              Visibility@0..3
+                PUB_KW@0..3 "pub"
+              WHITESPACE@3..4 " "
+              MODULE_KW@4..10 "module"
+              Name@10..14
+                WHITESPACE@10..11 " "
+                IDENT@11..14 "api"
+              WHITESPACE@14..15 " "
+              L_BRACE@15..16 "{"
+              FunctionDef@16..37
+                Visibility@16..20
+                  WHITESPACE@16..17 " "
+                  PUB_KW@17..20 "pub"
+                WHITESPACE@20..21 " "
+                FN_KW@21..23 "fn"
+                Name@23..32
+                  WHITESPACE@23..24 " "
+                  IDENT@24..32 "endpoint"
+                ParamList@32..34
+                  L_PAREN@32..33 "("
+                  R_PAREN@33..34 ")"
+                Block@34..37
+                  WHITESPACE@34..35 " "
+                  L_BRACE@35..36 "{"
+                  R_BRACE@36..37 "}"
+              WHITESPACE@37..38 " "
+              R_BRACE@38..39 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn module_nested() {
+    check_item(
+        "module outer { module inner { fn deep() {} } }",
+        &expect![[r#"
+            ModuleDef@0..46
+              MODULE_KW@0..6 "module"
+              Name@6..12
+                WHITESPACE@6..7 " "
+                IDENT@7..12 "outer"
+              WHITESPACE@12..13 " "
+              L_BRACE@13..14 "{"
+              ModuleDef@14..44
+                WHITESPACE@14..15 " "
+                MODULE_KW@15..21 "module"
+                Name@21..27
+                  WHITESPACE@21..22 " "
+                  IDENT@22..27 "inner"
+                WHITESPACE@27..28 " "
+                L_BRACE@28..29 "{"
+                FunctionDef@29..42
+                  WHITESPACE@29..30 " "
+                  FN_KW@30..32 "fn"
+                  Name@32..37
+                    WHITESPACE@32..33 " "
+                    IDENT@33..37 "deep"
+                  ParamList@37..39
+                    L_PAREN@37..38 "("
+                    R_PAREN@38..39 ")"
+                  Block@39..42
+                    WHITESPACE@39..40 " "
+                    L_BRACE@40..41 "{"
+                    R_BRACE@41..42 "}"
+                WHITESPACE@42..43 " "
+                R_BRACE@43..44 "}"
+              WHITESPACE@44..45 " "
+              R_BRACE@45..46 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn module_with_struct() {
+    check_item(
+        "module types { pub struct Point(x: i32, y: i32) }",
+        &expect![[r#"
+            ModuleDef@0..49
+              MODULE_KW@0..6 "module"
+              Name@6..12
+                WHITESPACE@6..7 " "
+                IDENT@7..12 "types"
+              WHITESPACE@12..13 " "
+              L_BRACE@13..14 "{"
+              StructDef@14..47
+                Visibility@14..18
+                  WHITESPACE@14..15 " "
+                  PUB_KW@15..18 "pub"
+                WHITESPACE@18..19 " "
+                STRUCT_KW@19..25 "struct"
+                Name@25..31
+                  WHITESPACE@25..26 " "
+                  IDENT@26..31 "Point"
+                FieldList@31..47
+                  L_PAREN@31..32 "("
+                  FieldDef@32..38
+                    Name@32..33
+                      IDENT@32..33 "x"
+                    COLON@33..34 ":"
+                    PathType@34..38
+                      Path@34..38
+                        PathSegment@34..38
+                          NameRef@34..38
+                            WHITESPACE@34..35 " "
+                            IDENT@35..38 "i32"
+                  COMMA@38..39 ","
+                  FieldDef@39..46
+                    Name@39..41
+                      WHITESPACE@39..40 " "
+                      IDENT@40..41 "y"
+                    COLON@41..42 ":"
+                    PathType@42..46
+                      Path@42..46
+                        PathSegment@42..46
+                          NameRef@42..46
+                            WHITESPACE@42..43 " "
+                            IDENT@43..46 "i32"
+                  R_PAREN@46..47 ")"
+              WHITESPACE@47..48 " "
+              R_BRACE@48..49 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn module_mixed_items() {
+    check_item(
+        "module utils { fn private() {} pub fn public() {} type Alias = i32; }",
+        &expect![[r#"
+            ModuleDef@0..69
+              MODULE_KW@0..6 "module"
+              Name@6..12
+                WHITESPACE@6..7 " "
+                IDENT@7..12 "utils"
+              WHITESPACE@12..13 " "
+              L_BRACE@13..14 "{"
+              FunctionDef@14..30
+                WHITESPACE@14..15 " "
+                FN_KW@15..17 "fn"
+                Name@17..25
+                  WHITESPACE@17..18 " "
+                  IDENT@18..25 "private"
+                ParamList@25..27
+                  L_PAREN@25..26 "("
+                  R_PAREN@26..27 ")"
+                Block@27..30
+                  WHITESPACE@27..28 " "
+                  L_BRACE@28..29 "{"
+                  R_BRACE@29..30 "}"
+              FunctionDef@30..49
+                Visibility@30..34
+                  WHITESPACE@30..31 " "
+                  PUB_KW@31..34 "pub"
+                WHITESPACE@34..35 " "
+                FN_KW@35..37 "fn"
+                Name@37..44
+                  WHITESPACE@37..38 " "
+                  IDENT@38..44 "public"
+                ParamList@44..46
+                  L_PAREN@44..45 "("
+                  R_PAREN@45..46 ")"
+                Block@46..49
+                  WHITESPACE@46..47 " "
+                  L_BRACE@47..48 "{"
+                  R_BRACE@48..49 "}"
+              TypeAlias@49..67
+                WHITESPACE@49..50 " "
+                TYPE_KW@50..54 "type"
+                Name@54..60
+                  WHITESPACE@54..55 " "
+                  IDENT@55..60 "Alias"
+                WHITESPACE@60..61 " "
+                EQ@61..62 "="
+                PathType@62..66
+                  Path@62..66
+                    PathSegment@62..66
+                      NameRef@62..66
+                        WHITESPACE@62..63 " "
+                        IDENT@63..66 "i32"
+                SEMI@66..67 ";"
+              WHITESPACE@67..68 " "
+              R_BRACE@68..69 "}"
+        "#]],
+    );
+}

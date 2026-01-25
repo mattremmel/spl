@@ -235,6 +235,15 @@ impl LoweringContext {
                 // Use declarations are handled during import resolution, not HIR lowering
                 None
             }
+            Item::Module(module_def) => {
+                // Inline modules are flattened - lower their items recursively
+                for item in module_def.items() {
+                    if let Some(hir_item) = self.lower_item(&item) {
+                        self.db.items.push(hir_item);
+                    }
+                }
+                None
+            }
         }
     }
 

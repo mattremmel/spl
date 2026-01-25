@@ -1,0 +1,11 @@
+module utils {
+    fn private_impl(): i32 { 42 }
+
+    pub fn helper(): i32 {
+        private_impl()
+    }
+}
+
+fn main(): i32 {
+    0
+}
