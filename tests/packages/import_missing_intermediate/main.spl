@@ -1,0 +1,6 @@
+// Test: Importing from non-existent intermediate module should fail
+use level1.nonexistent.item;
+
+fn main(): i32 {
+    item()
+}

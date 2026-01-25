@@ -1,0 +1,7 @@
+// Test: pub use re-export
+// The internal_fn is re-exported by the root module
+pub use internal.internal_fn;
+
+fn main(): i32 {
+    internal_fn()
+}

@@ -405,12 +405,18 @@ impl<'ctx> Resolver<'ctx> {
             }
             "super" => {
                 // `super.` prefix: resolve from parent module
-                // At root, this is an error
-                self.diagnostics.push(
-                    Diagnostic::error("cannot use `super` at module root".to_string())
-                        .with_label(span.clone(), "no parent module"),
-                );
-                (None, true)
+                // In multi-file mode with a module tree, let resolve_cross_module_import handle it
+                // In single-file mode (no module tree), this is an error
+                if self.ctx.module_tree.is_some() {
+                    // Pass through with "super" prefix intact - tree.resolve_path handles it
+                    (Some(path.to_vec()), true)
+                } else {
+                    self.diagnostics.push(
+                        Diagnostic::error("cannot use `super` at module root".to_string())
+                            .with_label(span.clone(), "no parent module"),
+                    );
+                    (None, true)
+                }
             }
             _ => {
                 // No prefix, resolve as-is
@@ -432,10 +438,12 @@ impl<'ctx> Resolver<'ctx> {
             .ctx
             .lookup_in_scope(local_interned, self.ctx.current_scope_id())
         {
-            // If it's the same DefId, this is a redundant import (no-op)
+            // If it's the same DefId, this is a redundant import
             if existing_def_id == def_id {
                 // Redundant import, just record the resolution
                 self.resolutions.insert(import.span.clone(), def_id);
+                // But still handle pub use exports!
+                self.maybe_add_pub_use_export(import, def_id);
                 return;
             }
             // Different DefId means duplicate definition
@@ -468,77 +476,106 @@ impl<'ctx> Resolver<'ctx> {
 
         // Record the resolution for the import span
         self.resolutions.insert(import.span.clone(), def_id);
+
+        // For pub use, also add to current module's exports in the module tree
+        self.maybe_add_pub_use_export(import, def_id);
+    }
+
+    /// Add an item to the current module's exports for pub use statements.
+    fn maybe_add_pub_use_export(&mut self, import: &PendingImport, def_id: DefId) {
+        if import.is_pub
+            && let Some(ref mut tree) = self.ctx.module_tree
+        {
+            let current_module = self.ctx.current_module;
+            tree.add_export(current_module, &import.local_name, def_id);
+        }
     }
 
     /// Resolve a cross-module import like `use utils.helper`.
     fn resolve_cross_module_import(&mut self, import: &PendingImport, path: &[String]) {
-        let Some(tree) = &self.ctx.module_tree else {
-            // Single-file mode, no cross-module possible
-            self.diagnostics.push(
-                Diagnostic::error(format!(
-                    "cross-module imports require multi-file compilation: `{}`",
-                    path.join(".")
-                ))
-                .with_label(import.span.clone(), "cross-module import"),
-            );
-            return;
-        };
-
         // Split: module path (all but last) + item name (last)
         let (mod_path, item_name_slice) = path.split_at(path.len() - 1);
-        let item_name = &item_name_slice[0];
+        let item_name = item_name_slice[0].clone();
+        let mod_path_owned: Vec<String> = mod_path.to_vec();
 
-        // Convert to &str for resolve_path
-        let mod_refs: Vec<&str> = mod_path.iter().map(|s| s.as_str()).collect();
-
-        // Resolve module path
-        let current_module = self.ctx.current_module;
-        let target_module = match tree.resolve_path(current_module, &mod_refs) {
-            Ok(id) => id,
-            Err(crate::sema::PathResolveError::SuperAtRoot) => {
+        // Lookup phase: immutably borrow the tree in a limited scope
+        // Result: Ok(def_id) = found, Err(true) = private, Err(false) = not found
+        let lookup_result: Result<DefId, bool> = {
+            let Some(tree) = &self.ctx.module_tree else {
+                // Single-file mode, no cross-module possible
                 self.diagnostics.push(
-                    Diagnostic::error("cannot use `super` at module root")
-                        .with_label(import.span.clone(), "invalid super"),
+                    Diagnostic::error(format!(
+                        "cross-module imports require multi-file compilation: `{}`",
+                        path.join(".")
+                    ))
+                    .with_label(import.span.clone(), "cross-module import"),
                 );
                 return;
-            }
-            Err(crate::sema::PathResolveError::ModuleNotFound) => {
-                self.diagnostics.push(
-                    Diagnostic::error(format!("module `{}` not found", mod_path.join(".")))
-                        .with_label(import.span.clone(), "unknown module"),
-                );
-                return;
-            }
-        };
+            };
 
-        // Look up item in target module's EXPORTS (not items - visibility!)
-        let item_spur = tree.interner.get(item_name);
-        let target = tree.get(target_module);
+            // Convert to &str for resolve_path
+            let mod_refs: Vec<&str> = mod_path_owned.iter().map(|s| s.as_str()).collect();
 
-        match item_spur.and_then(|spur| target.exports().get(&spur)) {
-            Some(&def_id) => {
-                self.add_import_binding(import, def_id, item_name);
-            }
-            None => {
-                // Check if it exists but is private
-                if item_spur
-                    .and_then(|spur| target.items().get(&spur))
-                    .is_some()
-                {
+            // Resolve module path
+            let current_module = self.ctx.current_module;
+            let target_module = match tree.resolve_path(current_module, &mod_refs) {
+                Ok(id) => id,
+                Err(crate::sema::PathResolveError::SuperAtRoot) => {
                     self.diagnostics.push(
-                        Diagnostic::error(format!("`{}` is private", item_name))
-                            .with_label(import.span.clone(), "private item"),
+                        Diagnostic::error("cannot use `super` at module root")
+                            .with_label(import.span.clone(), "invalid super"),
                     );
-                } else {
+                    return;
+                }
+                Err(crate::sema::PathResolveError::ModuleNotFound) => {
                     self.diagnostics.push(
                         Diagnostic::error(format!(
-                            "cannot find `{}` in module `{}`",
-                            item_name,
-                            mod_path.join(".")
+                            "module `{}` not found",
+                            mod_path_owned.join(".")
                         ))
-                        .with_label(import.span.clone(), "not found"),
+                        .with_label(import.span.clone(), "unknown module"),
                     );
+                    return;
                 }
+            };
+
+            // Look up item in target module's EXPORTS (not items - visibility!)
+            let item_spur = tree.interner.get(&item_name);
+            let target = tree.get(target_module);
+
+            if let Some(spur) = item_spur {
+                if let Some(&def_id) = target.exports().get(&spur) {
+                    Ok(def_id)
+                } else if target.items().get(&spur).is_some() {
+                    Err(true) // Private
+                } else {
+                    Err(false) // Not found
+                }
+            } else {
+                Err(false) // Not found
+            }
+        }; // tree borrow ends here
+
+        // Handle the result - now we can mutably borrow the module tree
+        match lookup_result {
+            Ok(def_id) => {
+                self.add_import_binding(import, def_id, &item_name);
+            }
+            Err(true) => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!("`{}` is private", item_name))
+                        .with_label(import.span.clone(), "private item"),
+                );
+            }
+            Err(false) => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "cannot find `{}` in module `{}`",
+                        item_name,
+                        mod_path_owned.join(".")
+                    ))
+                    .with_label(import.span.clone(), "not found"),
+                );
             }
         }
     }
@@ -3268,6 +3305,748 @@ mod tests {
             assert!(
                 resolver.diagnostics.is_empty(),
                 "expected no errors for glob import"
+            );
+        }
+    }
+
+    // ===== Cross-Module Import Extended Tests =====
+
+    #[test]
+    fn cross_module_import_with_rename() {
+        // Test that cross-module imports with rename work: `use utils.helper as h`
+        let ctx = create_context_with_module_tree();
+
+        let import = PendingImport {
+            path: vec!["utils".to_string(), "helper".to_string()],
+            local_name: "h".to_string(), // renamed to 'h'
+            is_pub: false,
+            is_glob: false,
+            span: 0..20,
+        };
+
+        let ctx_cell = std::cell::RefCell::new(ctx);
+        let mut resolver = {
+            let ctx_ref = unsafe { &mut *ctx_cell.as_ptr() };
+            Resolver::new(ctx_ref)
+        };
+
+        resolver.resolve_single_import(&import);
+
+        // Should have no errors
+        assert!(
+            resolver.diagnostics.is_empty(),
+            "expected no errors, got: {:?}",
+            resolver
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+
+        // Verify the binding was created with the renamed name 'h'
+        let ctx = unsafe { &*ctx_cell.as_ptr() };
+        let h_name = ctx.interner.get("h");
+        assert!(h_name.is_some(), "expected 'h' to be interned");
+        let h_def = ctx.lookup(h_name.unwrap());
+        assert!(h_def.is_some(), "expected 'h' to be bound");
+    }
+
+    /// Helper to create a SemanticContext with a 3-level deep module tree.
+    /// Structure: root -> level1 -> level2 -> level3 (with deep_fn)
+    fn create_deeply_nested_module_tree() -> SemanticContext {
+        use crate::sema::module::{ModuleId, ModuleTree};
+        use crate::sema::{SymbolKind, Visibility};
+
+        let mut tree = ModuleTree::new();
+
+        // Create nested modules: level1 -> level2 -> level3
+        let level1_id = tree.add_child(tree.root_id(), "level1");
+        let level2_id = tree.add_child(level1_id, "level2");
+        let level3_id = tree.add_child(level2_id, "level3");
+
+        let mut ctx = SemanticContext::with_module_tree(tree, ModuleId(0));
+
+        // Define a public function "deep_fn" in the context
+        let deep_fn_name = ctx.intern("deep_fn");
+        let deep_fn_def_id = ctx
+            .define(
+                deep_fn_name,
+                SymbolKind::Function,
+                Visibility::Public,
+                0..7,
+                false,
+            )
+            .expect("should define deep_fn");
+
+        // Add deep_fn to level3 module's items and exports
+        if let Some(ref mut tree) = ctx.module_tree {
+            tree.add_item(level3_id, "deep_fn", deep_fn_def_id);
+            tree.add_export(level3_id, "deep_fn", deep_fn_def_id);
+        }
+
+        ctx
+    }
+
+    #[test]
+    fn cross_module_deeply_nested_3_levels() {
+        // Test resolving `use level1.level2.level3.deep_fn`
+        let ctx = create_deeply_nested_module_tree();
+
+        let import = PendingImport {
+            path: vec![
+                "level1".to_string(),
+                "level2".to_string(),
+                "level3".to_string(),
+                "deep_fn".to_string(),
+            ],
+            local_name: "deep_fn".to_string(),
+            is_pub: false,
+            is_glob: false,
+            span: 0..30,
+        };
+
+        let ctx_cell = std::cell::RefCell::new(ctx);
+        let mut resolver = {
+            let ctx_ref = unsafe { &mut *ctx_cell.as_ptr() };
+            Resolver::new(ctx_ref)
+        };
+
+        resolver.resolve_single_import(&import);
+
+        // Should have no errors
+        assert!(
+            resolver.diagnostics.is_empty(),
+            "expected no errors, got: {:?}",
+            resolver
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+
+        // Verify the binding was created
+        let ctx = unsafe { &*ctx_cell.as_ptr() };
+        let deep_fn_name = ctx.interner.get("deep_fn");
+        assert!(deep_fn_name.is_some(), "expected 'deep_fn' to be interned");
+        let deep_fn_def = ctx.lookup(deep_fn_name.unwrap());
+        assert!(deep_fn_def.is_some(), "expected 'deep_fn' to be bound");
+    }
+
+    #[test]
+    fn cross_module_deeply_nested_missing_intermediate() {
+        // Test error when intermediate module doesn't exist: `use level1.nonexistent.level3.deep_fn`
+        let ctx = create_deeply_nested_module_tree();
+
+        let import = PendingImport {
+            path: vec![
+                "level1".to_string(),
+                "nonexistent".to_string(),
+                "level3".to_string(),
+                "deep_fn".to_string(),
+            ],
+            local_name: "deep_fn".to_string(),
+            is_pub: false,
+            is_glob: false,
+            span: 0..40,
+        };
+
+        let ctx_cell = std::cell::RefCell::new(ctx);
+        let mut resolver = {
+            let ctx_ref = unsafe { &mut *ctx_cell.as_ptr() };
+            Resolver::new(ctx_ref)
+        };
+
+        resolver.resolve_single_import(&import);
+
+        // Should have an error about module not found
+        assert!(
+            resolver
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("not found")),
+            "expected 'not found' error, got: {:?}",
+            resolver
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// Helper to create a SemanticContext with a module that has multiple exports.
+    fn create_context_with_multiple_exports() -> SemanticContext {
+        use crate::sema::module::{ModuleId, ModuleTree};
+        use crate::sema::{SymbolKind, Visibility};
+
+        let mut tree = ModuleTree::new();
+
+        // Create a child module "utils" with multiple exported items
+        let utils_id = tree.add_child(tree.root_id(), "utils");
+
+        let mut ctx = SemanticContext::with_module_tree(tree, ModuleId(0));
+
+        // Define helper1 - public
+        let helper1_name = ctx.intern("helper1");
+        let helper1_def_id = ctx
+            .define(
+                helper1_name,
+                SymbolKind::Function,
+                Visibility::Public,
+                0..7,
+                false,
+            )
+            .expect("should define helper1");
+
+        // Define helper2 - public
+        let helper2_name = ctx.intern("helper2");
+        let helper2_def_id = ctx
+            .define(
+                helper2_name,
+                SymbolKind::Function,
+                Visibility::Public,
+                10..17,
+                false,
+            )
+            .expect("should define helper2");
+
+        // Define helper3 - private (not exported)
+        let helper3_name = ctx.intern("helper3");
+        let _helper3_def_id = ctx
+            .define(
+                helper3_name,
+                SymbolKind::Function,
+                Visibility::Private,
+                20..27,
+                false,
+            )
+            .expect("should define helper3");
+
+        // Add items to the utils module - only helper1 and helper2 are exported
+        if let Some(ref mut tree) = ctx.module_tree {
+            tree.add_item(utils_id, "helper1", helper1_def_id);
+            tree.add_export(utils_id, "helper1", helper1_def_id);
+            tree.add_item(utils_id, "helper2", helper2_def_id);
+            tree.add_export(utils_id, "helper2", helper2_def_id);
+            // helper3 is in items but NOT exported
+            tree.add_item(utils_id, "helper3", _helper3_def_id);
+        }
+
+        ctx
+    }
+
+    #[test]
+    fn cross_module_grouped_imports() {
+        // Test `use utils.{helper1, helper2}` - both should be bound
+        // Grouped imports are expanded into multiple PendingImports by collect_use_tree
+        let ctx = create_context_with_multiple_exports();
+
+        // Simulate the two imports that would come from `use utils.{helper1, helper2}`
+        let import1 = PendingImport {
+            path: vec!["utils".to_string(), "helper1".to_string()],
+            local_name: "helper1".to_string(),
+            is_pub: false,
+            is_glob: false,
+            span: 0..20,
+        };
+        let import2 = PendingImport {
+            path: vec!["utils".to_string(), "helper2".to_string()],
+            local_name: "helper2".to_string(),
+            is_pub: false,
+            is_glob: false,
+            span: 0..20,
+        };
+
+        let ctx_cell = std::cell::RefCell::new(ctx);
+        let mut resolver = {
+            let ctx_ref = unsafe { &mut *ctx_cell.as_ptr() };
+            Resolver::new(ctx_ref)
+        };
+
+        resolver.resolve_single_import(&import1);
+        resolver.resolve_single_import(&import2);
+
+        // Should have no errors
+        assert!(
+            resolver.diagnostics.is_empty(),
+            "expected no errors, got: {:?}",
+            resolver
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+
+        // Verify both bindings were created
+        let ctx = unsafe { &*ctx_cell.as_ptr() };
+        let h1_name = ctx.interner.get("helper1");
+        let h2_name = ctx.interner.get("helper2");
+        assert!(h1_name.is_some(), "expected 'helper1' to be interned");
+        assert!(h2_name.is_some(), "expected 'helper2' to be interned");
+        assert!(
+            ctx.lookup(h1_name.unwrap()).is_some(),
+            "expected 'helper1' to be bound"
+        );
+        assert!(
+            ctx.lookup(h2_name.unwrap()).is_some(),
+            "expected 'helper2' to be bound"
+        );
+    }
+
+    #[test]
+    fn cross_module_grouped_with_rename() {
+        // Test `use utils.{helper1, helper2 as h2}`
+        let ctx = create_context_with_multiple_exports();
+
+        let import1 = PendingImport {
+            path: vec!["utils".to_string(), "helper1".to_string()],
+            local_name: "helper1".to_string(),
+            is_pub: false,
+            is_glob: false,
+            span: 0..20,
+        };
+        let import2 = PendingImport {
+            path: vec!["utils".to_string(), "helper2".to_string()],
+            local_name: "h2".to_string(), // renamed
+            is_pub: false,
+            is_glob: false,
+            span: 0..20,
+        };
+
+        let ctx_cell = std::cell::RefCell::new(ctx);
+        let mut resolver = {
+            let ctx_ref = unsafe { &mut *ctx_cell.as_ptr() };
+            Resolver::new(ctx_ref)
+        };
+
+        resolver.resolve_single_import(&import1);
+        resolver.resolve_single_import(&import2);
+
+        // Should have no errors
+        assert!(
+            resolver.diagnostics.is_empty(),
+            "expected no errors, got: {:?}",
+            resolver
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+
+        // Verify bindings: helper1 and h2 (not helper2)
+        let ctx = unsafe { &*ctx_cell.as_ptr() };
+        let h1_name = ctx.interner.get("helper1");
+        let h2_name = ctx.interner.get("h2");
+        assert!(h1_name.is_some(), "expected 'helper1' to be interned");
+        assert!(h2_name.is_some(), "expected 'h2' to be interned");
+        assert!(
+            ctx.lookup(h1_name.unwrap()).is_some(),
+            "expected 'helper1' to be bound"
+        );
+        assert!(
+            ctx.lookup(h2_name.unwrap()).is_some(),
+            "expected 'h2' to be bound"
+        );
+    }
+
+    #[test]
+    fn cross_module_grouped_partial_error() {
+        // Test `use utils.{helper1, nonexistent}` - error on nonexistent
+        let ctx = create_context_with_multiple_exports();
+
+        let import1 = PendingImport {
+            path: vec!["utils".to_string(), "helper1".to_string()],
+            local_name: "helper1".to_string(),
+            is_pub: false,
+            is_glob: false,
+            span: 0..20,
+        };
+        let import2 = PendingImport {
+            path: vec!["utils".to_string(), "nonexistent".to_string()],
+            local_name: "nonexistent".to_string(),
+            is_pub: false,
+            is_glob: false,
+            span: 25..45,
+        };
+
+        let ctx_cell = std::cell::RefCell::new(ctx);
+        let mut resolver = {
+            let ctx_ref = unsafe { &mut *ctx_cell.as_ptr() };
+            Resolver::new(ctx_ref)
+        };
+
+        resolver.resolve_single_import(&import1);
+        resolver.resolve_single_import(&import2);
+
+        // Should have an error for nonexistent
+        assert!(
+            resolver
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("cannot find")),
+            "expected 'cannot find' error, got: {:?}",
+            resolver
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+
+        // But helper1 should still be bound
+        let ctx = unsafe { &*ctx_cell.as_ptr() };
+        let h1_name = ctx.interner.get("helper1");
+        assert!(h1_name.is_some(), "expected 'helper1' to be interned");
+        assert!(
+            ctx.lookup(h1_name.unwrap()).is_some(),
+            "expected 'helper1' to be bound despite other error"
+        );
+    }
+
+    /// Helper to create a context with sibling modules for super prefix testing.
+    /// Structure: root -> child (current) and root -> sibling (with sibling_fn)
+    fn create_context_with_sibling_modules() -> SemanticContext {
+        use crate::sema::module::{ModuleId, ModuleTree};
+        use crate::sema::{SymbolKind, Visibility};
+
+        let mut tree = ModuleTree::new();
+
+        // Create two child modules: "child" and "sibling"
+        let _child_id = tree.add_child(tree.root_id(), "child");
+        let sibling_id = tree.add_child(tree.root_id(), "sibling");
+
+        // Current module is "child" (ModuleId(1) since it was added first)
+        let mut ctx = SemanticContext::with_module_tree(tree, ModuleId(1));
+
+        // Define a public function "sibling_fn" in the context
+        let sibling_fn_name = ctx.intern("sibling_fn");
+        let sibling_fn_def_id = ctx
+            .define(
+                sibling_fn_name,
+                SymbolKind::Function,
+                Visibility::Public,
+                0..10,
+                false,
+            )
+            .expect("should define sibling_fn");
+
+        // Add sibling_fn to the sibling module's items and exports
+        if let Some(ref mut tree) = ctx.module_tree {
+            tree.add_item(sibling_id, "sibling_fn", sibling_fn_def_id);
+            tree.add_export(sibling_id, "sibling_fn", sibling_fn_def_id);
+        }
+
+        ctx
+    }
+
+    #[test]
+    fn cross_module_super_prefix_resolves_sibling() {
+        // From child module, use super.sibling.sibling_fn should work
+        let ctx = create_context_with_sibling_modules();
+
+        let import = PendingImport {
+            path: vec![
+                "super".to_string(),
+                "sibling".to_string(),
+                "sibling_fn".to_string(),
+            ],
+            local_name: "sibling_fn".to_string(),
+            is_pub: false,
+            is_glob: false,
+            span: 0..30,
+        };
+
+        let ctx_cell = std::cell::RefCell::new(ctx);
+        let mut resolver = {
+            let ctx_ref = unsafe { &mut *ctx_cell.as_ptr() };
+            Resolver::new(ctx_ref)
+        };
+
+        resolver.resolve_single_import(&import);
+
+        // Should have no errors
+        assert!(
+            resolver.diagnostics.is_empty(),
+            "expected no errors, got: {:?}",
+            resolver
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+
+        // Verify the binding was created
+        let ctx = unsafe { &*ctx_cell.as_ptr() };
+        let sibling_fn_name = ctx.interner.get("sibling_fn");
+        assert!(
+            sibling_fn_name.is_some(),
+            "expected 'sibling_fn' to be interned"
+        );
+        assert!(
+            ctx.lookup(sibling_fn_name.unwrap()).is_some(),
+            "expected 'sibling_fn' to be bound"
+        );
+    }
+
+    #[test]
+    fn cross_module_super_at_root_error() {
+        // At root module, super should still error
+        use crate::sema::module::{ModuleId, ModuleTree};
+
+        let tree = ModuleTree::new();
+        // Current module is root (ModuleId(0))
+        let ctx = SemanticContext::with_module_tree(tree, ModuleId(0));
+
+        let import = PendingImport {
+            path: vec!["super".to_string(), "something".to_string()],
+            local_name: "something".to_string(),
+            is_pub: false,
+            is_glob: false,
+            span: 0..20,
+        };
+
+        let ctx_cell = std::cell::RefCell::new(ctx);
+        let mut resolver = {
+            let ctx_ref = unsafe { &mut *ctx_cell.as_ptr() };
+            Resolver::new(ctx_ref)
+        };
+
+        resolver.resolve_single_import(&import);
+
+        // Should have an error about super at root
+        assert!(
+            resolver
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("super") || d.message.contains("root")),
+            "expected super at root error, got: {:?}",
+            resolver
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    // ===== Pub Use Re-export Tests =====
+
+    #[test]
+    fn pub_use_adds_to_exports() {
+        // Test that `pub use child.item` adds item to current module's exports
+        use crate::sema::module::{ModuleId, ModuleTree};
+        use crate::sema::{SymbolKind, Visibility};
+
+        let mut tree = ModuleTree::new();
+
+        // Create a child module "internal" with an item
+        let internal_id = tree.add_child(tree.root_id(), "internal");
+
+        // Current module is root
+        let mut ctx = SemanticContext::with_module_tree(tree, ModuleId(0));
+
+        // Define the internal item
+        let internal_fn_name = ctx.intern("internal_fn");
+        let internal_fn_def_id = ctx
+            .define(
+                internal_fn_name,
+                SymbolKind::Function,
+                Visibility::Public,
+                0..11,
+                false,
+            )
+            .expect("should define internal_fn");
+
+        // Add to internal module's exports
+        if let Some(ref mut tree) = ctx.module_tree {
+            tree.add_item(internal_id, "internal_fn", internal_fn_def_id);
+            tree.add_export(internal_id, "internal_fn", internal_fn_def_id);
+        }
+
+        // Create a pub use import
+        let import = PendingImport {
+            path: vec!["internal".to_string(), "internal_fn".to_string()],
+            local_name: "internal_fn".to_string(),
+            is_pub: true, // This is a pub use
+            is_glob: false,
+            span: 0..25,
+        };
+
+        let ctx_cell = std::cell::RefCell::new(ctx);
+        let mut resolver = {
+            let ctx_ref = unsafe { &mut *ctx_cell.as_ptr() };
+            Resolver::new(ctx_ref)
+        };
+
+        resolver.resolve_single_import(&import);
+
+        // Should have no errors
+        assert!(
+            resolver.diagnostics.is_empty(),
+            "expected no errors, got: {:?}",
+            resolver
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+
+        // Verify that internal_fn was added to root module's exports
+        let ctx = unsafe { &*ctx_cell.as_ptr() };
+        if let Some(ref tree) = ctx.module_tree {
+            let root = tree.get(tree.root_id());
+            let internal_fn_spur = tree.interner.get("internal_fn");
+            assert!(
+                internal_fn_spur.is_some(),
+                "expected 'internal_fn' to be interned in tree"
+            );
+            assert!(
+                root.exports().contains_key(&internal_fn_spur.unwrap()),
+                "expected 'internal_fn' to be in root module exports"
+            );
+        }
+    }
+
+    #[test]
+    fn pub_use_with_rename() {
+        // Test `pub use internal.item as public_name`
+        use crate::sema::module::{ModuleId, ModuleTree};
+        use crate::sema::{SymbolKind, Visibility};
+
+        let mut tree = ModuleTree::new();
+        let internal_id = tree.add_child(tree.root_id(), "internal");
+
+        let mut ctx = SemanticContext::with_module_tree(tree, ModuleId(0));
+
+        let internal_fn_name = ctx.intern("internal_fn");
+        let internal_fn_def_id = ctx
+            .define(
+                internal_fn_name,
+                SymbolKind::Function,
+                Visibility::Public,
+                0..11,
+                false,
+            )
+            .expect("should define internal_fn");
+
+        if let Some(ref mut tree) = ctx.module_tree {
+            tree.add_item(internal_id, "internal_fn", internal_fn_def_id);
+            tree.add_export(internal_id, "internal_fn", internal_fn_def_id);
+        }
+
+        // Pub use with rename
+        let import = PendingImport {
+            path: vec!["internal".to_string(), "internal_fn".to_string()],
+            local_name: "public_fn".to_string(), // renamed
+            is_pub: true,
+            is_glob: false,
+            span: 0..30,
+        };
+
+        let ctx_cell = std::cell::RefCell::new(ctx);
+        let mut resolver = {
+            let ctx_ref = unsafe { &mut *ctx_cell.as_ptr() };
+            Resolver::new(ctx_ref)
+        };
+
+        resolver.resolve_single_import(&import);
+
+        assert!(
+            resolver.diagnostics.is_empty(),
+            "expected no errors, got: {:?}",
+            resolver
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+
+        // Verify that public_fn (not internal_fn) was added to exports
+        let ctx = unsafe { &*ctx_cell.as_ptr() };
+        if let Some(ref tree) = ctx.module_tree {
+            let root = tree.get(tree.root_id());
+            let public_fn_spur = tree.interner.get("public_fn");
+            assert!(
+                public_fn_spur.is_some(),
+                "expected 'public_fn' to be interned in tree"
+            );
+            assert!(
+                root.exports().contains_key(&public_fn_spur.unwrap()),
+                "expected 'public_fn' to be in root module exports"
+            );
+        }
+    }
+
+    #[test]
+    fn pub_use_chain_works() {
+        // Test re-export chain: grandchild -> child -> root
+        // root pub uses from child, child pub uses from grandchild
+        use crate::sema::module::ModuleTree;
+        use crate::sema::{SymbolKind, Visibility};
+
+        let mut tree = ModuleTree::new();
+
+        // Create: root -> child -> grandchild
+        let child_id = tree.add_child(tree.root_id(), "child");
+        let grandchild_id = tree.add_child(child_id, "grandchild");
+
+        // Start at child module
+        let mut ctx = SemanticContext::with_module_tree(tree, child_id);
+
+        // Define the original item in grandchild
+        let deep_fn_name = ctx.intern("deep_fn");
+        let deep_fn_def_id = ctx
+            .define(
+                deep_fn_name,
+                SymbolKind::Function,
+                Visibility::Public,
+                0..7,
+                false,
+            )
+            .expect("should define deep_fn");
+
+        // Add deep_fn to grandchild's exports
+        if let Some(ref mut tree) = ctx.module_tree {
+            tree.add_item(grandchild_id, "deep_fn", deep_fn_def_id);
+            tree.add_export(grandchild_id, "deep_fn", deep_fn_def_id);
+        }
+
+        // Child does `pub use grandchild.deep_fn`
+        let import = PendingImport {
+            path: vec!["grandchild".to_string(), "deep_fn".to_string()],
+            local_name: "deep_fn".to_string(),
+            is_pub: true,
+            is_glob: false,
+            span: 0..25,
+        };
+
+        let ctx_cell = std::cell::RefCell::new(ctx);
+        let mut resolver = {
+            let ctx_ref = unsafe { &mut *ctx_cell.as_ptr() };
+            Resolver::new(ctx_ref)
+        };
+
+        resolver.resolve_single_import(&import);
+
+        assert!(
+            resolver.diagnostics.is_empty(),
+            "expected no errors, got: {:?}",
+            resolver
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+
+        // Verify deep_fn is now in child's exports
+        let ctx = unsafe { &*ctx_cell.as_ptr() };
+        if let Some(ref tree) = ctx.module_tree {
+            let child = tree.get(child_id);
+            let deep_fn_spur = tree.interner.get("deep_fn");
+            assert!(
+                deep_fn_spur.is_some(),
+                "expected 'deep_fn' to be interned in tree"
+            );
+            assert!(
+                child.exports().contains_key(&deep_fn_spur.unwrap()),
+                "expected 'deep_fn' to be in child module exports (re-exported from grandchild)"
             );
         }
     }

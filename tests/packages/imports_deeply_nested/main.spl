@@ -1,0 +1,6 @@
+// Test: Deeply nested import (3+ levels)
+use level1.level2.level3.deep_fn;
+
+fn main(): i32 {
+    deep_fn()
+}

@@ -1,0 +1,13 @@
+// Level 2 module with multiple exports for glob import
+pub fn helper1(): i32 {
+    10
+}
+
+pub fn helper2(): i32 {
+    20
+}
+
+// Private function should not be glob-imported
+fn private_fn(): i32 {
+    99
+}

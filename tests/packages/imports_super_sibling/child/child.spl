@@ -1,0 +1,6 @@
+// Child module that imports from sibling using super
+use super.sibling.sibling_fn;
+
+pub fn use_sibling(): i32 {
+    sibling_fn()
+}

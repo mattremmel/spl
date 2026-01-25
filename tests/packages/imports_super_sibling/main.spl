@@ -1,0 +1,6 @@
+// Test: super prefix to access sibling module
+use child.use_sibling;
+
+fn main(): i32 {
+    use_sibling()
+}

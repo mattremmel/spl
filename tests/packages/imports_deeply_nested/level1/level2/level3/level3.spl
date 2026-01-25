@@ -1,0 +1,4 @@
+// Level 3 module - contains the deeply nested function
+pub fn deep_fn(): i32 {
+    3
+}

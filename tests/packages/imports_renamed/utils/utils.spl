@@ -1,0 +1,4 @@
+// Helper function to be imported with rename
+pub fn helper(): i32 {
+    42
+}

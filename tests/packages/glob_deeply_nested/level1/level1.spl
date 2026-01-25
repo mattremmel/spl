@@ -1,0 +1,4 @@
+// Level 1 module
+pub fn l1_fn(): i32 {
+    1
+}

@@ -1,0 +1,4 @@
+// Sibling module to be accessed via super
+pub fn sibling_fn(): i32 {
+    42
+}

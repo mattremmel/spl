@@ -1,0 +1,4 @@
+// Level 2 module
+pub fn l2(): i32 {
+    2
+}

@@ -1,0 +1,6 @@
+// Test: Importing private item from nested module should fail
+use level1.level2.private_fn;
+
+fn main(): i32 {
+    private_fn()
+}

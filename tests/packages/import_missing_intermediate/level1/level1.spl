@@ -1,0 +1,4 @@
+// Level 1 module exists, but has no "nonexistent" child
+pub fn l1_fn(): i32 {
+    1
+}

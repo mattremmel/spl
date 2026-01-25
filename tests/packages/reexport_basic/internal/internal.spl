@@ -1,0 +1,4 @@
+// Internal function to be re-exported
+pub fn internal_fn(): i32 {
+    42
+}

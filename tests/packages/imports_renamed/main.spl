@@ -1,0 +1,6 @@
+// Test: Import with rename
+use utils.helper as h;
+
+fn main(): i32 {
+    h()
+}
