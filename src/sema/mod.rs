@@ -98,8 +98,8 @@ pub mod scope;
 pub mod symbol;
 pub mod types;
 
-pub use infer::{InferResult, infer};
-pub use resolver::{ResolveResult, Resolver, resolve};
+pub use infer::{InferResult, infer, infer_package};
+pub use resolver::{ResolveResult, Resolver, resolve, resolve_package};
 pub use scope::{Scope, ScopeId, ScopeKind};
 pub use symbol::{DefId, Symbol, SymbolKind, Visibility};
 pub use types::{Mutability, PrimitiveKind, Type, TypeId, TypeInterner, TypeVar};
@@ -202,6 +202,19 @@ impl SemanticContext {
 
         let current = &self.scopes[self.current_scope.0 as usize];
         self.current_scope = current.parent.expect("cannot exit root scope");
+    }
+
+    /// Set the current scope to an existing scope by ID.
+    ///
+    /// This is used to switch between package scopes during multi-file resolution.
+    pub fn set_current_scope(&mut self, scope_id: ScopeId) {
+        debug_assert!(
+            self.is_valid_scope_id(scope_id),
+            "precondition: scope_id {} must be valid (< {})",
+            scope_id.0,
+            self.scopes.len()
+        );
+        self.current_scope = scope_id;
     }
 
     /// Get the current scope ID.

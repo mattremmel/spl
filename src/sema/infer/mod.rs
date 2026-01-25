@@ -191,6 +191,75 @@ pub fn infer(source_file: &SourceFile, resolve_result: &ResolveResult) -> InferR
     engine.into_result()
 }
 
+/// Run type inference on a multi-file package.
+///
+/// Like `infer`, but processes all source files in the package and its subpackages
+/// using a shared type interner.
+///
+/// Uses a two-phase approach:
+/// 1. Collect all function signatures, struct info, and type aliases from ALL packages
+/// 2. Infer all function bodies from ALL packages
+///
+/// This ensures cross-package calls have signature info available.
+pub fn infer_package(
+    package: &crate::package::Package,
+    resolve_result: &ResolveResult,
+) -> InferResult {
+    let mut engine = InferEngine::new(resolve_result);
+
+    // Phase 1: Collect signatures from ALL packages first
+    collect_all_signatures(package, &mut engine);
+
+    // Phase 2: Infer all bodies
+    infer_all_bodies(package, &mut engine);
+
+    engine.apply_defaults();
+    engine.into_result()
+}
+
+/// Phase 1: Collect function signatures, struct info, and type aliases from all packages.
+fn collect_all_signatures(package: &crate::package::Package, engine: &mut InferEngine) {
+    use crate::ast::Item;
+
+    for (_file_id, source_file) in package.compilation_unit().source_files() {
+        for item in source_file.items() {
+            match &item {
+                Item::Function(func) => engine.collect_function_signature(func),
+                Item::Struct(struct_def) => engine.collect_struct_info(struct_def),
+                Item::TypeAlias(type_alias) => engine.collect_type_alias_info(type_alias),
+                Item::Impl(impl_block) => engine.collect_impl_signatures(impl_block),
+                Item::Extern(extern_block) => engine.collect_extern_signatures(extern_block),
+                Item::Use(_) => {} // Skip use declarations
+            }
+        }
+    }
+
+    // Recurse into subpackages
+    for subpkg in package.subpackages() {
+        collect_all_signatures(subpkg, engine);
+    }
+}
+
+/// Phase 2: Infer function bodies from all packages.
+fn infer_all_bodies(package: &crate::package::Package, engine: &mut InferEngine) {
+    use crate::ast::Item;
+
+    for (_file_id, source_file) in package.compilation_unit().source_files() {
+        for item in source_file.items() {
+            match &item {
+                Item::Function(func) => engine.infer_function_body(func),
+                Item::Impl(impl_block) => engine.infer_impl_bodies(impl_block),
+                _ => {} // Other items don't have bodies to infer
+            }
+        }
+    }
+
+    // Recurse into subpackages
+    for subpkg in package.subpackages() {
+        infer_all_bodies(subpkg, engine);
+    }
+}
+
 /// The kind of receiver for a method.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SelfParamKind {

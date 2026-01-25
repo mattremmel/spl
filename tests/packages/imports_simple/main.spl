@@ -1,6 +1,6 @@
 // Test: Simple import from subpackage
-// use utils.helper;
+use utils.helper;
 
-fn main() {
-    // helper();  // Should work after import resolution is implemented
+fn main(): i32 {
+    helper()
 }

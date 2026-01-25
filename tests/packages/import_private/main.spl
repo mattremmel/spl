@@ -1,0 +1,6 @@
+// Test: Importing private item should fail
+use internal.secret;
+
+fn main(): i32 {
+    secret()
+}

@@ -4,13 +4,14 @@
 //! Each test package has a `_test.toml` file that specifies test expectations.
 
 use serde::Deserialize;
+use spl::Severity;
 use spl::package::Package;
 use std::path::Path;
 
 /// Test configuration from `_test.toml`.
 #[derive(Debug, Deserialize)]
 struct TestConfig {
-    /// Test mode: "load-pass" or "load-fail"
+    /// Test mode: "load-pass", "load-fail", "compile-pass", or "compile-fail"
     mode: String,
     /// Expected item count (for load-pass)
     expect_items: Option<usize>,
@@ -22,6 +23,8 @@ struct TestConfig {
     expect_subpackages: Option<usize>,
     /// Expected error pattern (for load-fail)
     expect_error: Option<String>,
+    /// Expected compile error pattern (for compile-fail)
+    expect_compile_error: Option<String>,
 }
 
 fn run_package_test(path: &Path) -> datatest_stable::Result<()> {
@@ -118,6 +121,57 @@ fn run_package_test(path: &Path) -> datatest_stable::Result<()> {
                             .into());
                         }
                     }
+                }
+            }
+        }
+        "compile-pass" => {
+            let pkg = result.map_err(|e| format!("{}: load failed: {:?}", path.display(), e))?;
+            let compile_result = spl::package::compile_package(&pkg);
+
+            if compile_result.is_err() {
+                let errors: Vec<_> = compile_result
+                    .errors()
+                    .map(|d| d.message.clone())
+                    .collect();
+                return Err(format!(
+                    "{}: compilation failed:\n{}",
+                    path.display(),
+                    errors.join("\n")
+                )
+                .into());
+            }
+        }
+        "compile-fail" => {
+            let pkg = result.map_err(|e| format!("{}: load failed: {:?}", path.display(), e))?;
+            let compile_result = spl::package::compile_package(&pkg);
+
+            // Check that compilation actually failed
+            let has_errors = compile_result
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == Severity::Error);
+
+            if !has_errors {
+                return Err(format!("{}: expected compilation to fail", path.display()).into());
+            }
+
+            // Check error pattern if specified
+            if let Some(pattern) = &config.expect_compile_error {
+                let has_match = compile_result
+                    .errors()
+                    .any(|d| d.message.to_lowercase().contains(&pattern.to_lowercase()));
+                if !has_match {
+                    let errors: Vec<_> = compile_result
+                        .errors()
+                        .map(|d| d.message.clone())
+                        .collect();
+                    return Err(format!(
+                        "{}: expected error containing '{}', got:\n{}",
+                        path.display(),
+                        pattern,
+                        errors.join("\n")
+                    )
+                    .into());
                 }
             }
         }

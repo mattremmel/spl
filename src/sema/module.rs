@@ -27,6 +27,7 @@ use lasso::Spur;
 use rustc_hash::FxHashMap;
 
 use super::symbol::DefId;
+use crate::package::Package;
 
 /// A unique identifier for each module in the crate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -238,6 +239,25 @@ impl ModuleTree {
     /// Resolve an interned string.
     pub fn resolve_str(&self, spur: Spur) -> &str {
         self.interner.resolve(&spur)
+    }
+
+    /// Build a ModuleTree from a Package hierarchy.
+    ///
+    /// Creates module nodes for each package. Items and exports are populated
+    /// later during resolution after DefIds are assigned.
+    pub fn from_package_structure(package: &Package) -> Self {
+        let mut tree = Self::new();
+        let root_id = tree.root_id();
+        Self::build_module_structure(&mut tree, root_id, package);
+        tree
+    }
+
+    fn build_module_structure(tree: &mut ModuleTree, parent_id: ModuleId, package: &Package) {
+        // Recursively create child modules for subpackages
+        for subpkg in package.subpackages() {
+            let child_id = tree.add_child(parent_id, subpkg.name());
+            Self::build_module_structure(tree, child_id, subpkg);
+        }
     }
 }
 

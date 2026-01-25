@@ -41,7 +41,8 @@ use crate::ast::{
 };
 use crate::diagnostic::Diagnostic;
 use crate::lexer::Span;
-use crate::sema::{ScopeKind, SemanticContext, SymbolKind, Visibility};
+use crate::package::Package;
+use crate::sema::{ModuleId, ModuleTree, ScopeKind, SemanticContext, SymbolKind, Visibility};
 use rowan::ast::AstNode;
 use rustc_hash::FxHashMap;
 
@@ -1429,52 +1430,18 @@ impl<'ctx> Resolver<'ctx> {
     }
 }
 
-/// Resolve names in a source file.
-///
-/// This is the main entry point for name resolution.
-pub fn resolve(source_file: &SourceFile) -> ResolveResult {
-    let mut ctx = SemanticContext::new();
-
+/// Helper to define built-in types and traits in a SemanticContext.
+fn define_builtins(ctx: &mut SemanticContext) {
     // Pre-define built-in primitive types
     for builtin in &[
         "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
         "f32", "f64", "bool", "char", "str",
     ] {
         let name = ctx.intern(builtin);
-        // Define with a dummy span since these are built-in
         let _ = ctx.define(name, SymbolKind::Struct, Visibility::Public, 0..0, false);
     }
 
-    // Pre-define built-in traits.
-    //
-    // These are hardcoded here as a temporary measure. In a complete implementation:
-    //
-    // 1. **Standard Library**: These traits would be defined in SPL's standard library
-    //    (like Rust's `core` crate), e.g.:
-    //    ```
-    //    // In std/clone.spl
-    //    #[lang = "clone"]
-    //    pub trait Clone {
-    //        fn clone(&self): Self;
-    //    }
-    //    ```
-    //
-    // 2. **Lang Items**: The compiler would recognize `#[lang = "..."]` attributes
-    //    and maintain a `LangItems` table mapping lang item names to DefIds:
-    //    ```
-    //    enum LangItem { Copy, Clone, Add, Drop, ... }
-    //    struct LangItems { items: HashMap<LangItem, DefId> }
-    //    ```
-    //
-    // 3. **Special Handling**: Later compiler phases would query lang items for
-    //    special behavior:
-    //    - `Copy`: move vs copy semantics
-    //    - `Drop`: destructor insertion
-    //    - `Add`, `Sub`, etc.: operator overloading desugaring
-    //    - `Index`: `a[i]` desugaring
-    //    - `Deref`: auto-deref coercions
-    //
-    // For now, we just make these names resolve so bound validation works.
+    // Pre-define built-in traits
     for builtin_trait in &[
         "Clone",
         "Copy",
@@ -1489,6 +1456,14 @@ pub fn resolve(source_file: &SourceFile) -> ResolveResult {
         let name = ctx.intern(builtin_trait);
         let _ = ctx.define(name, SymbolKind::Trait, Visibility::Public, 0..0, false);
     }
+}
+
+/// Resolve names in a source file.
+///
+/// This is the main entry point for name resolution.
+pub fn resolve(source_file: &SourceFile) -> ResolveResult {
+    let mut ctx = SemanticContext::new();
+    define_builtins(&mut ctx);
 
     let resolver = Resolver::new(&mut ctx);
     let (resolutions, diagnostics) = resolver.resolve(source_file);
@@ -1497,6 +1472,248 @@ pub fn resolve(source_file: &SourceFile) -> ResolveResult {
         ctx,
         resolutions,
         diagnostics,
+    }
+}
+
+/// Resolve a multi-file package.
+///
+/// This function handles cross-package imports by:
+/// 1. Building a module tree from the package hierarchy
+/// 2. Collecting all items from all files across all packages (Phase 1)
+/// 3. Populating the module tree with items and exports
+/// 4. Resolving imports using the populated module tree (Phase 2)
+///
+/// # Arguments
+///
+/// * `package` - The root package to resolve
+///
+/// # Returns
+///
+/// A `ResolveResult` containing the semantic context with resolved symbols
+/// and any diagnostics produced during resolution.
+pub fn resolve_package(package: &Package) -> ResolveResult {
+    // Build module tree from package hierarchy
+    let module_tree = ModuleTree::from_package_structure(package);
+    let root_id = module_tree.root_id();
+
+    // Create context with module tree for cross-package resolution
+    let mut ctx = SemanticContext::with_module_tree(module_tree, root_id);
+    define_builtins(&mut ctx);
+
+    // Use a single Resolver for the entire package hierarchy
+    let (resolutions, diagnostics) = {
+        let mut resolver = Resolver::new(&mut ctx);
+
+        // Map from ModuleId to ScopeId (populated during item collection)
+        let mut module_scopes: FxHashMap<ModuleId, crate::sema::ScopeId> = FxHashMap::default();
+
+        // Phase 1: Collect all items from ALL packages (through Resolver to track resolutions)
+        collect_all_items_through_resolver(package, &mut resolver, root_id, &mut module_scopes);
+
+        // Phase 2: Resolve imports for all packages
+        resolve_all_imports(package, &mut resolver, root_id, &module_scopes);
+
+        // Phase 3: Resolve bodies for all packages
+        resolve_all_bodies(package, &mut resolver, root_id, &module_scopes);
+
+        (resolver.resolutions, resolver.diagnostics)
+    };
+
+    ResolveResult {
+        ctx,
+        resolutions,
+        diagnostics,
+    }
+}
+
+/// Phase 1: Collect all items from all packages through Resolver.
+///
+/// This populates:
+/// - The symbol table (via Resolver.collect_item)
+/// - The resolutions map (span→DefId for definitions)
+/// - The module tree (items and exports)
+fn collect_all_items_through_resolver(
+    package: &Package,
+    resolver: &mut Resolver,
+    module_id: ModuleId,
+    module_scopes: &mut FxHashMap<ModuleId, crate::sema::ScopeId>,
+) {
+    // Enter a new scope for this package
+    let package_scope = resolver.ctx.enter_scope(ScopeKind::Module);
+    module_scopes.insert(module_id, package_scope);
+    resolver.ctx.current_module = module_id;
+
+    // Collect items (but not use declarations yet - those come in phase 2)
+    for (_file_id, source_file) in package.compilation_unit().source_files() {
+        for item in source_file.items() {
+            match &item {
+                Item::Use(_) => {
+                    // Skip use declarations in phase 1
+                }
+                _ => {
+                    resolver.collect_item(&item);
+                }
+            }
+        }
+    }
+
+    // Populate module tree with items from this package
+    populate_module_tree_from_scope(package, resolver, module_id);
+
+    // Recurse into subpackages
+    for subpkg in package.subpackages() {
+        let child_id = {
+            let tree = resolver.ctx.module_tree.as_ref().unwrap();
+            let module = tree.get(module_id);
+            let name_spur = tree.interner.get(subpkg.name());
+            name_spur
+                .and_then(|spur| module.children().get(&spur).copied())
+                .expect("subpackage module should exist in tree")
+        };
+        collect_all_items_through_resolver(subpkg, resolver, child_id, module_scopes);
+    }
+
+    // Exit this package's scope
+    resolver.ctx.exit_scope();
+}
+
+/// Populate the module tree with items defined in the current scope.
+fn populate_module_tree_from_scope(
+    package: &Package,
+    resolver: &mut Resolver,
+    module_id: ModuleId,
+) {
+    for (_file_id, source_file) in package.compilation_unit().source_files() {
+        for item in source_file.items() {
+            if let Some((name, is_pub)) = get_item_name_and_visibility(&item) {
+                let name_spur = resolver.ctx.intern(&name);
+                if let Some(def_id) = resolver
+                    .ctx
+                    .lookup_in_scope(name_spur, resolver.ctx.current_scope_id())
+                {
+                    let tree = resolver.ctx.module_tree.as_mut().unwrap();
+                    tree.add_item(module_id, &name, def_id);
+                    if is_pub {
+                        tree.add_export(module_id, &name, def_id);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Get the name and visibility of an item.
+fn get_item_name_and_visibility(item: &Item) -> Option<(String, bool)> {
+    match item {
+        Item::Function(func) => {
+            let name = func.name()?;
+            let name_token = name.ident_token()?;
+            Some((name_token.text().to_string(), func.visibility().is_some()))
+        }
+        Item::Struct(struct_def) => {
+            let name = struct_def.name()?;
+            let name_token = name.ident_token()?;
+            Some((
+                name_token.text().to_string(),
+                struct_def.visibility().is_some(),
+            ))
+        }
+        Item::TypeAlias(type_alias) => {
+            let name = type_alias.name()?;
+            let name_token = name.ident_token()?;
+            Some((
+                name_token.text().to_string(),
+                type_alias.visibility().is_some(),
+            ))
+        }
+        Item::Extern(extern_block) => {
+            // Return first extern fn for simplicity
+            for extern_fn in extern_block.extern_fns() {
+                if let Some(name) = extern_fn.name()
+                    && let Some(name_token) = name.ident_token()
+                {
+                    return Some((
+                        name_token.text().to_string(),
+                        extern_fn.visibility().is_some(),
+                    ));
+                }
+            }
+            None
+        }
+        Item::Impl(_) | Item::Use(_) => None,
+    }
+}
+
+/// Phase 2: Collect and resolve imports for all packages.
+fn resolve_all_imports(
+    package: &Package,
+    resolver: &mut Resolver,
+    module_id: ModuleId,
+    module_scopes: &FxHashMap<ModuleId, crate::sema::ScopeId>,
+) {
+    // Switch to this package's scope
+    let package_scope = module_scopes
+        .get(&module_id)
+        .expect("package scope should exist");
+    resolver.ctx.set_current_scope(*package_scope);
+    resolver.ctx.current_module = module_id;
+
+    // Collect use declarations
+    for (_file_id, source_file) in package.compilation_unit().source_files() {
+        for item in source_file.items() {
+            if let Item::Use(use_decl) = item {
+                resolver.collect_item(&Item::Use(use_decl));
+            }
+        }
+    }
+
+    // Resolve imports
+    resolver.resolve_imports();
+
+    // Recurse into subpackages
+    for subpkg in package.subpackages() {
+        let child_id = {
+            let tree = resolver.ctx.module_tree.as_ref().unwrap();
+            let module = tree.get(module_id);
+            let name_spur = tree.interner.get(subpkg.name());
+            name_spur
+                .and_then(|spur| module.children().get(&spur).copied())
+                .expect("subpackage module should exist in tree")
+        };
+        resolve_all_imports(subpkg, resolver, child_id, module_scopes);
+    }
+}
+
+/// Phase 3: Resolve all bodies for all packages.
+fn resolve_all_bodies(
+    package: &Package,
+    resolver: &mut Resolver,
+    module_id: ModuleId,
+    module_scopes: &FxHashMap<ModuleId, crate::sema::ScopeId>,
+) {
+    // Switch to this package's scope
+    let package_scope = module_scopes
+        .get(&module_id)
+        .expect("package scope should exist");
+    resolver.ctx.set_current_scope(*package_scope);
+    resolver.ctx.current_module = module_id;
+
+    // Resolve bodies
+    for (_file_id, source_file) in package.compilation_unit().source_files() {
+        resolver.resolve_source_file(&source_file);
+    }
+
+    // Recurse into subpackages
+    for subpkg in package.subpackages() {
+        let child_id = {
+            let tree = resolver.ctx.module_tree.as_ref().unwrap();
+            let module = tree.get(module_id);
+            let name_spur = tree.interner.get(subpkg.name());
+            name_spur
+                .and_then(|spur| module.children().get(&spur).copied())
+                .expect("subpackage module should exist in tree")
+        };
+        resolve_all_bodies(subpkg, resolver, child_id, module_scopes);
     }
 }
 

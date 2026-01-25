@@ -1,0 +1,6 @@
+// Test: Importing non-existent item should fail
+use utils.nonexistent;
+
+fn main(): i32 {
+    nonexistent()
+}

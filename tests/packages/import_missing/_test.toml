@@ -1,0 +1,2 @@
+mode = "compile-fail"
+expect_compile_error = "cannot find"

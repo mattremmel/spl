@@ -361,8 +361,8 @@ impl<'a> InferEngine<'a> {
         }
     }
 
-    /// Collect type alias information.
-    fn collect_type_alias_info(&mut self, type_alias: &crate::ast::TypeAlias) {
+    /// Collect type alias information (public for multi-file inference).
+    pub(super) fn collect_type_alias_info(&mut self, type_alias: &crate::ast::TypeAlias) {
         let name = match type_alias.name() {
             Some(n) => n,
             None => return,
@@ -474,7 +474,8 @@ impl<'a> InferEngine<'a> {
         }
     }
 
-    fn collect_struct_info(&mut self, struct_def: &crate::ast::StructDef) {
+    /// Collect struct information (public for multi-file inference).
+    pub(super) fn collect_struct_info(&mut self, struct_def: &crate::ast::StructDef) {
         let name = match struct_def.name() {
             Some(n) => n,
             None => return,
@@ -555,6 +556,92 @@ impl<'a> InferEngine<'a> {
                 if let Some(&param_def_id) = self.resolutions.get(&span) {
                     type_params.push(param_def_id);
                 }
+            }
+        }
+    }
+
+    /// Collect signatures for all methods in an impl block (public for multi-file inference).
+    pub(super) fn collect_impl_signatures(&mut self, impl_block: &crate::ast::ImplBlock) {
+        // Get the struct this impl is for
+        let struct_def_id = self.get_impl_struct_def_id(impl_block);
+
+        // Collect impl block type parameters from where clause
+        let mut impl_type_params = Vec::new();
+        if let Some(where_clause) = impl_block.where_clause() {
+            self.collect_type_params_from_where(&where_clause, &mut impl_type_params);
+        }
+
+        // Create type args from impl type params (as Type::Param)
+        let type_args: Vec<TypeId> = impl_type_params
+            .iter()
+            .map(|&def_id| self.types.mk_param(def_id))
+            .collect();
+
+        // Create the struct type with type args
+        let struct_ty = struct_def_id.map(|id| self.types.mk_struct(id, type_args.clone()));
+
+        // Set current_self_type so that `Self` in signatures resolves correctly
+        self.current_self_type = struct_ty;
+
+        for item in impl_block.items() {
+            if let Item::Function(func) = item {
+                self.collect_function_signature(&func);
+
+                // Register this method with its struct and update self_ty
+                if let Some(struct_id) = struct_def_id
+                    && let Some(method_def_id) = self.get_function_def_id(&func)
+                {
+                    self.struct_methods
+                        .entry(struct_id)
+                        .or_default()
+                        .push(method_def_id);
+
+                    // Update self_ty in the method signature
+                    if let Some(sig) = self.fn_signatures.get_mut(&method_def_id)
+                        && let Some(ref mut sp) = sig.self_param
+                        && let Some(sty) = struct_ty
+                    {
+                        // Apply the appropriate wrapper based on receiver kind
+                        sp.self_ty = match sp.kind {
+                            SelfParamKind::Ref => self.types.mk_ref(Mutability::Shared, sty),
+                            SelfParamKind::RefMut => self.types.mk_ref(Mutability::Mutable, sty),
+                            SelfParamKind::Owned => sty,
+                        };
+                    }
+
+                    // Add impl type params to method signature
+                    if let Some(sig) = self.fn_signatures.get_mut(&method_def_id) {
+                        for &param_def_id in impl_type_params.iter().rev() {
+                            if !sig.type_params.contains(&param_def_id) {
+                                sig.type_params.insert(0, param_def_id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Clear current_self_type after processing impl block
+        self.current_self_type = None;
+    }
+
+    /// Collect signatures for all extern functions (public for multi-file inference).
+    pub(super) fn collect_extern_signatures(&mut self, extern_block: &crate::ast::ExternBlock) {
+        for extern_fn in extern_block.extern_fns() {
+            self.collect_extern_fn_signature(&extern_fn);
+        }
+    }
+
+    /// Infer a function body (public for multi-file inference).
+    pub(super) fn infer_function_body(&mut self, func: &FunctionDef) {
+        self.infer_function(func);
+    }
+
+    /// Infer all method bodies in an impl block (public for multi-file inference).
+    pub(super) fn infer_impl_bodies(&mut self, impl_block: &crate::ast::ImplBlock) {
+        for item in impl_block.items() {
+            if let Item::Function(func) = item {
+                self.infer_function(&func);
             }
         }
     }

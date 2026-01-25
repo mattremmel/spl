@@ -1,0 +1,4 @@
+// Public helper exists, but we try to import something else
+pub fn helper(): i32 {
+    42
+}

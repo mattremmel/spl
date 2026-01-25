@@ -87,6 +87,32 @@ pub fn lower_to_hir(source_file: &SourceFile, infer_result: &InferResult) -> Hir
     ctx.into_database()
 }
 
+/// Lower a multi-file package to HIR.
+///
+/// Like `lower_to_hir`, but processes all source files in the package and its
+/// subpackages.
+pub fn lower_package_to_hir(
+    package: &crate::package::Package,
+    infer_result: &InferResult,
+) -> HirDatabase {
+    let mut ctx = LoweringContext::new(infer_result);
+    lower_package_files(package, &mut ctx);
+    ctx.into_database()
+}
+
+/// Helper to recursively lower all files in a package hierarchy.
+fn lower_package_files(package: &crate::package::Package, ctx: &mut LoweringContext) {
+    // Lower all source files in this package
+    for (_file_id, source_file) in package.compilation_unit().source_files() {
+        ctx.lower_source_file(&source_file);
+    }
+
+    // Recurse into subpackages
+    for subpkg in package.subpackages() {
+        lower_package_files(subpkg, ctx);
+    }
+}
+
 // ============================================================================
 // Lowering Context
 // ============================================================================

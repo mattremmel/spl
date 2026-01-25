@@ -20,12 +20,14 @@
 //! ```
 
 mod compilation_unit;
+mod compile;
 mod directive;
 mod resolver;
 mod scanner;
 mod source_map;
 
 pub use compilation_unit::CompilationUnit;
+pub use compile::compile_package;
 pub use directive::{DirectiveError, PackageDirectives, parse_package_directives};
 pub use resolver::{
     ResolveError, resolve_includes, resolve_packages, try_resolve_includes, try_resolve_packages,

@@ -1,0 +1,4 @@
+// Private function (no pub keyword)
+fn secret(): i32 {
+    42
+}
