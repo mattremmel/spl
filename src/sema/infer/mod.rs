@@ -201,17 +201,17 @@ pub fn infer(source_file: &SourceFile, resolve_result: &ResolveResult) -> InferR
 /// using a shared type interner.
 ///
 /// Uses a two-phase approach:
-/// 1. Collect all function signatures, struct info, and type aliases from ALL packages
-/// 2. Infer all function bodies from ALL packages
+/// 1. Collect all function signatures, struct info, and type aliases from ALL modules
+/// 2. Infer all function bodies from ALL modules
 ///
-/// This ensures cross-package calls have signature info available.
+/// This ensures cross-module calls have signature info available.
 pub fn infer_package(
     package: &crate::package::Package,
     resolve_result: &ResolveResult,
 ) -> InferResult {
     let mut engine = InferEngine::new(resolve_result);
 
-    // Phase 1: Collect signatures from ALL packages first
+    // Phase 1: Collect signatures from ALL modules first
     collect_all_signatures(package, &mut engine);
 
     // Phase 2: Infer all bodies
@@ -221,7 +221,7 @@ pub fn infer_package(
     engine.into_result()
 }
 
-/// Phase 1: Collect function signatures, struct info, and type aliases from all packages.
+/// Phase 1: Collect function signatures, struct info, and type aliases from all modules.
 fn collect_all_signatures(package: &crate::package::Package, engine: &mut InferEngine) {
     use crate::ast::Item;
 
@@ -240,12 +240,12 @@ fn collect_all_signatures(package: &crate::package::Package, engine: &mut InferE
     }
 
     // Recurse into modules
-    for subpkg in package.modules() {
-        collect_all_signatures(subpkg, engine);
+    for child_mod in package.modules() {
+        collect_all_signatures(child_mod, engine);
     }
 }
 
-/// Phase 2: Infer function bodies from all packages.
+/// Phase 2: Infer function bodies from all modules.
 fn infer_all_bodies(package: &crate::package::Package, engine: &mut InferEngine) {
     use crate::ast::Item;
 
@@ -260,8 +260,8 @@ fn infer_all_bodies(package: &crate::package::Package, engine: &mut InferEngine)
     }
 
     // Recurse into modules
-    for subpkg in package.modules() {
-        infer_all_bodies(subpkg, engine);
+    for child_mod in package.modules() {
+        infer_all_bodies(child_mod, engine);
     }
 }
 

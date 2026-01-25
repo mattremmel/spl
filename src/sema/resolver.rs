@@ -327,8 +327,9 @@ impl<'ctx> Resolver<'ctx> {
     /// Resolve pending imports after pass 1.
     ///
     /// Handles path prefixes: `module.`, `self.`, `super.`
-    /// - `module.` and `self.` resolve from the root/current package
-    /// - `super.` is an error at the root package
+    /// - `module.` resolves from the package root (root module)
+    /// - `self.` resolves from the current module
+    /// - `super.` resolves from the parent module (error at root)
     fn resolve_imports(&mut self) {
         let imports = std::mem::take(&mut self.pending_imports);
 
@@ -370,7 +371,7 @@ impl<'ctx> Resolver<'ctx> {
             let interned = self.ctx.intern(name);
 
             if let Some(def_id) = self.ctx.lookup(interned) {
-                // Check visibility if needed (for now, all items in same package are visible)
+                // Check visibility if needed (for now, all items in same module are visible)
                 self.add_import_binding(import, def_id, name);
             } else {
                 self.diagnostics.push(
@@ -407,7 +408,7 @@ impl<'ctx> Resolver<'ctx> {
                 // At root, this is an error
                 self.diagnostics.push(
                     Diagnostic::error("cannot use `super` at module root".to_string())
-                        .with_label(span.clone(), "no parent package"),
+                        .with_label(span.clone(), "no parent module"),
                 );
                 (None, true)
             }
@@ -469,41 +470,41 @@ impl<'ctx> Resolver<'ctx> {
         self.resolutions.insert(import.span.clone(), def_id);
     }
 
-    /// Resolve a cross-package import like `use utils.helper`.
+    /// Resolve a cross-module import like `use utils.helper`.
     fn resolve_cross_module_import(&mut self, import: &PendingImport, path: &[String]) {
         let Some(tree) = &self.ctx.module_tree else {
-            // Single-file mode, no cross-package possible
+            // Single-file mode, no cross-module possible
             self.diagnostics.push(
                 Diagnostic::error(format!(
-                    "cross-package imports require multi-file compilation: `{}`",
+                    "cross-module imports require multi-file compilation: `{}`",
                     path.join(".")
                 ))
-                .with_label(import.span.clone(), "cross-package import"),
+                .with_label(import.span.clone(), "cross-module import"),
             );
             return;
         };
 
-        // Split: package path (all but last) + item name (last)
-        let (pkg_path, item_name_slice) = path.split_at(path.len() - 1);
+        // Split: module path (all but last) + item name (last)
+        let (mod_path, item_name_slice) = path.split_at(path.len() - 1);
         let item_name = &item_name_slice[0];
 
         // Convert to &str for resolve_path
-        let pkg_refs: Vec<&str> = pkg_path.iter().map(|s| s.as_str()).collect();
+        let mod_refs: Vec<&str> = mod_path.iter().map(|s| s.as_str()).collect();
 
-        // Resolve package path
+        // Resolve module path
         let current_module = self.ctx.current_module;
-        let target_module = match tree.resolve_path(current_module, &pkg_refs) {
+        let target_module = match tree.resolve_path(current_module, &mod_refs) {
             Ok(id) => id,
             Err(crate::sema::PathResolveError::SuperAtRoot) => {
                 self.diagnostics.push(
-                    Diagnostic::error("cannot use `super` at package root")
+                    Diagnostic::error("cannot use `super` at module root")
                         .with_label(import.span.clone(), "invalid super"),
                 );
                 return;
             }
             Err(crate::sema::PathResolveError::ModuleNotFound) => {
                 self.diagnostics.push(
-                    Diagnostic::error(format!("module `{}` not found", pkg_path.join(".")))
+                    Diagnostic::error(format!("module `{}` not found", mod_path.join(".")))
                         .with_label(import.span.clone(), "unknown module"),
                 );
                 return;
@@ -531,9 +532,9 @@ impl<'ctx> Resolver<'ctx> {
                 } else {
                     self.diagnostics.push(
                         Diagnostic::error(format!(
-                            "cannot find `{}` in package `{}`",
+                            "cannot find `{}` in module `{}`",
                             item_name,
-                            pkg_path.join(".")
+                            mod_path.join(".")
                         ))
                         .with_label(import.span.clone(), "not found"),
                     );
@@ -552,28 +553,28 @@ impl<'ctx> Resolver<'ctx> {
         let path = resolved_path.unwrap();
 
         if path.is_empty() {
-            // `use self.*` or `use module.*` - import all from current package
+            // `use self.*` or `use module.*` - import all from current module
             // For now, this is a no-op since all items are already in scope
-            // In a multi-package setup, this would import all public items
+            // In a multi-module setup, this would import all public items
             return;
         }
 
-        // Cross-package glob: import all exports from target package
+        // Cross-module glob: import all exports from target module
         let Some(tree) = &self.ctx.module_tree else {
             self.diagnostics.push(
                 Diagnostic::error(format!(
-                    "cross-package glob imports require multi-file compilation: `{}.*`",
+                    "cross-module glob imports require multi-file compilation: `{}.*`",
                     path.join(".")
                 ))
-                .with_label(import.span.clone(), "cross-package glob import"),
+                .with_label(import.span.clone(), "cross-module glob import"),
             );
             return;
         };
 
-        let pkg_refs: Vec<&str> = path.iter().map(|s| s.as_str()).collect();
+        let mod_refs: Vec<&str> = path.iter().map(|s| s.as_str()).collect();
         let current_module = self.ctx.current_module;
 
-        match tree.resolve_path(current_module, &pkg_refs) {
+        match tree.resolve_path(current_module, &mod_refs) {
             Ok(target_id) => {
                 let target = tree.get(target_id);
                 // Collect exports to avoid borrowing issues
@@ -1539,9 +1540,9 @@ pub fn resolve(source_file: &SourceFile) -> ResolveResult {
 
 /// Resolve a multi-file package.
 ///
-/// This function handles cross-package imports by:
+/// This function handles cross-module imports by:
 /// 1. Building a module tree from the package hierarchy
-/// 2. Collecting all items from all files across all packages (Phase 1)
+/// 2. Collecting all items from all files across all modules (Phase 1)
 /// 3. Populating the module tree with items and exports
 /// 4. Resolving imports using the populated module tree (Phase 2)
 ///
@@ -1558,7 +1559,7 @@ pub fn resolve_package(package: &Package) -> ResolveResult {
     let module_tree = ModuleTree::from_package_structure(package);
     let root_id = module_tree.root_id();
 
-    // Create context with module tree for cross-package resolution
+    // Create context with module tree for cross-module resolution
     let mut ctx = SemanticContext::with_module_tree(module_tree, root_id);
     define_builtins(&mut ctx);
 
@@ -1569,13 +1570,13 @@ pub fn resolve_package(package: &Package) -> ResolveResult {
         // Map from ModuleId to ScopeId (populated during item collection)
         let mut module_scopes: FxHashMap<ModuleId, crate::sema::ScopeId> = FxHashMap::default();
 
-        // Phase 1: Collect all items from ALL packages (through Resolver to track resolutions)
+        // Phase 1: Collect all items from ALL modules (through Resolver to track resolutions)
         collect_all_items_through_resolver(package, &mut resolver, root_id, &mut module_scopes);
 
-        // Phase 2: Resolve imports for all packages
+        // Phase 2: Resolve imports for all modules
         resolve_all_imports(package, &mut resolver, root_id, &module_scopes);
 
-        // Phase 3: Resolve bodies for all packages
+        // Phase 3: Resolve bodies for all modules
         resolve_all_bodies(package, &mut resolver, root_id, &module_scopes);
 
         (
@@ -1593,7 +1594,7 @@ pub fn resolve_package(package: &Package) -> ResolveResult {
     }
 }
 
-/// Phase 1: Collect all items from all packages through Resolver.
+/// Phase 1: Collect all items from all modules through Resolver.
 ///
 /// This populates:
 /// - The symbol table (via Resolver.collect_item)
@@ -1605,9 +1606,9 @@ fn collect_all_items_through_resolver(
     module_id: ModuleId,
     module_scopes: &mut FxHashMap<ModuleId, crate::sema::ScopeId>,
 ) {
-    // Enter a new scope for this package
-    let package_scope = resolver.ctx.enter_scope(ScopeKind::Module);
-    module_scopes.insert(module_id, package_scope);
+    // Enter a new scope for this module
+    let module_scope = resolver.ctx.enter_scope(ScopeKind::Module);
+    module_scopes.insert(module_id, module_scope);
     resolver.ctx.current_module = module_id;
 
     // Collect items (but not use declarations yet - those come in phase 2)
@@ -1719,18 +1720,18 @@ fn get_item_name_and_visibility(item: &Item) -> Option<(String, bool)> {
     }
 }
 
-/// Phase 2: Collect and resolve imports for all packages.
+/// Phase 2: Collect and resolve imports for all modules.
 fn resolve_all_imports(
     package: &Package,
     resolver: &mut Resolver,
     module_id: ModuleId,
     module_scopes: &FxHashMap<ModuleId, crate::sema::ScopeId>,
 ) {
-    // Switch to this package's scope
-    let package_scope = module_scopes
+    // Switch to this module's scope
+    let module_scope = module_scopes
         .get(&module_id)
-        .expect("package scope should exist");
-    resolver.ctx.set_current_scope(*package_scope);
+        .expect("module scope should exist");
+    resolver.ctx.set_current_scope(*module_scope);
     resolver.ctx.current_module = module_id;
 
     // Collect use declarations
@@ -1759,18 +1760,18 @@ fn resolve_all_imports(
     }
 }
 
-/// Phase 3: Resolve all bodies for all packages.
+/// Phase 3: Resolve all bodies for all modules.
 fn resolve_all_bodies(
     package: &Package,
     resolver: &mut Resolver,
     module_id: ModuleId,
     module_scopes: &FxHashMap<ModuleId, crate::sema::ScopeId>,
 ) {
-    // Switch to this package's scope
-    let package_scope = module_scopes
+    // Switch to this module's scope
+    let module_scope = module_scopes
         .get(&module_id)
-        .expect("package scope should exist");
-    resolver.ctx.set_current_scope(*package_scope);
+        .expect("module scope should exist");
+    resolver.ctx.set_current_scope(*module_scope);
     resolver.ctx.current_module = module_id;
 
     // Resolve bodies
@@ -2570,7 +2571,7 @@ mod tests {
     fn use_cross_module_requires_multifile() {
         check_err(
             "use utils.helper; fn main() {}",
-            &["cross-package imports require multi-file compilation"],
+            &["cross-module imports require multi-file compilation"],
         );
     }
 
@@ -2578,7 +2579,7 @@ mod tests {
     fn use_module_prefix_requires_multifile() {
         check_err(
             "use module.utils.helper; fn main() {}",
-            &["cross-package imports require multi-file compilation"],
+            &["cross-module imports require multi-file compilation"],
         );
     }
 
@@ -2586,7 +2587,7 @@ mod tests {
 
     #[test]
     fn use_self_prefix_resolves() {
-        // `use self.foo` should resolve to foo in current package
+        // `use self.foo` should resolve to foo in current module
         check_ok("fn foo() {} use self.foo; fn main() { foo(); }");
     }
 
@@ -2657,7 +2658,7 @@ mod tests {
     fn use_glob_cross_module_requires_multifile() {
         check_err(
             "use utils.*; fn main() {}",
-            &["cross-package glob imports require multi-file compilation"],
+            &["cross-module glob imports require multi-file compilation"],
         );
     }
 
@@ -2805,14 +2806,14 @@ mod tests {
 
     #[test]
     fn use_grouped_cross_module_requires_multifile() {
-        // When cross-package is implemented with a module tree, this should work
-        // For now it should error with cross-package not implemented
+        // When cross-module is implemented with a module tree, this should work
+        // For now it should error with cross-module not implemented
         check_err(
             r#"
             use utils.{helper, other};
             fn main() {}
         "#,
-            &["cross-package imports require multi-file compilation"],
+            &["cross-module imports require multi-file compilation"],
         );
     }
 
@@ -3000,7 +3001,7 @@ mod tests {
 
     // ===== Cross-Package Resolution with ModuleTree =====
 
-    /// Helper to create a SemanticContext with a ModuleTree for testing cross-package resolution.
+    /// Helper to create a SemanticContext with a ModuleTree for testing cross-module resolution.
     fn create_context_with_module_tree() -> SemanticContext {
         use crate::sema::module::{ModuleId, ModuleTree};
         use crate::sema::{SymbolKind, Visibility};
@@ -3052,7 +3053,7 @@ mod tests {
 
     #[test]
     fn cross_module_import_resolves_exported_item() {
-        // Test that cross-package imports work when a ModuleTree is provided
+        // Test that cross-module imports work when a ModuleTree is provided
         let ctx = create_context_with_module_tree();
 
         // Manually create a pending import and resolve it

@@ -120,7 +120,7 @@ pub struct SemanticContext {
     current_scope: ScopeId,
     /// Type interner for semantic types.
     pub types: TypeInterner,
-    /// Module tree for cross-package resolution (None for single-file mode).
+    /// Module tree for cross-module resolution (None for single-file mode).
     pub module_tree: Option<ModuleTree>,
     /// Current module ID within the module tree.
     pub current_module: ModuleId,
@@ -212,7 +212,7 @@ impl SemanticContext {
 
     /// Set the current scope to an existing scope by ID.
     ///
-    /// This is used to switch between package scopes during multi-file resolution.
+    /// This is used to switch between module scopes during multi-file resolution.
     pub fn set_current_scope(&mut self, scope_id: ScopeId) {
         debug_assert!(
             self.is_valid_scope_id(scope_id),

@@ -108,8 +108,8 @@ fn lower_package_files(package: &crate::package::Package, ctx: &mut LoweringCont
     }
 
     // Recurse into modules
-    for subpkg in package.modules() {
-        lower_package_files(subpkg, ctx);
+    for child_mod in package.modules() {
+        lower_package_files(child_mod, ctx);
     }
 }
 

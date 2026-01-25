@@ -18,10 +18,10 @@
 //!
 //! # Path Resolution
 //!
-//! Paths like `module.utils.helpers` are resolved by walking the package tree:
-//! 1. Start at the specified anchor (`module`, `super`, `self`, or current package)
-//! 2. Follow each segment to a child package
-//! 3. Look up the final segment in the target package's exports
+//! Paths like `module.utils.helpers` are resolved by walking the module tree:
+//! 1. Start at the specified anchor (`module`, `super`, `self`, or current module)
+//! 2. Follow each segment to a child module
+//! 3. Look up the final segment in the target module's exports
 
 use lasso::Spur;
 use rustc_hash::FxHashMap;
@@ -199,8 +199,8 @@ impl ModuleTree {
 
     /// Resolve a path with possible prefix (module, super, self).
     ///
-    /// Returns the target package and whether resolution succeeded.
-    /// - `module` → jump to package root (project root)
+    /// Returns the target module and whether resolution succeeded.
+    /// - `module` → jump to package root (root module)
     /// - `super` → jump to parent module (error if at root)
     /// - `self` → stay at current module
     pub fn resolve_path(
