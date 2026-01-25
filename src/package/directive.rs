@@ -153,11 +153,15 @@ fn process_attribute(
         }
         "include_package_if" => {
             let (condition, pkg) = get_conditional_args(attr, "include_package_if")?;
-            directives.conditional_package_includes.push((condition, pkg));
+            directives
+                .conditional_package_includes
+                .push((condition, pkg));
         }
         "exclude_package_if" => {
             let (condition, pkg) = get_conditional_args(attr, "exclude_package_if")?;
-            directives.conditional_package_excludes.push((condition, pkg));
+            directives
+                .conditional_package_excludes
+                .push((condition, pkg));
         }
 
         _ => {
@@ -170,21 +174,27 @@ fn process_attribute(
 
 /// Extract a single string argument from an attribute like `#![name("value")]`.
 fn get_single_string_arg(attr: &InnerAttribute, directive: &str) -> Result<String, DirectiveError> {
-    let input = attr.input().ok_or_else(|| DirectiveError::MalformedDirective {
-        directive: directive.to_string(),
-        reason: "expected parenthesized argument".to_string(),
-    })?;
+    let input = attr
+        .input()
+        .ok_or_else(|| DirectiveError::MalformedDirective {
+            directive: directive.to_string(),
+            reason: "expected parenthesized argument".to_string(),
+        })?;
 
     let mut args = input.args();
-    let arg = args.next().ok_or_else(|| DirectiveError::MalformedDirective {
-        directive: directive.to_string(),
-        reason: "expected string argument".to_string(),
-    })?;
+    let arg = args
+        .next()
+        .ok_or_else(|| DirectiveError::MalformedDirective {
+            directive: directive.to_string(),
+            reason: "expected string argument".to_string(),
+        })?;
 
-    let value = arg.value().ok_or_else(|| DirectiveError::MalformedDirective {
-        directive: directive.to_string(),
-        reason: "expected string literal".to_string(),
-    })?;
+    let value = arg
+        .value()
+        .ok_or_else(|| DirectiveError::MalformedDirective {
+            directive: directive.to_string(),
+            reason: "expected string literal".to_string(),
+        })?;
 
     let text = value.text();
     let unquoted = unquote_string(text);
@@ -205,10 +215,12 @@ fn get_conditional_args(
     attr: &InnerAttribute,
     directive: &str,
 ) -> Result<(String, String), DirectiveError> {
-    let input = attr.input().ok_or_else(|| DirectiveError::MalformedDirective {
-        directive: directive.to_string(),
-        reason: "expected parenthesized arguments".to_string(),
-    })?;
+    let input = attr
+        .input()
+        .ok_or_else(|| DirectiveError::MalformedDirective {
+            directive: directive.to_string(),
+            reason: "expected parenthesized arguments".to_string(),
+        })?;
 
     let args: Vec<_> = input.args().collect();
 
@@ -229,10 +241,12 @@ fn get_conditional_args(
         })?;
 
     // Second arg is the file (string literal)
-    let file_value = args[1].value().ok_or_else(|| DirectiveError::MalformedDirective {
-        directive: directive.to_string(),
-        reason: "expected file string".to_string(),
-    })?;
+    let file_value = args[1]
+        .value()
+        .ok_or_else(|| DirectiveError::MalformedDirective {
+            directive: directive.to_string(),
+            reason: "expected file string".to_string(),
+        })?;
 
     let file = unquote_string(file_value.text());
 
@@ -423,10 +437,7 @@ mod tests {
         "#;
         let directives = parse_package_directives(source).unwrap();
 
-        assert_eq!(
-            directives.package_includes,
-            vec!["utils", "core", "tests"]
-        );
+        assert_eq!(directives.package_includes, vec!["utils", "core", "tests"]);
     }
 
     #[test]

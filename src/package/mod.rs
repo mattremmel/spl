@@ -26,11 +26,11 @@ mod scanner;
 mod source_map;
 
 pub use compilation_unit::CompilationUnit;
-pub use directive::{parse_package_directives, DirectiveError, PackageDirectives};
+pub use directive::{DirectiveError, PackageDirectives, parse_package_directives};
 pub use resolver::{
-    resolve_includes, resolve_packages, try_resolve_includes, try_resolve_packages, ResolveError,
+    ResolveError, resolve_includes, resolve_packages, try_resolve_includes, try_resolve_packages,
 };
-pub use scanner::{find_subpackages, has_package_config, scan_directory, ScanError};
+pub use scanner::{ScanError, find_subpackages, has_package_config, scan_directory};
 pub use source_map::{FileId, SourceMap};
 
 use crate::ast::Item;
@@ -210,15 +210,12 @@ impl Package {
         };
 
         // Determine package name
-        let name = directives
-            .name
-            .clone()
-            .unwrap_or_else(|| {
-                root.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("unnamed")
-                    .to_string()
-            });
+        let name = directives.name.clone().unwrap_or_else(|| {
+            root.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unnamed")
+                .to_string()
+        });
 
         // Resolve which files to include
         let file_names: Vec<String> = all_files
@@ -495,16 +492,10 @@ mod tests {
             .expect("expected level1 subpackage");
         assert_eq!(l1.name(), "level1");
 
-        let l2 = l1
-            .subpackages()
-            .next()
-            .expect("expected level2 subpackage");
+        let l2 = l1.subpackages().next().expect("expected level2 subpackage");
         assert_eq!(l2.name(), "level2");
 
-        let l3 = l2
-            .subpackages()
-            .next()
-            .expect("expected level3 subpackage");
+        let l3 = l2.subpackages().next().expect("expected level3 subpackage");
         assert_eq!(l3.name(), "level3");
     }
 

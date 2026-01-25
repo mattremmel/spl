@@ -107,6 +107,8 @@ pub use types::{Mutability, PrimitiveKind, Type, TypeId, TypeInterner, TypeVar};
 use crate::lexer::Span;
 use lasso::{Rodeo, Spur};
 
+pub use module::{ModuleId, ModuleTree, PathResolveError};
+
 /// The central context for semantic analysis.
 ///
 /// Owns the string interner, symbol table, scope hierarchy, and type interner.
@@ -118,6 +120,10 @@ pub struct SemanticContext {
     current_scope: ScopeId,
     /// Type interner for semantic types.
     pub types: TypeInterner,
+    /// Module tree for cross-package resolution (None for single-file mode).
+    pub module_tree: Option<ModuleTree>,
+    /// Current module ID within the module tree.
+    pub current_module: ModuleId,
 }
 
 impl Default for SemanticContext {
@@ -139,6 +145,25 @@ impl SemanticContext {
             scopes,
             current_scope: ScopeId(0),
             types: TypeInterner::new(),
+            module_tree: None,
+            current_module: ModuleId(0),
+        }
+    }
+
+    /// Create a new semantic context with a module tree for multi-file compilation.
+    pub fn with_module_tree(module_tree: ModuleTree, current_module: ModuleId) -> Self {
+        let mut scopes = Vec::new();
+        let root_scope = Scope::new(ScopeId(0), ScopeKind::Module, None);
+        scopes.push(root_scope);
+
+        Self {
+            interner: Rodeo::default(),
+            symbols: Vec::new(),
+            scopes,
+            current_scope: ScopeId(0),
+            types: TypeInterner::new(),
+            module_tree: Some(module_tree),
+            current_module,
         }
     }
 

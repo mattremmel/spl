@@ -93,7 +93,8 @@ impl Module {
 /// Owns all modules and provides path resolution.
 pub struct ModuleTree {
     modules: Vec<Module>,
-    interner: lasso::Rodeo,
+    /// String interner for module names and item names.
+    pub interner: lasso::Rodeo,
 }
 
 impl Default for ModuleTree {

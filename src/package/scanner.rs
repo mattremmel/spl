@@ -59,9 +59,7 @@ pub fn scan_directory(path: &Path) -> Result<Vec<PathBuf>, ScanError> {
         let entry = entry?;
         let entry_path = entry.path();
 
-        if entry_path.is_file()
-            && entry_path.extension().is_some_and(|ext| ext == "spl")
-        {
+        if entry_path.is_file() && entry_path.extension().is_some_and(|ext| ext == "spl") {
             files.push(entry_path);
         }
     }

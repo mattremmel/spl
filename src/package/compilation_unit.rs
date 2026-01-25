@@ -5,7 +5,7 @@
 
 use super::{FileId, SourceMap};
 use crate::ast::{Item, SourceFile as AstSourceFile};
-use crate::parser::{parse, Parse, ParseError};
+use crate::parser::{Parse, ParseError, parse};
 use rowan::ast::AstNode;
 
 /// Aggregated AST from multiple source files.
@@ -54,7 +54,10 @@ impl CompilationUnit {
     pub fn items(&self) -> impl Iterator<Item = (FileId, Item)> + '_ {
         self.source_files().flat_map(|(id, sf)| {
             // Collect items to avoid lifetime issues with the iterator
-            sf.items().collect::<Vec<_>>().into_iter().map(move |item| (id, item))
+            sf.items()
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(move |item| (id, item))
         })
     }
 
@@ -183,10 +186,7 @@ mod tests {
         let unit = CompilationUnit::parse(source_map, &[id]);
 
         // Can access source map through unit
-        assert_eq!(
-            unit.source_map().get_content(id),
-            Some("fn test() {}")
-        );
+        assert_eq!(unit.source_map().get_content(id), Some("fn test() {}"));
     }
 
     #[test]
