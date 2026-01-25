@@ -10,7 +10,7 @@ The lexer transforms source text into a stream of tokens. Whitespace and comment
 
 ## Keywords
 
-SPL reserves 29 keywords that cannot be used as identifiers:
+SPL reserves 30 keywords that cannot be used as identifiers:
 
 | Keyword    | Description                          |
 |------------|--------------------------------------|
@@ -33,16 +33,17 @@ SPL reserves 29 keywords that cannot be used as identifiers:
 | `true`     | Boolean literal true                 |
 | `false`    | Boolean literal false                |
 | `pub`      | Public visibility modifier           |
+| `package`  | Package scope in `pub(package)`      |
 | `self`     | Self value in methods                |
 | `Self`     | Self type in impl blocks             |
 | `use`      | Import declaration                   |
-| `mod`      | Module declaration                   |
-| `crate`    | Root module reference                |
+| `module`   | Module declaration (inline or ref)   |
 | `super`    | Parent module reference              |
 | `where`    | Generic type constraints             |
 | `is`       | Pattern matching operator            |
 | `not`      | Negation in `is not` pattern         |
 | `match`    | Match expression                     |
+| `extern`   | External function declaration        |
 
 ---
 
@@ -90,14 +91,14 @@ SPL reserves 29 keywords that cannot be used as identifiers:
 
 ### Other Operators
 
-| Operator | Description                      |
-|----------|----------------------------------|
-| `.`      | Member access / path separator   |
-| `&`      | Reference                        |
-| `..`     | Range                            |
-| `$`      | End of array (in slices)         |
+| Operator | Description                        |
+|----------|-----------------------------------|
+| `.`      | Member access / path separator    |
+| `&`      | Reference                         |
+| `..`     | Range                             |
+| `$`      | Package root (paths) / array end (slices) |
 
-**Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses: `Vec(i32)` instead of `Vec<i32>`.
+**Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses: `Vec(i32)` instead of `Vec<i32>`. Package-root paths use `$`: `$.utils.helper`.
 
 ### Operator Precedence (highest to lowest)
 

@@ -194,23 +194,23 @@ Swift's solution from [Doug Gregor's Swift for C++ Practitioners](https://www.do
 
 ## Recommendation for SPL
 
-### Decision: Module = Compilation Unit with Stable ABI
+### Decision: Package = Compilation Unit with Stable ABI
 
-SPL should use **modules** (directories) as compilation units with **stable ABI by default** and **type-erased generics** with opt-in specialization.
+SPL should use **packages** as compilation units with **stable ABI by default** and **type-erased generics** with opt-in specialization.
 
 ```
 myproject/
 ├── main.spl           ─┐
-└── utils.spl           │── One compilation unit: "myproject"
+└── utils.spl           │── One compilation unit: "myproject" package
                        ─┘
 ├── network/
 │   ├── client.spl     ─┐
-│   └── server.spl      │── One compilation unit: "network"
+│   └── server.spl      │── Modules within the same package
 │                      ─┘
 ```
 
 This aligns with:
-- SPL's existing module system (Go-style directory = module)
+- SPL's module system (Go-style directory = module, package = compilation unit)
 - Graydon Hoare's preferred design for Rust
 - Swift's proven approach to ABI stability
 
@@ -222,14 +222,14 @@ This aligns with:
 - **Phase 3+:** Add binary stdlib/library support *if* compile times become a pain point
 - **Key insight:** Witness table architecture enables stable ABI without requiring it upfront
 
-This means we design for ABI stability (using witness tables, defining clear module boundaries) but defer the maintenance burden of actually shipping and supporting pre-compiled binaries until there's a demonstrated need.
+This means we design for ABI stability (using witness tables, defining clear package boundaries) but defer the maintenance burden of actually shipping and supporting pre-compiled binaries until there's a demonstrated need.
 
 #### 1. Design for Stable ABI
 
 The architecture supports stable calling conventions and layouts:
-- Modules *can* be pre-compiled into `.splmod` or `.a` files
+- Packages *can* be pre-compiled into `.splpkg` or `.a` files
 - The standard library *could* ship pre-compiled
-- Incremental builds *would* only recompile changed modules
+- Incremental builds *would* only recompile changed packages
 
 **Current reality:** In early phases, we compile everything from source. The witness table design keeps the pre-compiled library option open for later.
 
@@ -270,14 +270,14 @@ fn sum<T: Numeric>(items: &[T]) -> T {
 }
 ```
 
-**Rationale:** Preserves ability to optimize hot paths. The optimizer can also auto-specialize within a module.
+**Rationale:** Preserves ability to optimize hot paths. The optimizer can also auto-specialize within a package.
 
-#### 4. Module Interface Files
+#### 4. Package Interface Files
 
-Each module produces an interface file (like Swift's `.swiftinterface` or OCaml's `.mli`):
+Each package produces an interface file (like Swift's `.swiftinterface` or OCaml's `.mli`):
 
 ```
-network.splmod      # Binary interface (for fast loading)
+network.splpkg      # Binary interface (for fast loading)
 network.spli        # Text interface (for debugging/tooling)
 network.a           # Compiled code
 ```
@@ -291,9 +291,9 @@ network.a           # Compiled code
 - No separate compilation
 - Good for bootstrapping
 
-**Phase 2: Module Boundaries**
-- Define module interface format
-- Implement separate compilation of modules
+**Phase 2: Package Boundaries**
+- Define package interface format
+- Implement separate compilation of packages
 - Generics still use whole-program monomorphization
 
 **Phase 3: Witness Tables**
@@ -304,11 +304,11 @@ network.a           # Compiled code
 **Phase 4: Selective Specialization**
 - Add `#[specialize]` attribute
 - Implement monomorphization for marked functions
-- Auto-specialization heuristics within modules
+- Auto-specialization heuristics within packages
 
 ### Implementation Priority
 
-Binary library support (pre-compiled stdlib, `.splmod` files) is **"nice to have"** not **"must have"**:
+Binary library support (pre-compiled stdlib, `.splpkg` files) is **"nice to have"** not **"must have"**:
 
 1. **Language features and correctness come first** - Phases 1-2 focus on getting the language right
 2. **Compile-from-source is the initial strategy** - Simple, debuggable, no ABI maintenance burden
@@ -363,7 +363,7 @@ From the original task (spl-bkf):
 **Benefits:** Clear boundaries, aggressive optimization, parallel crate compilation.
 **Drawbacks:** No stable ABI, slow incremental builds due to cross-crate monomorphization, orphan rules complexity.
 
-> 2. Could modules be compiled independently?
+> 2. Could packages be compiled independently?
 
 **Yes**, with:
 - Stable ABI for non-generic code
@@ -372,10 +372,10 @@ From the original task (spl-bkf):
 
 This is exactly what Swift does successfully.
 
-> 3. Cross-crate optimization / LTO trade-offs?
+> 3. Cross-package optimization / LTO trade-offs?
 
 With witness tables as default:
-- Cross-module optimization is less critical (generic code is pre-compiled)
+- Cross-package optimization is less critical (generic code is pre-compiled)
 - `#[specialize]` provides escape hatch for performance-critical paths
 - LTO remains available for release builds
 - Profile-guided optimization can inform auto-specialization
@@ -384,7 +384,7 @@ With witness tables as default:
 
 | Choice | Decision | Rationale |
 |--------|----------|-----------|
-| Compilation unit | Module (directory) | Matches SPL's module system |
+| Compilation unit | Package | Matches SPL's module system |
 | ABI | Design for stability (implement later) | Keeps option open without upfront maintenance burden |
 | Generics | Witness tables by default | Enables separate compilation |
 | Optimization | Opt-in monomorphization | Preserves performance where needed |
@@ -392,7 +392,7 @@ With witness tables as default:
 This positions SPL to have:
 - **Fast compile times** (Go-like, due to pre-compiled generics)
 - **Good runtime performance** (Swift-like, with specialization for hot paths)
-- **Simple mental model** (one module = one compilation unit)
+- **Simple mental model** (one package = one compilation unit)
 - **Pre-compiled standard library** (major build time reduction)
 
 ## References

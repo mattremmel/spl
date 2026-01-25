@@ -36,7 +36,11 @@ Trailing commas are allowed in all comma-separated lists (Rust-style).
 ```ebnf
 Program = { Item } ;
 
-Item = [ "pub" ] ( FunctionDef | StructDef | ImplBlock | TypeAlias | UseDecl | ModDecl ) ;
+Item = [ Visibility ] ( FunctionDef | StructDef | ImplBlock | TypeAlias | UseDecl | ModuleDecl ) ;
+
+Visibility = "pub" [ "(" VisibilityScope ")" ] ;
+
+VisibilityScope = "package" | "super" | "in" Path ;
 ```
 
 ### Function Definitions
@@ -174,7 +178,7 @@ UseDecl = "use" UsePath ";" ;
 
 UsePath = PathPrefix [ "." UseTree ] ;
 
-PathPrefix = [ "crate" | "super" | "self" ] "." IDENTIFIER { "." IDENTIFIER }
+PathPrefix = [ "$" | "super" | "self" ] "." IDENTIFIER { "." IDENTIFIER }
            | IDENTIFIER { "." IDENTIFIER } ;
 
 UseTree = "*"                                    (* glob import *)
@@ -193,23 +197,45 @@ UseTreeList = UseTree { "," UseTree } [ "," ] ;
 | `use std.collections.HashMap as Map;` | Import with rename |
 | `use std.collections.{HashMap, HashSet};` | Grouped import |
 | `use std.prelude.*;` | Glob import |
-| `use crate.utils.helper;` | Crate-relative import |
+| `use $.utils.helper;` | Package-root import |
 | `use super.common;` | Parent module import |
 
 ### Module Declarations
 
-Declare submodules. Only valid in `_module.spl` files.
+Declare inline modules for namespacing within a file, or reference submodules.
 
 ```ebnf
-ModDecl = "mod" IDENTIFIER ";" ;
+ModuleDecl = "module" IDENTIFIER ( ";" | "{" { Item } "}" ) ;
 ```
 
 **Examples:**
 
 | Syntax | Description |
 |--------|-------------|
-| `mod network;` | Private submodule |
-| `pub mod api;` | Public submodule |
+| `module network;` | Reference submodule in directory |
+| `pub module api;` | Public submodule reference |
+| `module internal { ... }` | Inline module for namespacing |
+
+**Inline Module Example:**
+
+```spl
+// Inline module for namespacing
+module internal {
+    fn helper(): i32 {
+        42
+    }
+
+    pub fn public_helper(): i32 {
+        helper()
+    }
+}
+
+fn main() {
+    let x = internal.public_helper();
+}
+```
+
+**Note:** Inline modules are a future feature. See the module system roadmap.
 
 ---
 
@@ -862,7 +888,7 @@ impl Point(T) where T {
 | Category    | Key Productions                                                     |
 |-------------|---------------------------------------------------------------------|
 | Program     | `Program`, `Item`, `FunctionDef`, `StructDef`, `WhereClause`        |
-| Modules     | `UseDecl`, `UsePath`, `UseTree`, `ModDecl`                          |
+| Modules     | `UseDecl`, `UsePath`, `UseTree`, `ModuleDecl`                       |
 | Types       | `Type`, `ReferenceType`, `ArrayType`, `FnPointerType`, `GenericArgs`|
 | Statements  | `Block`, `Statement`, `LetStatement`                                |
 | Expressions | `Expression`, `IsExpr`, `MatchExpr`, `IfExpr`, `LoopExpr`           |
