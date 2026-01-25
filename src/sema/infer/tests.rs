@@ -3981,7 +3981,7 @@ fn module_private_item_error() {
         module m { fn private(): i32 { 42 } }
         fn main() { m.private() }
         "#,
-        &["private", "not accessible"],
+        &["private"],
     );
 }
 
@@ -3993,5 +3993,219 @@ fn module_item_not_found_error() {
         fn main() { m.nonexistent() }
         "#,
         &["cannot find"],
+    );
+}
+
+// ===== Visibility Tests for Qualified Access =====
+
+#[test]
+fn visibility_qualified_access_public_ok() {
+    // Public functions in modules should be accessible via qualified access
+    check(
+        r#"
+        module m { pub fn public_fn(): i32 { 42 } }
+        fn main() { let x = m.public_fn(); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn visibility_qualified_access_private_error() {
+    // Private functions in modules should NOT be accessible via qualified access
+    check_err(
+        r#"
+        module m { fn private_fn(): i32 { 42 } }
+        fn main() { m.private_fn() }
+        "#,
+        &["private"],
+    );
+}
+
+#[test]
+fn visibility_nested_module_public_access() {
+    // Public items in nested modules accessible via qualified path
+    check(
+        r#"
+        module outer {
+            pub module inner {
+                pub fn nested_fn(): i32 { 42 }
+            }
+        }
+        fn main() { let x = outer.inner.nested_fn(); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn visibility_nested_module_private_error() {
+    // Private items in nested modules NOT accessible
+    check_err(
+        r#"
+        module outer {
+            pub module inner {
+                fn private_fn(): i32 { 42 }
+            }
+        }
+        fn main() { outer.inner.private_fn() }
+        "#,
+        &["private"],
+    );
+}
+
+#[test]
+fn visibility_child_can_call_parent_private() {
+    // Child module can access parent's private functions through scope
+    check(
+        r#"
+        fn private_helper(): i32 { 42 }
+        module child {
+            pub fn call_parent(): i32 { private_helper() }
+        }
+        fn main() { let x = child.call_parent(); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn visibility_grandchild_can_call_grandparent_private() {
+    // Grandchild can access grandparent's private functions through scope chain
+    check(
+        r#"
+        fn private_grandparent(): i32 { 100 }
+        module parent {
+            pub module child {
+                pub fn call_ancestor(): i32 { private_grandparent() }
+            }
+        }
+        fn main() { let x = parent.child.call_ancestor(); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn visibility_sibling_cannot_call_private() {
+    // One module cannot access sibling module's private items
+    check_err(
+        r#"
+        module a { fn private_fn(): i32 { 1 } }
+        module b {
+            pub fn try_call(): i32 { a.private_fn() }
+        }
+        fn main() { b.try_call() }
+        "#,
+        &["private"],
+    );
+}
+
+#[test]
+fn visibility_sibling_can_call_public() {
+    // One module CAN access sibling module's public items
+    check(
+        r#"
+        module a { pub fn public_fn(): i32 { 1 } }
+        module b {
+            pub fn call_sibling(): i32 { a.public_fn() }
+        }
+        fn main() { let x = b.call_sibling(); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn visibility_pub_struct_private_field_error() {
+    // TODO(visibility): This test should pass once field visibility checking is implemented
+    // Public struct with private field: field not accessible outside module
+    check_err(
+        r#"
+        module m {
+            pub struct S(x: i32)
+        }
+        fn main() {
+            let s = m.S(x: 42);
+            let _ = s.x;
+        }
+        "#,
+        &["private"],
+    );
+}
+
+#[test]
+fn visibility_pub_struct_pub_field_ok() {
+    // Public struct with public field: field accessible
+    check(
+        r#"
+        module m {
+            pub struct S(pub x: i32)
+        }
+        fn main() {
+            let s = m.S(x: 42);
+            let y = s.x;
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn visibility_private_method_same_module_ok() {
+    // Private method accessible within same module
+    check(
+        r#"
+        struct S()
+        impl S {
+            fn private_method(&self): i32 { 42 }
+            pub fn public_method(&self): i32 { self.private_method() }
+        }
+        fn main() {
+            let s = S();
+            let x = s.public_method();
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn visibility_private_method_other_module_error() {
+    // Private method NOT accessible from other module
+    check_err(
+        r#"
+        module m {
+            pub struct S()
+            impl S {
+                fn private_method(&self): i32 { 42 }
+            }
+        }
+        fn main() {
+            let s = m.S();
+            s.private_method();
+        }
+        "#,
+        &["private"],
+    );
+}
+
+#[test]
+fn visibility_pub_method_other_module_ok() {
+    // Public method accessible from other module
+    check(
+        r#"
+        module m {
+            pub struct S()
+            impl S {
+                pub fn public_method(&self): i32 { 42 }
+            }
+        }
+        fn main() {
+            let s = m.S();
+            let x = s.public_method();
+        }
+        "#,
+        "i32",
     );
 }

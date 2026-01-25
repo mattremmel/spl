@@ -204,7 +204,7 @@ impl<'a> InferEngine<'a> {
     }
 
     /// Infer bodies for items inside an inline module.
-    fn infer_module_bodies(&mut self, module_def: &crate::ast::ModuleDef) {
+    pub(super) fn infer_module_bodies(&mut self, module_def: &crate::ast::ModuleDef) {
         for item in module_def.items() {
             match &item {
                 Item::Function(func) => self.infer_function(func),
@@ -423,7 +423,7 @@ impl<'a> InferEngine<'a> {
 
         // Check all fields of this struct
         if let Some(fields) = self.struct_fields.get(&struct_id) {
-            for (_, field_ty) in fields {
+            for (_, field_ty, _) in fields {
                 // Get the directly contained struct types (not through references)
                 if let Some(contained_id) = self.get_direct_struct_dependency(*field_ty)
                     && self.has_recursive_type(contained_id, visited, in_progress, path)
@@ -610,7 +610,14 @@ impl<'a> InferEngine<'a> {
                     .ty()
                     .map(|t| self.ast_type_to_type_id(&t))
                     .unwrap_or_else(|| self.fresh_type_var());
-                fields.push((field_name, field_ty));
+                // Get the field's DefId from its name's resolution
+                let field_def_id = field
+                    .name()
+                    .and_then(|n| n.ident_token())
+                    .map(|t| text_range_to_span(t.text_range()))
+                    .and_then(|span| self.resolutions.get(&span).copied())
+                    .unwrap_or(DefId::INVALID);
+                fields.push((field_name, field_ty, field_def_id));
             }
         }
 
@@ -762,6 +769,12 @@ impl<'a> InferEngine<'a> {
             None => return,
         };
 
+        // Set current scope to the function's scope for visibility checking
+        let fn_symbol = self.resolve_ctx.get_symbol(def_id);
+        let fn_scope = fn_symbol.scope_id;
+        let saved_scope = self.current_inference_scope;
+        self.current_inference_scope = fn_scope;
+
         // Get signature
         let sig = match self.fn_signatures.get(&def_id) {
             Some(s) => s.clone(),
@@ -858,6 +871,9 @@ impl<'a> InferEngine<'a> {
                 }
             }
         }
+
+        // Restore the previous scope
+        self.current_inference_scope = saved_scope;
 
         self.current_return_type = None;
     }

@@ -1,0 +1,9 @@
+// Test: Private struct field not accessible from outside module
+module m {
+    pub struct S(x: i32)
+}
+
+fn main(): i32 {
+    let s = m.S(x: 42);
+    s.x  // Error: field x is private
+}

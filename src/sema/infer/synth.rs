@@ -620,8 +620,30 @@ impl<'a> InferEngine<'a> {
             }
 
             if let Some(fields) = self.struct_fields.get(&def_id).cloned() {
-                for (name, ty) in fields {
+                for (name, ty, field_def_id) in fields {
                     if name == field_name {
+                        // Check field visibility
+                        if field_def_id.is_valid() {
+                            let field_symbol = self.resolve_ctx.get_symbol(field_def_id);
+                            if field_symbol.visibility == Visibility::Private {
+                                // Private fields: check if accessor is in same module as struct
+                                let struct_symbol = self.resolve_ctx.get_symbol(def_id);
+                                let current_scope = self.current_inference_scope;
+                                let struct_scope = struct_symbol.scope_id;
+                                // Check if current scope is NOT the struct's defining scope or a child of it
+                                if !self.is_scope_descendant_of(current_scope, struct_scope) {
+                                    let span = text_range_to_span(segment.syntax().text_range());
+                                    self.diagnostics.push(
+                                        Diagnostic::error(format!(
+                                            "field `{}` is private",
+                                            field_name
+                                        ))
+                                        .with_label(span, "private field"),
+                                    );
+                                    return self.types.error();
+                                }
+                            }
+                        }
                         // Substitute type parameters in field type
                         let result_ty = self.substitute_type_params(ty, &subst);
                         // Record the type for this field access
@@ -779,7 +801,7 @@ impl<'a> InferEngine<'a> {
             .unwrap_or_default();
         let instantiated_fields: Vec<(String, TypeId)> = fields_info
             .iter()
-            .map(|(name, ty)| (name.clone(), self.substitute_type_params(*ty, &subst)))
+            .map(|(name, ty, _def_id)| (name.clone(), self.substitute_type_params(*ty, &subst)))
             .collect();
         let field_map: FxHashMap<_, _> = instantiated_fields.iter().cloned().collect();
 
@@ -1058,15 +1080,17 @@ impl<'a> InferEngine<'a> {
 
                     // Check visibility
                     if item_symbol.visibility == Visibility::Private {
-                        let span = text_range_to_span(segment.syntax().text_range());
-                        self.diagnostics.push(
-                            Diagnostic::error(format!(
-                                "`{}` is private and not accessible",
-                                segment_name
-                            ))
-                            .with_label(span, "private item, not accessible"),
-                        );
-                        return self.types.error();
+                        let current_scope = self.current_inference_scope;
+                        let item_scope = item_symbol.scope_id;
+                        // Check if current scope is NOT the item's defining scope or a child of it
+                        if !self.is_scope_descendant_of(current_scope, item_scope) {
+                            let span = text_range_to_span(segment.syntax().text_range());
+                            self.diagnostics.push(
+                                Diagnostic::error(format!("`{}` is private", segment_name))
+                                    .with_label(span, "private item"),
+                            );
+                            return self.types.error();
+                        }
                     }
 
                     // Must be a module for intermediate segments
@@ -1130,12 +1154,17 @@ impl<'a> InferEngine<'a> {
 
         // Check visibility
         if item_symbol.visibility == Visibility::Private {
-            let span = text_range_to_span(last_segment.syntax().text_range());
-            self.diagnostics.push(
-                Diagnostic::error(format!("`{}` is private and not accessible", last_name))
-                    .with_label(span, "private item, not accessible"),
-            );
-            return self.types.error();
+            let current_scope = self.current_inference_scope;
+            let item_scope = item_symbol.scope_id;
+            // Check if current scope is NOT the item's defining scope or a child of it
+            if !self.is_scope_descendant_of(current_scope, item_scope) {
+                let span = text_range_to_span(last_segment.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error(format!("`{}` is private", last_name))
+                        .with_label(span, "private item"),
+                );
+                return self.types.error();
+            }
         }
 
         // Handle based on item kind
@@ -1285,6 +1314,26 @@ impl<'a> InferEngine<'a> {
             if fn_name == method_name
                 && let Some(sig) = self.fn_signatures.get(&method_def_id).cloned()
             {
+                // Check method visibility
+                if symbol.visibility == Visibility::Private {
+                    // Private methods: check if accessor is in same module as the struct/method
+                    let struct_symbol = self.resolve_ctx.get_symbol(struct_def_id);
+                    let current_scope = self.current_inference_scope;
+                    let struct_scope = struct_symbol.scope_id;
+                    // Check if current scope is NOT the struct's defining scope or a child of it
+                    if !self.is_scope_descendant_of(current_scope, struct_scope) {
+                        let span = text_range_to_span(method_token.text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "method `{}` is private",
+                                method_name
+                            ))
+                            .with_label(span, "private method"),
+                        );
+                        return self.types.error();
+                    }
+                }
+
                 // Store the resolution for the method
                 let method_span = text_range_to_span(method_token.text_range());
                 self.method_resolutions.insert(method_span, method_def_id);
@@ -1473,7 +1522,7 @@ impl<'a> InferEngine<'a> {
             .unwrap_or_default();
         let instantiated_fields: Vec<(String, TypeId)> = fields_info
             .iter()
-            .map(|(name, ty)| (name.clone(), self.substitute_type_params(*ty, &subst)))
+            .map(|(name, ty, _def_id)| (name.clone(), self.substitute_type_params(*ty, &subst)))
             .collect();
         let field_map: FxHashMap<_, _> = instantiated_fields.iter().cloned().collect();
 
@@ -1959,8 +2008,33 @@ impl<'a> InferEngine<'a> {
             }
 
             if let Some(fields) = self.struct_fields.get(&def_id).cloned() {
-                for (name, ty) in fields {
+                for (name, ty, field_def_id) in fields {
                     if name == field_name {
+                        // Check field visibility
+                        if field_def_id.is_valid() {
+                            let field_symbol = self.resolve_ctx.get_symbol(field_def_id);
+                            if field_symbol.visibility == Visibility::Private {
+                                // Private fields: check if accessor is in same module as struct
+                                let struct_symbol = self.resolve_ctx.get_symbol(def_id);
+                                // If struct is defined in a different scope hierarchy, field may not be accessible
+                                // Simple check: if scopes differ significantly, report error
+                                // This is a simplified check - proper module hierarchy checking is more complex
+                                let current_scope = self.current_inference_scope;
+                                let struct_scope = struct_symbol.scope_id;
+                                // Check if current scope is NOT the struct's defining scope or a child of it
+                                if !self.is_scope_descendant_of(current_scope, struct_scope) {
+                                    let span = text_range_to_span(field.syntax().text_range());
+                                    self.diagnostics.push(
+                                        Diagnostic::error(format!(
+                                            "field `{}` is private",
+                                            field_name
+                                        ))
+                                        .with_label(span, "private field"),
+                                    );
+                                    return self.types.error();
+                                }
+                            }
+                        }
                         // Substitute type parameters in field type
                         return self.substitute_type_params(ty, &subst);
                     }
@@ -2210,6 +2284,27 @@ impl<'a> InferEngine<'a> {
             }
 
             if let Some((sig, resolved_method_def_id)) = found_method {
+                // Check method visibility
+                let method_symbol = self.resolve_ctx.get_symbol(resolved_method_def_id);
+                if method_symbol.visibility == Visibility::Private {
+                    // Private methods: check if accessor is in same module as the struct/method
+                    let struct_symbol = self.resolve_ctx.get_symbol(def_id);
+                    let current_scope = self.current_inference_scope;
+                    let struct_scope = struct_symbol.scope_id;
+                    // Check if current scope is NOT the struct's defining scope or a child of it
+                    if !self.is_scope_descendant_of(current_scope, struct_scope) {
+                        let span = text_range_to_span(method.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "method `{}` is private",
+                                method_name
+                            ))
+                            .with_label(span, "private method"),
+                        );
+                        return self.types.error();
+                    }
+                }
+
                 // Store the resolved method DefId for MIR lowering
                 let method_span = text_range_to_span(method.syntax().text_range());
                 self.method_resolutions

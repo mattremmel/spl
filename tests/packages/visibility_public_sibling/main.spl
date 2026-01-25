@@ -1,0 +1,13 @@
+// Test: Sibling module can access another sibling's public function
+module a {
+    pub fn public_fn(): i32 { 42 }
+}
+
+module b {
+    // Sibling can access public items via qualified path
+    pub fn call_sibling(): i32 { a.public_fn() }
+}
+
+fn main(): i32 {
+    b.call_sibling()
+}

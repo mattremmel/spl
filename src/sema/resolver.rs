@@ -42,7 +42,9 @@ use crate::ast::{
 use crate::diagnostic::Diagnostic;
 use crate::lexer::Span;
 use crate::package::Package;
-use crate::sema::{ModuleId, ModuleTree, ScopeKind, SemanticContext, SymbolKind, Visibility};
+use crate::sema::{
+    ModuleId, ModuleTree, ScopeKind, SemanticContext, SymbolKind, Visibility, is_visible,
+};
 use rowan::ast::AstNode;
 use rustc_hash::FxHashMap;
 
@@ -499,8 +501,8 @@ impl<'ctx> Resolver<'ctx> {
         let mod_path_owned: Vec<String> = mod_path.to_vec();
 
         // Lookup phase: immutably borrow the tree in a limited scope
-        // Result: Ok(def_id) = found, Err(true) = private, Err(false) = not found
-        let lookup_result: Result<DefId, bool> = {
+        // Result: Ok(def_id) = found and visible, Err(Some(name)) = found but not visible, Err(None) = not found
+        let lookup_result: Result<DefId, Option<String>> = {
             let Some(tree) = &self.ctx.module_tree else {
                 // Single-file mode, no cross-module possible
                 self.diagnostics.push(
@@ -539,20 +541,24 @@ impl<'ctx> Resolver<'ctx> {
                 }
             };
 
-            // Look up item in target module's EXPORTS (not items - visibility!)
+            // Look up item in target module's items (not just exports)
             let item_spur = tree.interner.get(&item_name);
             let target = tree.get(target_module);
 
             if let Some(spur) = item_spur {
-                if let Some(&def_id) = target.exports().get(&spur) {
-                    Ok(def_id)
-                } else if target.items().get(&spur).is_some() {
-                    Err(true) // Private
+                if let Some(&def_id) = target.items().get(&spur) {
+                    // Found the item - now check visibility
+                    let symbol = self.ctx.get_symbol(def_id);
+                    if is_visible(symbol.visibility, target_module, current_module, tree) {
+                        Ok(def_id)
+                    } else {
+                        Err(Some(item_name.clone())) // Not visible
+                    }
                 } else {
-                    Err(false) // Not found
+                    Err(None) // Not found
                 }
             } else {
-                Err(false) // Not found
+                Err(None) // Not found
             }
         }; // tree borrow ends here
 
@@ -561,13 +567,13 @@ impl<'ctx> Resolver<'ctx> {
             Ok(def_id) => {
                 self.add_import_binding(import, def_id, &item_name);
             }
-            Err(true) => {
+            Err(Some(_)) => {
                 self.diagnostics.push(
                     Diagnostic::error(format!("`{}` is private", item_name))
                         .with_label(import.span.clone(), "private item"),
                 );
             }
-            Err(false) => {
+            Err(None) => {
                 self.diagnostics.push(
                     Diagnostic::error(format!(
                         "cannot find `{}` in module `{}`",
@@ -596,7 +602,7 @@ impl<'ctx> Resolver<'ctx> {
             return;
         }
 
-        // Cross-module glob: import all exports from target module
+        // Cross-module glob: import all visible items from target module
         let Some(tree) = &self.ctx.module_tree else {
             self.diagnostics.push(
                 Diagnostic::error(format!(
@@ -614,14 +620,21 @@ impl<'ctx> Resolver<'ctx> {
         match tree.resolve_path(current_module, &mod_refs) {
             Ok(target_id) => {
                 let target = tree.get(target_id);
-                // Collect exports to avoid borrowing issues
-                let exports: Vec<_> = target
-                    .exports()
+                // Collect all items and filter by visibility
+                let visible_items: Vec<_> = target
+                    .items()
                     .iter()
-                    .map(|(&spur, &def_id)| (tree.resolve_str(spur).to_string(), def_id))
+                    .filter_map(|(&spur, &def_id)| {
+                        let symbol = self.ctx.get_symbol(def_id);
+                        if is_visible(symbol.visibility, target_id, current_module, tree) {
+                            Some((tree.resolve_str(spur).to_string(), def_id))
+                        } else {
+                            None
+                        }
+                    })
                     .collect();
 
-                for (name, def_id) in exports {
+                for (name, def_id) in visible_items {
                     self.add_import_binding(
                         &PendingImport {
                             path: vec![name.clone()],
@@ -4096,5 +4109,53 @@ mod tests {
     fn resolve_inline_module_with_impl() {
         // Module can contain impl blocks
         check_ok("module m { pub struct S() impl S { pub fn new(): S { S() } } } fn main() {}");
+    }
+
+    // ===== Visibility Tests =====
+    // These tests use scope-based access and qualified access (not use imports)
+    // because single-file mode doesn't have a module tree for cross-module imports.
+
+    #[test]
+    fn visibility_child_can_access_parent_private_via_scope() {
+        // Child module can access parent's private item through scope chain (direct lookup)
+        check_ok(
+            r#"
+            fn private_fn(): i32 { 42 }
+            module child {
+                pub fn call_it(): i32 { private_fn() }
+            }
+            fn main() {}
+            "#,
+        );
+    }
+
+    #[test]
+    fn visibility_nested_child_can_access_ancestor_private_via_scope() {
+        // Deeply nested child can access ancestor's private items through scope chain
+        check_ok(
+            r#"
+            fn private_fn(): i32 { 42 }
+            module child {
+                module grandchild {
+                    pub fn call_it(): i32 { private_fn() }
+                }
+            }
+            fn main() {}
+            "#,
+        );
+    }
+
+    #[test]
+    fn visibility_parent_cannot_access_child_private_via_import() {
+        // Parent cannot import child's private item (cross-module requires multi-file)
+        // This tests the exports-based lookup
+        check_err(
+            r#"
+            module child { fn private_fn(): i32 { 42 } }
+            use child.private_fn;
+            fn main() {}
+            "#,
+            &["cross-module imports require multi-file"],
+        );
     }
 }

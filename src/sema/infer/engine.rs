@@ -97,6 +97,11 @@ pub(super) struct InferEngine<'a> {
     /// Borrowed reference to the semantic context for symbol/scope lookup.
     pub(super) resolve_ctx: &'a SemanticContext,
 
+    /// Current scope being type-checked. Used for visibility checking.
+    /// This is separate from resolve_ctx.current_scope because we need to track
+    /// which function/module we're checking from, not the scope chain state.
+    pub(super) current_inference_scope: crate::sema::ScopeId,
+
     /// Owned type interner for creating types during inference.
     pub(super) types: TypeInterner,
 
@@ -125,8 +130,8 @@ pub(super) struct InferEngine<'a> {
     /// Function signatures collected in first pass, enabling forward references.
     pub(super) fn_signatures: FxHashMap<DefId, FnSignature>,
 
-    /// Struct field info: maps struct DefId to (field_name, field_type) pairs.
-    pub(super) struct_fields: FxHashMap<DefId, Vec<(String, TypeId)>>,
+    /// Struct field info: maps struct DefId to (field_name, field_type, field_def_id) triples.
+    pub(super) struct_fields: FxHashMap<DefId, Vec<(String, TypeId, DefId)>>,
 
     /// Struct type parameters: maps struct DefId to its generic param DefIds.
     pub(super) struct_type_params: FxHashMap<DefId, Vec<DefId>>,
@@ -189,6 +194,7 @@ impl<'a> InferEngine<'a> {
     pub(super) fn new(resolve_result: &'a ResolveResult) -> Self {
         let mut engine = Self {
             resolve_ctx: &resolve_result.ctx,
+            current_inference_scope: crate::sema::ScopeId(0), // Start at root scope
             types: TypeInterner::new(),
             resolutions: resolve_result.resolutions.clone(),
             expr_types: FxHashMap::default(),
@@ -326,5 +332,29 @@ impl<'a> InferEngine<'a> {
     /// Create a fresh float type variable (defaults to f64 if unconstrained).
     pub(super) fn fresh_float_var(&mut self) -> TypeId {
         self.types.fresh_float_var()
+    }
+
+    // =========================================================================
+    // Scope Helpers
+    // =========================================================================
+
+    /// Check if `potential_descendant` scope is the same as or a descendant of `ancestor` scope.
+    /// This walks up the scope chain from `potential_descendant` to see if we reach `ancestor`.
+    pub(super) fn is_scope_descendant_of(
+        &self,
+        potential_descendant: crate::sema::ScopeId,
+        ancestor: crate::sema::ScopeId,
+    ) -> bool {
+        let mut current = potential_descendant;
+        loop {
+            if current == ancestor {
+                return true;
+            }
+            let scope = self.resolve_ctx.get_scope(current);
+            match scope.parent {
+                Some(parent) => current = parent,
+                None => return false, // Reached root without finding ancestor
+            }
+        }
     }
 }

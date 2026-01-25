@@ -1,0 +1,11 @@
+// Test: Child module can access parent's private function via scope chain
+fn private_fn(): i32 { 42 }
+
+module child {
+    // Child can directly call parent's private function through scope chain
+    pub fn call_parent(): i32 { private_fn() }
+}
+
+fn main(): i32 {
+    child.call_parent()
+}

@@ -1,0 +1,12 @@
+// Test: Private method not accessible from outside module
+module m {
+    pub struct S()
+    impl S {
+        fn private_method(&self): i32 { 42 }
+    }
+}
+
+fn main(): i32 {
+    let s = m.S();
+    s.private_method()  // Error: method is private
+}

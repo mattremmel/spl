@@ -254,6 +254,7 @@ fn infer_all_bodies(package: &crate::package::Package, engine: &mut InferEngine)
             match &item {
                 Item::Function(func) => engine.infer_function_body(func),
                 Item::Impl(impl_block) => engine.infer_impl_bodies(impl_block),
+                Item::Module(module_def) => engine.infer_module_bodies(module_def),
                 _ => {} // Other items don't have bodies to infer
             }
         }

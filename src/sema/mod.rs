@@ -381,6 +381,67 @@ impl SemanticContext {
     }
 }
 
+// =============================================================================
+// Visibility Helpers
+// =============================================================================
+
+/// Check if an item defined in `item_module` with `visibility` is visible from `accessor_module`.
+///
+/// # Visibility Rules
+///
+/// | Visibility | Rule |
+/// |------------|------|
+/// | Private (default) | Visible within current module and descendant submodules |
+/// | Public (pub) | Visible to all |
+/// | Crate (pub(crate)) | Future - visible within crate only (treated as Public for now) |
+/// | Super (pub(super)) | Future - visible to parent module (treated as Public for now) |
+/// | PubSelf (pub(self)) | Future - same as Private (treated as Public for now) |
+///
+/// Key semantics:
+/// - Child modules CAN access parent's private items (descendants see ancestors' private items)
+/// - Sibling modules CANNOT access each other's private items
+/// - Ancestors can access items in descendants only if public
+pub fn is_visible(
+    visibility: Visibility,
+    item_module: ModuleId,
+    accessor_module: ModuleId,
+    tree: &ModuleTree,
+) -> bool {
+    match visibility {
+        Visibility::Public => true,
+        Visibility::Private => {
+            // Private items are visible to same module and descendants
+            // i.e., accessor must be item_module or a descendant of item_module
+            is_same_or_descendant(accessor_module, item_module, tree)
+        }
+        // Future visibility levels - currently treated as public
+        Visibility::Crate | Visibility::Super | Visibility::PubSelf => true,
+    }
+}
+
+/// Check if `potential_descendant` is the same as or a descendant of `ancestor`.
+///
+/// This walks up the module hierarchy from `potential_descendant` to see if we
+/// eventually reach `ancestor`. Returns true if:
+/// - `potential_descendant == ancestor` (same module), OR
+/// - `potential_descendant` is nested inside `ancestor` (any depth)
+pub fn is_same_or_descendant(
+    potential_descendant: ModuleId,
+    ancestor: ModuleId,
+    tree: &ModuleTree,
+) -> bool {
+    let mut current = potential_descendant;
+    loop {
+        if current == ancestor {
+            return true;
+        }
+        match tree.get(current).parent() {
+            Some(parent) => current = parent,
+            None => return false, // Reached root without finding ancestor
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -819,5 +880,134 @@ mod tests {
         assert_eq!(symbol.kind, SymbolKind::Local);
         assert_eq!(symbol.visibility, Visibility::Private);
         assert_eq!(symbol.span, 0..1);
+    }
+
+    // ===== Visibility Helper Tests =====
+
+    #[test]
+    fn test_is_visible_public_always_visible() {
+        let tree = ModuleTree::new();
+        let root = tree.root_id();
+
+        // Public items visible from same module
+        assert!(is_visible(Visibility::Public, root, root, &tree));
+    }
+
+    #[test]
+    fn test_is_visible_private_same_module() {
+        let tree = ModuleTree::new();
+        let root = tree.root_id();
+
+        // Private items visible from same module
+        assert!(is_visible(Visibility::Private, root, root, &tree));
+    }
+
+    #[test]
+    fn test_is_visible_private_child_can_access_parent() {
+        let mut tree = ModuleTree::new();
+        let parent = tree.root_id();
+        let child = tree.add_child(parent, "child");
+
+        // Child can see parent's private items
+        assert!(is_visible(Visibility::Private, parent, child, &tree));
+    }
+
+    #[test]
+    fn test_is_visible_private_grandchild_can_access_grandparent() {
+        let mut tree = ModuleTree::new();
+        let grandparent = tree.root_id();
+        let parent = tree.add_child(grandparent, "parent");
+        let grandchild = tree.add_child(parent, "grandchild");
+
+        // Grandchild can see grandparent's private items
+        assert!(is_visible(Visibility::Private, grandparent, grandchild, &tree));
+    }
+
+    #[test]
+    fn test_is_visible_private_parent_cannot_access_child() {
+        let mut tree = ModuleTree::new();
+        let parent = tree.root_id();
+        let child = tree.add_child(parent, "child");
+
+        // Parent CANNOT see child's private items
+        assert!(!is_visible(Visibility::Private, child, parent, &tree));
+    }
+
+    #[test]
+    fn test_is_visible_private_sibling_cannot_access() {
+        let mut tree = ModuleTree::new();
+        let parent = tree.root_id();
+        let sibling_a = tree.add_child(parent, "a");
+        let sibling_b = tree.add_child(parent, "b");
+
+        // Siblings CANNOT see each other's private items
+        assert!(!is_visible(Visibility::Private, sibling_a, sibling_b, &tree));
+        assert!(!is_visible(Visibility::Private, sibling_b, sibling_a, &tree));
+    }
+
+    #[test]
+    fn test_is_visible_private_cousin_cannot_access() {
+        let mut tree = ModuleTree::new();
+        let root = tree.root_id();
+        let uncle = tree.add_child(root, "uncle");
+        let parent = tree.add_child(root, "parent");
+        let cousin_a = tree.add_child(uncle, "cousin_a");
+        let cousin_b = tree.add_child(parent, "cousin_b");
+
+        // Cousins CANNOT see each other's private items
+        assert!(!is_visible(Visibility::Private, cousin_a, cousin_b, &tree));
+        assert!(!is_visible(Visibility::Private, cousin_b, cousin_a, &tree));
+    }
+
+    #[test]
+    fn test_is_same_or_descendant_same_module() {
+        let tree = ModuleTree::new();
+        let root = tree.root_id();
+
+        assert!(is_same_or_descendant(root, root, &tree));
+    }
+
+    #[test]
+    fn test_is_same_or_descendant_direct_child() {
+        let mut tree = ModuleTree::new();
+        let parent = tree.root_id();
+        let child = tree.add_child(parent, "child");
+
+        // Child is descendant of parent
+        assert!(is_same_or_descendant(child, parent, &tree));
+        // Parent is NOT descendant of child
+        assert!(!is_same_or_descendant(parent, child, &tree));
+    }
+
+    #[test]
+    fn test_is_same_or_descendant_deep_nesting() {
+        let mut tree = ModuleTree::new();
+        let root = tree.root_id();
+        let a = tree.add_child(root, "a");
+        let b = tree.add_child(a, "b");
+        let c = tree.add_child(b, "c");
+
+        // c is descendant of all ancestors
+        assert!(is_same_or_descendant(c, root, &tree));
+        assert!(is_same_or_descendant(c, a, &tree));
+        assert!(is_same_or_descendant(c, b, &tree));
+        assert!(is_same_or_descendant(c, c, &tree));
+
+        // But ancestors are not descendants of c
+        assert!(!is_same_or_descendant(root, c, &tree));
+        assert!(!is_same_or_descendant(a, c, &tree));
+        assert!(!is_same_or_descendant(b, c, &tree));
+    }
+
+    #[test]
+    fn test_is_same_or_descendant_siblings_not_descendants() {
+        let mut tree = ModuleTree::new();
+        let parent = tree.root_id();
+        let a = tree.add_child(parent, "a");
+        let b = tree.add_child(parent, "b");
+
+        // Siblings are not descendants of each other
+        assert!(!is_same_or_descendant(a, b, &tree));
+        assert!(!is_same_or_descendant(b, a, &tree));
     }
 }

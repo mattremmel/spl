@@ -1,0 +1,13 @@
+// Test: Sibling module cannot access private items
+module a {
+    fn private_fn(): i32 { 42 }
+}
+
+module b {
+    // This should fail - sibling cannot access private
+    pub fn try_call(): i32 { a.private_fn() }
+}
+
+fn main(): i32 {
+    b.try_call()
+}

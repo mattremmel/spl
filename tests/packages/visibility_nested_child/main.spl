@@ -1,0 +1,13 @@
+// Test: Deeply nested child can access grandparent's private function
+fn private_grandparent(): i32 { 100 }
+
+module parent {
+    pub module child {
+        // Grandchild can access grandparent's private through scope chain
+        pub fn call_grandparent(): i32 { private_grandparent() }
+    }
+}
+
+fn main(): i32 {
+    parent.child.call_grandparent()
+}
