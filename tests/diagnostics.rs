@@ -332,3 +332,27 @@ fn open_range_needs_context() {
     // Open range (..) has no type info - should error or infer from context
     check_contains("fn main() { let r = ..; }", "cannot infer");
 }
+
+// =============================================================================
+// For Loop Float Range Errors
+// =============================================================================
+
+#[test]
+fn for_loop_cannot_iterate_float_range() {
+    check_contains(
+        "fn main() { for x in 0.0..10.0 { } }",
+        "cannot iterate over non-integer range",
+    );
+}
+
+#[test]
+fn float_range_without_iteration_is_valid() {
+    // Float range as a value (not iterated) should compile
+    spl::testing::compile_ok("fn main() { let r = 0.0..10.0; }");
+}
+
+#[test]
+fn integer_range_iteration_is_valid() {
+    // Integer range iteration should still work
+    spl::testing::compile_ok("fn main() { for x in 0..10 { } }");
+}

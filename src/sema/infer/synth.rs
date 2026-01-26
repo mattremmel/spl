@@ -2394,7 +2394,22 @@ impl<'a> InferEngine<'a> {
         // Synthesize iterable and get element type
         // For range expressions, the synthesized type IS the element type
         let elem_ty = if let Some(iterable) = for_expr.iterable() {
-            self.synth_expr(&iterable)
+            let ty = self.synth_expr(&iterable);
+
+            // Check if iterating over a range expression
+            if matches!(iterable, Expr::Range(_)) {
+                // Range iteration requires integer element type
+                let int_var = self.types.fresh_int_var();
+                if self.unify(ty, int_var).is_err() {
+                    let span = text_range_to_span(iterable.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("cannot iterate over non-integer range")
+                            .with_label(span, "range element type must be an integer"),
+                    );
+                }
+            }
+
+            ty
         } else {
             self.fresh_type_var()
         };
