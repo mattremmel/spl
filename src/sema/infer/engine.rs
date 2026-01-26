@@ -88,12 +88,97 @@ pub(super) struct FnSignature {
     pub(super) ret: TypeId,
 }
 
+// =============================================================================
+// Sub-Structs for InferEngine Field Organization
+// =============================================================================
+
+/// AST traversal context - tracks current position during inference.
+#[derive(Default)]
+pub(super) struct ContextStack {
+    /// Return type of the function currently being checked.
+    /// None when outside a function body.
+    pub(super) return_type: Option<TypeId>,
+
+    /// Expected break type for the innermost loop.
+    /// None when outside a loop or in a loop that doesn't support break values.
+    pub(super) loop_break_type: Option<TypeId>,
+
+    /// Whether the innermost loop has at least one break statement.
+    /// Used to determine if a `loop {}` expression might be infinite.
+    pub(super) loop_has_break: bool,
+
+    /// Self type from the enclosing impl block, for resolving `Self` in type positions.
+    /// Set when entering an impl block, cleared when exiting.
+    pub(super) self_type: Option<TypeId>,
+
+    /// The kind of innermost loop (loop/while/for).
+    /// Used to validate break/continue: only `loop` allows `break value`.
+    pub(super) loop_kind: Option<LoopKind>,
+}
+
+/// Definition collection from first pass - enables forward references.
+#[derive(Default)]
+pub(super) struct CollectedDefs {
+    /// Function signatures collected in first pass, enabling forward references.
+    pub(super) fn_signatures: FxHashMap<DefId, FnSignature>,
+
+    /// Struct field info: maps struct `DefId` to (`field_name`, `field_type`, `field_def_id`) triples.
+    pub(super) struct_fields: FxHashMap<DefId, Vec<(String, TypeId, DefId)>>,
+
+    /// Struct type parameters: maps struct `DefId` to its generic param `DefIds`.
+    pub(super) struct_type_params: FxHashMap<DefId, Vec<DefId>>,
+
+    /// Methods associated with each struct (struct `DefId` → method `DefIds`).
+    pub(super) struct_methods: FxHashMap<DefId, Vec<DefId>>,
+
+    /// Type alias targets collected in first pass (alias `DefId` → resolved type).
+    pub(super) type_alias_targets: FxHashMap<DefId, TypeId>,
+}
+
+/// Primitive/builtin method machinery.
+#[derive(Default)]
+pub(super) struct MethodRegistry {
+    /// Methods on primitive types (`TypeId` → method `DefIds`).
+    /// Similar to `struct_methods` but keyed by `TypeId` for primitives like str.
+    pub(super) primitive_methods: FxHashMap<TypeId, Vec<DefId>>,
+
+    /// Intrinsic methods that need special lowering during HIR lowering.
+    /// Maps method `DefId` to how it should be lowered.
+    pub intrinsic_methods: FxHashMap<DefId, IntrinsicKind>,
+
+    /// Names of builtin methods (`DefId` → name).
+    /// Used during method resolution since builtins aren't in the symbol table.
+    pub(super) builtin_method_names: FxHashMap<DefId, String>,
+}
+
+/// Inference outputs - results of type inference.
+#[derive(Default)]
+pub(super) struct InferResults {
+    /// Map from expression spans to their inferred types.
+    /// Populated during the inference pass as expressions are visited.
+    pub(super) expr_types: FxHashMap<Span, TypeId>,
+
+    /// Map from local bindings (`DefId`) to their inferred types.
+    /// Includes locals, parameters, and other named bindings.
+    pub(super) binding_types: FxHashMap<DefId, TypeId>,
+
+    /// Method resolutions: maps method call spans to resolved method `DefIds`.
+    /// Separate from `resolutions` because method lookup happens during inference.
+    pub(super) method_resolutions: FxHashMap<Span, DefId>,
+
+    /// Map from type annotation spans to their `TypeIds`.
+    /// Records the types of explicit type annotations like `-> i32`, `: bool`, etc.
+    /// These are separate from `expr_types` because type annotations are not expressions.
+    pub(super) type_annotation_types: FxHashMap<Span, TypeId>,
+}
+
 /// The type inference engine.
 ///
 /// Holds all state needed for type inference, including references to the
 /// semantic context (symbol table) and its own type interner, inference results,
 /// and contextual information about the current position in the AST.
 pub(super) struct InferEngine<'a> {
+    // === Core Fields ===
     /// Borrowed reference to the semantic context for symbol/scope lookup.
     pub(super) resolve_ctx: &'a SemanticContext,
 
@@ -109,15 +194,6 @@ pub(super) struct InferEngine<'a> {
     /// Cloned from `ResolveResult` to allow modification during inference.
     pub(super) resolutions: FxHashMap<Span, DefId>,
 
-    // === Inference Results ===
-    /// Map from expression spans to their inferred types.
-    /// Populated during the inference pass as expressions are visited.
-    pub(super) expr_types: FxHashMap<Span, TypeId>,
-
-    /// Map from local bindings (`DefId`) to their inferred types.
-    /// Includes locals, parameters, and other named bindings.
-    pub(super) binding_types: FxHashMap<DefId, TypeId>,
-
     /// Type substitution table implementing union-find for type variables.
     /// When a type variable is unified with a type, an entry is added here.
     /// See `unify.rs` for the unification algorithm.
@@ -126,68 +202,22 @@ pub(super) struct InferEngine<'a> {
     /// Collected diagnostics (type errors, etc.).
     pub(super) diagnostics: Vec<Diagnostic>,
 
-    // === Pre-collected Definitions (from collection pass) ===
-    /// Function signatures collected in first pass, enabling forward references.
-    pub(super) fn_signatures: FxHashMap<DefId, FnSignature>,
-
-    /// Struct field info: maps struct `DefId` to (`field_name`, `field_type`, `field_def_id`) triples.
-    pub(super) struct_fields: FxHashMap<DefId, Vec<(String, TypeId, DefId)>>,
-
-    /// Struct type parameters: maps struct `DefId` to its generic param `DefIds`.
-    pub(super) struct_type_params: FxHashMap<DefId, Vec<DefId>>,
-
-    /// Methods associated with each struct (struct `DefId` → method `DefIds`).
-    pub(super) struct_methods: FxHashMap<DefId, Vec<DefId>>,
-
-    /// Type alias targets collected in first pass (alias `DefId` → resolved type).
-    pub(super) type_alias_targets: FxHashMap<DefId, TypeId>,
-
-    // === Context Stack (tracks position in AST) ===
-    /// Current function's return type, for checking return statements.
-    /// None when outside a function body.
-    pub(super) current_return_type: Option<TypeId>,
-
-    /// Current loop's expected break type, for `break expr` statements.
-    /// None when outside a loop or in a loop that doesn't support break values.
-    pub(super) current_loop_break_type: Option<TypeId>,
-
-    /// Whether the current loop has at least one break statement.
-    /// Used to determine if a `loop {}` expression might be infinite.
-    pub(super) current_loop_has_break: bool,
-
-    /// Current impl block's Self type, for resolving `Self` in type positions.
-    /// Set when entering an impl block, cleared when exiting.
-    pub(super) current_self_type: Option<TypeId>,
-
-    /// The kind of innermost loop (loop/while/for).
-    /// Used to validate break/continue: only `loop` allows `break value`.
-    pub(super) current_loop_kind: Option<LoopKind>,
-
-    /// Method resolutions: maps method call spans to resolved method `DefIds`.
-    /// Separate from `resolutions` because method lookup happens during inference.
-    pub(super) method_resolutions: FxHashMap<Span, DefId>,
-
-    /// Map from type annotation spans to their `TypeIds`.
-    /// Records the types of explicit type annotations like `-> i32`, `: bool`, etc.
-    /// These are separate from `expr_types` because type annotations are not expressions.
-    pub(super) type_annotation_types: FxHashMap<Span, TypeId>,
-
-    // === Primitive Type Methods ===
-    /// Methods on primitive types (`TypeId` → method `DefIds`).
-    /// Similar to `struct_methods` but keyed by `TypeId` for primitives like str.
-    pub(super) primitive_methods: FxHashMap<TypeId, Vec<DefId>>,
-
-    /// Intrinsic methods that need special lowering during HIR lowering.
-    /// Maps method `DefId` to how it should be lowered.
-    pub intrinsic_methods: FxHashMap<DefId, IntrinsicKind>,
-
-    /// Names of builtin methods (`DefId` → name).
-    /// Used during method resolution since builtins aren't in the symbol table.
-    pub(super) builtin_method_names: FxHashMap<DefId, String>,
-
     /// Map from module `DefId` to its scope ID (for qualified module access).
     /// Used to look up items within inline modules, e.g., `module.Item`.
     pub(super) module_scopes: FxHashMap<DefId, crate::sema::ScopeId>,
+
+    // === Grouped Sub-Structs ===
+    /// AST traversal context (return type, loop state, self type).
+    pub(super) ctx: ContextStack,
+
+    /// Pre-collected definitions from first pass (functions, structs, aliases).
+    pub(super) defs: CollectedDefs,
+
+    /// Primitive and builtin method machinery.
+    pub(super) methods: MethodRegistry,
+
+    /// Inference outputs (expression types, binding types, resolutions).
+    pub(super) results: InferResults,
 }
 
 impl<'a> InferEngine<'a> {
@@ -197,26 +227,13 @@ impl<'a> InferEngine<'a> {
             current_inference_scope: crate::sema::ScopeId::new(0), // Start at root scope
             types: TypeInterner::new(),
             resolutions: resolve_result.resolutions.clone(),
-            expr_types: FxHashMap::default(),
-            binding_types: FxHashMap::default(),
             substitution: FxHashMap::default(),
             diagnostics: Vec::new(), // Fresh diagnostics, not inherited
-            fn_signatures: FxHashMap::default(),
-            struct_fields: FxHashMap::default(),
-            struct_type_params: FxHashMap::default(),
-            struct_methods: FxHashMap::default(),
-            type_alias_targets: FxHashMap::default(),
-            current_return_type: None,
-            current_loop_break_type: None,
-            current_loop_has_break: false,
-            current_self_type: None,
-            current_loop_kind: None,
-            method_resolutions: FxHashMap::default(),
-            type_annotation_types: FxHashMap::default(),
-            primitive_methods: FxHashMap::default(),
-            intrinsic_methods: FxHashMap::default(),
-            builtin_method_names: FxHashMap::default(),
             module_scopes: resolve_result.module_scopes.clone(),
+            ctx: ContextStack::default(),
+            defs: CollectedDefs::default(),
+            methods: MethodRegistry::default(),
+            results: InferResults::default(),
         };
         engine.register_builtin_primitive_methods();
         engine
@@ -238,13 +255,16 @@ impl<'a> InferEngine<'a> {
         let len_def_id = self.create_builtin_method("len", str_ty, vec![], usize_ty);
 
         // Register methods for str type
-        self.primitive_methods
+        self.methods
+            .primitive_methods
             .insert(str_ty, vec![ptr_def_id, len_def_id]);
 
         // Mark these as intrinsic methods that lower to field access
-        self.intrinsic_methods
+        self.methods
+            .intrinsic_methods
             .insert(ptr_def_id, IntrinsicKind::FieldAccess(0));
-        self.intrinsic_methods
+        self.methods
+            .intrinsic_methods
             .insert(len_def_id, IntrinsicKind::FieldAccess(1));
     }
 
@@ -262,13 +282,15 @@ impl<'a> InferEngine<'a> {
         use super::SelfParamKind;
 
         // Use the builtin DefId range (starting at DefId::BUILTIN_START)
-        let def_id = DefId::new_builtin(self.builtin_method_names.len() as u32);
+        let def_id = DefId::new_builtin(self.methods.builtin_method_names.len() as u32);
 
         // Store the method name for later lookup during resolution
-        self.builtin_method_names.insert(def_id, name.to_string());
+        self.methods
+            .builtin_method_names
+            .insert(def_id, name.to_string());
 
         // Register the function signature
-        self.fn_signatures.insert(
+        self.defs.fn_signatures.insert(
             def_id,
             FnSignature {
                 self_param: Some(SelfParam {
@@ -294,7 +316,7 @@ impl<'a> InferEngine<'a> {
     pub(super) fn into_result(self) -> InferResult {
         // Verify no INVALID DefIds made it into binding_types
         #[cfg(debug_assertions)]
-        for def_id in self.binding_types.keys() {
+        for def_id in self.results.binding_types.keys() {
             debug_assert!(
                 def_id.is_valid(),
                 "INVALID DefId found in binding_types after inference - resolution phase produced invalid binding"
@@ -303,12 +325,12 @@ impl<'a> InferEngine<'a> {
 
         InferResult {
             types: self.types,
-            expr_types: self.expr_types,
-            binding_types: self.binding_types,
+            expr_types: self.results.expr_types,
+            binding_types: self.results.binding_types,
             resolutions: self.resolutions,
-            method_resolutions: self.method_resolutions,
-            type_annotation_types: self.type_annotation_types,
-            intrinsic_methods: self.intrinsic_methods,
+            method_resolutions: self.results.method_resolutions,
+            type_annotation_types: self.results.type_annotation_types,
+            intrinsic_methods: self.methods.intrinsic_methods,
             diagnostics: self.diagnostics,
         }
     }

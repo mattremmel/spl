@@ -193,7 +193,7 @@ impl<'a> InferEngine<'a> {
             }
             // Resolve type aliases stored as Struct or Alias
             Type::Struct(def_id, _) | Type::Alias(def_id, _) => {
-                if let Some(&target) = self.type_alias_targets.get(def_id) {
+                if let Some(&target) = self.defs.type_alias_targets.get(def_id) {
                     self.resolve_type_inner(target, depth + 1)
                 } else {
                     type_id
@@ -624,7 +624,7 @@ impl<'a> InferEngine<'a> {
         let mut defaults: Vec<(TypeVar, TypeId)> = Vec::new();
 
         // Go through all bindings and apply defaults
-        for &type_id in self.binding_types.values() {
+        for &type_id in self.results.binding_types.values() {
             self.collect_defaults(type_id, &mut defaults);
         }
 
@@ -635,24 +635,24 @@ impl<'a> InferEngine<'a> {
 
         // Resolve all binding types
         // First collect all the bindings to avoid borrow conflicts
-        let bindings: Vec<_> = self.binding_types.drain().collect();
+        let bindings: Vec<_> = self.results.binding_types.drain().collect();
         for (def_id, type_id) in bindings {
             let resolved = self.fully_resolve_type(type_id);
-            self.binding_types.insert(def_id, resolved);
+            self.results.binding_types.insert(def_id, resolved);
         }
 
         // Resolve all expression types
-        let exprs: Vec<_> = self.expr_types.drain().collect();
+        let exprs: Vec<_> = self.results.expr_types.drain().collect();
         for (span, type_id) in exprs {
             let resolved = self.fully_resolve_type(type_id);
-            self.expr_types.insert(span, resolved);
+            self.results.expr_types.insert(span, resolved);
         }
 
         // Resolve all type annotation types
-        let annotations: Vec<_> = self.type_annotation_types.drain().collect();
+        let annotations: Vec<_> = self.results.type_annotation_types.drain().collect();
         for (span, type_id) in annotations {
             let resolved = self.fully_resolve_type(type_id);
-            self.type_annotation_types.insert(span, resolved);
+            self.results.type_annotation_types.insert(span, resolved);
         }
     }
 

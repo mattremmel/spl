@@ -44,7 +44,7 @@ impl<'a> InferEngine<'a> {
                         struct_def_id.map(|id| self.types.mk_struct(id, type_args.clone()));
 
                     // Set current_self_type so that `Self` in signatures resolves correctly
-                    self.current_self_type = struct_ty;
+                    self.ctx.self_type = struct_ty;
 
                     for item in impl_block.items() {
                         if let Item::Function(func) = item {
@@ -54,13 +54,13 @@ impl<'a> InferEngine<'a> {
                             if let Some(struct_id) = struct_def_id
                                 && let Some(method_def_id) = self.get_function_def_id(&func)
                             {
-                                self.struct_methods
+                                self.defs.struct_methods
                                     .entry(struct_id)
                                     .or_default()
                                     .push(method_def_id);
 
                                 // Update self_ty in the method signature
-                                if let Some(sig) = self.fn_signatures.get_mut(&method_def_id)
+                                if let Some(sig) = self.defs.fn_signatures.get_mut(&method_def_id)
                                     && let Some(ref mut sp) = sig.self_param
                                     && let Some(sty) = struct_ty
                                 {
@@ -77,7 +77,7 @@ impl<'a> InferEngine<'a> {
                                 }
 
                                 // Add impl type params to method signature
-                                if let Some(sig) = self.fn_signatures.get_mut(&method_def_id) {
+                                if let Some(sig) = self.defs.fn_signatures.get_mut(&method_def_id) {
                                     for &param_def_id in impl_type_params.iter().rev() {
                                         if !sig.type_params.contains(&param_def_id) {
                                             sig.type_params.insert(0, param_def_id);
@@ -89,7 +89,7 @@ impl<'a> InferEngine<'a> {
                     }
 
                     // Clear current_self_type after processing impl block
-                    self.current_self_type = None;
+                    self.ctx.self_type = None;
                 }
                 Item::Extern(extern_block) => {
                     // Collect signatures for extern functions
@@ -152,18 +152,18 @@ impl<'a> InferEngine<'a> {
                         .collect();
                     let struct_ty =
                         struct_def_id.map(|id| self.types.mk_struct(id, type_args.clone()));
-                    self.current_self_type = struct_ty;
+                    self.ctx.self_type = struct_ty;
                     for inner_item in impl_block.items() {
                         if let Item::Function(func) = inner_item {
                             self.collect_function_signature(&func);
                             if let Some(struct_id) = struct_def_id
                                 && let Some(method_def_id) = self.get_function_def_id(&func)
                             {
-                                self.struct_methods
+                                self.defs.struct_methods
                                     .entry(struct_id)
                                     .or_default()
                                     .push(method_def_id);
-                                if let Some(sig) = self.fn_signatures.get_mut(&method_def_id)
+                                if let Some(sig) = self.defs.fn_signatures.get_mut(&method_def_id)
                                     && let Some(ref mut sp) = sig.self_param
                                     && let Some(sty) = struct_ty
                                 {
@@ -177,7 +177,7 @@ impl<'a> InferEngine<'a> {
                                         super::SelfParamKind::Owned => sty,
                                     };
                                 }
-                                if let Some(sig) = self.fn_signatures.get_mut(&method_def_id) {
+                                if let Some(sig) = self.defs.fn_signatures.get_mut(&method_def_id) {
                                     for &param_def_id in impl_type_params.iter().rev() {
                                         if !sig.type_params.contains(&param_def_id) {
                                             sig.type_params.insert(0, param_def_id);
@@ -187,7 +187,7 @@ impl<'a> InferEngine<'a> {
                             }
                         }
                     }
-                    self.current_self_type = None;
+                    self.ctx.self_type = None;
                 }
                 Item::Extern(extern_block) => {
                     for extern_fn in extern_block.extern_fns() {
@@ -291,7 +291,7 @@ impl<'a> InferEngine<'a> {
             .map(|t| self.ast_type_to_type_id(&t))
             .unwrap_or_else(|| self.types.unit());
 
-        self.fn_signatures.insert(
+        self.defs.fn_signatures.insert(
             def_id,
             FnSignature {
                 self_param,
@@ -349,7 +349,7 @@ impl<'a> InferEngine<'a> {
                 {
                     let param_span = text_range_to_span(param_token.text_range());
                     if let Some(&param_def_id) = self.resolutions.get(&param_span) {
-                        self.binding_types.insert(param_def_id, param_ty);
+                        self.results.binding_types.insert(param_def_id, param_ty);
                     }
                 }
             }
@@ -362,7 +362,7 @@ impl<'a> InferEngine<'a> {
             .unwrap_or_else(|| self.types.unit());
 
         // Extern functions don't have self parameters
-        self.fn_signatures.insert(
+        self.defs.fn_signatures.insert(
             def_id,
             FnSignature {
                 self_param: None,
@@ -376,7 +376,7 @@ impl<'a> InferEngine<'a> {
     /// Check for recursive types (structs that contain themselves without indirection).
     fn check_recursive_types(&mut self) {
         // Build a dependency graph: struct -> structs it directly contains (not via reference)
-        let struct_ids: Vec<DefId> = self.struct_fields.keys().copied().collect();
+        let struct_ids: Vec<DefId> = self.defs.struct_fields.keys().copied().collect();
 
         for &struct_id in &struct_ids {
             // Check if this struct is part of a cycle using DFS
@@ -418,7 +418,7 @@ impl<'a> InferEngine<'a> {
         path.push(struct_id);
 
         // Check all fields of this struct
-        if let Some(fields) = self.struct_fields.get(&struct_id) {
+        if let Some(fields) = self.defs.struct_fields.get(&struct_id) {
             for (_, field_ty, _) in fields {
                 // Get the directly contained struct types (not through references)
                 if let Some(contained_id) = self.get_direct_struct_dependency(*field_ty)
@@ -475,13 +475,13 @@ impl<'a> InferEngine<'a> {
         // Get the target type
         if let Some(ty) = type_alias.ty() {
             let target_ty = self.ast_type_to_type_id(&ty);
-            self.type_alias_targets.insert(def_id, target_ty);
+            self.defs.type_alias_targets.insert(def_id, target_ty);
         }
     }
 
     /// Check for cyclic type alias definitions.
     fn check_type_alias_cycles(&mut self) {
-        let alias_ids: Vec<DefId> = self.type_alias_targets.keys().copied().collect();
+        let alias_ids: Vec<DefId> = self.defs.type_alias_targets.keys().copied().collect();
         let mut cyclic_aliases = Vec::new();
 
         for &alias_id in &alias_ids {
@@ -502,7 +502,7 @@ impl<'a> InferEngine<'a> {
         // Replace cyclic alias targets with Error to prevent infinite recursion in resolve_type
         let error_ty = self.types.error();
         for alias_id in cyclic_aliases {
-            self.type_alias_targets.insert(alias_id, error_ty);
+            self.defs.type_alias_targets.insert(alias_id, error_ty);
         }
     }
 
@@ -523,7 +523,7 @@ impl<'a> InferEngine<'a> {
         in_progress.insert(alias_id);
 
         // Get the target type for this alias
-        if let Some(&target_ty) = self.type_alias_targets.get(&alias_id) {
+        if let Some(&target_ty) = self.defs.type_alias_targets.get(&alias_id) {
             // Check if the target references another alias
             if let Some(referenced_alias) = self.get_referenced_alias(target_ty)
                 && self.has_alias_cycle(referenced_alias, visited, in_progress)
@@ -546,7 +546,7 @@ impl<'a> InferEngine<'a> {
             // Type::Alias is also used for type aliases
             // Check if the DefId is actually a type alias
             Type::Struct(def_id, _) | Type::Alias(def_id, _) => {
-                if self.type_alias_targets.contains_key(def_id) {
+                if self.defs.type_alias_targets.contains_key(def_id) {
                     Some(*def_id)
                 } else {
                     None
@@ -581,7 +581,7 @@ impl<'a> InferEngine<'a> {
         if let Some(where_clause) = struct_def.where_clause() {
             self.collect_type_params_from_where(&where_clause, &mut type_params);
         }
-        self.struct_type_params.insert(def_id, type_params);
+        self.defs.struct_type_params.insert(def_id, type_params);
 
         let mut fields = Vec::new();
         if let Some(field_list) = struct_def.field_list() {
@@ -606,7 +606,7 @@ impl<'a> InferEngine<'a> {
             }
         }
 
-        self.struct_fields.insert(def_id, fields);
+        self.defs.struct_fields.insert(def_id, fields);
     }
 
     /// Get the struct `DefId` for an impl block.
@@ -672,7 +672,7 @@ impl<'a> InferEngine<'a> {
         let struct_ty = struct_def_id.map(|id| self.types.mk_struct(id, type_args.clone()));
 
         // Set current_self_type so that `Self` in signatures resolves correctly
-        self.current_self_type = struct_ty;
+        self.ctx.self_type = struct_ty;
 
         for item in impl_block.items() {
             if let Item::Function(func) = item {
@@ -682,13 +682,13 @@ impl<'a> InferEngine<'a> {
                 if let Some(struct_id) = struct_def_id
                     && let Some(method_def_id) = self.get_function_def_id(&func)
                 {
-                    self.struct_methods
+                    self.defs.struct_methods
                         .entry(struct_id)
                         .or_default()
                         .push(method_def_id);
 
                     // Update self_ty in the method signature
-                    if let Some(sig) = self.fn_signatures.get_mut(&method_def_id)
+                    if let Some(sig) = self.defs.fn_signatures.get_mut(&method_def_id)
                         && let Some(ref mut sp) = sig.self_param
                         && let Some(sty) = struct_ty
                     {
@@ -701,7 +701,7 @@ impl<'a> InferEngine<'a> {
                     }
 
                     // Add impl type params to method signature
-                    if let Some(sig) = self.fn_signatures.get_mut(&method_def_id) {
+                    if let Some(sig) = self.defs.fn_signatures.get_mut(&method_def_id) {
                         for &param_def_id in impl_type_params.iter().rev() {
                             if !sig.type_params.contains(&param_def_id) {
                                 sig.type_params.insert(0, param_def_id);
@@ -713,7 +713,7 @@ impl<'a> InferEngine<'a> {
         }
 
         // Clear current_self_type after processing impl block
-        self.current_self_type = None;
+        self.ctx.self_type = None;
     }
 
     /// Collect signatures for all extern functions (public for multi-file inference).
@@ -759,13 +759,13 @@ impl<'a> InferEngine<'a> {
         self.current_inference_scope = fn_scope;
 
         // Get signature
-        let sig = match self.fn_signatures.get(&def_id) {
+        let sig = match self.defs.fn_signatures.get(&def_id) {
             Some(s) => s.clone(),
             None => return,
         };
 
         // Set current return type
-        self.current_return_type = Some(sig.ret);
+        self.ctx.return_type = Some(sig.ret);
 
         // Bind parameters by looking up their DefIds from the AST
         if let Some(param_list) = func.param_list() {
@@ -779,7 +779,7 @@ impl<'a> InferEngine<'a> {
                         if let Some(&self_def_id) = self.resolutions.get(&self_span) {
                             // Determine self type based on receiver kind
                             let self_ty = self_param_info.self_ty;
-                            self.binding_types.insert(self_def_id, self_ty);
+                            self.results.binding_types.insert(self_def_id, self_ty);
                         }
                     }
                 }
@@ -794,7 +794,7 @@ impl<'a> InferEngine<'a> {
                 {
                     let param_span = text_range_to_span(token.text_range());
                     if let Some(&param_def_id) = self.resolutions.get(&param_span) {
-                        self.binding_types.insert(param_def_id, *param_ty);
+                        self.results.binding_types.insert(param_def_id, *param_ty);
                     }
                 }
             }
@@ -858,7 +858,7 @@ impl<'a> InferEngine<'a> {
         // Restore the previous scope
         self.current_inference_scope = saved_scope;
 
-        self.current_return_type = None;
+        self.ctx.return_type = None;
     }
 
     /// Check if a type is the unit type (either `Primitive::Unit` or empty tuple)

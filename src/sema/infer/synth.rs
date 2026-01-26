@@ -62,7 +62,7 @@ impl<'a> InferEngine<'a> {
 
                     // Multi-segment path (like self.a) - treat as field assignment
                     // Check if base is mutable or is a mutable reference
-                    if let Some(&base_ty) = self.binding_types.get(&def_id) {
+                    if let Some(&base_ty) = self.results.binding_types.get(&def_id) {
                         let resolved = self.resolve_type(base_ty);
                         let ty = self.types.get(resolved);
                         if let Type::Ref(mutability, _) = ty {
@@ -87,7 +87,7 @@ impl<'a> InferEngine<'a> {
                 if let Some(base) = field_expr.expr() {
                     // Check if the base's type is a mutable reference
                     let base_span = text_range_to_span(base.syntax().text_range());
-                    if let Some(&base_ty) = self.expr_types.get(&base_span) {
+                    if let Some(&base_ty) = self.results.expr_types.get(&base_span) {
                         let resolved = self.resolve_type(base_ty);
                         let ty = self.types.get(resolved);
                         if let Type::Ref(mutability, _) = ty {
@@ -111,6 +111,7 @@ impl<'a> InferEngine<'a> {
                     && let Some(inner) = prefix_expr.expr()
                 {
                     let inner_ty = self
+                        .results
                         .expr_types
                         .get(&text_range_to_span(inner.syntax().text_range()))?;
                     let resolved = self.resolve_type(*inner_ty);
@@ -172,7 +173,7 @@ impl<'a> InferEngine<'a> {
 
                     // Multi-segment path (like self.a) - treat as field borrow
                     // Check if base is mutable or is a mutable reference
-                    if let Some(&base_ty) = self.binding_types.get(&def_id) {
+                    if let Some(&base_ty) = self.results.binding_types.get(&def_id) {
                         let resolved = self.resolve_type(base_ty);
                         let ty = self.types.get(resolved);
                         if let Type::Ref(mutability, _) = ty {
@@ -202,7 +203,7 @@ impl<'a> InferEngine<'a> {
                 if let Some(base) = field_expr.expr() {
                     // Check if the base's type is a mutable reference
                     let base_span = text_range_to_span(base.syntax().text_range());
-                    if let Some(&base_ty) = self.expr_types.get(&base_span) {
+                    if let Some(&base_ty) = self.results.expr_types.get(&base_span) {
                         let resolved = self.resolve_type(base_ty);
                         let ty = self.types.get(resolved);
                         if let Type::Ref(mutability, _) = ty {
@@ -230,7 +231,7 @@ impl<'a> InferEngine<'a> {
                 {
                     // Check if the reference being dereferenced is mutable
                     let inner_span = text_range_to_span(inner.syntax().text_range());
-                    if let Some(&inner_ty) = self.expr_types.get(&inner_span) {
+                    if let Some(&inner_ty) = self.results.expr_types.get(&inner_span) {
                         let resolved = self.resolve_type(inner_ty);
                         let ty = self.types.get(resolved);
                         if let Type::Ref(Mutability::Shared, _) = ty {
@@ -279,7 +280,7 @@ impl<'a> InferEngine<'a> {
                 LoweredExpr::BoolLiteral { .. } => self.types.bool(),
                 LoweredExpr::Passthrough => unreachable!("Passthrough should not appear in binary expression"),
             };
-            self.expr_types.insert(span, type_id);
+            self.results.expr_types.insert(span, type_id);
             return type_id;
         }
 
@@ -309,7 +310,7 @@ impl<'a> InferEngine<'a> {
             Expr::Is(is_expr) => self.synth_is(is_expr),
             Expr::Match(match_expr) => self.synth_match(match_expr),
         };
-        self.expr_types.insert(span, type_id);
+        self.results.expr_types.insert(span, type_id);
         type_id
     }
 
@@ -444,9 +445,9 @@ impl<'a> InferEngine<'a> {
         }
 
         // Get the type of the first segment (for non-module paths)
-        let mut current_type = if let Some(&type_id) = self.binding_types.get(&def_id) {
+        let mut current_type = if let Some(&type_id) = self.results.binding_types.get(&def_id) {
             type_id
-        } else if let Some(sig) = self.fn_signatures.get(&def_id).cloned() {
+        } else if let Some(sig) = self.defs.fn_signatures.get(&def_id).cloned() {
             // It's a function - for multi-segment paths this might be a qualified function call
             let (param_types, ret_ty) = self.instantiate_signature(&sig);
             self.types.mk_fn_ptr(param_types, ret_ty)
@@ -550,7 +551,7 @@ impl<'a> InferEngine<'a> {
                         }
                         SymbolKind::Function => {
                             // Function reference - return function pointer type
-                            if let Some(sig) = self.fn_signatures.get(&item_def_id).cloned() {
+                            if let Some(sig) = self.defs.fn_signatures.get(&item_def_id).cloned() {
                                 let (param_types, ret_ty) = self.instantiate_signature(&sig);
                                 return self.types.mk_fn_ptr(param_types, ret_ty);
                             }
@@ -599,6 +600,7 @@ impl<'a> InferEngine<'a> {
 
             // Build substitution map from struct's type params to type args
             let type_params = self
+                .defs
                 .struct_type_params
                 .get(&def_id)
                 .cloned()
@@ -608,7 +610,7 @@ impl<'a> InferEngine<'a> {
                 subst.insert(*param_def_id, *type_arg);
             }
 
-            if let Some(fields) = self.struct_fields.get(&def_id).cloned() {
+            if let Some(fields) = self.defs.struct_fields.get(&def_id).cloned() {
                 for (name, ty, field_def_id) in fields {
                     if name == field_name {
                         // Check field visibility
@@ -636,7 +638,7 @@ impl<'a> InferEngine<'a> {
                         let result_ty = self.substitute_type_params(ty, &subst);
                         // Record the type for this field access
                         let seg_span = text_range_to_span(segment.syntax().text_range());
-                        self.expr_types.insert(seg_span, result_ty);
+                        self.results.expr_types.insert(seg_span, result_ty);
                         return result_ty;
                     }
                 }
@@ -744,7 +746,7 @@ impl<'a> InferEngine<'a> {
         };
 
         // Check if the first segment is a variable (instance method call like `p.distance()`)
-        if let Some(&binding_type) = self.binding_types.get(&first_def_id) {
+        if let Some(&binding_type) = self.results.binding_types.get(&first_def_id) {
             return self.synth_instance_method_call(call, segments, binding_type);
         }
 
@@ -755,9 +757,9 @@ impl<'a> InferEngine<'a> {
         }
 
         // Otherwise, try to resolve as a type (associated function call like `S.new()`)
-        let struct_def_id = if self.struct_fields.contains_key(&first_def_id) {
+        let struct_def_id = if self.defs.struct_fields.contains_key(&first_def_id) {
             first_def_id
-        } else if let Some(&target_ty) = self.type_alias_targets.get(&first_def_id) {
+        } else if let Some(&target_ty) = self.defs.type_alias_targets.get(&first_def_id) {
             let resolved = self.resolve_type(target_ty);
             if let Type::Struct(actual_def_id, _) = self.types.get(resolved) {
                 *actual_def_id
@@ -789,6 +791,7 @@ impl<'a> InferEngine<'a> {
 
         // Look up the method in the struct's impl
         let method_def_ids = self
+            .defs
             .struct_methods
             .get(&struct_def_id)
             .cloned()
@@ -798,11 +801,11 @@ impl<'a> InferEngine<'a> {
             let symbol = self.resolve_ctx.get_symbol(method_def_id);
             let fn_name = self.resolve_ctx.resolve(symbol.name);
             if fn_name == method_name
-                && let Some(sig) = self.fn_signatures.get(&method_def_id).cloned()
+                && let Some(sig) = self.defs.fn_signatures.get(&method_def_id).cloned()
             {
                 // Store the resolution for the method
                 let method_span = text_range_to_span(method_token.text_range());
-                self.method_resolutions.insert(method_span, method_def_id);
+                self.results.method_resolutions.insert(method_span, method_def_id);
 
                 return self.synth_call_as_function(call, &sig);
             }
@@ -944,10 +947,10 @@ impl<'a> InferEngine<'a> {
         match item_symbol.kind {
             SymbolKind::Function => {
                 // It's a function - call it
-                if let Some(sig) = self.fn_signatures.get(&item_def_id).cloned() {
+                if let Some(sig) = self.defs.fn_signatures.get(&item_def_id).cloned() {
                     // Store resolution for HIR lowering
                     let method_span = text_range_to_span(last_segment.syntax().text_range());
-                    self.method_resolutions.insert(method_span, item_def_id);
+                    self.results.method_resolutions.insert(method_span, item_def_id);
 
                     return self.synth_call_as_function(call, &sig);
                 }
@@ -1036,12 +1039,13 @@ impl<'a> InferEngine<'a> {
             };
 
             // Find the field
-            if let Some(fields) = self.struct_fields.get(&struct_def_id).cloned() {
+            if let Some(fields) = self.defs.struct_fields.get(&struct_def_id).cloned() {
                 if let Some((_, field_ty, _)) =
                     fields.iter().find(|(name, _, _)| name == &field_name)
                 {
                     // Build substitution map from struct type params to type args
                     let struct_type_params = self
+                        .defs
                         .struct_type_params
                         .get(&struct_def_id)
                         .cloned()
@@ -1094,16 +1098,16 @@ impl<'a> InferEngine<'a> {
         let method_name = method_token.text().to_string();
 
         // Check primitive type methods first (e.g., str.ptr(), str.len())
-        if let Some(method_def_ids) = self.primitive_methods.get(&current_resolved).cloned() {
+        if let Some(method_def_ids) = self.methods.primitive_methods.get(&current_resolved).cloned() {
             for method_def_id in &method_def_ids {
                 // Look up method name from builtin_method_names
-                let fn_name = match self.builtin_method_names.get(method_def_id) {
+                let fn_name = match self.methods.builtin_method_names.get(method_def_id) {
                     Some(name) => name.as_str(),
                     None => continue,
                 };
 
                 if fn_name == method_name
-                    && let Some(sig) = self.fn_signatures.get(method_def_id).cloned()
+                    && let Some(sig) = self.defs.fn_signatures.get(method_def_id).cloned()
                 {
                     // Check argument count
                     let args: Vec<_> = call.args().collect();
@@ -1128,7 +1132,7 @@ impl<'a> InferEngine<'a> {
                     }
                     // Store resolution for HIR lowering (same as struct methods)
                     let call_span = text_range_to_span(call.syntax().text_range());
-                    self.method_resolutions.insert(call_span, *method_def_id);
+                    self.results.method_resolutions.insert(call_span, *method_def_id);
                     return sig.ret;
                 }
             }
@@ -1156,6 +1160,7 @@ impl<'a> InferEngine<'a> {
 
         // Look up the method in the struct's impl
         let method_def_ids = self
+            .defs
             .struct_methods
             .get(&struct_def_id)
             .cloned()
@@ -1165,7 +1170,7 @@ impl<'a> InferEngine<'a> {
             let symbol = self.resolve_ctx.get_symbol(method_def_id);
             let fn_name = self.resolve_ctx.resolve(symbol.name);
             if fn_name == method_name
-                && let Some(sig) = self.fn_signatures.get(&method_def_id).cloned()
+                && let Some(sig) = self.defs.fn_signatures.get(&method_def_id).cloned()
             {
                 // Check method visibility
                 if symbol.visibility == Visibility::Private {
@@ -1186,7 +1191,7 @@ impl<'a> InferEngine<'a> {
 
                 // Store the resolution for the method
                 let method_span = text_range_to_span(method_token.text_range());
-                self.method_resolutions.insert(method_span, method_def_id);
+                self.results.method_resolutions.insert(method_span, method_def_id);
 
                 // Call the method with adjusted argument handling for self parameter
                 return self.synth_method_call_with_receiver(
@@ -1217,6 +1222,7 @@ impl<'a> InferEngine<'a> {
     ) -> TypeId {
         // Get struct type params for building substitution map
         let struct_type_params = self
+            .defs
             .struct_type_params
             .get(&struct_def_id)
             .cloned()
@@ -1345,6 +1351,7 @@ impl<'a> InferEngine<'a> {
     fn synth_call_as_struct(&mut self, call: &CallExpr, struct_def_id: crate::DefId) -> TypeId {
         // Get struct type params and create substitution map
         let type_params = self
+            .defs
             .struct_type_params
             .get(&struct_def_id)
             .cloned()
@@ -1361,6 +1368,7 @@ impl<'a> InferEngine<'a> {
 
         // Get struct field info and substitute type params
         let fields_info = self
+            .defs
             .struct_fields
             .get(&struct_def_id)
             .cloned()
@@ -1782,7 +1790,7 @@ impl<'a> InferEngine<'a> {
                         }
                         SymbolKind::Function => {
                             // Function reference - return function pointer type
-                            if let Some(sig) = self.fn_signatures.get(&item_def_id).cloned() {
+                            if let Some(sig) = self.defs.fn_signatures.get(&item_def_id).cloned() {
                                 let (param_types, ret_ty) = self.instantiate_signature(&sig);
                                 return self.types.mk_fn_ptr(param_types, ret_ty);
                             }
@@ -1831,6 +1839,7 @@ impl<'a> InferEngine<'a> {
 
             // Build substitution map from struct's type params to type args
             let type_params = self
+                .defs
                 .struct_type_params
                 .get(&def_id)
                 .cloned()
@@ -1840,7 +1849,7 @@ impl<'a> InferEngine<'a> {
                 subst.insert(*param_def_id, *type_arg);
             }
 
-            if let Some(fields) = self.struct_fields.get(&def_id).cloned() {
+            if let Some(fields) = self.defs.struct_fields.get(&def_id).cloned() {
                 for (name, ty, field_def_id) in fields {
                     if name == field_name {
                         // Check field visibility
@@ -1936,18 +1945,18 @@ impl<'a> InferEngine<'a> {
         };
 
         // Determine if this is a function or struct based on resolution
-        if let Some(sig) = self.fn_signatures.get(&def_id).cloned() {
+        if let Some(sig) = self.defs.fn_signatures.get(&def_id).cloned() {
             // It's a function call
             return self.synth_call_as_function(call, &sig);
         }
 
         // Check if it's a struct (has struct fields)
-        if self.struct_fields.contains_key(&def_id) {
+        if self.defs.struct_fields.contains_key(&def_id) {
             return self.synth_call_as_struct(call, def_id);
         }
 
         // Check if it's a type alias that resolves to a struct
-        if let Some(&target_ty) = self.type_alias_targets.get(&def_id) {
+        if let Some(&target_ty) = self.defs.type_alias_targets.get(&def_id) {
             let resolved = self.resolve_type(target_ty);
             if let Type::Struct(actual_def_id, _) = self.types.get(resolved) {
                 return self.synth_call_as_struct(call, *actual_def_id);
@@ -1987,15 +1996,15 @@ impl<'a> InferEngine<'a> {
         let receiver_type = self.types.get(resolved).clone();
 
         // Check primitive type methods first (e.g., str.ptr(), str.len())
-        if let Some(method_def_ids) = self.primitive_methods.get(&resolved).cloned() {
+        if let Some(method_def_ids) = self.methods.primitive_methods.get(&resolved).cloned() {
             for method_def_id in &method_def_ids {
-                let fn_name = match self.builtin_method_names.get(method_def_id) {
+                let fn_name = match self.methods.builtin_method_names.get(method_def_id) {
                     Some(name) => name.as_str(),
                     None => continue,
                 };
 
                 if fn_name == method_name
-                    && let Some(sig) = self.fn_signatures.get(method_def_id).cloned()
+                    && let Some(sig) = self.defs.fn_signatures.get(method_def_id).cloned()
                 {
                     let args: Vec<_> = call.args().collect();
                     if args.len() != sig.params.len() {
@@ -2019,7 +2028,7 @@ impl<'a> InferEngine<'a> {
                     }
                     // Store resolution for HIR lowering
                     let call_span = text_range_to_span(call.syntax().text_range());
-                    self.method_resolutions.insert(call_span, *method_def_id);
+                    self.results.method_resolutions.insert(call_span, *method_def_id);
                     return sig.ret;
                 }
             }
@@ -2082,9 +2091,9 @@ impl<'a> InferEngine<'a> {
                     return self.types.error();
                 }
 
-                if let Some(sig) = self.fn_signatures.get(&fn_def_id).cloned() {
+                if let Some(sig) = self.defs.fn_signatures.get(&fn_def_id).cloned() {
                     let call_span = text_range_to_span(call.syntax().text_range());
-                    self.method_resolutions.insert(call_span, fn_def_id);
+                    self.results.method_resolutions.insert(call_span, fn_def_id);
                     let (param_types, ret_ty) = self.instantiate_signature(&sig);
                     return self.check_call_args(call, &param_types, ret_ty);
                 }
@@ -2127,6 +2136,7 @@ impl<'a> InferEngine<'a> {
 
         if let Some(def_id) = struct_def_id {
             let method_def_ids = self
+                .defs
                 .struct_methods
                 .get(&def_id)
                 .cloned()
@@ -2136,11 +2146,11 @@ impl<'a> InferEngine<'a> {
                 let symbol = self.resolve_ctx.get_symbol(method_def_id);
                 let fn_name = self.resolve_ctx.resolve(symbol.name);
                 if fn_name == method_name
-                    && let Some(sig) = self.fn_signatures.get(&method_def_id).cloned()
+                    && let Some(sig) = self.defs.fn_signatures.get(&method_def_id).cloned()
                 {
                     // Store resolution
                     let method_span = text_range_to_span(call.syntax().text_range());
-                    self.method_resolutions.insert(method_span, method_def_id);
+                    self.results.method_resolutions.insert(method_span, method_def_id);
 
                     return self.synth_method_call_with_receiver(
                         call,
@@ -2344,7 +2354,7 @@ impl<'a> InferEngine<'a> {
         }
 
         // Set loop context for break/continue validation
-        let old_loop_kind = self.current_loop_kind.replace(LoopKind::While);
+        let old_loop_kind = self.ctx.loop_kind.replace(LoopKind::While);
 
         // Synthesize body
         if let Some(body) = while_expr.body() {
@@ -2352,7 +2362,7 @@ impl<'a> InferEngine<'a> {
         }
 
         // Restore loop context
-        self.current_loop_kind = old_loop_kind;
+        self.ctx.loop_kind = old_loop_kind;
 
         // While loops always return unit
         self.types.unit()
@@ -2373,7 +2383,7 @@ impl<'a> InferEngine<'a> {
         }
 
         // Set loop context for break/continue validation
-        let old_loop_kind = self.current_loop_kind.replace(LoopKind::For);
+        let old_loop_kind = self.ctx.loop_kind.replace(LoopKind::For);
 
         // Synthesize body
         if let Some(body) = for_expr.body() {
@@ -2381,7 +2391,7 @@ impl<'a> InferEngine<'a> {
         }
 
         // Restore loop context
-        self.current_loop_kind = old_loop_kind;
+        self.ctx.loop_kind = old_loop_kind;
 
         // For loops always return unit
         self.types.unit()
@@ -2390,21 +2400,21 @@ impl<'a> InferEngine<'a> {
     fn synth_loop(&mut self, loop_expr: &LoopExpr) -> TypeId {
         // Create a fresh type variable for the loop's break value
         let break_ty = self.fresh_type_var();
-        let old_break_ty = self.current_loop_break_type.replace(break_ty);
-        let old_has_break = self.current_loop_has_break;
-        self.current_loop_has_break = false;
+        let old_break_ty = self.ctx.loop_break_type.replace(break_ty);
+        let old_has_break = self.ctx.loop_has_break;
+        self.ctx.loop_has_break = false;
         // Set loop context for break/continue validation
-        let old_loop_kind = self.current_loop_kind.replace(LoopKind::Loop);
+        let old_loop_kind = self.ctx.loop_kind.replace(LoopKind::Loop);
 
         if let Some(body) = loop_expr.body() {
             self.synth_block(&body);
         }
 
-        let has_break = self.current_loop_has_break;
-        self.current_loop_break_type = old_break_ty;
-        self.current_loop_has_break = old_has_break;
+        let has_break = self.ctx.loop_has_break;
+        self.ctx.loop_break_type = old_break_ty;
+        self.ctx.loop_has_break = old_has_break;
         // Restore loop context
-        self.current_loop_kind = old_loop_kind;
+        self.ctx.loop_kind = old_loop_kind;
 
         // If no break was found, this is an infinite loop - return never type
         // If break with value exists, return that type
@@ -2419,7 +2429,7 @@ impl<'a> InferEngine<'a> {
         let span = text_range_to_span(break_expr.syntax().text_range());
 
         // Check if we're inside a loop
-        let Some(loop_kind) = self.current_loop_kind else {
+        let Some(loop_kind) = self.ctx.loop_kind else {
             self.diagnostics.push(
                 Diagnostic::error("break outside of loop")
                     .with_label(span, "`break` can only be used inside a loop"),
@@ -2428,7 +2438,7 @@ impl<'a> InferEngine<'a> {
         };
 
         // Mark that we found a break in the current loop
-        self.current_loop_has_break = true;
+        self.ctx.loop_has_break = true;
 
         if let Some(value) = break_expr.expr() {
             // Check if break with value is allowed (only in `loop`, not while/for)
@@ -2441,7 +2451,7 @@ impl<'a> InferEngine<'a> {
             }
 
             let value_ty = self.synth_expr(&value);
-            if let Some(break_ty) = self.current_loop_break_type
+            if let Some(break_ty) = self.ctx.loop_break_type
                 && self.unify(break_ty, value_ty).is_err()
             {
                 let value_span = text_range_to_span(value.syntax().text_range());
@@ -2450,7 +2460,7 @@ impl<'a> InferEngine<'a> {
                         .with_label(value_span, "mismatched types"),
                 );
             }
-        } else if let Some(break_ty) = self.current_loop_break_type {
+        } else if let Some(break_ty) = self.ctx.loop_break_type {
             // Break without value - unify with unit
             let unit_ty = self.types.unit();
             let _ = self.unify(break_ty, unit_ty);
@@ -2461,7 +2471,7 @@ impl<'a> InferEngine<'a> {
 
     fn synth_continue(&mut self, continue_expr: &ContinueExpr) -> TypeId {
         // Check if we're inside a loop
-        if self.current_loop_kind.is_none() {
+        if self.ctx.loop_kind.is_none() {
             let span = text_range_to_span(continue_expr.syntax().text_range());
             self.diagnostics.push(
                 Diagnostic::error("continue outside of loop")
@@ -2479,7 +2489,7 @@ impl<'a> InferEngine<'a> {
             self.types.unit()
         };
 
-        if let Some(ret_ty) = self.current_return_type
+        if let Some(ret_ty) = self.ctx.return_type
             && self.unify(ret_ty, value_ty).is_err()
         {
             let span = text_range_to_span(return_expr.syntax().text_range());
@@ -2781,6 +2791,7 @@ impl<'a> InferEngine<'a> {
                 if let Type::Struct(struct_id, type_args) = ty_data {
                     // Build substitution map from struct type params to type args
                     let type_params = self
+                        .defs
                         .struct_type_params
                         .get(&struct_id)
                         .cloned()
@@ -2791,7 +2802,7 @@ impl<'a> InferEngine<'a> {
                     }
 
                     // Get struct fields
-                    if let Some(fields) = self.struct_fields.get(&struct_id).cloned() {
+                    if let Some(fields) = self.defs.struct_fields.get(&struct_id).cloned() {
                         // Check each pattern field against struct field types
                         for pat_field in struct_pat.fields() {
                             if let Some(name_ref) = pat_field.name()
@@ -3059,7 +3070,7 @@ impl<'a> InferEngine<'a> {
                     let span = text_range_to_span(token.text_range());
                     // The resolver already defined this binding, we just need to record its type
                     if let Some(&def_id) = self.resolutions.get(&span) {
-                        self.binding_types.insert(def_id, ty);
+                        self.results.binding_types.insert(def_id, ty);
                     }
                     // If not in resolutions, the resolver didn't define it (error already reported)
                 }
@@ -3080,6 +3091,7 @@ impl<'a> InferEngine<'a> {
                 if let Type::Struct(struct_id, type_args) = ty_data {
                     // Build substitution map from struct type params to type args
                     let type_params = self
+                        .defs
                         .struct_type_params
                         .get(&struct_id)
                         .cloned()
@@ -3090,7 +3102,7 @@ impl<'a> InferEngine<'a> {
                     }
 
                     // Get struct fields
-                    if let Some(fields) = self.struct_fields.get(&struct_id).cloned() {
+                    if let Some(fields) = self.defs.struct_fields.get(&struct_id).cloned() {
                         // Define bindings for each pattern field
                         for pat_field in struct_pat.fields() {
                             if let Some(name_ref) = pat_field.name()
@@ -3126,7 +3138,7 @@ impl<'a> InferEngine<'a> {
     pub(super) fn ast_type_to_type_id(&mut self, ty: &crate::ast::Type) -> TypeId {
         let span = text_range_to_span(ty.syntax().text_range());
         let type_id = self.ast_type_to_type_id_inner(ty);
-        self.type_annotation_types.insert(span, type_id);
+        self.results.type_annotation_types.insert(span, type_id);
         type_id
     }
 
@@ -3146,7 +3158,7 @@ impl<'a> InferEngine<'a> {
 
                                 // Handle Self type
                                 if token.kind() == SyntaxKind::SELF_TYPE_KW || name == "Self" {
-                                    if let Some(self_ty) = self.current_self_type {
+                                    if let Some(self_ty) = self.ctx.self_type {
                                         return self_ty;
                                     }
                                     // Self used outside impl block - emit diagnostic and return error
