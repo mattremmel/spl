@@ -958,4 +958,114 @@ mod tests {
             "#]],
         );
     }
+
+    // =========================================================================
+    // Cast with Unary Precedence Tests
+    // =========================================================================
+
+    #[test]
+    fn cast_after_negation() {
+        // "-x as i32" should parse as "(-x) as i32" since unary binds tighter than cast
+        check_expr(
+            "-x as i32",
+            &expect![[r#"
+                CastExpr@0..9
+                  PrefixExpr@0..2
+                    MINUS@0..1 "-"
+                    PathExpr@1..2
+                      Path@1..2
+                        PathSegment@1..2
+                          NameRef@1..2
+                            IDENT@1..2 "x"
+                  WHITESPACE@2..3 " "
+                  AS_KW@3..5 "as"
+                  PathType@5..9
+                    Path@5..9
+                      PathSegment@5..9
+                        NameRef@5..9
+                          WHITESPACE@5..6 " "
+                          IDENT@6..9 "i32"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn cast_after_not() {
+        // "!x as i32" should parse as "(!x) as i32"
+        check_expr(
+            "!x as i32",
+            &expect![[r#"
+                CastExpr@0..9
+                  PrefixExpr@0..2
+                    BANG@0..1 "!"
+                    PathExpr@1..2
+                      Path@1..2
+                        PathSegment@1..2
+                          NameRef@1..2
+                            IDENT@1..2 "x"
+                  WHITESPACE@2..3 " "
+                  AS_KW@3..5 "as"
+                  PathType@5..9
+                    Path@5..9
+                      PathSegment@5..9
+                        NameRef@5..9
+                          WHITESPACE@5..6 " "
+                          IDENT@6..9 "i32"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn cast_after_deref() {
+        // "*x as i32" should parse as "(*x) as i32"
+        check_expr(
+            "*x as i32",
+            &expect![[r#"
+                CastExpr@0..9
+                  PrefixExpr@0..2
+                    STAR@0..1 "*"
+                    PathExpr@1..2
+                      Path@1..2
+                        PathSegment@1..2
+                          NameRef@1..2
+                            IDENT@1..2 "x"
+                  WHITESPACE@2..3 " "
+                  AS_KW@3..5 "as"
+                  PathType@5..9
+                    Path@5..9
+                      PathSegment@5..9
+                        NameRef@5..9
+                          WHITESPACE@5..6 " "
+                          IDENT@6..9 "i32"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn cast_after_double_unary() {
+        // "-*x as i32" should parse as "((-(*x))) as i32"
+        check_expr(
+            "-*x as i32",
+            &expect![[r#"
+                CastExpr@0..10
+                  PrefixExpr@0..3
+                    MINUS@0..1 "-"
+                    PrefixExpr@1..3
+                      STAR@1..2 "*"
+                      PathExpr@2..3
+                        Path@2..3
+                          PathSegment@2..3
+                            NameRef@2..3
+                              IDENT@2..3 "x"
+                  WHITESPACE@3..4 " "
+                  AS_KW@4..6 "as"
+                  PathType@6..10
+                    Path@6..10
+                      PathSegment@6..10
+                        NameRef@6..10
+                          WHITESPACE@6..7 " "
+                          IDENT@7..10 "i32"
+            "#]],
+        );
+    }
 }

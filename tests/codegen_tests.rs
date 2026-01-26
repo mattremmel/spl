@@ -605,3 +605,454 @@ fn logical_short_circuit_or() {
         0, // x should still be 0 because second expr wasn't evaluated
     );
 }
+
+// =============================================================================
+// Division Operations
+// =============================================================================
+
+#[test]
+fn division_i32_basic() {
+    check_returns("fn main(): i32 { 84 / 2 }", 42);
+    check_returns("fn main(): i32 { 100 / 10 }", 10);
+    check_returns("fn main(): i32 { 7 / 3 }", 2); // Integer division truncates
+}
+
+#[test]
+fn division_i64_basic() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let a: i64 = 84;
+            let b: i64 = 2;
+            return (a / b) as i32;
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+fn modulo_i32_basic() {
+    check_returns("fn main(): i32 { 47 % 5 }", 2);
+    check_returns("fn main(): i32 { 10 % 3 }", 1);
+    check_returns("fn main(): i32 { 42 % 7 }", 0);
+}
+
+#[test]
+fn division_const_folding() {
+    // Verify constant folding works for division
+    check_returns("fn main(): i32 { 100 / 5 / 2 }", 10);
+}
+
+#[test]
+fn division_dynamic_values() {
+    check_returns(
+        r#"
+        fn divide(_ a: i32, _ b: i32): i32 { a / b }
+        fn main(): i32 { divide(84, 2) }
+        "#,
+        42,
+    );
+}
+
+// =============================================================================
+// Array Bounds Checking
+// =============================================================================
+
+#[test]
+fn array_valid_upper_bound() {
+    // Access last element (index 4 for 5-element array)
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let arr = [10, 20, 30, 40, 42];
+            return arr[4];
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+fn array_zero_index() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let arr = [42, 1, 2, 3];
+            return arr[0];
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+fn array_bounds_in_loop() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let arr = [1, 2, 3, 4, 5];
+            let mut sum = 0;
+            for i in 0..5 {
+                sum = sum + arr[i];
+            }
+            return sum;
+        }
+        "#,
+        15,
+    );
+}
+
+#[test]
+fn array_computed_index() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let arr = [10, 20, 30, 42, 50];
+            let idx = 1 + 2;
+            return arr[idx];
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+fn array_from_function_result() {
+    check_returns(
+        r#"
+        fn get_index(): i32 { 3 }
+        fn main(): i32 {
+            let arr = [10, 20, 30, 42, 50];
+            return arr[get_index()];
+        }
+        "#,
+        42,
+    );
+}
+
+// =============================================================================
+// Integer Arithmetic Edge Cases
+// =============================================================================
+
+#[test]
+fn integer_addition_chain() {
+    check_returns("fn main(): i32 { 10 + 10 + 10 + 12 }", 42);
+}
+
+#[test]
+fn integer_subtraction_chain() {
+    check_returns("fn main(): i32 { 100 - 30 - 20 - 8 }", 42);
+}
+
+#[test]
+fn integer_mixed_arithmetic() {
+    check_returns("fn main(): i32 { 10 * 5 - 8 }", 42);
+    check_returns("fn main(): i32 { 50 - 2 * 4 }", 42);
+}
+
+#[test]
+fn integer_negation_basic() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let x = -42;
+            return -x;
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+fn integer_negation_in_expression() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let x = 10;
+            return 52 + (-x);
+        }
+        "#,
+        42,
+    );
+}
+
+// =============================================================================
+// Function Pointer Calls
+// =============================================================================
+
+#[test]
+#[ignore = "function pointer calls not yet implemented"]
+fn fn_ptr_basic_call() {
+    check_returns(
+        r#"
+        fn add(_ a: i32, _ b: i32): i32 { a + b }
+        fn main(): i32 {
+            let f: fn(i32, i32) -> i32 = add;
+            return f(40, 2);
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+#[ignore = "function pointer calls not yet implemented"]
+fn fn_ptr_passed_as_argument() {
+    check_returns(
+        r#"
+        fn double(_ x: i32): i32 { x * 2 }
+        fn apply(_ f: fn(i32) -> i32, _ x: i32): i32 { f(x) }
+        fn main(): i32 {
+            return apply(double, 21);
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+#[ignore = "function pointer calls not yet implemented"]
+fn fn_ptr_returned_from_function() {
+    check_returns(
+        r#"
+        fn add(_ a: i32, _ b: i32): i32 { a + b }
+        fn get_adder(): fn(i32, i32) -> i32 { add }
+        fn main(): i32 {
+            let f = get_adder();
+            return f(40, 2);
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+#[ignore = "function pointer calls not yet implemented"]
+fn fn_ptr_no_params_no_return() {
+    check_returns(
+        r#"
+        fn side_effect() {}
+        fn call_it(_ f: fn()) { f(); }
+        fn main(): i32 {
+            call_it(side_effect);
+            return 42;
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+#[ignore = "function pointer calls not yet implemented"]
+fn fn_ptr_with_multiple_params() {
+    check_returns(
+        r#"
+        fn sum3(_ a: i32, _ b: i32, _ c: i32): i32 { a + b + c }
+        fn main(): i32 {
+            let f: fn(i32, i32, i32) -> i32 = sum3;
+            return f(10, 12, 20);
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+#[ignore = "function pointer calls not yet implemented"]
+fn fn_ptr_in_struct() {
+    check_returns(
+        r#"
+        struct Adder(add_fn: fn(i32, i32) -> i32)
+        fn add(_ a: i32, _ b: i32): i32 { a + b }
+        fn main(): i32 {
+            let adder = Adder(add_fn: add);
+            return (adder.add_fn)(40, 2);
+        }
+        "#,
+        42,
+    );
+}
+
+// =============================================================================
+// Range Iteration
+// =============================================================================
+
+#[test]
+fn for_range_basic() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let mut sum = 0;
+            for i in 0..10 {
+                sum = sum + i;
+            }
+            return sum;
+        }
+        "#,
+        45, // 0+1+2+...+9 = 45
+    );
+}
+
+#[test]
+fn for_range_with_variable_bounds() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let start = 5;
+            let end = 10;
+            let mut sum = 0;
+            for i in start..end {
+                sum = sum + i;
+            }
+            return sum;
+        }
+        "#,
+        35, // 5+6+7+8+9 = 35
+    );
+}
+
+#[test]
+fn for_range_empty() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let mut sum = 0;
+            for i in 5..5 {
+                sum = sum + 1;
+            }
+            return sum;
+        }
+        "#,
+        0, // Empty range, no iterations
+    );
+}
+
+// =============================================================================
+// Pattern Matching
+// =============================================================================
+
+#[test]
+#[ignore = "range patterns in match not yet working correctly"]
+fn match_range_pattern() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let x = 5;
+            return match x {
+                0..3 => 10,
+                3..6 => 42,
+                _ => 100,
+            };
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+#[ignore = "nested tuple destructuring returns incorrect value"]
+fn tuple_destructure_nested() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let nested = ((10, 20), (12, 0));
+            let ((a, b), (c, d)) = nested;
+            return a + b + c;
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+#[ignore = "slice pattern destructuring not yet implemented"]
+fn slice_pattern_exact_match() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let arr = [10, 32];
+            let [a, b] = arr;
+            return a + b;
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+#[ignore = "slice pattern destructuring not yet implemented"]
+fn slice_pattern_with_rest() {
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let arr = [10, 20, 30, 42, 50];
+            let [_, _, _, x, _] = arr;
+            return x;
+        }
+        "#,
+        42,
+    );
+}
+
+// =============================================================================
+// Cast with Unary Precedence
+// =============================================================================
+
+#[test]
+#[ignore = "negative cast from i64 to i32 returns incorrect value"]
+fn cast_negative_value() {
+    // Cast a negative value
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let x: i64 = -42;
+            return x as i32;
+        }
+        "#,
+        -42,
+    );
+}
+
+#[test]
+#[ignore = "negative cast from i64 to i32 returns incorrect value"]
+fn cast_negation_expression() {
+    // -x as i32 should cast the negated value
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let x: i64 = 42;
+            return -x as i32;
+        }
+        "#,
+        -42,
+    );
+}
+
+#[test]
+fn cast_chain_precedence() {
+    // Cast chains: (x as i64) as i32
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let x: i32 = 42;
+            return x as i64 as i32;
+        }
+        "#,
+        42,
+    );
+}
+
+#[test]
+fn cast_in_arithmetic() {
+    // Cast within arithmetic expression
+    check_returns(
+        r#"
+        fn main(): i32 {
+            let x: i64 = 40;
+            return (x as i32) + 2;
+        }
+        "#,
+        42,
+    );
+}

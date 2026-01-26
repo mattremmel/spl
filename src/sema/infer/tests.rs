@@ -5106,3 +5106,399 @@ fn alternating_struct_tuple_pattern() {
 fn range_int_float_mismatch() {
     check_err("fn main() { let r = 0..10.0; }", &["type mismatch"]);
 }
+
+// =============================================================================
+// Function Pointer Type Inference
+// =============================================================================
+
+#[test]
+fn fn_ptr_type_in_param() {
+    // Function pointer types in parameters parse and type-check correctly
+    check(
+        "fn apply(_ f: fn(i32) -> i32, _ x: i32): i32 { 0 } fn main() { let x = 0; }",
+        "i32",
+    );
+}
+
+#[test]
+fn fn_ptr_type_in_let() {
+    // Function pointer types in let bindings parse correctly
+    // (even if coercion from fn def isn't implemented yet)
+    check_err(
+        "fn add(_ a: i32, _ b: i32): i32 { a + b } fn main() { let f: fn(i32, i32) -> i32 = add; }",
+        &["type mismatch"], // fn def to fn ptr coercion not yet implemented
+    );
+}
+
+#[test]
+fn fn_ptr_param_mismatch() {
+    check_err(
+        "fn add(_ a: i32, _ b: i32): i32 { a + b } fn main() { let f: fn(i64, i32) -> i32 = add; }",
+        &["type mismatch"],
+    );
+}
+
+#[test]
+fn fn_ptr_return_mismatch() {
+    check_err(
+        "fn add(_ a: i32, _ b: i32): i32 { a + b } fn main() { let f: fn(i32, i32) -> i64 = add; }",
+        &["type mismatch"],
+    );
+}
+
+// =============================================================================
+// Slice/Array Pattern Type Inference
+// =============================================================================
+
+#[test]
+#[ignore = "slice pattern destructuring not yet implemented"]
+fn slice_pattern_basic() {
+    // Basic slice pattern with 2 elements - check type of extracted element
+    check(
+        r#"
+        fn main() {
+            let arr = [1, 2];
+            let [a, b] = arr;
+            let x = a;
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+#[ignore = "slice pattern destructuring not yet implemented"]
+fn slice_pattern_with_annotation() {
+    // Slice pattern with type annotation - check type of extracted element
+    check(
+        r#"
+        fn main() {
+            let arr: [i64; 3] = [1, 2, 3];
+            let [a, b, c] = arr;
+            let x = a;
+        }
+        "#,
+        "i64",
+    );
+}
+
+#[test]
+#[ignore = "slice pattern destructuring not yet implemented"]
+fn slice_pattern_with_rest() {
+    // Slice pattern with rest to capture remaining elements
+    check(
+        r#"
+        fn main() {
+            let arr = [1, 2, 3, 4, 5];
+            let [first, .., last] = arr;
+            let x = first;
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn slice_pattern_wrong_element_type() {
+    // Pattern elements must match array element type
+    check_err(
+        r#"
+        fn main() {
+            let arr = [1, 2];
+            let [a, b]: [bool; 2] = arr;
+        }
+        "#,
+        &["type mismatch"],
+    );
+}
+
+// =============================================================================
+// Range Type Inference
+// =============================================================================
+
+#[test]
+fn range_inference_basic() {
+    // Range infers element type from bounds
+    check("fn main() { let r = 0..10; }", "i32");
+}
+
+#[test]
+fn range_inference_i64() {
+    // Range with i64 bounds infers i64 element type
+    check("fn main() { let x: i64 = 0; let r = x..10; }", "i64");
+}
+
+#[test]
+fn range_from_inference() {
+    // Range from (start..) infers type from start
+    check("fn main() { let r = 5..; }", "i32");
+}
+
+#[test]
+fn range_to_inference() {
+    // Range to (..end) infers type from end
+    check("fn main() { let r = ..10; }", "i32");
+}
+
+#[test]
+fn range_incompatible_bounds() {
+    // Start and end bounds must have compatible types
+    check_err("fn main() { let r = 0i32..10i64; }", &["type mismatch"]);
+}
+
+// =============================================================================
+// Mutable Borrows in Patterns
+// =============================================================================
+
+#[test]
+fn mut_borrow_in_let_pattern() {
+    // Basic mutable borrow in let binding
+    check(
+        r#"
+        fn main() {
+            let mut x = 42;
+            let y = &mut x;
+        }
+        "#,
+        "&mut i32",
+    );
+}
+
+#[test]
+fn mut_borrow_in_tuple_pattern() {
+    // Mutable borrow within tuple destructuring
+    check(
+        r#"
+        fn main() {
+            let mut a = 1;
+            let mut b = 2;
+            let (x, y) = (&mut a, &mut b);
+        }
+        "#,
+        "&mut i32",
+    );
+}
+
+#[test]
+fn mut_borrow_in_struct_pattern() {
+    // Mutable borrow in struct field pattern
+    check(
+        r#"
+        struct Pair(first: i32, second: i32)
+        fn main() {
+            let mut p = Pair(first: 1, second: 2);
+            let r = &mut p.first;
+        }
+        "#,
+        "&mut i32",
+    );
+}
+
+#[test]
+fn mut_borrow_error_immutable_source() {
+    // Cannot mutably borrow immutable variable
+    check_err(
+        "fn main() { let x = 42; let y = &mut x; }",
+        &["cannot borrow"],
+    );
+}
+
+#[test]
+fn mut_borrow_error_through_shared_ref() {
+    // Cannot mutably borrow through shared reference
+    check_err(
+        r#"
+        fn main() {
+            let mut x = 42;
+            let r = &x;
+            let m = &mut *r;
+        }
+        "#,
+        &["cannot borrow"],
+    );
+}
+
+#[test]
+fn mut_borrow_reborrow_allowed() {
+    // Reborrowing a mutable reference is allowed
+    check(
+        r#"
+        fn main() {
+            let mut x = 42;
+            let r1 = &mut x;
+            let r2 = &mut *r1;
+        }
+        "#,
+        "&mut i32",
+    );
+}
+
+#[test]
+fn mut_borrow_fn_param_immutable() {
+    // Function parameter is immutable by default - cannot borrow mutably
+    check_err(
+        "fn foo(_ x: i32) { let y = &mut x; }",
+        &["cannot borrow"],
+    );
+}
+
+#[test]
+fn mut_borrow_nested_struct() {
+    // Mutable borrow through nested struct access
+    check(
+        r#"
+        struct Inner(value: i32)
+        struct Outer(inner: Inner)
+        fn main() {
+            let mut o = Outer(inner: Inner(value: 42));
+            let r = &mut o.inner.value;
+        }
+        "#,
+        "&mut i32",
+    );
+}
+
+// =============================================================================
+// Built-in Types Visibility
+// =============================================================================
+
+#[test]
+fn builtin_i32_accessible() {
+    // i32 is accessible without imports
+    check("fn main() { let x: i32 = 42; }", "i32");
+}
+
+#[test]
+fn builtin_types_in_function_params() {
+    // Built-in types work in function parameters
+    check(
+        "fn foo(_ a: i32, _ b: bool, _ c: f64): i64 { 0 } fn main() { let x = foo(1, true, 1.0); }",
+        "i64",
+    );
+}
+
+#[test]
+fn builtin_types_in_nested_module() {
+    // Built-in types accessible within nested modules
+    check(
+        r#"
+        module inner {
+            pub fn get_value(): i32 { 42 }
+        }
+        fn main() { let x = inner.get_value(); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn builtin_unit_type() {
+    // Unit type () is a built-in
+    check("fn main() { let x: () = (); }", "()");
+}
+
+#[test]
+fn builtin_bool_type() {
+    // Bool type works correctly
+    check("fn main() { let x: bool = true && false; }", "bool");
+}
+
+#[test]
+fn builtin_all_integer_types() {
+    // All integer types are accessible
+    check("fn main() { let a: i8 = 1; let b: i16 = 2; let c: i32 = 3; let d: i64 = 4; let e: i128 = 5; let f: u8 = 6; let g: u16 = 7; let h: u32 = 8; let i: u64 = 9; let j: u128 = 10; }", "u128");
+}
+
+// =============================================================================
+// Generic Syntax Tests
+// =============================================================================
+
+#[test]
+fn generic_in_type_annotation() {
+    // Generic types in let annotations work (type display shows struct name without args)
+    check(
+        r#"
+        struct Box(value: T) where T
+        fn main() {
+            let b: Box(i32) = Box(value: 42);
+        }
+        "#,
+        "Box",
+    );
+}
+
+#[test]
+fn generic_in_function_param() {
+    // Generic types in function parameters - returns element type
+    check(
+        r#"
+        struct Wrapper(value: T) where T
+        fn unwrap(_ w: Wrapper(T)): T where T { w.value }
+        fn main() {
+            let w = Wrapper(value: 42);
+            let x = unwrap(w);
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn generic_in_function_return() {
+    // Generic types in function return type
+    check(
+        r#"
+        struct Pair(a: T, b: T) where T
+        fn make_pair(_ x: T, _ y: T): Pair(T) where T {
+            Pair(a: x, b: y)
+        }
+        fn main() {
+            let p = make_pair(1, 2);
+        }
+        "#,
+        "Pair",
+    );
+}
+
+#[test]
+fn generic_nested_types() {
+    // Nested generic types
+    check(
+        r#"
+        struct Outer(inner: T) where T
+        struct Inner(value: U) where U
+        fn main() {
+            let x: Outer(Inner(i32)) = Outer(inner: Inner(value: 42));
+        }
+        "#,
+        "Outer",
+    );
+}
+
+#[test]
+fn generic_multiple_params() {
+    // Multiple generic parameters
+    check(
+        r#"
+        struct Pair(first: A, second: B) where A, B
+        fn main() {
+            let p: Pair(i32, bool) = Pair(first: 42, second: true);
+        }
+        "#,
+        "Pair",
+    );
+}
+
+#[test]
+fn generic_inferred_from_usage() {
+    // Generic type inferred from context
+    check(
+        r#"
+        struct Box(value: T) where T
+        fn main() {
+            let b = Box(value: 42);
+        }
+        "#,
+        "Box",
+    );
+}

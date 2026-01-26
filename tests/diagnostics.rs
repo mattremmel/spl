@@ -356,3 +356,85 @@ fn integer_range_iteration_is_valid() {
     // Integer range iteration should still work
     spl::testing::compile_ok("fn main() { for x in 0..10 { } }");
 }
+
+// =============================================================================
+// Postfix Chain Errors
+// =============================================================================
+
+#[test]
+fn postfix_missing_rparen_in_call() {
+    // Missing closing paren in function call
+    let diagnostics = compile_err("fn main() { foo( }");
+    assert!(
+        !diagnostics.is_empty(),
+        "Expected error for missing rparen"
+    );
+}
+
+#[test]
+fn postfix_missing_rbracket_in_index() {
+    // Missing closing bracket in index expression
+    let diagnostics = compile_err("fn main() { arr[0 }");
+    assert!(
+        !diagnostics.is_empty(),
+        "Expected error for missing rbracket"
+    );
+}
+
+#[test]
+fn postfix_nested_call_missing_paren() {
+    // Missing paren in nested call
+    let diagnostics = compile_err("fn main() { foo(bar( }");
+    assert!(
+        !diagnostics.is_empty(),
+        "Expected error for missing paren in nested call"
+    );
+}
+
+#[test]
+fn postfix_method_chain_error() {
+    // Error in method chain doesn't prevent further parsing
+    let diagnostics = compile_err("fn main() { x.foo(.bar() }");
+    assert!(
+        !diagnostics.is_empty(),
+        "Expected error in method chain"
+    );
+}
+
+#[test]
+fn postfix_index_chain_error() {
+    // Error in index chain
+    let diagnostics = compile_err("fn main() { arr[0][1 }");
+    assert!(
+        !diagnostics.is_empty(),
+        "Expected error in index chain"
+    );
+}
+
+#[test]
+fn postfix_multiple_errors_in_chain() {
+    // Multiple errors in a single postfix chain
+    let diagnostics = compile_err("fn main() { foo([bar( }");
+    assert!(
+        !diagnostics.is_empty(),
+        "Expected at least one error in chain with multiple issues"
+    );
+}
+
+#[test]
+fn postfix_recovery_at_eof() {
+    // Parser should recover gracefully at EOF
+    let diagnostics = compile_err("fn main() { foo(");
+    assert!(
+        !diagnostics.is_empty(),
+        "Expected error for unclosed call at EOF"
+    );
+}
+
+#[test]
+fn postfix_recovery_continues_parsing() {
+    // After error recovery, parser should continue
+    let diagnostics = compile_err("fn main() { foo(; let x = 1; }");
+    // Should get error about unclosed call, but also process rest
+    assert!(!diagnostics.is_empty());
+}
