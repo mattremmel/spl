@@ -16,6 +16,7 @@
 //! a panic from out-of-bounds indexing. The `debug_assert!()` provides better
 //! diagnostics during development without runtime cost in production.
 
+use rustc_hash::FxHashMap;
 use std::collections::HashMap;
 
 use super::symbol::DefId;
@@ -314,6 +315,9 @@ pub struct TypeInterner {
     type_to_id: HashMap<Type, TypeId>,
     /// Counter for generating fresh type variables.
     next_type_var: u32,
+    /// Map from struct `DefId` to its field types (in declaration order).
+    /// This is populated during HIR lowering and used by codegen for layout computation.
+    struct_field_types: FxHashMap<DefId, Vec<TypeId>>,
 
     // Pre-interned primitive type IDs
     unit_id: TypeId,
@@ -342,6 +346,7 @@ impl TypeInterner {
             types: Vec::new(),
             type_to_id: HashMap::new(),
             next_type_var: 0,
+            struct_field_types: FxHashMap::default(),
             // These will be filled in below
             unit_id: TypeId::new(0),
             bool_id: TypeId::new(0),
@@ -510,6 +515,32 @@ impl TypeInterner {
     /// Intern a primitive type by kind.
     pub fn primitive(&mut self, kind: PrimitiveKind) -> TypeId {
         self.intern(Type::Primitive(kind))
+    }
+
+    // ===== Struct Field Type Registration =====
+
+    /// Register the field types for a struct definition.
+    ///
+    /// This should be called during HIR lowering when processing struct definitions.
+    /// The field types are stored in declaration order and used by codegen for layout computation.
+    pub fn register_struct_fields(&mut self, def_id: DefId, field_types: Vec<TypeId>) {
+        self.struct_field_types.insert(def_id, field_types);
+    }
+
+    /// Get the field types for a struct definition.
+    ///
+    /// Returns `None` if the struct has not been registered (should not happen for valid code).
+    pub fn struct_field_types(&self, def_id: DefId) -> Option<&[TypeId]> {
+        self.struct_field_types.get(&def_id).map(Vec::as_slice)
+    }
+
+    /// Get the type of a specific field by index.
+    ///
+    /// Returns `None` if the struct is not registered or the field index is out of bounds.
+    pub fn struct_field_type(&self, def_id: DefId, field_idx: usize) -> Option<TypeId> {
+        self.struct_field_types
+            .get(&def_id)
+            .and_then(|fields| fields.get(field_idx).copied())
     }
 
     // ===== Convenience Accessors =====

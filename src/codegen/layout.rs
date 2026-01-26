@@ -106,13 +106,17 @@ impl<'a> LayoutComputer<'a> {
             }
 
             // Structs: sequential layout with alignment
-            // Note: We don't have field type info here yet, so struct layout
-            // would need additional infrastructure. For now, treat as opaque.
-            Type::Struct(_, fields) => {
-                if fields.is_empty() {
-                    return TypeLayout::zst();
+            // Look up field types from TypeInterner (registered during HIR lowering)
+            Type::Struct(def_id, _) => {
+                if let Some(field_types) = self.types.struct_field_types(*def_id) {
+                    if field_types.is_empty() {
+                        return TypeLayout::zst();
+                    }
+                    self.compute_struct_layout(field_types)
+                } else {
+                    // Struct not registered - treat as ZST (should not happen for valid code)
+                    TypeLayout::zst()
                 }
-                self.compute_struct_layout(fields)
             }
 
             // Slices are unsized, but &[T] is a fat pointer (2 pointers)
@@ -161,7 +165,13 @@ impl<'a> LayoutComputer<'a> {
         let ty_data = self.types.get(ty);
         match ty_data {
             Type::Tuple(elems) => self.compute_field_offset(elems, field_idx),
-            Type::Struct(_, fields) => self.compute_field_offset(fields, field_idx),
+            Type::Struct(def_id, _) => {
+                if let Some(field_types) = self.types.struct_field_types(*def_id) {
+                    self.compute_field_offset(field_types, field_idx)
+                } else {
+                    0
+                }
+            }
             // StrRef is a fat pointer: [ptr, len], both pointer-sized
             Type::StrRef => {
                 debug_assert!(
@@ -214,14 +224,18 @@ impl<'a> LayoutComputer<'a> {
                 );
                 elems.get(field_idx).copied()
             }
-            Type::Struct(_, fields) => {
-                debug_assert!(
-                    field_idx < fields.len(),
-                    "precondition: field_idx {} must be < struct field count {}",
-                    field_idx,
-                    fields.len()
-                );
-                fields.get(field_idx).copied()
+            Type::Struct(def_id, _) => {
+                if let Some(field_types) = self.types.struct_field_types(*def_id) {
+                    debug_assert!(
+                        field_idx < field_types.len(),
+                        "precondition: field_idx {} must be < struct field count {}",
+                        field_idx,
+                        field_types.len()
+                    );
+                    field_types.get(field_idx).copied()
+                } else {
+                    None
+                }
             }
             // StrRef fields are both pointer-sized (ptr and len)
             Type::StrRef => {

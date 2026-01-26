@@ -355,6 +355,48 @@ impl<'a> FunctionLowerer<'a> {
         self.builder.ins().store(flags, val, addr, 0);
     }
 
+    /// Copy memory from source to destination.
+    ///
+    /// This is used for copying compound types (structs, tuples, arrays).
+    fn copy_memory(&mut self, src: Value, dest: Value, size: u32) {
+        // For small sizes, emit inline loads/stores
+        // For larger sizes, we could call a memcpy intrinsic
+        let flags = MemFlags::trusted();
+
+        let mut offset = 0u32;
+        while offset < size {
+            // Determine the largest type we can copy at this alignment
+            let remaining = size - offset;
+            let (ty, step) = if remaining >= 8 && offset.is_multiple_of(8) {
+                (types::I64, 8)
+            } else if remaining >= 4 && offset.is_multiple_of(4) {
+                (types::I32, 4)
+            } else if remaining >= 2 && offset.is_multiple_of(2) {
+                (types::I16, 2)
+            } else {
+                (types::I8, 1)
+            };
+
+            // Load from source + offset
+            let src_addr = if offset == 0 {
+                src
+            } else {
+                self.builder.ins().iadd_imm(src, offset as i64)
+            };
+            let val = self.builder.ins().load(ty, flags, src_addr, 0);
+
+            // Store to dest + offset
+            let dest_addr = if offset == 0 {
+                dest
+            } else {
+                self.builder.ins().iadd_imm(dest, offset as i64)
+            };
+            self.builder.ins().store(flags, val, dest_addr, 0);
+
+            offset += step;
+        }
+    }
+
     /// Get the storage kind for a local.
     fn local_storage(&self, local: Local) -> Option<LocalStorage> {
         self.local_map.get(local)

@@ -604,6 +604,12 @@ impl<'a> InferEngine<'a> {
                     .map(|t| text_range_to_span(t.text_range()))
                     .and_then(|span| self.resolutions.get(&span).copied())
                     .unwrap_or(DefId::INVALID);
+
+                // Register field type in binding_types for HIR lowering
+                if field_def_id.is_valid() {
+                    self.results.binding_types.insert(field_def_id, field_ty);
+                }
+
                 fields.push((field_name, field_ty, field_def_id));
             }
         }

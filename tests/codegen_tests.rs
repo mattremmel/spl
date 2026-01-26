@@ -293,7 +293,6 @@ fn loop_with_break_value() {
 }
 
 #[test]
-#[ignore = "for loop codegen not yet working"]
 fn for_loop_basic() {
     check_returns(
         r#"
@@ -366,7 +365,6 @@ fn function_mutually_recursive() {
 // =============================================================================
 
 #[test]
-#[ignore = "array indexing with literal index not yet working"]
 fn array_indexing() {
     check_returns(
         r#"
@@ -380,7 +378,6 @@ fn array_indexing() {
 }
 
 #[test]
-#[ignore = "array mutation not yet working"]
 fn array_mutation() {
     check_returns(
         r#"
@@ -395,7 +392,6 @@ fn array_mutation() {
 }
 
 #[test]
-#[ignore = "array indexing with variable index not yet working"]
 fn array_in_loop() {
     check_returns(
         r#"
@@ -419,7 +415,6 @@ fn array_in_loop() {
 // =============================================================================
 
 #[test]
-#[ignore = "struct field access codegen not yet working"]
 fn struct_creation_and_field_access() {
     check_returns(
         r#"
@@ -434,7 +429,6 @@ fn struct_creation_and_field_access() {
 }
 
 #[test]
-#[ignore = "struct field mutation codegen not yet working"]
 fn struct_field_mutation() {
     check_returns(
         r#"
@@ -493,7 +487,6 @@ fn match_wildcard() {
 // =============================================================================
 
 #[test]
-#[ignore = "tuple codegen not yet working (ZST local error)"]
 fn tuple_creation_and_access() {
     check_returns(
         r#"
@@ -507,7 +500,6 @@ fn tuple_creation_and_access() {
 }
 
 #[test]
-#[ignore = "tuple destructuring codegen not yet working"]
 fn tuple_destructuring() {
     check_returns(
         r#"

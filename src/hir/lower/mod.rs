@@ -54,9 +54,9 @@ pub use folding::try_lower_expr;
 
 use crate::ast::{
     ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, ExternFn, FieldExpr,
-    FunctionDef, IfExpr, IndexExpr, IsExpr, Item, LetStmt, LiteralExpr, LoopExpr, MatchExpr,
-    ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt, TupleExpr,
-    WhileExpr,
+    ForExpr, FunctionDef, IfExpr, IndexExpr, IsExpr, Item, LetStmt, LiteralExpr, LoopExpr,
+    MatchExpr, ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt,
+    TupleExpr, WhileExpr,
 };
 use crate::hir::{
     BinOp, ExprId, HirDatabase, HirExpr, HirExprKind, HirField, HirFunction, HirImpl, HirItem,
@@ -409,6 +409,10 @@ impl<'a> LoweringContext<'a> {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+
+        // Register struct field types for codegen layout computation
+        let field_types: Vec<_> = fields.iter().map(|f| f.ty).collect();
+        self.db.types.register_struct_fields(def_id, field_types);
 
         Some(HirStruct {
             def_id,
@@ -788,8 +792,9 @@ impl<'a> LoweringContext<'a> {
             Expr::Ref(ref_expr) => self.lower_ref_expr(ref_expr, span, ty),
             Expr::Field(field) => self.lower_field_expr(field, span, ty),
             Expr::Index(index) => self.lower_index_expr(index, span, ty),
-            // TODO: Slice, For, and Range are not yet implemented
-            Expr::Slice(_) | Expr::For(_) | Expr::Range(_) => self.lower_missing(span),
+            // TODO: Slice and Range are not yet implemented as standalone expressions
+            Expr::Slice(_) | Expr::Range(_) => self.lower_missing(span),
+            Expr::For(for_expr) => self.lower_for_expr(for_expr, span),
             Expr::If(if_expr) => self.lower_if_expr(if_expr, span, ty),
             Expr::While(while_expr) => self.lower_while_expr(while_expr, span),
             Expr::Loop(loop_expr) => self.lower_loop_expr(loop_expr, span, ty),
@@ -1645,6 +1650,249 @@ impl<'a> LoweringContext<'a> {
             span,
         };
         self.db.alloc_expr(expr)
+    }
+
+    /// Lower a for loop expression.
+    ///
+    /// Desugars `for i in start..end { body }` to:
+    /// ```text
+    /// {
+    ///     let mut i = start;
+    ///     loop {
+    ///         if i >= end { break; }
+    ///         body
+    ///         i = i + 1;
+    ///     }
+    /// }
+    /// ```
+    fn lower_for_expr(&mut self, for_expr: &ForExpr, span: Span) -> ExprId {
+        let ty = self.unit_type(); // for loops have unit type
+
+        // Get the iterable (expected to be a Range expression: start..end)
+        let iterable = for_expr.iterable();
+
+        // Extract start and end from the range
+        let (start_expr_id, end_expr_id) = if let Some(Expr::Range(range)) = iterable.as_ref() {
+            let start = range
+                .start()
+                .map(|e| self.lower_expr(&e))
+                .unwrap_or_else(|| {
+                    // Default to 0 if no start
+                    let zero = HirExpr {
+                        kind: HirExprKind::Literal(Literal::Int(0)),
+                        ty: self.db.types.i32(),
+                        span: span.clone(),
+                    };
+                    self.db.alloc_expr(zero)
+                });
+            let end = range
+                .end()
+                .map(|e| self.lower_expr(&e))
+                .unwrap_or_else(|| self.lower_missing(span.clone()));
+            (start, end)
+        } else {
+            // Not a range expression - fallback to missing
+            return self.lower_missing(span);
+        };
+
+        // Lower the pattern to get the binding's DefId and type
+        let pat = for_expr.pat();
+        let (pat_def_id, pat_ty) = if let Some(ref p) = pat {
+            let pat_span = Self::text_range_to_span(p.syntax().text_range());
+            // Lower the pattern (which gets the DefId from resolution)
+            let pat_id = self.lower_pattern(p, true); // mutable: true for iteration
+            let hir_pat = &self.db.pats[pat_id];
+            match &hir_pat.kind {
+                HirPatKind::Bind { def_id, .. } => (*def_id, hir_pat.ty),
+                _ => {
+                    // Complex pattern not yet supported - use missing
+                    return self.lower_missing(pat_span);
+                }
+            }
+        } else {
+            return self.lower_missing(span);
+        };
+
+        // Create: let mut i = start;
+        let let_pat = HirPat {
+            kind: HirPatKind::Bind {
+                def_id: pat_def_id,
+                mutable: true,
+            },
+            ty: pat_ty,
+            span: span.clone(),
+        };
+        let let_pat_id = self.db.alloc_pat(let_pat);
+
+        let let_stmt = HirStmt {
+            kind: HirStmtKind::Let {
+                pat: let_pat_id,
+                ty: Some(pat_ty),
+                init: Some(start_expr_id),
+            },
+            span: span.clone(),
+        };
+        let let_stmt_id = self.db.alloc_stmt(let_stmt);
+
+        // Create: i (variable reference for comparisons and increment)
+        let var_expr = HirExpr {
+            kind: HirExprKind::Var(pat_def_id),
+            ty: pat_ty,
+            span: span.clone(),
+        };
+        let var_id = self.db.alloc_expr(var_expr);
+
+        // Create: i >= end
+        let cmp_expr = HirExpr {
+            kind: HirExprKind::Binary {
+                op: BinOp::Ge,
+                lhs: var_id,
+                rhs: end_expr_id,
+            },
+            ty: self.bool_type(),
+            span: span.clone(),
+        };
+        let cmp_id = self.db.alloc_expr(cmp_expr);
+
+        // Create: break
+        let break_expr = HirExpr {
+            kind: HirExprKind::Break { value: None },
+            ty: self.never_type(),
+            span: span.clone(),
+        };
+        let break_id = self.db.alloc_expr(break_expr);
+
+        // Create: if i >= end { break; }
+        let if_break = HirExpr {
+            kind: HirExprKind::If {
+                condition: cmp_id,
+                then_branch: break_id,
+                else_branch: None,
+            },
+            ty: self.unit_type(),
+            span: span.clone(),
+        };
+        let if_break_id = self.db.alloc_expr(if_break);
+
+        let if_stmt = HirStmt {
+            kind: HirStmtKind::Expr {
+                expr: if_break_id,
+                has_semi: true,
+            },
+            span: span.clone(),
+        };
+        let if_stmt_id = self.db.alloc_stmt(if_stmt);
+
+        // Lower the body
+        let body_expr_id = for_expr
+            .body()
+            .map(|b| self.lower_block(&b))
+            .unwrap_or_else(|| self.lower_missing(span.clone()));
+
+        let body_stmt = HirStmt {
+            kind: HirStmtKind::Expr {
+                expr: body_expr_id,
+                has_semi: true,
+            },
+            span: span.clone(),
+        };
+        let body_stmt_id = self.db.alloc_stmt(body_stmt);
+
+        // Create: i (for the lhs of assignment)
+        let var_lhs = HirExpr {
+            kind: HirExprKind::Var(pat_def_id),
+            ty: pat_ty,
+            span: span.clone(),
+        };
+        let var_lhs_id = self.db.alloc_expr(var_lhs);
+
+        // Create: i (for the rhs of i + 1)
+        let var_rhs = HirExpr {
+            kind: HirExprKind::Var(pat_def_id),
+            ty: pat_ty,
+            span: span.clone(),
+        };
+        let var_rhs_id = self.db.alloc_expr(var_rhs);
+
+        // Create: 1
+        let one = HirExpr {
+            kind: HirExprKind::Literal(Literal::Int(1)),
+            ty: pat_ty, // Same type as the loop variable
+            span: span.clone(),
+        };
+        let one_id = self.db.alloc_expr(one);
+
+        // Create: i + 1
+        let add_expr = HirExpr {
+            kind: HirExprKind::Binary {
+                op: BinOp::Add,
+                lhs: var_rhs_id,
+                rhs: one_id,
+            },
+            ty: pat_ty,
+            span: span.clone(),
+        };
+        let add_id = self.db.alloc_expr(add_expr);
+
+        // Create: i = i + 1
+        let assign_expr = HirExpr {
+            kind: HirExprKind::Binary {
+                op: BinOp::Assign,
+                lhs: var_lhs_id,
+                rhs: add_id,
+            },
+            ty: self.unit_type(),
+            span: span.clone(),
+        };
+        let assign_id = self.db.alloc_expr(assign_expr);
+
+        let assign_stmt = HirStmt {
+            kind: HirStmtKind::Expr {
+                expr: assign_id,
+                has_semi: true,
+            },
+            span: span.clone(),
+        };
+        let assign_stmt_id = self.db.alloc_stmt(assign_stmt);
+
+        // Create loop body block: { if i >= end { break; } body; i = i + 1; }
+        let loop_body = HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![if_stmt_id, body_stmt_id, assign_stmt_id],
+                tail: None,
+            },
+            ty: self.unit_type(),
+            span: span.clone(),
+        };
+        let loop_body_id = self.db.alloc_expr(loop_body);
+
+        // Create: loop { ... }
+        let loop_expr = HirExpr {
+            kind: HirExprKind::Loop { body: loop_body_id },
+            ty: self.unit_type(),
+            span: span.clone(),
+        };
+        let loop_expr_id = self.db.alloc_expr(loop_expr);
+
+        let loop_stmt = HirStmt {
+            kind: HirStmtKind::Expr {
+                expr: loop_expr_id,
+                has_semi: false, // The loop is the last expression in the block
+            },
+            span: span.clone(),
+        };
+        let loop_stmt_id = self.db.alloc_stmt(loop_stmt);
+
+        // Create outer block: { let mut i = start; loop { ... } }
+        let outer_block = HirExpr {
+            kind: HirExprKind::Block {
+                stmts: vec![let_stmt_id, loop_stmt_id],
+                tail: None,
+            },
+            ty,
+            span,
+        };
+        self.db.alloc_expr(outer_block)
     }
 
     fn lower_break_expr(&mut self, break_expr: &BreakExpr, span: Span) -> ExprId {

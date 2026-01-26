@@ -7,7 +7,7 @@ use cranelift_codegen::ir::{InstBuilder, MemFlags, Value};
 use crate::codegen::LocalStorage;
 use crate::codegen::error::CodegenError;
 use crate::mir::operand::{AggregateKind, BinOp, CastKind, Constant, Operand, Rvalue, UnOp};
-use crate::mir::types::{Local, Place};
+use crate::mir::types::{Local, Place, PlaceElem};
 use crate::sema::types::TypeId;
 
 use super::FunctionLowerer;
@@ -38,7 +38,40 @@ impl<'a> FunctionLowerer<'a> {
                 if let Some(dest_ty) = self.local_type(dest) {
                     self.lower_operand_as(operand, dest_ty)
                 } else {
-                    // ZST destination
+                    // Compound type destination - need to copy memory
+                    // This handles Move/Copy of structs, tuples, arrays
+                    if let Operand::Copy(src_place) | Operand::Move(src_place) = operand {
+                        let dest_spl_ty = self.local_spl_type(dest);
+                        let layout = self.layout.layout_of(dest_spl_ty);
+
+                        // Skip if ZST
+                        if layout.size == 0 {
+                            return Ok(None);
+                        }
+
+                        let dest_addr = self.local_stack_addr(dest).ok_or_else(|| {
+                            CodegenError::Internal(
+                                "compound type requires stack slot destination".to_string(),
+                            )
+                        })?;
+
+                        let src_addr = if src_place.projection.is_empty() {
+                            self.local_stack_addr(src_place.local).ok_or_else(|| {
+                                CodegenError::Internal(
+                                    "compound type source requires stack slot".to_string(),
+                                )
+                            })?
+                        } else {
+                            let (addr, _) = self.compute_place_address(src_place)?;
+                            addr
+                        };
+
+                        // Copy memory from source to destination
+                        self.copy_memory(src_addr, dest_addr, layout.size);
+                        return Ok(None);
+                    }
+
+                    // ZST or unhandled case
                     Ok(None)
                 }
             }
@@ -695,9 +728,53 @@ impl<'a> FunctionLowerer<'a> {
     /// Infer the Cranelift type for an operand.
     fn infer_operand_type(&self, operand: &Operand) -> Result<types::Type, CodegenError> {
         match operand {
-            Operand::Copy(place) | Operand::Move(place) => self
-                .local_type(place.local)
-                .ok_or_else(|| CodegenError::Internal("ZST local".to_string())),
+            Operand::Copy(place) | Operand::Move(place) => {
+                // If no projections, use local's direct Cranelift type (works for scalars)
+                if place.projection.is_empty() {
+                    return self
+                        .local_type(place.local)
+                        .ok_or_else(|| CodegenError::Internal("ZST local".to_string()));
+                }
+
+                // For places with projections, compute the final projected type
+                let mut current_ty = self.local_spl_type(place.local);
+                for proj in &place.projection {
+                    current_ty = match proj {
+                        PlaceElem::Field(idx) => self
+                            .layout
+                            .field_type(current_ty, idx.index() as usize)
+                            .ok_or_else(|| {
+                                CodegenError::Internal(format!(
+                                    "field {} not found in type",
+                                    idx.index()
+                                ))
+                            })?,
+                        PlaceElem::Index(_) | PlaceElem::ConstantIndex { .. } => self
+                            .layout
+                            .element_type(current_ty)
+                            .ok_or_else(|| {
+                                CodegenError::Internal("element type not found".to_string())
+                            })?,
+                        PlaceElem::Deref => self.layout.pointee_type(current_ty).ok_or_else(
+                            || CodegenError::Internal("pointee type not found".to_string()),
+                        )?,
+                        PlaceElem::Subslice { .. } => {
+                            return Err(CodegenError::Internal(
+                                "subslice not yet supported".to_string(),
+                            ));
+                        }
+                        PlaceElem::Downcast(_) => {
+                            // Downcast doesn't change the type at this level
+                            current_ty
+                        }
+                    };
+                }
+
+                // Map the final SPL type to Cranelift type
+                self.type_mapper
+                    .map_type(current_ty, self.types)
+                    .ok_or_else(|| CodegenError::Internal("projected compound type".to_string()))
+            }
             Operand::Constant(constant) => match constant {
                 crate::mir::operand::Constant::Int(..) => Ok(types::I64),
                 crate::mir::operand::Constant::Bool(_) => Ok(types::I8),
