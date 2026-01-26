@@ -8833,14 +8833,20 @@ fn test_match_wildcard_is_otherwise() {
     let body = &bodies[0];
 
     // Find the SwitchInt terminator
-    let switch = body.basic_blocks.iter().find_map(|bb| match bb.terminator.as_ref()?.kind {
-        TerminatorKind::SwitchInt { ref targets, .. } => Some(targets.clone()),
-        _ => None,
-    });
+    let switch = body
+        .basic_blocks
+        .iter()
+        .find_map(|bb| match bb.terminator.as_ref()?.kind {
+            TerminatorKind::SwitchInt { ref targets, .. } => Some(targets.clone()),
+            _ => None,
+        });
     let switch = switch.expect("Should have SwitchInt terminator");
 
     // Should have explicit target for 0
-    assert!(switch.target_for(0).is_some(), "Should have explicit target for 0");
+    assert!(
+        switch.target_for(0).is_some(),
+        "Should have explicit target for 0"
+    );
     // Otherwise target should be different from the 0 target
     assert_ne!(
         switch.target_for(0).unwrap(),

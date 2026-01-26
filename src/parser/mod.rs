@@ -557,7 +557,10 @@ impl Marker {
         if self.pos == p.events.len() - 1 {
             match p.events.pop() {
                 Some(Event::Placeholder) => {}
-                _ => unreachable!("Marker abandon: expected Placeholder event at position {}", self.pos),
+                _ => unreachable!(
+                    "Marker abandon: expected Placeholder event at position {}",
+                    self.pos
+                ),
             }
         }
     }
@@ -588,7 +591,10 @@ impl CompletedMarker {
         if let Event::Start { forward_parent, .. } = &mut p.events[self.pos] {
             *forward_parent = Some(new_pos - self.pos);
         } else {
-            unreachable!("CompletedMarker precede: expected Start event at position {}", self.pos);
+            unreachable!(
+                "CompletedMarker precede: expected Start event at position {}",
+                self.pos
+            );
         }
 
         Marker::new(new_pos)
@@ -1384,5 +1390,224 @@ pub(crate) mod tests {
         let parse = parse("fn f(a: i32, @@@, b: i32) {}");
         let tree = parse.debug_tree();
         assert!(tree.contains("ERROR"), "tree:\n{tree}");
+    }
+
+    // =============================================================================
+    // Parser Recovery Stress Tests (spl-7jpw)
+    // =============================================================================
+
+    // -------------------------------------------------------------------------
+    // Deeply Nested Errors
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn recovery_deeply_nested_braces_with_error() {
+        // Error token deep inside nested braces
+        let parse = parse("fn f() { { { { @ } } } }");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        // Function should still be parsed
+        assert!(tree.contains("FunctionDef"));
+        // Error should be wrapped
+        assert!(tree.contains("ERROR"));
+    }
+
+    #[test]
+    fn recovery_deeply_nested_multiple_errors() {
+        // Multiple errors at different nesting levels
+        let parse = parse("fn f() { { @ } { { # } } }");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Mismatched Delimiters
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn recovery_mismatched_paren_brace() {
+        // Opening paren, closing brace
+        let parse = parse("fn f() { ( 1 + 2 } }");
+        assert!(!parse.ok());
+        // Should still produce some tree
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef") || tree.contains("SourceFile"));
+    }
+
+    #[test]
+    fn recovery_mismatched_bracket_paren() {
+        // Opening bracket, closing paren
+        let parse = parse("fn f() { let a = [1, 2); }");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef") || tree.contains("SourceFile"));
+    }
+
+    #[test]
+    fn recovery_extra_closing_delimiter() {
+        // Extra closing brace
+        let parse = parse("fn f() { } }");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    #[test]
+    fn recovery_missing_closing_delimiter() {
+        // Missing closing brace
+        let parse = parse("fn f() { let x = 1;");
+        assert!(!parse.ok());
+        // Should still parse what it can
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef") || tree.contains("SourceFile"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Multiple Errors in Same Construct
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn recovery_multiple_errors_in_params() {
+        // Multiple error tokens in parameter list
+        let parse = parse("fn f(a: @, b: #, c: !) {}");
+        assert!(!parse.ok());
+        let errors = parse.errors();
+        // Should report multiple errors (at least 2 for the first two invalid types)
+        assert!(errors.len() >= 2, "errors: {errors:?}");
+    }
+
+    #[test]
+    fn recovery_multiple_errors_in_struct_fields() {
+        // Multiple error tokens in struct field list
+        let parse = parse("struct S(a: @, b: #, c: !)");
+        assert!(!parse.ok());
+        let errors = parse.errors();
+        // Should report multiple errors (at least 2 for invalid types)
+        assert!(errors.len() >= 2, "errors: {errors:?}");
+    }
+
+    #[test]
+    fn recovery_multiple_errors_in_function_args() {
+        // Multiple error tokens in function call
+        let parse = parse("fn f() { foo(@, #, !); }");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Very Long Sequences
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn recovery_long_statement_sequence() {
+        // Very long sequence of statements
+        let statements = "let x = 1;".repeat(100);
+        let input = format!("fn f() {{ {statements} }}");
+        let parse = parse(&input);
+        assert!(parse.ok(), "errors: {:?}", parse.errors());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    #[test]
+    fn recovery_long_sequence_with_errors() {
+        // Long sequence with periodic errors
+        let mut input = String::from("fn f() { ");
+        for i in 0..50 {
+            if i % 10 == 5 {
+                input.push_str("@ ");
+            } else {
+                input.push_str("let x = 1; ");
+            }
+        }
+        input.push('}');
+        let parse = parse(&input);
+        assert!(!parse.ok());
+        // Should still produce a function
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    #[test]
+    fn recovery_very_long_expression() {
+        // Very long chained expression
+        let expr = "1 +".repeat(100) + " 1";
+        let input = format!("fn f() {{ let x = {expr}; }}");
+        let parse = parse(&input);
+        assert!(parse.ok(), "errors: {:?}", parse.errors());
+    }
+
+    // -------------------------------------------------------------------------
+    // Edge Cases with Nested Constructs
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn recovery_error_in_nested_tuple() {
+        // Error inside a tuple
+        let parse = parse("fn f() { let x = (1, @, 3); }");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    #[test]
+    fn recovery_error_in_nested_array() {
+        // Error inside an array
+        let parse = parse("fn f() { let x = [1, @, 3]; }");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    #[test]
+    fn recovery_error_in_match_arm() {
+        // Error inside match arm
+        let parse = parse("fn f() { match x { 0 => @, _ => 1, } }");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    #[test]
+    fn recovery_error_in_if_condition() {
+        // Error in if condition
+        let parse = parse("fn f() { if @ { 1 } else { 2 } }");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Recovery Doesn't Panic
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn recovery_only_error_tokens() {
+        // Input with only error tokens
+        let parse = parse("@@@ ### !!!");
+        assert!(!parse.ok());
+        // Should not panic, should produce a tree
+        let _tree = parse.debug_tree();
+    }
+
+    #[test]
+    fn recovery_interleaved_errors_and_valid() {
+        // Interleaved error tokens and valid constructs
+        let parse = parse("@ fn a() {} # struct B() % fn c() {}");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        // Should parse some items
+        assert!(tree.contains("FunctionDef") || tree.contains("StructDef"));
+    }
+
+    #[test]
+    fn recovery_unicode_garbage() {
+        // Unicode characters that aren't valid tokens
+        let parse = parse("fn f() { \u{1F600} }");
+        assert!(!parse.ok());
+        let tree = parse.debug_tree();
+        assert!(tree.contains("FunctionDef"));
     }
 }

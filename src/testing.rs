@@ -209,7 +209,11 @@ pub fn format_parse_errors(errors: &[ParseError]) -> String {
 /// ```
 pub fn parse_ok(source: &str) -> SourceFile {
     let parse = crate::parser::parse(source);
-    assert!(parse.ok(), "parse failed:\n{}", format_parse_errors(parse.errors()));
+    assert!(
+        parse.ok(),
+        "parse failed:\n{}",
+        format_parse_errors(parse.errors())
+    );
     SourceFile::cast(parse.syntax()).expect("cast to SourceFile")
 }
 
@@ -254,7 +258,8 @@ pub fn parse_err(source: &str) -> Vec<ParseError> {
 pub fn resolve_ok(source: &str) -> ResolveResult {
     let ast = parse_ok(source);
     let result = crate::sema::resolve(&ast);
-    assert!(result.diagnostics.is_empty(), 
+    assert!(
+        result.diagnostics.is_empty(),
         "resolution failed:\n{}",
         format_diagnostics(&result.diagnostics)
     );
@@ -280,7 +285,10 @@ pub fn resolve_ok(source: &str) -> ResolveResult {
 pub fn resolve_err(source: &str) -> Vec<Diagnostic> {
     let ast = parse_ok(source);
     let result = crate::sema::resolve(&ast);
-    assert!(!result.diagnostics.is_empty(), "expected resolution errors but resolution succeeded");
+    assert!(
+        !result.diagnostics.is_empty(),
+        "expected resolution errors but resolution succeeded"
+    );
     result.diagnostics
 }
 
@@ -303,12 +311,14 @@ pub fn resolve_err(source: &str) -> Vec<Diagnostic> {
 pub fn infer_ok(source: &str) -> InferResult {
     let ast = parse_ok(source);
     let resolve_result = crate::sema::resolve(&ast);
-    assert!(resolve_result.diagnostics.is_empty(), 
+    assert!(
+        resolve_result.diagnostics.is_empty(),
         "resolution failed:\n{}",
         format_diagnostics(&resolve_result.diagnostics)
     );
     let infer_result = crate::sema::infer(&ast, &resolve_result);
-    assert!(infer_result.diagnostics.is_empty(), 
+    assert!(
+        infer_result.diagnostics.is_empty(),
         "type inference failed:\n{}",
         format_diagnostics(&infer_result.diagnostics)
     );
@@ -336,7 +346,10 @@ pub fn infer_err(source: &str) -> Vec<Diagnostic> {
     let ast = parse_ok(source);
     let resolve_result = crate::sema::resolve(&ast);
     let infer_result = crate::sema::infer(&ast, &resolve_result);
-    assert!(!infer_result.diagnostics.is_empty(), "expected type inference errors but inference succeeded");
+    assert!(
+        !infer_result.diagnostics.is_empty(),
+        "expected type inference errors but inference succeeded"
+    );
     infer_result.diagnostics
 }
 
@@ -725,7 +738,8 @@ pub fn compile_fixture_err(name: &str) -> Vec<Diagnostic> {
 /// assert_has_error(&diags, "cannot find");
 /// ```
 pub fn assert_has_error(diags: &[Diagnostic], pattern: &str) {
-    assert!(diags.iter().any(|d| d.message.contains(pattern)), 
+    assert!(
+        diags.iter().any(|d| d.message.contains(pattern)),
         "no diagnostic matching '{}'\nActual diagnostics:\n{}",
         pattern,
         format_diagnostics(diags)
@@ -753,7 +767,8 @@ pub fn assert_error_count(diags: &[Diagnostic], expected: usize) {
         .iter()
         .filter(|d| d.severity == Severity::Error)
         .count();
-    assert!(actual == expected,
+    assert!(
+        actual == expected,
         "expected {expected} errors, found {actual}\nDiagnostics:\n{}",
         format_diagnostics(diags)
     );

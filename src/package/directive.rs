@@ -366,7 +366,9 @@ mod tests {
             DirectiveError::MalformedDirective { directive, .. } => {
                 assert_eq!(directive, "name");
             }
-            DirectiveError::ParseError(e) => panic!("expected MalformedDirective, got ParseError({e:?})"),
+            DirectiveError::ParseError(e) => {
+                panic!("expected MalformedDirective, got ParseError({e:?})")
+            }
         }
     }
 
@@ -503,7 +505,9 @@ mod tests {
                 assert_eq!(directive, "include");
                 assert!(reason.contains("empty"));
             }
-            DirectiveError::ParseError(e) => panic!("expected MalformedDirective, got ParseError({e:?})"),
+            DirectiveError::ParseError(e) => {
+                panic!("expected MalformedDirective, got ParseError({e:?})")
+            }
         }
     }
 
@@ -518,7 +522,9 @@ mod tests {
                 assert_eq!(directive, "exclude");
                 assert!(reason.contains("empty"));
             }
-            DirectiveError::ParseError(e) => panic!("expected MalformedDirective, got ParseError({e:?})"),
+            DirectiveError::ParseError(e) => {
+                panic!("expected MalformedDirective, got ParseError({e:?})")
+            }
         }
     }
 
@@ -533,7 +539,9 @@ mod tests {
                 assert_eq!(directive, "name");
                 assert!(reason.contains("empty"));
             }
-            DirectiveError::ParseError(e) => panic!("expected MalformedDirective, got ParseError({e:?})"),
+            DirectiveError::ParseError(e) => {
+                panic!("expected MalformedDirective, got ParseError({e:?})")
+            }
         }
     }
 
@@ -548,7 +556,9 @@ mod tests {
                 assert_eq!(directive, "include_module");
                 assert!(reason.contains("empty"));
             }
-            DirectiveError::ParseError(e) => panic!("expected MalformedDirective, got ParseError({e:?})"),
+            DirectiveError::ParseError(e) => {
+                panic!("expected MalformedDirective, got ParseError({e:?})")
+            }
         }
     }
 
@@ -563,7 +573,9 @@ mod tests {
                 assert_eq!(directive, "exclude_module");
                 assert!(reason.contains("empty"));
             }
-            DirectiveError::ParseError(e) => panic!("expected MalformedDirective, got ParseError({e:?})"),
+            DirectiveError::ParseError(e) => {
+                panic!("expected MalformedDirective, got ParseError({e:?})")
+            }
         }
     }
 
@@ -578,7 +590,9 @@ mod tests {
                 assert_eq!(directive, "include_if");
                 assert!(reason.contains("empty"));
             }
-            DirectiveError::ParseError(e) => panic!("expected MalformedDirective, got ParseError({e:?})"),
+            DirectiveError::ParseError(e) => {
+                panic!("expected MalformedDirective, got ParseError({e:?})")
+            }
         }
     }
 }

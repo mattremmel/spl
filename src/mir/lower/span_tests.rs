@@ -60,11 +60,19 @@ fn assignment_span_covers_binary_op() {
         .basic_blocks
         .iter()
         .flat_map(|bb| bb.statements.iter())
-        .find(|s| matches!(&s.kind, crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::BinaryOp(..))))
+        .find(|s| {
+            matches!(
+                &s.kind,
+                crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::BinaryOp(..))
+            )
+        })
         .expect("should have binary op assignment");
 
     // The span should be within the source
-    assert!(binop_stmt.span.end <= source.len(), "Span should be within source bounds");
+    assert!(
+        binop_stmt.span.end <= source.len(),
+        "Span should be within source bounds"
+    );
     let span_text = span_to_source(source, &binop_stmt.span);
     assert!(
         span_text.contains('+') || span_text.contains('a') || span_text.contains('b'),
@@ -229,7 +237,10 @@ fn binary_op_span_covers_full_expression() {
         .find(|s| {
             matches!(
                 &s.kind,
-                crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::BinaryOp(crate::mir::BinOp::Add, ..))
+                crate::mir::StatementKind::Assign(
+                    _,
+                    crate::mir::Rvalue::BinaryOp(crate::mir::BinOp::Add, ..)
+                )
             )
         })
         .expect("should have Add binary op");
@@ -251,7 +262,8 @@ fn binary_op_span_covers_full_expression() {
 #[test]
 fn field_access_span_preserved() {
     // SPL uses tuple-struct syntax: struct Point(x: i32, y: i32)
-    let source = "struct Point(x: i32, y: i32) fn main() { let p = Point(x: 1, y: 2); let v = p.x; }";
+    let source =
+        "struct Point(x: i32, y: i32) fn main() { let p = Point(x: 1, y: 2); let v = p.x; }";
     let bodies = lower_source(source);
     let body = &bodies[0];
 
@@ -284,7 +296,10 @@ fn struct_construction_span_preserved() {
         .find(|s| {
             matches!(
                 &s.kind,
-                crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::Aggregate(crate::mir::AggregateKind::Adt(_), _))
+                crate::mir::StatementKind::Assign(
+                    _,
+                    crate::mir::Rvalue::Aggregate(crate::mir::AggregateKind::Adt(_), _)
+                )
             )
         })
         .expect("should have struct construction");
@@ -317,7 +332,10 @@ fn array_literal_span_preserved() {
         .find(|s| {
             matches!(
                 &s.kind,
-                crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::Aggregate(crate::mir::AggregateKind::Array, _))
+                crate::mir::StatementKind::Assign(
+                    _,
+                    crate::mir::Rvalue::Aggregate(crate::mir::AggregateKind::Array, _)
+                )
             )
         })
         .expect("should have array construction");
@@ -344,7 +362,10 @@ fn tuple_literal_span_preserved() {
         .find(|s| {
             matches!(
                 &s.kind,
-                crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::Aggregate(crate::mir::AggregateKind::Tuple, _))
+                crate::mir::StatementKind::Assign(
+                    _,
+                    crate::mir::Rvalue::Aggregate(crate::mir::AggregateKind::Tuple, _)
+                )
             )
         })
         .expect("should have tuple construction");
@@ -412,7 +433,12 @@ fn reference_span_preserved() {
         .basic_blocks
         .iter()
         .flat_map(|bb| bb.statements.iter())
-        .find(|s| matches!(&s.kind, crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::Ref(..))))
+        .find(|s| {
+            matches!(
+                &s.kind,
+                crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::Ref(..))
+            )
+        })
         .expect("should have reference creation");
 
     assert!(
@@ -435,7 +461,12 @@ fn unary_op_span_preserved() {
         .basic_blocks
         .iter()
         .flat_map(|bb| bb.statements.iter())
-        .find(|s| matches!(&s.kind, crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::UnaryOp(..))))
+        .find(|s| {
+            matches!(
+                &s.kind,
+                crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::UnaryOp(..))
+            )
+        })
         .expect("should have unary op");
 
     assert!(
@@ -455,7 +486,15 @@ fn unary_not_span_preserved() {
         .basic_blocks
         .iter()
         .flat_map(|bb| bb.statements.iter())
-        .find(|s| matches!(&s.kind, crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::UnaryOp(crate::mir::UnOp::Not, ..))))
+        .find(|s| {
+            matches!(
+                &s.kind,
+                crate::mir::StatementKind::Assign(
+                    _,
+                    crate::mir::Rvalue::UnaryOp(crate::mir::UnOp::Not, ..)
+                )
+            )
+        })
         .expect("should have unary Not op");
 
     assert!(
@@ -477,7 +516,12 @@ fn cast_span_preserved() {
         .basic_blocks
         .iter()
         .flat_map(|bb| bb.statements.iter())
-        .find(|s| matches!(&s.kind, crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::Cast(..))))
+        .find(|s| {
+            matches!(
+                &s.kind,
+                crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::Cast(..))
+            )
+        })
         .expect("should have cast");
 
     assert!(
@@ -615,7 +659,10 @@ fn compound_assignment_span_preserved() {
         .rfind(|s| {
             matches!(
                 &s.kind,
-                crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::BinaryOp(crate::mir::BinOp::Add, ..))
+                crate::mir::StatementKind::Assign(
+                    _,
+                    crate::mir::Rvalue::BinaryOp(crate::mir::BinOp::Add, ..)
+                )
             )
         }); // Get the compound assignment, not the initial 1
 
@@ -686,14 +733,21 @@ fn main() { complex(); }
                 assert!(
                     stmt.span.end <= source.len(),
                     "fn{} bb{} stmt{}: span {:?} exceeds source len {}",
-                    fn_idx, bb_idx, stmt_idx, stmt.span, source.len()
+                    fn_idx,
+                    bb_idx,
+                    stmt_idx,
+                    stmt.span,
+                    source.len()
                 );
             }
             if let Some(term) = &bb.terminator {
                 assert!(
                     term.span.end <= source.len(),
                     "fn{} bb{} terminator: span {:?} exceeds source len {}",
-                    fn_idx, bb_idx, term.span, source.len()
+                    fn_idx,
+                    bb_idx,
+                    term.span,
+                    source.len()
                 );
             }
         }

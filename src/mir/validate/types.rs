@@ -274,9 +274,9 @@ fn get_rvalue_type(rvalue: &Rvalue, body: &Body, types: &TypeInterner) -> TypeId
         Rvalue::Use(operand) | Rvalue::UnaryOp(_, operand) | Rvalue::Repeat(operand, _) => {
             get_operand_type(operand, body, types)
         }
-        Rvalue::Ref(_, _, ref_ty) | Rvalue::AddressOf(_, _, ref_ty) | Rvalue::Cast(_, _, ref_ty) => {
-            *ref_ty
-        }
+        Rvalue::Ref(_, _, ref_ty)
+        | Rvalue::AddressOf(_, _, ref_ty)
+        | Rvalue::Cast(_, _, ref_ty) => *ref_ty,
         Rvalue::BinaryOp(op, lhs, _) => match op {
             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => types.bool(),
             _ => get_operand_type(lhs, body, types),

@@ -1377,7 +1377,11 @@ impl<'a> LoweringContext<'a> {
 
         // Check if this is an intrinsic method
         if let Some(&method_def_id) = self.infer_result.method_resolutions.get(&span)
-            && let Some(intrinsic) = self.infer_result.intrinsic_methods.get(&method_def_id).cloned()
+            && let Some(intrinsic) = self
+                .infer_result
+                .intrinsic_methods
+                .get(&method_def_id)
+                .cloned()
         {
             match intrinsic {
                 crate::sema::infer::IntrinsicKind::FieldAccess(index) => {

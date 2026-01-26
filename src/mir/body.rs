@@ -390,7 +390,10 @@ mod tests {
 
     #[test]
     fn mir_body_user_locals() {
-        let body = Body::with_args(TypeId::new(0), &[(TypeId::new(1), false), (TypeId::new(2), false)]);
+        let body = Body::with_args(
+            TypeId::new(0),
+            &[(TypeId::new(1), false), (TypeId::new(2), false)],
+        );
         let user_locals: Vec<_> = body.user_locals().collect();
 
         // No user locals yet (only return + args)

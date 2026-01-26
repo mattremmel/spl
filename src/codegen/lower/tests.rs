@@ -3219,8 +3219,8 @@ fn lower_recursive_call() {
     body.block_mut(call_block).set_terminator(Terminator::new(
         TerminatorKind::Call {
             func: Operand::Constant(Constant::FnDef(DefId::new(1))), // factorial (self)
-            args: vec![Operand::copy_local(Local(3))],          // n - 1
-            destination: Place::from_local(Local(4)),           // result
+            args: vec![Operand::copy_local(Local(3))],               // n - 1
+            destination: Place::from_local(Local(4)),                // result
             target: Some(after_call),
         },
         0..0,

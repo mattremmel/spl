@@ -4639,3 +4639,250 @@ fn tuple_pattern_in_let() {
         "bool",
     );
 }
+
+// =============================================================================
+// Type Inference Edge Cases (spl-69ov)
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Mutually Recursive Functions
+// -----------------------------------------------------------------------------
+
+#[test]
+fn mutually_recursive_functions_simple() {
+    // Two functions that call each other
+    check(
+        r#"
+        fn f(_ n: i32): i32 { if n == 0 { 0 } else { g(n - 1) } }
+        fn g(_ n: i32): i32 { if n == 0 { 1 } else { f(n - 1) } }
+        fn main() { let x = f(10); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn mutually_recursive_functions_three_way() {
+    // Three functions that form a cycle
+    check(
+        r#"
+        fn a(_ n: i32): i32 { if n == 0 { 0 } else { b(n - 1) } }
+        fn b(_ n: i32): i32 { if n == 0 { 1 } else { c(n - 1) } }
+        fn c(_ n: i32): i32 { if n == 0 { 2 } else { a(n - 1) } }
+        fn main() { let x = a(5); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn mutually_recursive_with_different_return_types() {
+    // Mutually recursive with bool/i32 return types
+    check(
+        r#"
+        fn is_even(_ n: i32): bool { if n == 0 { true } else { is_odd(n - 1) } }
+        fn is_odd(_ n: i32): bool { if n == 0 { false } else { is_even(n - 1) } }
+        fn main() { let x = is_even(4); }
+        "#,
+        "bool",
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Nested Generic Types
+// -----------------------------------------------------------------------------
+
+#[test]
+fn nested_array_in_array() {
+    check(
+        "fn main() { let x: [[i32; 2]; 3] = [[1, 2], [3, 4], [5, 6]]; }",
+        "[[i32; 2]; 3]",
+    );
+}
+
+#[test]
+fn nested_tuple_in_tuple() {
+    check(
+        "fn main() { let x: ((i32, i64), (bool, f64)) = ((1, 2), (true, 3.14)); }",
+        "((i32, i64), (bool, f64))",
+    );
+}
+
+#[test]
+fn deeply_nested_array() {
+    check(
+        "fn main() { let x: [[[i32; 1]; 1]; 1] = [[[42]]]; }",
+        "[[[i32; 1]; 1]; 1]",
+    );
+}
+
+#[test]
+fn mixed_nested_types() {
+    // Tuple containing array
+    check(
+        "fn main() { let x: ([i32; 2], bool) = ([1, 2], true); }",
+        "([i32; 2], bool)",
+    );
+}
+
+#[test]
+fn array_of_tuples() {
+    check(
+        "fn main() { let x: [(i32, bool); 2] = [(1, true), (2, false)]; }",
+        "[(i32, bool); 2]",
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Complex Control Flow Type Inference
+// -----------------------------------------------------------------------------
+
+#[test]
+fn if_else_with_loop_break() {
+    // If-else where one branch is a loop with break
+    check(
+        r#"
+        fn main() {
+            let x: i32 = if true { 1 } else { loop { break 2; } };
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn nested_if_inference() {
+    // Deeply nested if-else
+    check(
+        r#"
+        fn f(_ a: bool, _ b: bool, _ c: bool): i32 {
+            if a {
+                if b { 1 } else { 2 }
+            } else {
+                if c { 3 } else { 4 }
+            }
+        }
+        fn main() { let x = f(true, false, true); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn while_with_break_value_inference() {
+    // While loop doesn't produce values, test that types flow through
+    check(
+        r#"
+        fn main() {
+            let mut x: i32 = 0;
+            while x < 10 {
+                x = x + 1;
+            }
+            let y = x;
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn match_all_branches_same_type() {
+    // Match expression type inference
+    check(
+        r#"
+        fn main() {
+            let x: i32 = 5;
+            let y = match x {
+                0 => 100,
+                1 => 200,
+                _ => 300,
+            };
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn match_with_complex_patterns() {
+    check(
+        r#"
+        fn main() {
+            let pair = (1, 2);
+            let x = match pair {
+                (0, y) => y,
+                (x, 0) => x,
+                (a, b) => a + b,
+            };
+        }
+        "#,
+        "i32",
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Edge Cases with Type Unification
+// -----------------------------------------------------------------------------
+
+#[test]
+fn unify_through_function_call_chain() {
+    // Type flows through multiple function calls
+    check(
+        r#"
+        fn identity(_ x: i64): i64 { x }
+        fn double(_ x: i64): i64 { x * 2 }
+        fn main() {
+            let a = 5;
+            let b = identity(a);
+            let c = double(b);
+        }
+        "#,
+        "i64",
+    );
+}
+
+#[test]
+fn infer_from_multiple_constraints() {
+    // Same variable used with multiple type constraints (should be consistent)
+    check(
+        r#"
+        fn take_i64(_ x: i64) {}
+        fn main() {
+            let x = 42;
+            take_i64(x);
+            let y: i64 = x;
+        }
+        "#,
+        "i64",
+    );
+}
+
+#[test]
+fn bidirectional_array_element_inference() {
+    // Infer array element type from usage
+    check(
+        r#"
+        fn take_i64(_ x: i64) {}
+        fn main() {
+            let arr = [1, 2, 3];
+            take_i64(arr[0]);
+        }
+        "#,
+        "[i64; 3]",
+    );
+}
+
+#[test]
+fn struct_field_type_inference() {
+    // Infer type from struct field access
+    check(
+        r#"
+        struct Point(x: i64, y: i64)
+        fn main() {
+            let p = Point(x: 1, y: 2);
+            let x = p.x;
+        }
+        "#,
+        "i64",
+    );
+}

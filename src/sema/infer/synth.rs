@@ -278,7 +278,9 @@ impl<'a> InferEngine<'a> {
                     span: _,
                 } => self.synth_lowered_float(suffix),
                 LoweredExpr::BoolLiteral { .. } => self.types.bool(),
-                LoweredExpr::Passthrough => unreachable!("Passthrough should not appear in binary expression"),
+                LoweredExpr::Passthrough => {
+                    unreachable!("Passthrough should not appear in binary expression")
+                }
             };
             self.results.expr_types.insert(span, type_id);
             return type_id;
@@ -805,7 +807,9 @@ impl<'a> InferEngine<'a> {
             {
                 // Store the resolution for the method
                 let method_span = text_range_to_span(method_token.text_range());
-                self.results.method_resolutions.insert(method_span, method_def_id);
+                self.results
+                    .method_resolutions
+                    .insert(method_span, method_def_id);
 
                 return self.synth_call_as_function(call, &sig);
             }
@@ -950,7 +954,9 @@ impl<'a> InferEngine<'a> {
                 if let Some(sig) = self.defs.fn_signatures.get(&item_def_id).cloned() {
                     // Store resolution for HIR lowering
                     let method_span = text_range_to_span(last_segment.syntax().text_range());
-                    self.results.method_resolutions.insert(method_span, item_def_id);
+                    self.results
+                        .method_resolutions
+                        .insert(method_span, item_def_id);
 
                     return self.synth_call_as_function(call, &sig);
                 }
@@ -1098,7 +1104,12 @@ impl<'a> InferEngine<'a> {
         let method_name = method_token.text().to_string();
 
         // Check primitive type methods first (e.g., str.ptr(), str.len())
-        if let Some(method_def_ids) = self.methods.primitive_methods.get(&current_resolved).cloned() {
+        if let Some(method_def_ids) = self
+            .methods
+            .primitive_methods
+            .get(&current_resolved)
+            .cloned()
+        {
             for method_def_id in &method_def_ids {
                 // Look up method name from builtin_method_names
                 let fn_name = match self.methods.builtin_method_names.get(method_def_id) {
@@ -1132,7 +1143,9 @@ impl<'a> InferEngine<'a> {
                     }
                     // Store resolution for HIR lowering (same as struct methods)
                     let call_span = text_range_to_span(call.syntax().text_range());
-                    self.results.method_resolutions.insert(call_span, *method_def_id);
+                    self.results
+                        .method_resolutions
+                        .insert(call_span, *method_def_id);
                     return sig.ret;
                 }
             }
@@ -1191,7 +1204,9 @@ impl<'a> InferEngine<'a> {
 
                 // Store the resolution for the method
                 let method_span = text_range_to_span(method_token.text_range());
-                self.results.method_resolutions.insert(method_span, method_def_id);
+                self.results
+                    .method_resolutions
+                    .insert(method_span, method_def_id);
 
                 // Call the method with adjusted argument handling for self parameter
                 return self.synth_method_call_with_receiver(
@@ -1317,10 +1332,8 @@ impl<'a> InferEngine<'a> {
             match (&param_info.label, &arg_label) {
                 (Some(expected), Some(actual)) if expected != actual => {
                     self.diagnostics.push(
-                        Diagnostic::error(format!(
-                            "expected label `{expected}`, found `{actual}`"
-                        ))
-                        .with_label(arg_span, "wrong label"),
+                        Diagnostic::error(format!("expected label `{expected}`, found `{actual}`"))
+                            .with_label(arg_span, "wrong label"),
                     );
                 }
                 (Some(expected), None) => {
@@ -1742,8 +1755,7 @@ impl<'a> InferEngine<'a> {
                 _ => "str has no such field",
             };
             self.diagnostics.push(
-                Diagnostic::error(format!("no field `{idx}` on type `str`"))
-                    .with_label(span, hint),
+                Diagnostic::error(format!("no field `{idx}` on type `str`")).with_label(span, hint),
             );
             return self.types.error();
         }
@@ -2028,7 +2040,9 @@ impl<'a> InferEngine<'a> {
                     }
                     // Store resolution for HIR lowering
                     let call_span = text_range_to_span(call.syntax().text_range());
-                    self.results.method_resolutions.insert(call_span, *method_def_id);
+                    self.results
+                        .method_resolutions
+                        .insert(call_span, *method_def_id);
                     return sig.ret;
                 }
             }
@@ -2150,7 +2164,9 @@ impl<'a> InferEngine<'a> {
                 {
                     // Store resolution
                     let method_span = text_range_to_span(call.syntax().text_range());
-                    self.results.method_resolutions.insert(method_span, method_def_id);
+                    self.results
+                        .method_resolutions
+                        .insert(method_span, method_def_id);
 
                     return self.synth_method_call_with_receiver(
                         call,
@@ -2559,8 +2575,9 @@ impl<'a> InferEngine<'a> {
 
             // Raw pointers can be cast to integers (for FFI, pointer arithmetic, etc.)
             // Integers can be cast to raw pointers
-            (Type::RawPtr(_, _), Type::Primitive(t))
-            | (Type::Primitive(t), Type::RawPtr(_, _)) => is_numeric_type(*t),
+            (Type::RawPtr(_, _), Type::Primitive(t)) | (Type::Primitive(t), Type::RawPtr(_, _)) => {
+                is_numeric_type(*t)
+            }
 
             // All other casts are invalid
             _ => false,

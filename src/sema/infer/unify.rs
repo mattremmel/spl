@@ -137,9 +137,10 @@ impl<'a> InferEngine<'a> {
         match ty {
             Type::Infer(v, _) => *v == var,
             Type::Tuple(tys) => tys.iter().any(|t| self.occurs_in(var, *t)),
-            Type::Array(elem, _) | Type::Slice(elem) | Type::Ref(_, elem) | Type::RawPtr(_, elem) => {
-                self.occurs_in(var, *elem)
-            }
+            Type::Array(elem, _)
+            | Type::Slice(elem)
+            | Type::Ref(_, elem)
+            | Type::RawPtr(_, elem) => self.occurs_in(var, *elem),
             Type::Struct(_, args) | Type::Alias(_, args) => {
                 args.iter().any(|t| self.occurs_in(var, *t))
             }

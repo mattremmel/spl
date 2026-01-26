@@ -30,7 +30,9 @@ pub fn validate_cfg(body: &Body) {
                 (successor.index() as usize) < num_blocks,
                 "CFG validation failed: BasicBlock({}) has invalid successor BasicBlock({}), \
                 but only {} blocks exist",
-                idx, successor.index(), num_blocks
+                idx,
+                successor.index(),
+                num_blocks
             );
         }
     }

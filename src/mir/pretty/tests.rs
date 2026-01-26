@@ -686,7 +686,10 @@ mod function_bodies {
 
     #[test]
     fn body_with_args() {
-        let mut body = Body::with_args(TypeId::new(1), &[(TypeId::new(2), false), (TypeId::new(3), true)]);
+        let mut body = Body::with_args(
+            TypeId::new(1),
+            &[(TypeId::new(2), false), (TypeId::new(3), true)],
+        );
         let bb = body.alloc_block();
         body.block_mut(bb).push_statement(Statement::assign(
             Place::from_local(Local(0)),
@@ -881,7 +884,10 @@ mod integration {
     #[test]
     fn integration_arithmetic() {
         // fn add(a: i32, b: i32) -> i32 { a + b }
-        let mut body = Body::with_args(TypeId::new(1), &[(TypeId::new(1), false), (TypeId::new(1), false)]);
+        let mut body = Body::with_args(
+            TypeId::new(1),
+            &[(TypeId::new(1), false), (TypeId::new(1), false)],
+        );
         let bb = body.alloc_block();
 
         body.block_mut(bb).push_statement(Statement::assign(

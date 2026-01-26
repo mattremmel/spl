@@ -54,7 +54,8 @@ impl<'a> InferEngine<'a> {
                             if let Some(struct_id) = struct_def_id
                                 && let Some(method_def_id) = self.get_function_def_id(&func)
                             {
-                                self.defs.struct_methods
+                                self.defs
+                                    .struct_methods
                                     .entry(struct_id)
                                     .or_default()
                                     .push(method_def_id);
@@ -159,7 +160,8 @@ impl<'a> InferEngine<'a> {
                             if let Some(struct_id) = struct_def_id
                                 && let Some(method_def_id) = self.get_function_def_id(&func)
                             {
-                                self.defs.struct_methods
+                                self.defs
+                                    .struct_methods
                                     .entry(struct_id)
                                     .or_default()
                                     .push(method_def_id);
@@ -682,7 +684,8 @@ impl<'a> InferEngine<'a> {
                 if let Some(struct_id) = struct_def_id
                     && let Some(method_def_id) = self.get_function_def_id(&func)
                 {
-                    self.defs.struct_methods
+                    self.defs
+                        .struct_methods
                         .entry(struct_id)
                         .or_default()
                         .push(method_def_id);

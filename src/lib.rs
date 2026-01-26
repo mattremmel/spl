@@ -731,9 +731,7 @@ mod aot_tests {
             .as_nanos();
         let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
         let pid = std::process::id();
-        temp_dir.join(format!(
-            "spl_test_{name}_{pid}_{unique_id}_{counter}"
-        ))
+        temp_dir.join(format!("spl_test_{name}_{pid}_{unique_id}_{counter}"))
     }
 
     // Integration test: compile, link, and run a real executable

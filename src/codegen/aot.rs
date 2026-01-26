@@ -637,9 +637,7 @@ mod tests {
         // Verify all 10 functions exist
         for i in 0..10 {
             assert!(
-                symbol_names
-                    .iter()
-                    .any(|n| n.contains(&format!("fn_{i}"))),
+                symbol_names.iter().any(|n| n.contains(&format!("fn_{i}"))),
                 "missing fn_{i} in {symbol_names:?}"
             );
         }

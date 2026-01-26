@@ -48,7 +48,7 @@ impl<'a> FunctionLowerer<'a> {
                 None => {
                     return Err(CodegenError::Internal(format!(
                         "local {:?} not found in local_map",
-                        place.local  // Debug formatting required
+                        place.local // Debug formatting required
                     )));
                 }
             }

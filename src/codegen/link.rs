@@ -175,7 +175,7 @@ impl CcLinker {
 
         // Library search paths
         for path in &options.library_paths {
-            args.push(format!("-L{}", path.display()));  // path.display() can't be inlined
+            args.push(format!("-L{}", path.display())); // path.display() can't be inlined
         }
 
         // Libraries
