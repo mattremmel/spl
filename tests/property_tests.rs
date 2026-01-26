@@ -41,6 +41,7 @@ fn valid_ident() -> impl Strategy<Value = String> {
                     | "use"
                     | "mod"
                     | "as"
+                    | "is"
             )
         })
 }
