@@ -2477,9 +2477,13 @@ impl<'a> InferEngine<'a> {
                 && self.unify(break_ty, value_ty).is_err()
             {
                 let value_span = text_range_to_span(value.syntax().text_range());
+                let expected = self.type_to_string(self.resolve_type(break_ty));
+                let found = self.type_to_string(self.resolve_type(value_ty));
                 self.diagnostics.push(
-                    Diagnostic::error("type mismatch in break value")
-                        .with_label(value_span, "mismatched types"),
+                    Diagnostic::error(format!(
+                        "type mismatch in break value: expected `{expected}`, found `{found}`"
+                    ))
+                    .with_label(value_span, format!("expected `{expected}`")),
                 );
             }
         } else if let Some(break_ty) = self.ctx.loop_break_type {
@@ -2515,9 +2519,13 @@ impl<'a> InferEngine<'a> {
             && self.unify(ret_ty, value_ty).is_err()
         {
             let span = text_range_to_span(return_expr.syntax().text_range());
+            let expected = self.type_to_string(self.resolve_type(ret_ty));
+            let found = self.type_to_string(self.resolve_type(value_ty));
             self.diagnostics.push(
-                Diagnostic::error("type mismatch in return")
-                    .with_label(span, "mismatched return type"),
+                Diagnostic::error(format!(
+                    "type mismatch in return: expected `{expected}`, found `{found}`"
+                ))
+                .with_label(span, format!("expected `{expected}`")),
             );
         }
 
@@ -2597,8 +2605,9 @@ impl<'a> InferEngine<'a> {
             Type::Primitive(prim) => prim.as_str().to_string(),
             Type::Infer(var, kind) => match kind {
                 InferKind::General => format!("?{}", var.index()),
-                InferKind::Int => format!("?int{}", var.index()),
-                InferKind::Float => format!("?float{}", var.index()),
+                // Show default types for constrained inference variables in error messages
+                InferKind::Int => "i32".to_string(),
+                InferKind::Float => "f64".to_string(),
             },
             Type::Ref(mutability, inner) => {
                 let inner_str = self.type_to_string(*inner);

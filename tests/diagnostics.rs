@@ -50,6 +50,23 @@ fn type_mismatch_in_return() {
 }
 
 #[test]
+fn break_type_mismatch_shows_types() {
+    // Multiple breaks with conflicting types should show expected/actual
+    check_contains(
+        "fn main() { let x = loop { if true { break 42; } break true; }; }",
+        "expected `i32`, found `bool`",
+    );
+}
+
+#[test]
+fn return_type_mismatch_shows_types() {
+    check_contains(
+        "fn foo(): i32 { return true; }",
+        "expected `i32`, found `bool`",
+    );
+}
+
+#[test]
 fn type_mismatch_function_arg() {
     check_contains(
         "fn foo(_ x: i32) {} fn main() { foo(true); }",

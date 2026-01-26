@@ -386,7 +386,7 @@ impl<'ctx> Resolver<'ctx> {
 
             if let Some(def_id) = self.ctx.lookup(interned) {
                 // Check visibility if needed (for now, all items in same module are visible)
-                self.add_import_binding(import, def_id, name);
+                self.add_import_binding(import, def_id);
             } else {
                 self.emit_diagnostic(
                     Diagnostic::error(format!("cannot find `{name}` in this scope"))
@@ -444,7 +444,7 @@ impl<'ctx> Resolver<'ctx> {
     /// For imports with rename (`use foo as bar`), creates an alias that references
     /// the original `DefId`. For same-name imports (`use self.foo`), creates a binding
     /// only if one doesn't already exist in the current scope.
-    fn add_import_binding(&mut self, import: &PendingImport, def_id: DefId, _original_name: &str) {
+    fn add_import_binding(&mut self, import: &PendingImport, def_id: DefId) {
         let local_interned = self.ctx.intern(&import.local_name);
 
         // Check if this name already exists in the current scope
@@ -577,7 +577,7 @@ impl<'ctx> Resolver<'ctx> {
         // Handle the result - now we can mutably borrow the module tree
         match lookup_result {
             Ok(def_id) => {
-                self.add_import_binding(import, def_id, &item_name);
+                self.add_import_binding(import, def_id);
             }
             Err(Some(_)) => {
                 self.emit_diagnostic(
@@ -656,7 +656,6 @@ impl<'ctx> Resolver<'ctx> {
                             span: import.span.clone(),
                         },
                         def_id,
-                        &name,
                     );
                 }
             }
