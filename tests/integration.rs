@@ -47,3 +47,16 @@ fn format_diagnostics_works() {
     assert!(formatted.contains("[error]"));
     assert!(formatted.contains("cannot find"));
 }
+
+#[test]
+fn range_type_inference_positive() {
+    compile_ok(
+        r#"
+        fn main() {
+            for i in 0..10 {
+                let x: i32 = i;
+            }
+        }
+    "#,
+    );
+}

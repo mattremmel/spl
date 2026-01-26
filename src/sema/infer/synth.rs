@@ -2391,16 +2391,16 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_for(&mut self, for_expr: &ForExpr) -> TypeId {
-        // Synthesize iterable
-        if let Some(iterable) = for_expr.iterable() {
-            self.synth_expr(&iterable);
-        }
+        // Synthesize iterable and get element type
+        // For range expressions, the synthesized type IS the element type
+        let elem_ty = if let Some(iterable) = for_expr.iterable() {
+            self.synth_expr(&iterable)
+        } else {
+            self.fresh_type_var()
+        };
 
-        // Define loop variable binding
+        // Define loop variable binding with the element type
         if let Some(pat) = for_expr.pat() {
-            // For now, assume the pattern is a simple identifier
-            // TODO: Handle complex patterns
-            let elem_ty = self.fresh_type_var();
             self.define_pattern(&pat, elem_ty);
         }
 
@@ -2659,11 +2659,34 @@ impl<'a> InferEngine<'a> {
         }
     }
 
-    fn synth_range(&mut self, _range: &RangeExpr) -> TypeId {
-        // Range expressions have a Range type
-        // For now, return a placeholder
-        // TODO: Implement Range type properly
-        self.fresh_type_var()
+    fn synth_range(&mut self, range: &RangeExpr) -> TypeId {
+        let start_ty = range.start().map(|e| self.synth_expr(&e));
+        let end_ty = range.end().map(|e| self.synth_expr(&e));
+
+        match (start_ty, end_ty) {
+            (Some(s), Some(e)) => {
+                // Unify start and end types
+                if self.unify(s, e).is_err() {
+                    let span = text_range_to_span(range.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("type mismatch: range start and end must have the same type")
+                            .with_label(span, "mismatched types in range"),
+                    );
+                }
+                s
+            }
+            (Some(s), None) => s,
+            (None, Some(e)) => e,
+            (None, None) => {
+                // Open range (..) has no type information
+                let span = text_range_to_span(range.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("cannot infer type for open range")
+                        .with_label(span, "open range `..` requires type context"),
+                );
+                self.types.error()
+            }
+        }
     }
 
     fn synth_is(&mut self, is_expr: &IsExpr) -> TypeId {

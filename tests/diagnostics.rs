@@ -270,3 +270,59 @@ fn recursive_struct_error() {
 fn cyclic_type_alias_error() {
     check_contains("type A = B; type B = A;", "cyclic");
 }
+
+// =============================================================================
+// Range Expression Type Inference
+// =============================================================================
+
+#[test]
+fn range_type_mismatch() {
+    check_contains("fn main() { let r = 0..true; }", "type mismatch");
+}
+
+#[test]
+fn for_loop_variable_type_from_range() {
+    // Loop var should be i32 from range, not compatible with bool
+    check_contains(
+        r#"fn main() {
+            for i in 0..10 {
+                let x: bool = i;
+            }
+        }"#,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn range_from_type_inference() {
+    // Range from (1..) should infer element type from start
+    check_contains(
+        r#"fn main() {
+            for i in (1..) {
+                let x: bool = i;
+                break;
+            }
+        }"#,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn range_to_type_inference() {
+    // Range to (..10) should infer element type from end
+    check_contains(
+        r#"fn main() {
+            for i in ..10 {
+                let x: bool = i;
+                break;
+            }
+        }"#,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn open_range_needs_context() {
+    // Open range (..) has no type info - should error or infer from context
+    check_contains("fn main() { let r = ..; }", "cannot infer");
+}
