@@ -4886,3 +4886,218 @@ fn struct_field_type_inference() {
         "i64",
     );
 }
+
+// =============================================================================
+// Missing Test Coverage (spl-qyu, spl-4fz, spl-5pe, spl-6ou)
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Comparison Chains (spl-qyu)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn comparison_chain_less_than() {
+    // a < b && b < c - typical range check pattern
+    check(
+        r#"
+        fn main() {
+            let a = 1;
+            let b = 2;
+            let c = 3;
+            let in_range = a < b && b < c;
+        }
+        "#,
+        "bool",
+    );
+}
+
+#[test]
+fn comparison_chain_mixed_operators() {
+    // a <= b && b < c - mixed comparison operators
+    check(
+        r#"
+        fn main() {
+            let x = 5;
+            let result = 0 <= x && x < 10;
+        }
+        "#,
+        "bool",
+    );
+}
+
+#[test]
+fn comparison_chain_three_comparisons() {
+    // a < b && b < c && c < d - three-way chain
+    check(
+        r#"
+        fn main() {
+            let result = 1 < 2 && 2 < 3 && 3 < 4;
+        }
+        "#,
+        "bool",
+    );
+}
+
+#[test]
+fn comparison_chain_with_function_calls() {
+    // Comparison chain using function return values
+    check(
+        r#"
+        fn min(): i32 { 0 }
+        fn max(): i32 { 100 }
+        fn value(): i32 { 50 }
+        fn main() {
+            let in_bounds = min() <= value() && value() <= max();
+        }
+        "#,
+        "bool",
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Rest Patterns in Nested Contexts (spl-4fz)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn rest_pattern_in_nested_tuple() {
+    // Rest pattern inside a nested tuple
+    check(
+        r#"
+        fn main() {
+            let outer = ((1, 2, 3), true);
+            let ((a, ..), flag) = outer;
+        }
+        "#,
+        "bool",
+    );
+}
+
+#[test]
+fn rest_pattern_in_nested_struct() {
+    // Rest pattern inside nested struct pattern
+    check(
+        r#"
+        struct Inner(a: i32, b: i32, c: i32)
+        struct Outer(inner: Inner, flag: bool)
+        fn make(): Outer { Outer(inner: Inner(a: 1, b: 2, c: 3), flag: true) }
+        fn main() {
+            let Outer(inner: Inner(a: x, ..), flag: f) = make();
+        }
+        "#,
+        "bool",
+    );
+}
+
+#[test]
+fn rest_pattern_multiple_levels() {
+    // Rest patterns at multiple nesting levels
+    check(
+        r#"
+        struct Point(x: i32, y: i32, z: i32)
+        fn main() {
+            let points = (Point(x: 1, y: 2, z: 3), Point(x: 4, y: 5, z: 6));
+            let (Point(x: x1, ..), ..) = points;
+        }
+        "#,
+        "i32",
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Deeply Nested Patterns (spl-5pe)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn deeply_nested_tuple_pattern() {
+    // Three levels of tuple nesting
+    check(
+        r#"
+        fn main() {
+            let nested = (((1, 2), 3), 4);
+            let (((a, b), c), d) = nested;
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn deeply_nested_struct_pattern() {
+    // Three levels of struct nesting
+    check(
+        r#"
+        struct A(value: i32)
+        struct B(a: A)
+        struct C(b: B)
+        fn make(): C { C(b: B(a: A(value: 42))) }
+        fn main() {
+            let C(b: B(a: A(value: x))) = make();
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn deeply_nested_mixed_pattern() {
+    // Mixed struct and tuple nesting
+    check(
+        r#"
+        struct Pair(first: i32, second: i32)
+        fn main() {
+            let data = ((Pair(first: 1, second: 2), true), false);
+            let ((Pair(first: x, second: y), inner_flag), outer_flag) = data;
+        }
+        "#,
+        "bool",
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Mixed Struct/Tuple Patterns (spl-6ou)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn tuple_containing_struct() {
+    // Tuple with struct elements
+    check(
+        r#"
+        struct Point(x: i32, y: i32)
+        fn main() {
+            let pair = (Point(x: 1, y: 2), Point(x: 3, y: 4));
+            let (Point(x: x1, y: y1), Point(x: x2, y: y2)) = pair;
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn struct_containing_tuple() {
+    // Struct with tuple field
+    check(
+        r#"
+        struct Container(pair: (i32, bool))
+        fn make(): Container { Container(pair: (42, true)) }
+        fn main() {
+            let Container(pair: (num, flag)) = make();
+        }
+        "#,
+        "bool",
+    );
+}
+
+#[test]
+fn alternating_struct_tuple_pattern() {
+    // Alternating struct and tuple nesting
+    check(
+        r#"
+        struct Wrapper(inner: (i32, i32))
+        fn main() {
+            let data = (Wrapper(inner: (1, 2)), Wrapper(inner: (3, 4)));
+            let (Wrapper(inner: (a, b)), Wrapper(inner: (c, d))) = data;
+        }
+        "#,
+        "i32",
+    );
+}

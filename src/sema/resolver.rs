@@ -2709,6 +2709,13 @@ mod tests {
         check_ok("fn a() {} fn b() {} use self.a; use self.b; fn main() { a(); b(); }");
     }
 
+    #[test]
+    fn use_empty_grouped_imports() {
+        // Empty grouped import `use self.{}` should be allowed (no-op)
+        // spl-q03: Missing test for empty grouped imports
+        check_ok("use self.{}; fn main() {}");
+    }
+
     // ===== Phase 6: Re-export Tests =====
 
     #[test]
