@@ -36,8 +36,7 @@ use crate::DefId;
 use crate::ast::{
     Block, CallExpr, Expr, ExternBlock, ExternFn, FieldDef, FunctionDef, GenericParam, ImplBlock,
     Item, LetStmt, Name, NameRef, Param, ParamList, Pat, Path, PathSegment, SelfParam, SourceFile,
-    Stmt, StructDef, StructExpr, StructExprField, StructPat, StructPatField, Type, TypeAlias,
-    WhereClause,
+    Stmt, StructDef, StructPat, StructPatField, Type, TypeAlias, WhereClause,
 };
 use crate::diagnostic::Diagnostic;
 use crate::lexer::Span;
@@ -1081,7 +1080,6 @@ impl<'ctx> Resolver<'ctx> {
                     self.resolve_expr(&expr);
                 }
             }
-            Expr::Struct(struct_expr) => self.resolve_struct_expr(struct_expr),
             Expr::Call(call_expr) => self.resolve_call_expr(call_expr),
             Expr::Binary(bin_expr) => {
                 if let Some(lhs) = bin_expr.lhs() {
@@ -1229,26 +1227,6 @@ impl<'ctx> Resolver<'ctx> {
                     self.ctx.exit_scope();
                 }
             }
-        }
-    }
-
-    fn resolve_struct_expr(&mut self, struct_expr: &StructExpr) {
-        // Resolve the struct type path
-        if let Some(path) = struct_expr.path() {
-            self.resolve_path(&path);
-        }
-
-        // Resolve field values
-        for field in struct_expr.fields() {
-            self.resolve_struct_expr_field(&field);
-        }
-    }
-
-    fn resolve_struct_expr_field(&mut self, field: &StructExprField) {
-        // Note: Field name resolution requires type info (deferred to type checking)
-        // Just resolve the value expression
-        if let Some(expr) = field.expr() {
-            self.resolve_expr(&expr);
         }
     }
 

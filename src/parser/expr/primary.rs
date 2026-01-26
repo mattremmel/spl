@@ -97,7 +97,9 @@ fn match_arm(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
     }
 
     // Optional guard: `if condition`
-    if p.eat(SyntaxKind::IF_KW) && let Err(e) = expr(p) {
+    if p.eat(SyntaxKind::IF_KW)
+        && let Err(e) = expr(p)
+    {
         m.abandon(p);
         return Err(e);
     }
@@ -849,100 +851,6 @@ mod tests {
                       INT_LITERAL@13..14 "4"
                     R_BRACKET@14..15 "]"
                   R_BRACKET@15..16 "]"
-            "#]],
-        );
-    }
-
-    #[test]
-    fn struct_expr_simple() {
-        check_expr(
-            "Point { x: 1, y: 2 }",
-            &expect![[r#"
-                PathExpr@0..6
-                  Path@0..5
-                    PathSegment@0..5
-                      NameRef@0..5
-                        IDENT@0..5 "Point"
-                  WHITESPACE@5..6 " "
-            "#]],
-        );
-    }
-
-    #[test]
-    fn struct_expr_shorthand() {
-        check_expr(
-            "Point { x, y }",
-            &expect![[r#"
-                PathExpr@0..6
-                  Path@0..5
-                    PathSegment@0..5
-                      NameRef@0..5
-                        IDENT@0..5 "Point"
-                  WHITESPACE@5..6 " "
-            "#]],
-        );
-    }
-
-    #[test]
-    fn struct_trailing_comma() {
-        check_expr(
-            "Point { x: 1, y: 2, }",
-            &expect![[r#"
-                PathExpr@0..6
-                  Path@0..5
-                    PathSegment@0..5
-                      NameRef@0..5
-                        IDENT@0..5 "Point"
-                  WHITESPACE@5..6 " "
-            "#]],
-        );
-    }
-
-    #[test]
-    fn struct_mixed_shorthand() {
-        check_expr(
-            "Point { x, y: other_y }",
-            &expect![[r#"
-                PathExpr@0..6
-                  Path@0..5
-                    PathSegment@0..5
-                      NameRef@0..5
-                        IDENT@0..5 "Point"
-                  WHITESPACE@5..6 " "
-            "#]],
-        );
-    }
-
-    #[test]
-    fn struct_nested() {
-        check_expr(
-            "Outer { inner: Inner { x: 1 } }",
-            &expect![[r#"
-                PathExpr@0..6
-                  Path@0..5
-                    PathSegment@0..5
-                      NameRef@0..5
-                        IDENT@0..5 "Outer"
-                  WHITESPACE@5..6 " "
-            "#]],
-        );
-    }
-
-    #[test]
-    fn struct_with_path() {
-        check_expr(
-            "module.Point { x: 1 }",
-            &expect![[r#"
-                PathExpr@0..13
-                  Path@0..12
-                    PathSegment@0..6
-                      NameRef@0..6
-                        MODULE_KW@0..6 "module"
-                    DOT@6..7 "."
-                    PathSegment@7..12
-                      NameRef@7..12
-                        IDENT@7..12 "Point"
-                  WHITESPACE@12..13 " "
             "#]],
         );
     }

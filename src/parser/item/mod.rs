@@ -322,13 +322,17 @@ pub(crate) fn function_def(
     }
 
     // Optional return type with `:` syntax
-    if p.eat(SyntaxKind::COLON) && let Err(e) = stmt::type_annotation(p) {
+    if p.eat(SyntaxKind::COLON)
+        && let Err(e) = stmt::type_annotation(p)
+    {
         m.abandon(p);
         return Err(e);
     }
 
     // Optional where clause (new syntax: `where T, U: Clone`)
-    if p.at(SyntaxKind::WHERE_KW) && let Err(e) = where_clause(p) {
+    if p.at(SyntaxKind::WHERE_KW)
+        && let Err(e) = where_clause(p)
+    {
         m.abandon(p);
         return Err(e);
     }
@@ -566,7 +570,9 @@ pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
         }
 
         // Optional where clause
-        if p.at(SyntaxKind::WHERE_KW) && let Err(e) = where_clause(p) {
+        if p.at(SyntaxKind::WHERE_KW)
+            && let Err(e) = where_clause(p)
+        {
             m.abandon(p);
             return Err(e);
         }
@@ -580,7 +586,9 @@ pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
             return Err(e);
         }
         // Expect field list
-        if p.at(SyntaxKind::L_PAREN) && let Err(e) = paren_field_list(p) {
+        if p.at(SyntaxKind::L_PAREN)
+            && let Err(e) = paren_field_list(p)
+        {
             m.abandon(p);
             return Err(e);
         }
@@ -695,7 +703,9 @@ pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
     }
 
     // Optional where clause (new syntax)
-    if p.at(SyntaxKind::WHERE_KW) && let Err(e) = where_clause(p) {
+    if p.at(SyntaxKind::WHERE_KW)
+        && let Err(e) = where_clause(p)
+    {
         m.abandon(p);
         return Err(e);
     }
@@ -735,7 +745,9 @@ pub(crate) fn impl_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
     }
 
     // Optional where clause (new syntax)
-    if p.at(SyntaxKind::WHERE_KW) && let Err(e) = where_clause(p) {
+    if p.at(SyntaxKind::WHERE_KW)
+        && let Err(e) = where_clause(p)
+    {
         m.abandon(p);
         return Err(e);
     }

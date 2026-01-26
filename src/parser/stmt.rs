@@ -60,13 +60,17 @@ fn let_stmt(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseE
     }
 
     // Optional type annotation
-    if p.eat(SyntaxKind::COLON) && let Err(e) = type_annotation(p) {
+    if p.eat(SyntaxKind::COLON)
+        && let Err(e) = type_annotation(p)
+    {
         m.abandon(p);
         return Err(e);
     }
 
     // Optional initializer
-    if p.eat(SyntaxKind::EQ) && let Err(e) = expr::expr(p) {
+    if p.eat(SyntaxKind::EQ)
+        && let Err(e) = expr::expr(p)
+    {
         m.abandon(p);
         return Err(e);
     }

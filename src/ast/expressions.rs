@@ -9,8 +9,6 @@ ast_node!(PathExpr);
 ast_node!(ParenExpr);
 ast_node!(TupleExpr);
 ast_node!(ArrayExpr);
-ast_node!(StructExpr);
-ast_node!(StructExprField);
 ast_node!(CallExpr);
 ast_node!(CallArg);
 ast_node!(BinExpr);
@@ -43,7 +41,6 @@ ast_enum!(
         Paren(ParenExpr),
         Tuple(TupleExpr),
         Array(ArrayExpr),
-        Struct(StructExpr),
         Call(CallExpr),
         Binary(BinExpr),
         Prefix(PrefixExpr),
@@ -107,41 +104,10 @@ impl ArrayExpr {
     }
 }
 
-impl StructExpr {
-    pub fn path(&self) -> Option<Path> {
-        child(&self.0)
-    }
-
-    pub fn fields(&self) -> impl Iterator<Item = StructExprField> {
-        children(&self.0)
-    }
-
-    /// Get the struct update base expression: `..base` in `S { field: value, ..base }`
-    pub fn update_base(&self) -> Option<StructUpdateBase> {
-        child(&self.0)
-    }
-}
-
 ast_node!(StructUpdateBase);
 
 impl StructUpdateBase {
     /// Get the base expression in `..base`
-    pub fn expr(&self) -> Option<Expr> {
-        child(&self.0)
-    }
-}
-
-impl StructExprField {
-    pub fn name(&self) -> Option<NameRef> {
-        child(&self.0)
-    }
-
-    /// Get the field name token directly (for struct expression fields where
-    /// the field name is stored as a raw IDENT token, not wrapped in NameRef).
-    pub fn name_token(&self) -> Option<SyntaxToken> {
-        token(&self.0, SyntaxKind::IDENT)
-    }
-
     pub fn expr(&self) -> Option<Expr> {
         child(&self.0)
     }
@@ -509,7 +475,11 @@ mod tests {
     /// Helper to parse source and find first expression of a specific kind.
     fn parse_expr<E: AstNode<Language = crate::syntax::Lang>>(source: &str) -> E {
         let parsed = parse(source);
-        assert!(parsed.errors().is_empty(), "parse errors: {:?}", parsed.errors());
+        assert!(
+            parsed.errors().is_empty(),
+            "parse errors: {:?}",
+            parsed.errors()
+        );
         let root = parsed.syntax();
         root.descendants()
             .find_map(E::cast)
@@ -520,7 +490,11 @@ mod tests {
     #[allow(dead_code)]
     fn parse_first_expr(source: &str) -> Expr {
         let parsed = parse(source);
-        assert!(parsed.errors().is_empty(), "parse errors: {:?}", parsed.errors());
+        assert!(
+            parsed.errors().is_empty(),
+            "parse errors: {:?}",
+            parsed.errors()
+        );
         let source_file = SourceFile::cast(parsed.syntax()).expect("expected SourceFile");
         source_file
             .items()
@@ -734,7 +708,8 @@ mod tests {
     fn field_expr_on_call_result() {
         // In SPL, point.x is a Path, not a FieldExpr
         // FieldExpr is for accessing fields on expression results
-        let field: FieldExpr = parse_expr("fn foo(): Point { Point(x: 1, y: 2) } fn main() { foo().x }");
+        let field: FieldExpr =
+            parse_expr("fn foo(): Point { Point(x: 1, y: 2) } fn main() { foo().x }");
         assert!(field.expr().is_some());
         assert!(field.name().is_some() || field.name_token().is_some());
     }

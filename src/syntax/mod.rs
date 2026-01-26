@@ -130,8 +130,6 @@ pub enum SyntaxKind {
     ParenExpr,
     TupleExpr,
     ArrayExpr,
-    StructExpr,
-    StructExprField,
     StructUpdateBase,
     CallExpr,
     CallArg,

@@ -920,7 +920,12 @@ mod tests {
         let grandchild = tree.add_child(parent, "grandchild");
 
         // Grandchild can see grandparent's private items
-        assert!(is_visible(Visibility::Private, grandparent, grandchild, &tree));
+        assert!(is_visible(
+            Visibility::Private,
+            grandparent,
+            grandchild,
+            &tree
+        ));
     }
 
     #[test]
@@ -941,8 +946,18 @@ mod tests {
         let sibling_b = tree.add_child(parent, "b");
 
         // Siblings CANNOT see each other's private items
-        assert!(!is_visible(Visibility::Private, sibling_a, sibling_b, &tree));
-        assert!(!is_visible(Visibility::Private, sibling_b, sibling_a, &tree));
+        assert!(!is_visible(
+            Visibility::Private,
+            sibling_a,
+            sibling_b,
+            &tree
+        ));
+        assert!(!is_visible(
+            Visibility::Private,
+            sibling_b,
+            sibling_a,
+            &tree
+        ));
     }
 
     #[test]

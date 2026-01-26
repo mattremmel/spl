@@ -79,7 +79,11 @@ mod tests {
     /// Helper to parse source and get the function body block.
     fn parse_block(source: &str) -> Block {
         let parsed = parse(source);
-        assert!(parsed.errors().is_empty(), "parse errors: {:?}", parsed.errors());
+        assert!(
+            parsed.errors().is_empty(),
+            "parse errors: {:?}",
+            parsed.errors()
+        );
         let source_file = SourceFile::cast(parsed.syntax()).expect("expected SourceFile");
         source_file
             .items()
@@ -94,7 +98,11 @@ mod tests {
     /// Helper to parse source and find first LetStmt.
     fn parse_let_stmt(source: &str) -> LetStmt {
         let parsed = parse(source);
-        assert!(parsed.errors().is_empty(), "parse errors: {:?}", parsed.errors());
+        assert!(
+            parsed.errors().is_empty(),
+            "parse errors: {:?}",
+            parsed.errors()
+        );
         parsed
             .syntax()
             .descendants()

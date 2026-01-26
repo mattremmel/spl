@@ -55,8 +55,8 @@ pub use folding::try_lower_expr;
 use crate::ast::{
     ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, ExternFn, FieldExpr,
     FunctionDef, IfExpr, IndexExpr, IsExpr, Item, LetStmt, LiteralExpr, LoopExpr, MatchExpr,
-    ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt,
-    StructExpr, TupleExpr, WhileExpr,
+    ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt, TupleExpr,
+    WhileExpr,
 };
 use crate::hir::{
     BinOp, ExprId, HirDatabase, HirExpr, HirExprKind, HirField, HirFunction, HirImpl, HirItem,
@@ -802,7 +802,6 @@ impl LoweringContext {
             Expr::Paren(paren) => self.lower_paren_expr(paren),
             Expr::Tuple(tuple) => self.lower_tuple_expr(tuple, span, ty),
             Expr::Array(array) => self.lower_array_expr(array, span, ty),
-            Expr::Struct(struct_expr) => self.lower_struct_expr(struct_expr, span, ty),
             Expr::Call(call) => self.lower_call_expr(call, span, ty),
             Expr::Binary(bin) => self.lower_binary_expr(bin, span, ty),
             Expr::Prefix(prefix) => self.lower_prefix_expr(prefix, span, ty),
@@ -1034,45 +1033,6 @@ impl LoweringContext {
         }
     }
 
-    fn lower_struct_expr(&mut self, struct_expr: &StructExpr, span: Span, ty: TypeId) -> ExprId {
-        // Get the struct DefId from the path - use token range to match resolver
-        let path_span = struct_expr
-            .path()
-            .and_then(|p| p.segments().next())
-            .and_then(|seg| seg.name())
-            .and_then(|n| n.token())
-            .map(|t| Self::text_range_to_span(t.text_range()))
-            .unwrap_or_else(|| span.clone());
-
-        let def_id = self
-            .resolutions
-            .get(&path_span)
-            .copied()
-            .unwrap_or(DefId::INVALID);
-
-        debug_assert!(
-            def_id.is_valid(),
-            "Struct expression path resolved to INVALID DefId at {:?} - resolution phase failed to register this struct type",
-            path_span
-        );
-
-        let fields: Vec<_> = struct_expr
-            .fields()
-            .filter_map(|f| {
-                let name = f.name_token()?.text().to_string();
-                let value = f.expr().map(|e| self.lower_expr(&e))?;
-                Some((name, value))
-            })
-            .collect();
-
-        let expr = HirExpr {
-            kind: HirExprKind::Struct { def_id, fields },
-            ty,
-            span,
-        };
-        self.db.alloc_expr(expr)
-    }
-
     fn lower_binary_expr(&mut self, bin: &BinExpr, span: Span, ty: TypeId) -> ExprId {
         // First, try to fold as a constant expression
         let full_expr = Expr::Binary(bin.clone());
@@ -1283,15 +1243,19 @@ impl LoweringContext {
                     self.lower_call_as_function(call, path_expr, span, ty)
                 }
             }
-            Expr::Field(field_expr) => {
-                self.lower_call_as_method(call, field_expr, span, ty)
-            }
+            Expr::Field(field_expr) => self.lower_call_as_method(call, field_expr, span, ty),
             _ => {
                 // Arbitrary callable expression
                 let callee_id = self.lower_expr(&callee);
-                let args: Vec<_> = call.args().filter_map(|a| a.value().map(|e| self.lower_expr(&e))).collect();
+                let args: Vec<_> = call
+                    .args()
+                    .filter_map(|a| a.value().map(|e| self.lower_expr(&e)))
+                    .collect();
                 let expr = HirExpr {
-                    kind: HirExprKind::Call { callee: callee_id, args },
+                    kind: HirExprKind::Call {
+                        callee: callee_id,
+                        args,
+                    },
                     ty,
                     span,
                 };
@@ -1393,13 +1357,6 @@ impl LoweringContext {
             .unwrap_or(DefId::INVALID);
 
         // Build callee expression (a Var pointing to the function)
-        let fn_span = segments
-            .last()
-            .and_then(|seg| seg.name())
-            .and_then(|n| n.token())
-            .map(|t| Self::text_range_to_span(t.text_range()))
-            .unwrap_or_else(|| span.clone());
-
         let fn_ty = self.get_type(&fn_span);
         let callee = self.db.alloc_expr(HirExpr {
             kind: HirExprKind::Var(def_id),

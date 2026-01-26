@@ -116,8 +116,14 @@ mod tests {
         let kind = HirPatKind::Struct {
             def_id: DefId(0),
             fields: vec![
-                ("x".to_string(), PatId::from_raw(la_arena::RawIdx::from_u32(0))),
-                ("y".to_string(), PatId::from_raw(la_arena::RawIdx::from_u32(1))),
+                (
+                    "x".to_string(),
+                    PatId::from_raw(la_arena::RawIdx::from_u32(0)),
+                ),
+                (
+                    "y".to_string(),
+                    PatId::from_raw(la_arena::RawIdx::from_u32(1)),
+                ),
             ],
             rest: false,
         };
@@ -134,7 +140,10 @@ mod tests {
     fn hir_pat_kind_struct_with_rest() {
         let kind = HirPatKind::Struct {
             def_id: DefId(0),
-            fields: vec![("x".to_string(), PatId::from_raw(la_arena::RawIdx::from_u32(0)))],
+            fields: vec![(
+                "x".to_string(),
+                PatId::from_raw(la_arena::RawIdx::from_u32(0)),
+            )],
             rest: true,
         };
         match kind {
@@ -231,8 +240,14 @@ mod tests {
         assert_eq!(pat.span, pat2.span);
         match (&pat.kind, &pat2.kind) {
             (
-                HirPatKind::Bind { def_id: a, mutable: m1 },
-                HirPatKind::Bind { def_id: b, mutable: m2 },
+                HirPatKind::Bind {
+                    def_id: a,
+                    mutable: m1,
+                },
+                HirPatKind::Bind {
+                    def_id: b,
+                    mutable: m2,
+                },
             ) => {
                 assert_eq!(a, b);
                 assert_eq!(m1, m2);
@@ -245,11 +260,21 @@ mod tests {
     fn hir_pat_kind_variants_distinct() {
         // Ensure all pattern kinds are distinguishable
         let patterns = [
-            HirPatKind::Bind { def_id: DefId(0), mutable: false },
+            HirPatKind::Bind {
+                def_id: DefId(0),
+                mutable: false,
+            },
             HirPatKind::Wildcard,
             HirPatKind::Tuple { elements: vec![] },
-            HirPatKind::Struct { def_id: DefId(0), fields: vec![], rest: false },
-            HirPatKind::Ref { mutable: false, inner: PatId::from_raw(la_arena::RawIdx::from_u32(0)) },
+            HirPatKind::Struct {
+                def_id: DefId(0),
+                fields: vec![],
+                rest: false,
+            },
+            HirPatKind::Ref {
+                mutable: false,
+                inner: PatId::from_raw(la_arena::RawIdx::from_u32(0)),
+            },
             HirPatKind::Literal(super::super::expr::Literal::Int(0)),
             HirPatKind::Missing,
         ];

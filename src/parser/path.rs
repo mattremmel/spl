@@ -63,7 +63,10 @@ fn path_segment(p: &mut Parser<'_>, allow_generics: bool) -> Result<CompletedMar
         m.abandon(p);
         return Err(e);
     }
-    if allow_generics && p.at(SyntaxKind::L_PAREN) && let Err(e) = generic_args_paren(p) {
+    if allow_generics
+        && p.at(SyntaxKind::L_PAREN)
+        && let Err(e) = generic_args_paren(p)
+    {
         m.abandon(p);
         return Err(e);
     }

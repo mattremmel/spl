@@ -324,7 +324,6 @@ impl AstPrinter {
             Expr::Paren(p) => self.print_paren_expr(p),
             Expr::Tuple(t) => self.print_tuple_expr(t),
             Expr::Array(a) => self.print_array_expr(a),
-            Expr::Struct(s) => self.print_struct_expr(s),
             Expr::Call(c) => self.print_call_expr(c),
             Expr::Binary(b) => self.print_binary_expr(b),
             Expr::Prefix(p) => self.print_prefix_expr(p),
@@ -465,70 +464,23 @@ impl AstPrinter {
         });
     }
 
-    fn print_struct_expr(&mut self, s: &StructExpr) {
-        let path_str = s
-            .path()
-            .map(|p| {
-                p.segments()
-                    .filter_map(|s| {
-                        s.name()
-                            .and_then(|n| n.token())
-                            .map(|t| t.text().to_string())
-                    })
-                    .collect::<Vec<_>>()
-                    .join(".")
-            })
-            .unwrap_or_else(|| "?".to_string());
-        self.line(&format!("StructExpr \"{path_str}\""));
-        self.indented(|p| {
-            for field in s.fields() {
-                let name = field
-                    .name_token()
-                    .map(|t| t.text().to_string())
-                    .or_else(|| {
-                        field
-                            .name()
-                            .and_then(|n| n.token())
-                            .map(|t| t.text().to_string())
-                    })
-                    .unwrap_or_else(|| "?".to_string());
-                p.line(&format!("Field \"{name}\""));
-                p.indented(|p| {
-                    if let Some(expr) = field.expr() {
-                        p.print_expr(&expr);
-                    }
-                });
-            }
-            if let Some(base) = s.update_base() {
-                p.line("UpdateBase");
-                p.indented(|p| {
-                    if let Some(expr) = base.expr() {
-                        p.print_expr(&expr);
-                    }
-                });
-            }
-        });
-    }
-
     fn print_call_expr(&mut self, call: &CallExpr) {
         // Try to extract a meaningful name for the call
         let callee_str = if let Some(callee) = call.callee() {
             match &callee {
-                Expr::Path(path_expr) => {
-                    path_expr
-                        .path()
-                        .map(|p| {
-                            p.segments()
-                                .filter_map(|s| {
-                                    s.name()
-                                        .and_then(|n| n.token())
-                                        .map(|t| t.text().to_string())
-                                })
-                                .collect::<Vec<_>>()
-                                .join(".")
-                        })
-                        .unwrap_or_else(|| "?".to_string())
-                }
+                Expr::Path(path_expr) => path_expr
+                    .path()
+                    .map(|p| {
+                        p.segments()
+                            .filter_map(|s| {
+                                s.name()
+                                    .and_then(|n| n.token())
+                                    .map(|t| t.text().to_string())
+                            })
+                            .collect::<Vec<_>>()
+                            .join(".")
+                    })
+                    .unwrap_or_else(|| "?".to_string()),
                 Expr::Field(field_expr) => {
                     let field_name = field_expr
                         .name_token()

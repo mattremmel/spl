@@ -64,9 +64,7 @@ impl RangePat {
             .find(|t| {
                 matches!(
                     t.kind(),
-                    SyntaxKind::INT_LITERAL
-                        | SyntaxKind::FLOAT_LITERAL
-                        | SyntaxKind::CHAR_LITERAL
+                    SyntaxKind::INT_LITERAL | SyntaxKind::FLOAT_LITERAL | SyntaxKind::CHAR_LITERAL
                 )
             })
     }
@@ -161,7 +159,11 @@ mod tests {
     /// Helper to parse source and find first pattern of a specific kind.
     fn parse_pat<P: AstNode<Language = crate::syntax::Lang>>(source: &str) -> P {
         let parsed = parse(source);
-        assert!(parsed.errors().is_empty(), "parse errors: {:?}", parsed.errors());
+        assert!(
+            parsed.errors().is_empty(),
+            "parse errors: {:?}",
+            parsed.errors()
+        );
         let root = parsed.syntax();
         root.descendants()
             .find_map(P::cast)

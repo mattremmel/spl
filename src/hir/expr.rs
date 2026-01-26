@@ -227,7 +227,14 @@ mod tests {
 
     #[test]
     fn binop_comparison_variants() {
-        let ops = [BinOp::Eq, BinOp::Ne, BinOp::Lt, BinOp::Gt, BinOp::Le, BinOp::Ge];
+        let ops = [
+            BinOp::Eq,
+            BinOp::Ne,
+            BinOp::Lt,
+            BinOp::Gt,
+            BinOp::Le,
+            BinOp::Ge,
+        ];
         for (i, a) in ops.iter().enumerate() {
             for (j, b) in ops.iter().enumerate() {
                 if i == j {
@@ -449,8 +456,14 @@ mod tests {
         let kind = HirExprKind::Struct {
             def_id: DefId(0),
             fields: vec![
-                ("x".to_string(), ExprId::from_raw(la_arena::RawIdx::from_u32(0))),
-                ("y".to_string(), ExprId::from_raw(la_arena::RawIdx::from_u32(1))),
+                (
+                    "x".to_string(),
+                    ExprId::from_raw(la_arena::RawIdx::from_u32(0)),
+                ),
+                (
+                    "y".to_string(),
+                    ExprId::from_raw(la_arena::RawIdx::from_u32(1)),
+                ),
             ],
         };
         match kind {

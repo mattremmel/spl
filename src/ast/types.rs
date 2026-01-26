@@ -89,7 +89,11 @@ mod tests {
     /// Helper to parse source and find first type of a specific kind.
     fn parse_type<T: AstNode<Language = crate::syntax::Lang>>(source: &str) -> T {
         let parsed = parse(source);
-        assert!(parsed.errors().is_empty(), "parse errors: {:?}", parsed.errors());
+        assert!(
+            parsed.errors().is_empty(),
+            "parse errors: {:?}",
+            parsed.errors()
+        );
         parsed
             .syntax()
             .descendants()
