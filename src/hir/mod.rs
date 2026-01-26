@@ -226,7 +226,7 @@ mod tests {
             HirStmtKind::Let { init, .. } => {
                 assert!(init.is_some());
             }
-            _ => panic!("expected let statement"),
+            HirStmtKind::Expr { .. } => panic!("expected let statement"),
         }
     }
 }

@@ -129,7 +129,7 @@ mod tests {
     #[test]
     fn error_is_debug() {
         let err = CodegenError::Internal("test".to_string());
-        let debug_str = format!("{:?}", err);
+        let debug_str = format!("{err:?}");
         assert!(debug_str.contains("Internal"));
     }
 
@@ -207,13 +207,13 @@ mod tests {
     #[test]
     fn runtime_error_is_debug() {
         let err = RuntimeError::MainNotFound;
-        let debug_str = format!("{:?}", err);
+        let debug_str = format!("{err:?}");
         assert!(debug_str.contains("MainNotFound"));
 
         let err2 = RuntimeError::Trap { code: Some(1) };
-        let debug_str2 = format!("{:?}", err2);
+        let debug_str2 = format!("{err2:?}");
         assert!(debug_str2.contains("Trap"));
-        assert!(debug_str2.contains("1"));
+        assert!(debug_str2.contains('1'));
     }
 
     #[test]

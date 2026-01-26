@@ -1096,7 +1096,7 @@ mod expressions {
         );
     }
 
-    /// RangeFull expression: `..`
+    /// `RangeFull` expression: `..`
     #[test]
     fn range_full() {
         check(
@@ -1129,7 +1129,7 @@ mod expressions {
         );
     }
 
-    /// RangeTo expression: `..10`
+    /// `RangeTo` expression: `..10`
     #[test]
     fn range_to() {
         check(

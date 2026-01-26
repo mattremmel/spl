@@ -87,15 +87,14 @@ mod tests {
         let source_file = SourceFile::cast(parsed.syntax()).expect("expected SourceFile");
         source_file
             .items()
-            .filter_map(|item| match item {
+            .find_map(|item| match item {
                 crate::ast::Item::Function(f) => f.body(),
                 _ => None,
             })
-            .next()
             .expect("expected function body")
     }
 
-    /// Helper to parse source and find first LetStmt.
+    /// Helper to parse source and find first `LetStmt`.
     fn parse_let_stmt(source: &str) -> LetStmt {
         let parsed = parse(source);
         assert!(

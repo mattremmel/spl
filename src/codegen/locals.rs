@@ -117,7 +117,7 @@ mod tests {
 
         match map.get(local) {
             Some(LocalStorage::Variable(v)) => assert_eq!(v.index(), 0),
-            other => panic!("expected Variable, got {:?}", other),
+            other => panic!("expected Variable, got {other:?}"),
         }
     }
 
@@ -147,7 +147,7 @@ mod tests {
 
         match map.get(local) {
             Some(LocalStorage::StackSlot(s)) => assert_eq!(s.as_u32(), 42),
-            other => panic!("expected StackSlot, got {:?}", other),
+            other => panic!("expected StackSlot, got {other:?}"),
         }
     }
 
@@ -160,7 +160,7 @@ mod tests {
 
         match map.get(local) {
             Some(LocalStorage::Zst) => {}
-            other => panic!("expected Zst, got {:?}", other),
+            other => panic!("expected Zst, got {other:?}"),
         }
     }
 
@@ -242,9 +242,9 @@ mod tests {
         let zst = LocalStorage::Zst;
 
         // Just ensure debug formatting works
-        let _ = format!("{:?}", var);
-        let _ = format!("{:?}", slot);
-        let _ = format!("{:?}", zst);
+        let _ = format!("{var:?}");
+        let _ = format!("{slot:?}");
+        let _ = format!("{zst:?}");
     }
 
     #[test]
@@ -252,7 +252,7 @@ mod tests {
         let mut map = LocalMap::new();
         map.alloc_variable(Local::new(0));
 
-        let debug_str = format!("{:?}", map);
+        let debug_str = format!("{map:?}");
         assert!(debug_str.contains("LocalMap"));
     }
 

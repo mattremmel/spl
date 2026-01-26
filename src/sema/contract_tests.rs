@@ -1,6 +1,6 @@
 //! Contract violation tests for semantic analysis.
 //!
-//! These tests verify that debug_assert! contracts correctly catch invalid states.
+//! These tests verify that `debug_assert`! contracts correctly catch invalid states.
 //! Tests are organized by the contract they exercise.
 
 #[cfg(test)]
@@ -406,9 +406,9 @@ mod tests {
             ];
 
             for expr in expressions {
-                let source = format!("fn test() {{ {}; }}", expr);
+                let source = format!("fn test() {{ {expr}; }}");
                 let result = parse(&source);
-                assert!(result.ok(), "failed to parse: {}", expr);
+                assert!(result.ok(), "failed to parse: {expr}");
             }
         }
     }
@@ -749,7 +749,7 @@ mod tests {
         fn forward_link_chain_terminates_on_deep_nesting() {
             // Deeply nested expressions stress forward-link chains
             let source = "(((((((((1 + 2) + 3) + 4) + 5) + 6) + 7) + 8) + 9) + 10)";
-            let source = format!("fn test() {{ {}; }}", source);
+            let source = format!("fn test() {{ {source}; }}");
             let result = parse(&source);
             // Just verify parse completed - assertions in sink verify chain termination
             assert!(result.ok(), "parse should succeed: {:?}", result.errors());
@@ -805,7 +805,7 @@ mod tests {
         fn def_ids_valid_after_many_definitions() {
             let mut ctx = SemanticContext::new();
             for i in 0..1000 {
-                let name = ctx.intern(&format!("sym_{}", i));
+                let name = ctx.intern(&format!("sym_{i}"));
                 if let Ok(def_id) =
                     ctx.define(name, SymbolKind::Local, Visibility::Private, 0..1, false)
                 {
@@ -913,10 +913,10 @@ mod tests {
         use crate::sema::symbol::DefId;
         use crate::sema::types::TypeId;
 
-        /// Invalid TypeId panics in debug builds.
+        /// Invalid `TypeId` panics in debug builds.
         ///
-        /// This documents the expected contract: TypeId values must only come from
-        /// the TypeInterner that created them. Passing a fabricated or stale TypeId
+        /// This documents the expected contract: `TypeId` values must only come from
+        /// the `TypeInterner` that created them. Passing a fabricated or stale `TypeId`
         /// indicates a compiler bug.
         #[test]
         #[cfg(debug_assertions)]
@@ -927,11 +927,11 @@ mod tests {
             let _ = interner.get(invalid_id);
         }
 
-        /// Invalid ScopeId panics in debug builds.
+        /// Invalid `ScopeId` panics in debug builds.
         ///
-        /// ScopeIds are created by enter_scope() and must not be fabricated.
-        /// Using an invalid ScopeId indicates a compiler bug (e.g., using a
-        /// ScopeId from a different SemanticContext).
+        /// `ScopeIds` are created by `enter_scope()` and must not be fabricated.
+        /// Using an invalid `ScopeId` indicates a compiler bug (e.g., using a
+        /// `ScopeId` from a different `SemanticContext`).
         #[test]
         #[cfg(debug_assertions)]
         #[should_panic(expected = "scope_id")]
@@ -941,10 +941,10 @@ mod tests {
             let _ = ctx.get_scope(invalid_id);
         }
 
-        /// Invalid DefId panics in debug builds.
+        /// Invalid `DefId` panics in debug builds.
         ///
-        /// DefIds are created by define() and must not be fabricated.
-        /// Using an invalid DefId indicates a compiler bug.
+        /// `DefIds` are created by `define()` and must not be fabricated.
+        /// Using an invalid `DefId` indicates a compiler bug.
         #[test]
         #[cfg(debug_assertions)]
         #[should_panic(expected = "def_id")]

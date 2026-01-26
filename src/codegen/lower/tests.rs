@@ -2838,7 +2838,7 @@ fn lower_place_deref_projection() {
     // Test it: create an i32 on the stack and pass its address
     let value: i32 = 42;
     let func: fn(*const i32) -> i32 = unsafe { mem::transmute(ptr) };
-    assert_eq!(func(&value as *const i32), 42);
+    assert_eq!(func(&raw const value), 42);
 }
 
 #[test]
@@ -3253,7 +3253,7 @@ fn lower_recursive_call() {
     assert_eq!(factorial(0), 1);
     assert_eq!(factorial(1), 1);
     assert_eq!(factorial(5), 120);
-    assert_eq!(factorial(10), 3628800);
+    assert_eq!(factorial(10), 3_628_800);
 }
 
 #[test]
@@ -3805,11 +3805,11 @@ fn lower_rvalue_discriminant() {
     let fake_enum: (isize, i32) = (42, 100);
     let func: fn(*const (isize, i32)) -> isize = unsafe { mem::transmute(ptr) };
 
-    assert_eq!(func(&fake_enum as *const _), 42);
+    assert_eq!(func(&raw const fake_enum), 42);
 
     // Test with different discriminant value
     let fake_enum2: (isize, i32) = (1, 200);
-    assert_eq!(func(&fake_enum2 as *const _), 1);
+    assert_eq!(func(&raw const fake_enum2), 1);
 }
 
 #[test]

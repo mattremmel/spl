@@ -411,7 +411,7 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(PackageError::NotADirectory(_)) => {}
-            Err(e) => panic!("expected NotADirectory, got {:?}", e),
+            Err(e) => panic!("expected NotADirectory, got {e:?}"),
             Ok(_) => panic!("expected error"),
         }
     }
@@ -424,7 +424,7 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(PackageError::NoSourceFiles(_)) => {}
-            Err(e) => panic!("expected NoSourceFiles, got {:?}", e),
+            Err(e) => panic!("expected NoSourceFiles, got {e:?}"),
             Ok(_) => panic!("expected error"),
         }
     }

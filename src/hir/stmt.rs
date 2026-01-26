@@ -62,7 +62,7 @@ mod tests {
                 assert!(ty.is_some());
                 assert!(init.is_some());
             }
-            _ => panic!("expected Let"),
+            HirStmtKind::Expr { .. } => panic!("expected Let"),
         }
     }
 
@@ -79,7 +79,7 @@ mod tests {
                 assert!(ty.is_none());
                 assert!(init.is_some());
             }
-            _ => panic!("expected Let"),
+            HirStmtKind::Expr { .. } => panic!("expected Let"),
         }
     }
 
@@ -99,7 +99,7 @@ mod tests {
                 assert!(ty.is_some());
                 assert!(init.is_none());
             }
-            _ => panic!("expected Let"),
+            HirStmtKind::Expr { .. } => panic!("expected Let"),
         }
     }
 
@@ -116,7 +116,7 @@ mod tests {
 
         match kind {
             HirStmtKind::Expr { has_semi, .. } => assert!(has_semi),
-            _ => panic!("expected Expr"),
+            HirStmtKind::Let { .. } => panic!("expected Expr"),
         }
     }
 
@@ -129,7 +129,7 @@ mod tests {
 
         match kind {
             HirStmtKind::Expr { has_semi, .. } => assert!(!has_semi),
-            _ => panic!("expected Expr"),
+            HirStmtKind::Let { .. } => panic!("expected Expr"),
         }
     }
 

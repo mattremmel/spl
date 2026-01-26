@@ -631,7 +631,7 @@ pub(crate) mod tests {
         let mut parser = Parser::new(input);
         let result = parser.parse_expr();
         let parse = parser.finish();
-        assert!(result.is_ok(), "Parse error: {:?}", result);
+        assert!(result.is_ok(), "Parse error: {result:?}");
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 
@@ -1373,7 +1373,7 @@ pub(crate) mod tests {
         assert!(!parse.ok()); // Has errors
         let tree = parse.debug_tree();
         // Both 'a' and 'b' params should be present (use "Param@" to avoid matching ParamList)
-        assert_eq!(tree.matches("Param@").count(), 2, "tree:\n{}", tree);
+        assert_eq!(tree.matches("Param@").count(), 2, "tree:\n{tree}");
     }
 
     #[test]
@@ -1385,7 +1385,7 @@ pub(crate) mod tests {
         assert!(!parse.ok());
         let tree = parse.debug_tree();
         // Should still have 2 params (a and b)
-        assert_eq!(tree.matches("Param@").count(), 2, "tree:\n{}", tree);
+        assert_eq!(tree.matches("Param@").count(), 2, "tree:\n{tree}");
     }
 
     #[test]
@@ -1393,6 +1393,6 @@ pub(crate) mod tests {
         // Recovered errors should be wrapped in ERROR nodes
         let parse = parse("fn f(a: i32, @@@, b: i32) {}");
         let tree = parse.debug_tree();
-        assert!(tree.contains("ERROR"), "tree:\n{}", tree);
+        assert!(tree.contains("ERROR"), "tree:\n{tree}");
     }
 }

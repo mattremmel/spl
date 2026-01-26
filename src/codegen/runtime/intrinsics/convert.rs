@@ -188,7 +188,7 @@ mod tests {
             ))
         };
         assert!(s.starts_with("3.25"));
-        super::super::memory::__free(result.ptr as *mut u8);
+        super::super::memory::__free(result.ptr.cast_mut());
     }
 
     #[test]
@@ -197,7 +197,7 @@ mod tests {
         assert!(!result.ptr.is_null());
         let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
         assert_eq!(s, b"42");
-        super::super::memory::__free(result.ptr as *mut u8);
+        super::super::memory::__free(result.ptr.cast_mut());
     }
 
     #[test]
@@ -205,7 +205,7 @@ mod tests {
         let result = __float_to_string(f64::NAN);
         let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
         assert_eq!(s, b"NaN");
-        super::super::memory::__free(result.ptr as *mut u8);
+        super::super::memory::__free(result.ptr.cast_mut());
     }
 
     #[test]
@@ -213,12 +213,12 @@ mod tests {
         let result = __float_to_string(f64::INFINITY);
         let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
         assert_eq!(s, b"inf");
-        super::super::memory::__free(result.ptr as *mut u8);
+        super::super::memory::__free(result.ptr.cast_mut());
 
         let result = __float_to_string(f64::NEG_INFINITY);
         let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
         assert_eq!(s, b"-inf");
-        super::super::memory::__free(result.ptr as *mut u8);
+        super::super::memory::__free(result.ptr.cast_mut());
     }
 
     #[test]
@@ -226,7 +226,7 @@ mod tests {
         let result = __float_to_string(-2.5);
         let s = unsafe { std::slice::from_raw_parts(result.ptr, result.len as usize) };
         assert_eq!(s, b"-2.5");
-        super::super::memory::__free(result.ptr as *mut u8);
+        super::super::memory::__free(result.ptr.cast_mut());
     }
 
     #[test]

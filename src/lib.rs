@@ -756,8 +756,7 @@ mod aot_tests {
         let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
         let pid = std::process::id();
         temp_dir.join(format!(
-            "spl_test_{}_{}_{}_{}",
-            name, pid, unique_id, counter
+            "spl_test_{name}_{pid}_{unique_id}_{counter}"
         ))
     }
 

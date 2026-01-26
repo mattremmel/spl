@@ -565,7 +565,7 @@ pub fn load_package(path: impl AsRef<std::path::Path>) -> Result<Package, Packag
     Package::load(path)
 }
 
-/// Check a MIR snapshot using expect_test.
+/// Check a MIR snapshot using `expect_test`.
 ///
 /// Compiles the source and compares the MIR output to the expected snapshot.
 ///
@@ -1391,7 +1391,7 @@ mod tests {
         use std::path::Path;
         let source = "//@ run-pass\n//@ expect-return: 42\nfn main(): i32 { 42 }";
         let result = run_spl_test(Path::new("test.spl"), source);
-        assert!(result.is_ok(), "error: {:?}", result);
+        assert!(result.is_ok(), "error: {result:?}");
     }
 
     #[test]

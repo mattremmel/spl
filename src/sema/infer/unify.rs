@@ -792,7 +792,7 @@ mod tests {
     use crate::sema::symbol::DefId;
     use rowan::ast::AstNode;
 
-    /// Helper to create a minimal ResolveResult for testing.
+    /// Helper to create a minimal `ResolveResult` for testing.
     fn create_test_resolve_result() -> ResolveResult {
         // Parse minimal source to get a valid ResolveResult
         let source = "fn main() {}";
@@ -801,7 +801,7 @@ mod tests {
         resolve(&source_file)
     }
 
-    /// Helper to create a minimal InferEngine for testing has_cycle.
+    /// Helper to create a minimal `InferEngine` for testing `has_cycle`.
     fn create_test_engine(resolve_result: &ResolveResult) -> InferEngine<'_> {
         InferEngine::new(resolve_result)
     }
@@ -955,10 +955,10 @@ mod tests {
         // Create some variables but don't bind the one we check
         let v0_id = engine.fresh_type_var();
         let v1_id = engine.fresh_type_var();
-        let _v2_id = engine.fresh_type_var(); // unbound
+        let v2_id = engine.fresh_type_var(); // unbound
 
         let v0 = engine.extract_type_var(v0_id).unwrap();
-        let v2 = engine.extract_type_var(_v2_id).unwrap();
+        let v2 = engine.extract_type_var(v2_id).unwrap();
 
         // Bind v0 -> v1, but v2 is unbound
         engine.substitution.insert(v0, v1_id);
@@ -1159,8 +1159,7 @@ mod tests {
         let result = engine.unify(var, tuple_containing_var);
         assert!(
             matches!(result, Err(UnifyError::InfiniteType { .. })),
-            "expected InfiniteType error, got {:?}",
-            result
+            "expected InfiniteType error, got {result:?}"
         );
     }
 
@@ -1175,8 +1174,7 @@ mod tests {
         let result = engine.unify(var, array_containing_var);
         assert!(
             matches!(result, Err(UnifyError::InfiniteType { .. })),
-            "expected InfiniteType error, got {:?}",
-            result
+            "expected InfiniteType error, got {result:?}"
         );
     }
 
@@ -1191,8 +1189,7 @@ mod tests {
         let result = engine.unify(var, ref_to_var);
         assert!(
             matches!(result, Err(UnifyError::InfiniteType { .. })),
-            "expected InfiniteType error, got {:?}",
-            result
+            "expected InfiniteType error, got {result:?}"
         );
     }
 
@@ -1208,8 +1205,7 @@ mod tests {
         let result = engine.unify(var, outer_tuple);
         assert!(
             matches!(result, Err(UnifyError::InfiniteType { .. })),
-            "expected InfiniteType error, got {:?}",
-            result
+            "expected InfiniteType error, got {result:?}"
         );
     }
 
@@ -1223,6 +1219,6 @@ mod tests {
         let tuple_containing_u = engine.types.mk_tuple(vec![var_u]);
 
         let result = engine.unify(var_t, tuple_containing_u);
-        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        assert!(result.is_ok(), "expected Ok, got {result:?}");
     }
 }

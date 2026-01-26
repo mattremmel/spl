@@ -1819,8 +1819,7 @@ mod tests {
         let result = resolve(&source_file);
         assert!(
             !result.diagnostics.is_empty(),
-            "expected errors containing {:?}, got none",
-            expected
+            "expected errors containing {expected:?}, got none"
         );
         for pattern in expected {
             let found = result
@@ -2039,7 +2038,7 @@ mod tests {
             }
         "#;
         let (_, ctx, diags) = resolve_source(source);
-        assert!(diags.is_empty(), "Should have no errors: {:?}", diags);
+        assert!(diags.is_empty(), "Should have no errors: {diags:?}");
 
         // Find the impl block's DefId
         let impl_symbols: Vec<_> = ctx
@@ -2993,7 +2992,7 @@ mod tests {
 
     // ===== Cross-Package Resolution with ModuleTree =====
 
-    /// Helper to create a SemanticContext with a ModuleTree for testing cross-module resolution.
+    /// Helper to create a `SemanticContext` with a `ModuleTree` for testing cross-module resolution.
     fn create_context_with_module_tree() -> SemanticContext {
         use crate::sema::module::{ModuleId, ModuleTree};
         use crate::sema::{SymbolKind, Visibility};
@@ -3306,8 +3305,8 @@ mod tests {
         assert!(h_def.is_some(), "expected 'h' to be bound");
     }
 
-    /// Helper to create a SemanticContext with a 3-level deep module tree.
-    /// Structure: root -> level1 -> level2 -> level3 (with deep_fn)
+    /// Helper to create a `SemanticContext` with a 3-level deep module tree.
+    /// Structure: root -> level1 -> level2 -> level3 (with `deep_fn`)
     fn create_deeply_nested_module_tree() -> SemanticContext {
         use crate::sema::module::{ModuleId, ModuleTree};
         use crate::sema::{SymbolKind, Visibility};
@@ -3428,7 +3427,7 @@ mod tests {
         );
     }
 
-    /// Helper to create a SemanticContext with a module that has multiple exports.
+    /// Helper to create a `SemanticContext` with a module that has multiple exports.
     fn create_context_with_multiple_exports() -> SemanticContext {
         use crate::sema::module::{ModuleId, ModuleTree};
         use crate::sema::{SymbolKind, Visibility};
@@ -3466,7 +3465,7 @@ mod tests {
 
         // Define helper3 - private (not exported)
         let helper3_name = ctx.intern("helper3");
-        let _helper3_def_id = ctx
+        let helper3_def_id = ctx
             .define(
                 helper3_name,
                 SymbolKind::Function,
@@ -3483,7 +3482,7 @@ mod tests {
             tree.add_item(utils_id, "helper2", helper2_def_id);
             tree.add_export(utils_id, "helper2", helper2_def_id);
             // helper3 is in items but NOT exported
-            tree.add_item(utils_id, "helper3", _helper3_def_id);
+            tree.add_item(utils_id, "helper3", helper3_def_id);
         }
 
         ctx
@@ -3657,7 +3656,7 @@ mod tests {
     }
 
     /// Helper to create a context with sibling modules for super prefix testing.
-    /// Structure: root -> child (current) and root -> sibling (with sibling_fn)
+    /// Structure: root -> child (current) and root -> sibling (with `sibling_fn`)
     fn create_context_with_sibling_modules() -> SemanticContext {
         use crate::sema::module::{ModuleId, ModuleTree};
         use crate::sema::{SymbolKind, Visibility};

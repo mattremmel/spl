@@ -442,7 +442,7 @@ mod tests {
         assert_eq!(cloned.compiler_command(), "gcc");
 
         // Test Debug impl
-        let debug_str = format!("{:?}", linker);
+        let debug_str = format!("{linker:?}");
         assert!(debug_str.contains("CcLinker"));
     }
 
@@ -453,7 +453,7 @@ mod tests {
         assert_eq!(cloned.libraries, vec!["m"]);
 
         // Test Debug impl
-        let debug_str = format!("{:?}", opts);
+        let debug_str = format!("{opts:?}");
         assert!(debug_str.contains("LinkOptions"));
     }
 }

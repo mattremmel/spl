@@ -282,13 +282,13 @@ mod tests {
         // Just verify they can all be created and matched
         for pat in &patterns {
             match pat {
-                HirPatKind::Bind { .. } => {}
-                HirPatKind::Wildcard => {}
-                HirPatKind::Tuple { .. } => {}
-                HirPatKind::Struct { .. } => {}
-                HirPatKind::Ref { .. } => {}
-                HirPatKind::Literal(_) => {}
-                HirPatKind::Missing => {}
+                HirPatKind::Bind { .. }
+                | HirPatKind::Wildcard
+                | HirPatKind::Tuple { .. }
+                | HirPatKind::Struct { .. }
+                | HirPatKind::Ref { .. }
+                | HirPatKind::Literal(_)
+                | HirPatKind::Missing => {}
             }
         }
     }

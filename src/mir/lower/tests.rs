@@ -783,7 +783,7 @@ fn test_lower_binary_add_literals() {
         ) => {
             assert_eq!(place.local, Local(1)); // First temp
         }
-        other => panic!("Expected Add rvalue, got {:?}", other),
+        other => panic!("Expected Add rvalue, got {other:?}"),
     }
 }
 
@@ -1009,7 +1009,7 @@ fn test_lower_binary_with_vars() {
             assert_eq!(lhs.local, Local(1)); // a
             assert_eq!(rhs.local, Local(2)); // b
         }
-        other => panic!("Expected Add(Copy(_1), Copy(_2)), got {:?}", other),
+        other => panic!("Expected Add(Copy(_1), Copy(_2)), got {other:?}"),
     }
 }
 
@@ -1151,7 +1151,7 @@ fn test_lower_unary_neg() {
             assert_eq!(place.local, Local(2)); // Temp
             assert_eq!(src.local, Local(1)); // x
         }
-        other => panic!("Expected Neg(Copy(_1)), got {:?}", other),
+        other => panic!("Expected Neg(Copy(_1)), got {other:?}"),
     }
 }
 
@@ -1207,7 +1207,7 @@ fn test_lower_unary_not() {
 
     match &body.basic_blocks[0].statements[0].kind {
         StatementKind::Assign(_, Rvalue::UnaryOp(UnOp::Not, Operand::Copy(_))) => {}
-        other => panic!("Expected Not(Copy(_)), got {:?}", other),
+        other => panic!("Expected Not(Copy(_)), got {other:?}"),
     }
 }
 
@@ -3459,11 +3459,10 @@ fn lower_if_no_else_var() {
         TerminatorKind::SwitchInt { discr, .. } => {
             assert!(
                 matches!(discr, Operand::Copy(p) if p.local == Local(1)),
-                "Expected SwitchInt(Copy(_1)), got {:?}",
-                discr
+                "Expected SwitchInt(Copy(_1)), got {discr:?}"
             );
         }
-        other => panic!("Expected SwitchInt, got {:?}", other),
+        other => panic!("Expected SwitchInt, got {other:?}"),
     }
 }
 
@@ -6998,8 +6997,7 @@ fn test_lower_return_in_if_branch() {
     // At least 2 returns: one from `return 1`, one from end of function
     assert!(
         return_count >= 1,
-        "Expected at least 1 Return terminator, got {}",
-        return_count
+        "Expected at least 1 Return terminator, got {return_count}"
     );
 
     // Should have both 1 and 2 assigned

@@ -440,7 +440,7 @@ mod tests {
                 _,
                 Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(5, _))),
             ) => {}
-            other => panic!("expected folded constant 5, got {:?}", other),
+            other => panic!("expected folded constant 5, got {other:?}"),
         }
     }
 
@@ -484,7 +484,7 @@ mod tests {
                 _,
                 Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(42, _))),
             ) => {}
-            other => panic!("expected folded constant 42, got {:?}", other),
+            other => panic!("expected folded constant 42, got {other:?}"),
         }
     }
 
@@ -586,7 +586,7 @@ mod tests {
                 _,
                 Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(2, _))),
             ) => {}
-            other => panic!("expected 2, got {:?}", other),
+            other => panic!("expected 2, got {other:?}"),
         }
 
         match &body.block(bb_then).statements[0].kind {
@@ -594,7 +594,7 @@ mod tests {
                 _,
                 Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(6, _))),
             ) => {}
-            other => panic!("expected 6, got {:?}", other),
+            other => panic!("expected 6, got {other:?}"),
         }
 
         match &body.block(bb_else).statements[0].kind {
@@ -602,7 +602,7 @@ mod tests {
                 _,
                 Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(9, _))),
             ) => {}
-            other => panic!("expected 9, got {:?}", other),
+            other => panic!("expected 9, got {other:?}"),
         }
     }
 
@@ -693,14 +693,14 @@ mod tests {
                 _,
                 Rvalue::Use(Operand::Constant(crate::mir::operand::Constant::Int(0, _))),
             ) => {}
-            other => panic!("expected 0, got {:?}", other),
+            other => panic!("expected 0, got {other:?}"),
         }
 
         // Non-foldable should remain unchanged
         match &body.block(bb_body).statements[0].kind {
             crate::mir::statement::StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _)) => {
             }
-            other => panic!("expected unfoldable add, got {:?}", other),
+            other => panic!("expected unfoldable add, got {other:?}"),
         }
     }
 

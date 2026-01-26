@@ -30,6 +30,7 @@ fn check(source: &str, expected: &[(Token, &str)]) {
 }
 
 /// Helper to check single token
+#[allow(clippy::needless_pass_by_value)] // Token is small and Copy-like
 fn check_single(source: &str, expected_token: Token) {
     let tokens = lex(source);
     assert_eq!(tokens.len(), 1, "Expected single token, got: {:?}", tokens);
@@ -1496,8 +1497,7 @@ loop {
         assert_ne!(
             *token,
             Token::Error,
-            "Unexpected error token for text: {:?}",
-            text
+            "Unexpected error token for text: {text:?}"
         );
     }
 
@@ -1677,9 +1677,9 @@ fn recovery_lex_result_methods() {
 #[test]
 fn recovery_error_display() {
     let error = LexError::new(LexErrorKind::InvalidCharacter('@'), 5..6);
-    let msg = format!("{}", error);
+    let msg = format!("{error}");
     assert!(msg.contains("invalid character"));
-    assert!(msg.contains("@"));
+    assert!(msg.contains('@'));
     assert!(msg.contains("5..6"));
 }
 

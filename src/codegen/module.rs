@@ -1202,7 +1202,7 @@ mod tests {
         let functions: Vec<_> = bodies
             .iter()
             .enumerate()
-            .map(|(i, b)| FunctionDef::new(DefId(i as u32 + 1), format!("fn_{}", i), b))
+            .map(|(i, b)| FunctionDef::new(DefId(i as u32 + 1), format!("fn_{i}"), b))
             .collect();
 
         let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");

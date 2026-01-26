@@ -181,7 +181,7 @@ mod tests {
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(5, _)))) => {}
-            other => panic!("expected folded int constant, got {:?}", other),
+            other => panic!("expected folded int constant, got {other:?}"),
         }
     }
 
@@ -214,7 +214,7 @@ mod tests {
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(7, _)))) => {}
-            other => panic!("expected folded int constant 7, got {:?}", other),
+            other => panic!("expected folded int constant 7, got {other:?}"),
         }
     }
 
@@ -247,7 +247,7 @@ mod tests {
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(20, _)))) => {}
-            other => panic!("expected folded int constant 20, got {:?}", other),
+            other => panic!("expected folded int constant 20, got {other:?}"),
         }
     }
 
@@ -280,7 +280,7 @@ mod tests {
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(3, _)))) => {}
-            other => panic!("expected folded int constant 3, got {:?}", other),
+            other => panic!("expected folded int constant 3, got {other:?}"),
         }
     }
 
@@ -344,7 +344,7 @@ mod tests {
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Bool(false)))) => {}
-            other => panic!("expected folded bool constant false, got {:?}", other),
+            other => panic!("expected folded bool constant false, got {other:?}"),
         }
     }
 
@@ -380,7 +380,7 @@ mod tests {
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Bool(true)))) => {}
-            other => panic!("expected folded bool constant true, got {:?}", other),
+            other => panic!("expected folded bool constant true, got {other:?}"),
         }
     }
 
@@ -414,7 +414,7 @@ mod tests {
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Bool(true)))) => {}
-            other => panic!("expected folded bool constant true, got {:?}", other),
+            other => panic!("expected folded bool constant true, got {other:?}"),
         }
     }
 
@@ -504,19 +504,19 @@ mod tests {
         // Check first statement was folded
         match &body.block(bb).statements[0].kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(3, _)))) => {}
-            other => panic!("expected folded constant 3, got {:?}", other),
+            other => panic!("expected folded constant 3, got {other:?}"),
         }
 
         // Check second statement was NOT folded
         match &body.block(bb).statements[1].kind {
             StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _)) => {}
-            other => panic!("expected unfold binary op, got {:?}", other),
+            other => panic!("expected unfold binary op, got {other:?}"),
         }
 
         // Check third statement was folded
         match &body.block(bb).statements[2].kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(20, _)))) => {}
-            other => panic!("expected folded constant 20, got {:?}", other),
+            other => panic!("expected folded constant 20, got {other:?}"),
         }
     }
 
@@ -584,7 +584,7 @@ mod tests {
         let stmt = &body.block(bb).statements[0];
         match &stmt.kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(8, _)))) => {}
-            other => panic!("expected folded int constant 8, got {:?}", other),
+            other => panic!("expected folded int constant 8, got {other:?}"),
         }
     }
 
@@ -659,7 +659,7 @@ mod tests {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(v, _)))) => {
                 assert_eq!(*v, i128::MIN);
             }
-            other => panic!("expected wrapped int constant, got {:?}", other),
+            other => panic!("expected wrapped int constant, got {other:?}"),
         }
     }
 
@@ -735,12 +735,12 @@ mod tests {
 
         match &body.block(bb).statements[0].kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(16, _)))) => {}
-            other => panic!("expected folded constant 16, got {:?}", other),
+            other => panic!("expected folded constant 16, got {other:?}"),
         }
 
         match &body.block(bb).statements[1].kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(16, _)))) => {}
-            other => panic!("expected folded constant 16, got {:?}", other),
+            other => panic!("expected folded constant 16, got {other:?}"),
         }
     }
 
@@ -842,7 +842,7 @@ mod tests {
         for i in 0..6 {
             match &body.block(bb).statements[i].kind {
                 StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Bool(true)))) => {}
-                other => panic!("expected folded bool true at stmt {}, got {:?}", i, other),
+                other => panic!("expected folded bool true at stmt {i}, got {other:?}"),
             }
         }
     }
@@ -877,7 +877,7 @@ mod tests {
         assert!(result.changed);
         match &body.block(bb).statements[0].kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Bool(true)))) => {}
-            other => panic!("expected folded bool true, got {:?}", other),
+            other => panic!("expected folded bool true, got {other:?}"),
         }
     }
 
@@ -956,7 +956,7 @@ mod tests {
         assert!(result.changed);
         match &body.block(bb).statements[0].kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(-2, _)))) => {}
-            other => panic!("expected folded constant -2, got {:?}", other),
+            other => panic!("expected folded constant -2, got {other:?}"),
         }
     }
 
@@ -1041,11 +1041,11 @@ mod tests {
         // Both blocks should have folded constants
         match &body.block(bb0).statements[0].kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(3, _)))) => {}
-            other => panic!("expected 3, got {:?}", other),
+            other => panic!("expected 3, got {other:?}"),
         }
         match &body.block(bb1).statements[0].kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(12, _)))) => {}
-            other => panic!("expected 12, got {:?}", other),
+            other => panic!("expected 12, got {other:?}"),
         }
     }
 
@@ -1089,19 +1089,19 @@ mod tests {
         // Check StorageLive preserved
         match &body.block(bb).statements[0].kind {
             StatementKind::StorageLive(l) => assert_eq!(*l, Local(1)),
-            other => panic!("expected StorageLive, got {:?}", other),
+            other => panic!("expected StorageLive, got {other:?}"),
         }
 
         // Check assignment was folded
         match &body.block(bb).statements[1].kind {
             StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(2, _)))) => {}
-            other => panic!("expected folded 2, got {:?}", other),
+            other => panic!("expected folded 2, got {other:?}"),
         }
 
         // Check StorageDead preserved
         match &body.block(bb).statements[2].kind {
             StatementKind::StorageDead(l) => assert_eq!(*l, Local(1)),
-            other => panic!("expected StorageDead, got {:?}", other),
+            other => panic!("expected StorageDead, got {other:?}"),
         }
     }
 }

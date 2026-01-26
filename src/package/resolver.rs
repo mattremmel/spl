@@ -388,7 +388,7 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             ResolveError::FileNotFound(f) => assert_eq!(f, "missing.spl"),
-            e => panic!("expected FileNotFound, got {:?}", e),
+            ResolveError::ModuleNotFound(m) => panic!("expected FileNotFound, got ModuleNotFound({m:?})"),
         }
     }
 
@@ -553,7 +553,7 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             ResolveError::ModuleNotFound(m) => assert_eq!(m, "missing"),
-            e => panic!("expected ModuleNotFound, got {:?}", e),
+            ResolveError::FileNotFound(f) => panic!("expected ModuleNotFound, got FileNotFound({f:?})"),
         }
     }
 

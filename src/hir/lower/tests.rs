@@ -1563,8 +1563,7 @@ fn lower_nested_blocks() {
     // Should have at least 3 blocks (function body + 2 nested)
     assert!(
         block_count >= 3,
-        "Expected at least 3 blocks, found {}",
-        block_count
+        "Expected at least 3 blocks, found {block_count}"
     );
 }
 

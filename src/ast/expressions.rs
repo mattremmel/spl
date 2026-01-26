@@ -498,11 +498,10 @@ mod tests {
         let source_file = SourceFile::cast(parsed.syntax()).expect("expected SourceFile");
         source_file
             .items()
-            .filter_map(|item| match item {
+            .find_map(|item| match item {
                 crate::ast::Item::Function(f) => f.body(),
                 _ => None,
             })
-            .next()
             .and_then(|block| block.tail_expr())
             .expect("expected expression in function body")
     }

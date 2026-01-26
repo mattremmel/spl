@@ -65,8 +65,7 @@ fn check_err(source: &str, expected: &[&str]) {
 
     assert!(
         !all_diagnostics.is_empty(),
-        "expected errors containing {:?}, got none",
-        expected
+        "expected errors containing {expected:?}, got none"
     );
 
     for pattern in expected {
@@ -84,7 +83,7 @@ fn check_err(source: &str, expected: &[&str]) {
 }
 
 /// Parse source, run resolution, run inference, and verify warning messages.
-/// Unlike check_err, this allows successful type checking while expecting warnings.
+/// Unlike `check_err`, this allows successful type checking while expecting warnings.
 fn check_warn(source: &str, expected: &[&str]) {
     let parse_result = parse(source);
     assert!(
@@ -100,8 +99,7 @@ fn check_warn(source: &str, expected: &[&str]) {
     // For warnings, we expect some diagnostics but type inference still succeeds
     assert!(
         !infer_result.diagnostics.is_empty(),
-        "expected warnings containing {:?}, got none",
-        expected
+        "expected warnings containing {expected:?}, got none"
     );
 
     for pattern in expected {

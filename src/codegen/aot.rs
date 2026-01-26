@@ -332,8 +332,7 @@ mod tests {
             .any(|name| name.contains("my_exported_fn"));
         assert!(
             has_symbol,
-            "expected symbol 'my_exported_fn' in object file, found: {:?}",
-            symbol_names
+            "expected symbol 'my_exported_fn' in object file, found: {symbol_names:?}"
         );
     }
 
@@ -610,7 +609,7 @@ mod tests {
         let mut func_ids = Vec::new();
         for i in 0..10 {
             let id = ctx
-                .declare_function(&format!("fn_{}", i), &sig.clone())
+                .declare_function(&format!("fn_{i}"), &sig.clone())
                 .unwrap();
             func_ids.push(id);
         }
@@ -640,10 +639,8 @@ mod tests {
             assert!(
                 symbol_names
                     .iter()
-                    .any(|n| n.contains(&format!("fn_{}", i))),
-                "missing fn_{} in {:?}",
-                i,
-                symbol_names
+                    .any(|n| n.contains(&format!("fn_{i}"))),
+                "missing fn_{i} in {symbol_names:?}"
             );
         }
     }

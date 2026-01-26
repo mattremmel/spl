@@ -186,7 +186,7 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             ScanError::NotADirectory(_) => {}
-            e => panic!("expected NotADirectory, got {:?}", e),
+            ScanError::Io(e) => panic!("expected NotADirectory, got Io({e:?})"),
         }
     }
 
