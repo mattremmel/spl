@@ -15,7 +15,7 @@
 //! | Parser | [`ParseError`] | Recovery sets, event collection | IDE support, partial results |
 //! | Sema | [`Diagnostic`] | Imperative collection, builder | Rich user-facing messages |
 //! | HIR Lowering | `Missing` nodes | Fallback values | Continue despite earlier errors |
-//! | MIR Lowering | `panic!()` | Invariant assertions | Input guaranteed valid |
+//! | MIR Lowering | [`IceError`](mir::IceError) | Result propagation | Structured ICE reporting |
 //!
 //! ## Error Flow
 //!
@@ -40,7 +40,7 @@
 //!          │ HirDatabase (typed HIR)
 //!          ▼
 //! ┌─────────────────┐
-//! │  MIR Lowering   │──▶ panic!() (invariant violations = compiler bugs)
+//! │  MIR Lowering   │──▶ IceError (structured internal compiler error)
 //! └────────┬────────┘
 //!          │ MIR Bodies
 //!          ▼
@@ -60,9 +60,10 @@
 //!   (from earlier errors), it produces `HirExprKind::Missing` or error types rather
 //!   than failing. This allows later phases to run for valid portions of code.
 //!
-//! - **MIR panics**: MIR lowering assumes valid, well-typed HIR. Any invariant
-//!   violation at this stage indicates a compiler bug, not user error, so we panic
-//!   rather than produce invalid MIR that would cause worse problems downstream.
+//! - **MIR ICE errors**: MIR lowering assumes valid, well-typed HIR. Any invariant
+//!   violation at this stage indicates a compiler bug, not user error. We return
+//!   structured [`IceError`](mir::IceError) with context (spans, `DefId`s) to help
+//!   diagnose bugs, converting them to user-friendly diagnostics.
 
 pub mod ast;
 pub mod codegen;
@@ -221,7 +222,17 @@ pub fn compile(source: &str) -> CompileResult {
     let hir_db = hir::lower::lower_to_hir(&source_file, &infer_result);
 
     // Phase 6: MIR lowering
-    let bodies = mir::lower_hir_to_mir(&hir_db);
+    let bodies = match mir::lower_hir_to_mir(&hir_db) {
+        Ok(bodies) => bodies,
+        Err(ice) => {
+            diagnostics.push(ice.to_diagnostic());
+            return CompileResult {
+                bodies: None,
+                types: None,
+                diagnostics,
+            };
+        }
+    };
 
     // Preserve the type interner for codegen
     let types = hir_db.types;
@@ -254,6 +265,9 @@ pub enum JitError {
     /// No main function found in the program.
     #[error("no main function found")]
     NoMain,
+    /// Internal compiler error during MIR lowering.
+    #[error("internal compiler error: {0}")]
+    Ice(#[from] mir::IceError),
 }
 
 /// Compile and execute SPL source code, returning the i32 result of `main()`.
@@ -346,6 +360,9 @@ pub enum AotError {
     /// IO error (writing files, etc.).
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+    /// Internal compiler error during MIR lowering.
+    #[error("internal compiler error: {0}")]
+    Ice(#[from] mir::IceError),
 }
 
 /// Compile SPL source code to an object file.
@@ -549,6 +566,17 @@ mod jit_tests {
     fn jit_error_display_no_main() {
         let err = JitError::NoMain;
         assert!(err.to_string().contains("no main"));
+    }
+
+    #[test]
+    fn jit_error_display_ice() {
+        let err = JitError::Ice(mir::IceError::FieldNotFound {
+            field: "x".to_string(),
+            struct_name: "Point".to_string(),
+            struct_def_id: sema::symbol::DefId::INVALID,
+            span: None,
+        });
+        assert!(err.to_string().contains("internal compiler error"));
     }
 }
 
@@ -1016,5 +1044,13 @@ mod aot_tests {
 
         let err5 = AotError::Io(std::io::Error::other("io"));
         assert!(err5.to_string().contains("IO error"));
+
+        let err6 = AotError::Ice(mir::IceError::FieldNotFound {
+            field: "x".to_string(),
+            struct_name: "Point".to_string(),
+            struct_def_id: sema::symbol::DefId::INVALID,
+            span: None,
+        });
+        assert!(err6.to_string().contains("internal compiler error"));
     }
 }

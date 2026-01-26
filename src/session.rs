@@ -304,8 +304,12 @@ impl<'src> CompileSession<'src> {
             return;
         };
 
-        let bodies = crate::mir::lower_hir_to_mir(hir_db);
-        self.mir = Some(bodies);
+        match crate::mir::lower_hir_to_mir(hir_db) {
+            Ok(bodies) => self.mir = Some(bodies),
+            Err(ice) => {
+                self.diagnostics.push(ice.to_diagnostic());
+            }
+        }
     }
 }
 

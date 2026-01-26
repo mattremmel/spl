@@ -22,6 +22,7 @@
 //! - **BasicBlock(0) is entry**: Entry block is always index 0
 
 pub mod body;
+pub mod error;
 pub mod lower;
 pub mod operand;
 pub mod optimize;
@@ -33,6 +34,7 @@ pub mod validate;
 
 // Re-export main types for convenience
 pub use body::{BasicBlockData, Body, LocalDecl};
+pub use error::{IceError, IceResult};
 pub use lower::{
     MirBuilder, MirLoweringContext, hir_binop_to_mir, hir_unop_to_mir, literal_to_operand,
     lower_hir_to_mir, lower_literal,

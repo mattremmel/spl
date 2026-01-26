@@ -34,7 +34,7 @@ fn lower_source(source: &str) -> Vec<Body> {
     let resolve_result = resolve(&source_file);
     let infer_result = infer(&source_file, &resolve_result);
     let hir = lower_to_hir(&source_file, &infer_result);
-    lower_hir_to_mir(&hir)
+    lower_hir_to_mir(&hir).expect("MIR lowering should not have ICE in tests")
 }
 
 // ========== Phase 1: MirBuilder Core Structure ==========
@@ -202,7 +202,9 @@ fn test_lower_literal_expr() {
     let mut ctx = MirLoweringContext::new(&hir_db);
     let mut builder = MirBuilder::new(ty);
 
-    let place = ctx.lower_expr_to_place(&mut builder, expr_id);
+    let place = ctx
+        .lower_expr_to_place(&mut builder, expr_id)
+        .expect("lowering failed");
 
     // Should allocate a temp and assign the constant
     assert_eq!(builder.locals.len(), 2); // return + temp
@@ -230,7 +232,9 @@ fn test_lower_literal_as_operand() {
     let mut ctx = MirLoweringContext::new(&hir_db);
     let mut builder = MirBuilder::new(ty);
 
-    let operand = ctx.lower_expr_as_operand(&mut builder, expr_id);
+    let operand = ctx
+        .lower_expr_as_operand(&mut builder, expr_id)
+        .expect("lowering failed");
 
     // Literals should become operands directly without temp
     assert!(matches!(operand, Operand::Constant(Constant::Int(42, _))));
@@ -272,7 +276,7 @@ fn test_lower_function_returning_constant() {
     let func = create_literal_function(&mut hir_db, "answer", i32_ty, Literal::Int(42));
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
 
     assert_eq!(bodies.len(), 1);
     let body = &bodies[0];
@@ -307,7 +311,7 @@ fn test_lower_function_returning_bool() {
     let func = create_literal_function(&mut hir_db, "is_true", bool_ty, Literal::Bool(true));
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     match &body.basic_blocks[0].statements[0].kind {
@@ -323,7 +327,7 @@ fn test_lower_function_returning_float() {
     let func = create_literal_function(&mut hir_db, "value", f64_ty, Literal::Float(1.23456));
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     match &body.basic_blocks[0].statements[0].kind {
@@ -361,7 +365,7 @@ fn test_lower_function_returning_unit() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Unit return should have no explicit assignment to return place
@@ -379,7 +383,7 @@ fn test_lower_function_returning_char() {
     let func = create_literal_function(&mut hir_db, "letter", char_ty, Literal::Char('a'));
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     match &body.basic_blocks[0].statements[0].kind {
@@ -401,7 +405,7 @@ fn test_lower_function_returning_string() {
     );
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     match &body.basic_blocks[0].statements[0].kind {
@@ -425,7 +429,7 @@ fn test_lower_multiple_functions() {
     hir_db.items.push(HirItem::Function(func1));
     hir_db.items.push(HirItem::Function(func2));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
 
     assert_eq!(bodies.len(), 2);
 }
@@ -470,7 +474,7 @@ fn test_lower_function_with_unused_params() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have: return place + 1 param = 2 locals
@@ -520,7 +524,7 @@ fn test_lower_negative_int() {
     let func = create_literal_function(&mut hir_db, "neg", i32_ty, Literal::Int(-42));
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     match &body.basic_blocks[0].statements[0].kind {
@@ -667,7 +671,7 @@ fn test_lower_var_reference() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have: return place + 1 param = 2 locals
@@ -708,7 +712,9 @@ fn test_lower_var_as_operand() {
     let mut builder = MirBuilder::new(i32_ty);
     builder.alloc_local(i32_ty, false, None); // _1 for param
 
-    let operand = ctx.lower_expr_as_operand(&mut builder, var_expr_id);
+    let operand = ctx
+        .lower_expr_as_operand(&mut builder, var_expr_id)
+        .expect("lowering failed");
 
     // Should be Copy(_1) directly
     match operand {
@@ -762,7 +768,7 @@ fn test_lower_binary_add_literals() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     let block = &body.basic_blocks[0];
@@ -823,7 +829,7 @@ fn test_lower_binary_sub() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     match &body.basic_blocks[0].statements[0].kind {
@@ -868,7 +874,7 @@ fn test_lower_binary_mul() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     match &body.basic_blocks[0].statements[0].kind {
@@ -914,7 +920,7 @@ fn test_lower_binary_comparison_lt() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     match &body.basic_blocks[0].statements[0].kind {
@@ -992,7 +998,7 @@ fn test_lower_binary_with_vars() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have: return place + 2 params + 1 temp = 4 locals
@@ -1065,7 +1071,7 @@ fn test_lower_nested_binary() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should produce:
@@ -1142,7 +1148,7 @@ fn test_lower_unary_neg() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should produce: _2 = Neg(Copy(_1))
@@ -1202,7 +1208,7 @@ fn test_lower_unary_not() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     match &body.basic_blocks[0].statements[0].kind {
@@ -1266,7 +1272,7 @@ fn test_lower_nested_unary() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should produce:
@@ -1385,7 +1391,7 @@ fn test_lower_complex_expression() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should produce:
@@ -1474,7 +1480,7 @@ fn lower_let_binding_simple() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have: _0 (return), _1 (x)
@@ -1568,7 +1574,7 @@ fn lower_let_binding_mutable() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Verify LocalDecl for _1 (x) has mutable == true
@@ -1631,7 +1637,7 @@ fn lower_let_wildcard() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // For wildcard, no named local is created for the pattern
@@ -1761,7 +1767,7 @@ fn lower_block_multiple_stmts() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have: _0 (return), _1 (a), _2 (b), _3 (temp for add result)
@@ -1849,7 +1855,7 @@ fn lower_block_no_tail() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have return terminator with no assignment to _0
@@ -1973,7 +1979,7 @@ fn lower_nested_blocks() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Verify both a (from outer) and b (from inner) are accessible
@@ -2038,7 +2044,7 @@ fn lower_empty_block() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have return terminator
@@ -2114,7 +2120,7 @@ fn lower_expr_stmt_with_semi() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     let block = &body.basic_blocks[0];
@@ -2195,7 +2201,7 @@ fn lower_storage_live_on_let() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
     let block = &body.basic_blocks[0];
 
@@ -2323,7 +2329,7 @@ fn lower_storage_dead_at_block_end() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
     let block = &body.basic_blocks[0];
 
@@ -2422,7 +2428,7 @@ fn lower_shadowing() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have two distinct locals for x: _1 and _2
@@ -2567,7 +2573,7 @@ fn lower_block_as_operand() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     let block = &body.basic_blocks[0];
@@ -2631,7 +2637,7 @@ fn lower_block_tail_only() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     let block = &body.basic_blocks[0];
@@ -2705,7 +2711,7 @@ fn lower_let_without_init() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have _1 allocated for x with StorageLive but no assignment
@@ -2790,7 +2796,7 @@ fn lower_storage_dead_excludes_result() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
     let block = &body.basic_blocks[0];
 
@@ -2902,7 +2908,7 @@ fn lower_let_uses_previous_binding() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
     let block = &body.basic_blocks[0];
 
@@ -3012,7 +3018,7 @@ fn lower_storage_dead_ordering() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
     let block = &body.basic_blocks[0];
 
@@ -3065,7 +3071,7 @@ fn lower_return_unit() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have at least one block with return terminator
@@ -3120,7 +3126,7 @@ fn lower_return_literal() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     let block = &body.basic_blocks[0];
@@ -3226,7 +3232,7 @@ fn lower_return_expression() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     let block = &body.basic_blocks[0];
@@ -3336,7 +3342,7 @@ fn lower_if_no_else_literal() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have multiple blocks: entry, then, join
@@ -3450,7 +3456,7 @@ fn lower_if_no_else_var() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Entry block should have SwitchInt with Copy(_1) - the cond param
@@ -3559,7 +3565,7 @@ fn lower_if_else_literals() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have multiple blocks: entry, then, else, join
@@ -3748,7 +3754,7 @@ fn lower_if_else_expressions() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have multiple blocks
@@ -3831,7 +3837,7 @@ fn lower_loop_with_break() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have multiple blocks: entry, header, exit
@@ -3905,7 +3911,7 @@ fn lower_break_no_value() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have at least 2 blocks
@@ -3974,7 +3980,7 @@ fn lower_continue_simple() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have at least 2 blocks
@@ -4094,7 +4100,7 @@ fn lower_conditional_break() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have multiple blocks
@@ -4220,7 +4226,7 @@ fn lower_nested_break_inner() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have multiple blocks for nested loops
@@ -4365,7 +4371,7 @@ fn lower_nested_loop_values() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have multiple blocks for nested loops
@@ -4456,7 +4462,7 @@ fn lower_return_in_loop() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have Return terminator (not just Goto to exit)
@@ -4603,7 +4609,7 @@ fn lower_if_else_breaks() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have multiple blocks
@@ -4704,7 +4710,7 @@ fn test_lower_call_no_args() {
     };
     hir_db.items.push(HirItem::Function(foo_func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     // Second body is foo
     let body = &bodies[1];
 
@@ -4846,7 +4852,7 @@ fn test_lower_call_with_args() {
     };
     hir_db.items.push(HirItem::Function(foo_func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[1]; // foo is second
 
     // Should have Call terminator with 2 arguments
@@ -4972,7 +4978,7 @@ fn test_lower_call_nested() {
     };
     hir_db.items.push(HirItem::Function(foo_func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[2]; // foo is third
 
     // Should have at least 2 Call terminators (or blocks for continuation)
@@ -5054,7 +5060,7 @@ fn test_lower_method_call() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have Call terminator
@@ -5158,7 +5164,7 @@ fn test_lower_method_call_with_args() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have Call terminator with 3 args (receiver + 2 explicit)
@@ -5218,7 +5224,7 @@ fn test_lower_binary_div() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     let found_div = body.basic_blocks[0].statements.iter().any(|stmt| {
@@ -5267,7 +5273,7 @@ fn test_lower_binary_rem() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     let found_rem = body.basic_blocks[0].statements.iter().any(|stmt| {
@@ -5347,7 +5353,7 @@ fn test_lower_binary_le() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     let found_le = body.basic_blocks[0].statements.iter().any(|stmt| {
@@ -5397,7 +5403,7 @@ fn test_lower_binary_ge() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     let found_ge = body.basic_blocks[0].statements.iter().any(|stmt| {
@@ -5447,7 +5453,7 @@ fn test_lower_binary_gt() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     let found_gt = body.basic_blocks[0].statements.iter().any(|stmt| {
@@ -5497,7 +5503,7 @@ fn test_lower_binary_ne() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     let found_ne = body.basic_blocks[0].statements.iter().any(|stmt| {
@@ -5550,7 +5556,7 @@ fn test_lower_binary_and_placeholder() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // And should use short-circuit evaluation with control flow
@@ -5629,7 +5635,7 @@ fn test_lower_binary_or_placeholder() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Or should use short-circuit evaluation with control flow
@@ -5723,7 +5729,7 @@ fn test_lower_ref_placeholder() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     assert!(!body.basic_blocks.is_empty(), "Should produce MIR body");
@@ -5772,7 +5778,7 @@ fn test_lower_struct_placeholder() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     assert!(!body.basic_blocks.is_empty(), "Should produce MIR body");
@@ -5833,7 +5839,7 @@ fn test_lower_array_placeholder() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     assert!(!body.basic_blocks.is_empty(), "Should produce MIR body");
@@ -5896,7 +5902,7 @@ fn test_lower_tuple_placeholder() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     assert!(!body.basic_blocks.is_empty(), "Should produce MIR body");
@@ -5948,7 +5954,7 @@ fn test_lower_array_repeat() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Verify: should produce Rvalue::Repeat with count 5
@@ -5994,7 +6000,7 @@ fn test_lower_array_repeat_zero_count() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Verify Rvalue::Repeat(_, 0) is produced
@@ -6075,7 +6081,7 @@ fn test_lower_array_repeat_complex_value() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Verify the value expression is lowered before repeat
@@ -6167,7 +6173,7 @@ fn test_lower_field_placeholder() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     assert!(!body.basic_blocks.is_empty(), "Should produce MIR body");
@@ -6243,7 +6249,7 @@ fn test_lower_tuple_field_placeholder() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     assert!(!body.basic_blocks.is_empty(), "Should produce MIR body");
@@ -6321,7 +6327,7 @@ fn test_lower_index_placeholder() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     assert!(!body.basic_blocks.is_empty(), "Should produce MIR body");
@@ -6382,7 +6388,7 @@ fn test_lower_cast_placeholder() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     assert!(!body.basic_blocks.is_empty(), "Should produce MIR body");
@@ -6448,7 +6454,7 @@ fn test_lower_deeply_nested_blocks() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // 42 should eventually be assigned to return place
@@ -6596,7 +6602,7 @@ fn test_lower_multiple_sequential_lets() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have at least 4 locals: _0 (return), _1 (a), _2 (b), _3 (c)
@@ -6742,7 +6748,7 @@ fn test_lower_if_in_loop() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have multiple blocks
@@ -6865,7 +6871,7 @@ fn test_lower_call_with_binary_arg() {
     };
     hir_db.items.push(HirItem::Function(foo_func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[1]; // foo is second
 
     // Should have Add operation before Call
@@ -6980,7 +6986,7 @@ fn test_lower_return_in_if_branch() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have Return terminator in some block
@@ -7111,7 +7117,7 @@ fn test_lower_continue_in_nested_if() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have multiple Goto terminators (for continue and break)
@@ -7214,7 +7220,7 @@ fn test_lower_field_access_first_field() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Field access for first field should produce Field(FieldIdx(0))
@@ -7312,7 +7318,7 @@ fn test_lower_field_access_second_field() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Field access for second field should produce Field(FieldIdx(1))
@@ -7429,7 +7435,7 @@ fn test_lower_nested_field_access() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have a place with [Field(0), Field(0)] projection
@@ -7505,7 +7511,7 @@ fn test_lower_deref_basic() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Deref should produce PlaceElem::Deref
@@ -7591,7 +7597,7 @@ fn test_lower_deref_as_lvalue() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Assignment target should have Deref projection
@@ -7689,7 +7695,7 @@ fn test_lower_deref_then_field() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have [Deref, Field(0)] projection
@@ -7774,7 +7780,7 @@ fn test_lower_double_deref() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have [Deref, Deref] projection
@@ -7850,7 +7856,7 @@ fn test_lower_cast_int_to_int() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Cast should produce CastKind::IntToInt
@@ -7918,7 +7924,7 @@ fn test_lower_cast_int_to_float() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Cast should produce CastKind::IntToFloat
@@ -7986,7 +7992,7 @@ fn test_lower_cast_float_to_int() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Cast should produce CastKind::FloatToInt
@@ -8076,7 +8082,7 @@ fn test_lower_index_with_variable() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Index should produce PlaceElem::Index(local)
@@ -8198,7 +8204,7 @@ fn test_lower_nested_index() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have [Index(i), Index(j)] projection
@@ -8333,7 +8339,7 @@ fn test_lower_deref_index_field_chain() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have [Deref, Index(i), Field(0)] projection
@@ -8463,7 +8469,7 @@ fn test_lower_field_then_index() {
     };
     hir_db.items.push(HirItem::Function(func));
 
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
     let body = &bodies[0];
 
     // Should have [Field(0), Index(i)] projection
@@ -8708,7 +8714,7 @@ fn test_lower_missing_expr_produces_zeroed() {
     hir_db.items.push(HirItem::Function(func));
 
     // Lower to MIR
-    let bodies = lower_hir_to_mir(&hir_db);
+    let bodies = lower_hir_to_mir(&hir_db).expect("MIR lowering failed");
 
     assert_eq!(bodies.len(), 1);
     let body = &bodies[0];

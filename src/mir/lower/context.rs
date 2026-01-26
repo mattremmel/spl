@@ -10,6 +10,7 @@ use crate::hir::{
 };
 use crate::lexer::Span;
 use crate::mir::body::Body;
+use crate::mir::error::{IceError, IceResult};
 use crate::mir::operand::{AggregateKind, BinOp, BorrowKind, Constant, Operand, Rvalue};
 use crate::mir::statement::Statement;
 use crate::mir::terminator::{BasicBlock, SwitchTargets, TerminatorKind};
@@ -94,7 +95,17 @@ impl<'hir> MirLoweringContext<'hir> {
     }
 
     /// Resolve a field name to its index within a struct.
-    fn resolve_field_index(&self, struct_def_id: DefId, field_name: &str) -> u32 {
+    ///
+    /// # Errors
+    ///
+    /// Returns `IceError::FieldNotFound` if the field doesn't exist in the struct.
+    /// Returns `IceError::StructNotFound` if no struct matches the given `DefId`.
+    fn resolve_field_index(
+        &self,
+        struct_def_id: DefId,
+        field_name: &str,
+        span: Option<Span>,
+    ) -> IceResult<u32> {
         debug_assert!(
             struct_def_id.is_valid(),
             "Cannot resolve field '{field_name}' with invalid struct DefId - this indicates a resolution bug in HIR lowering"
@@ -105,19 +116,35 @@ impl<'hir> MirLoweringContext<'hir> {
             {
                 for (idx, field) in s.fields.iter().enumerate() {
                     if field.name == field_name {
-                        return idx as u32;
+                        return Ok(idx as u32);
                     }
                 }
-                panic!("Field '{}' not found in struct '{}'", field_name, s.name);
+                return Err(IceError::FieldNotFound {
+                    field: field_name.to_string(),
+                    struct_name: s.name.clone(),
+                    struct_def_id,
+                    span,
+                });
             }
         }
-        panic!(
-            "Struct with DefId {struct_def_id:?} not found for field '{field_name}'"
-        );
+        Err(IceError::StructNotFound {
+            def_id: struct_def_id,
+            field_being_accessed: field_name.to_string(),
+            span,
+        })
     }
 
     /// Lower an expression to a place (allocates a temp if needed).
-    pub fn lower_expr_to_place(&mut self, builder: &mut MirBuilder, expr_id: ExprId) -> Place {
+    ///
+    /// # Errors
+    ///
+    /// Returns an `IceError` if the expression contains invalid references
+    /// (e.g., field access on non-struct type, missing struct definitions).
+    pub fn lower_expr_to_place(
+        &mut self,
+        builder: &mut MirBuilder,
+        expr_id: ExprId,
+    ) -> IceResult<Place> {
         let expr = self.hir.expr(expr_id);
         let ty = expr.ty;
         let span = expr.span.clone();
@@ -134,7 +161,7 @@ impl<'hir> MirLoweringContext<'hir> {
                     span,
                 );
                 builder.push_statement(stmt);
-                place
+                Ok(place)
             }
             HirExprKind::Var(def_id) => {
                 debug_assert!(
@@ -144,12 +171,12 @@ impl<'hir> MirLoweringContext<'hir> {
 
                 // Look up the local for this variable
                 if let Some(&local) = self.local_map.get(def_id) {
-                    Place::from_local(local)
+                    Ok(Place::from_local(local))
                 } else {
                     // Variable not found - allocate a temp as fallback
                     // This shouldn't happen with well-formed HIR
                     let temp = builder.alloc_temp(ty);
-                    Place::from_local(temp)
+                    Ok(Place::from_local(temp))
                 }
             }
             HirExprKind::Binary { op, lhs, rhs } => {
@@ -159,7 +186,7 @@ impl<'hir> MirLoweringContext<'hir> {
                 // Check if this is a simple unary op (not deref)
                 if let Some(mir_op) = hir_unop_to_mir(*op) {
                     // Lower operand
-                    let operand_val = self.lower_expr_as_operand(builder, *operand);
+                    let operand_val = self.lower_expr_as_operand(builder, *operand)?;
 
                     // Allocate temp for result
                     let temp = builder.alloc_temp(ty);
@@ -172,18 +199,18 @@ impl<'hir> MirLoweringContext<'hir> {
                         span,
                     );
                     builder.push_statement(stmt);
-                    place
+                    Ok(place)
                 } else {
                     // Deref - produces a place projection
-                    let operand_place = self.lower_expr_to_place(builder, *operand);
-                    Place {
+                    let operand_place = self.lower_expr_to_place(builder, *operand)?;
+                    Ok(Place {
                         local: operand_place.local,
                         projection: {
                             let mut proj = operand_place.projection;
                             proj.push(PlaceElem::Deref);
                             proj
                         },
-                    }
+                    })
                 }
             }
             HirExprKind::Block { stmts, tail } => {
@@ -192,12 +219,12 @@ impl<'hir> MirLoweringContext<'hir> {
 
                 // Lower each statement
                 for stmt_id in stmts {
-                    self.lower_stmt(builder, *stmt_id);
+                    self.lower_stmt(builder, *stmt_id)?;
                 }
 
                 // Lower tail or return unit
                 let result_place = if let Some(tail_id) = tail {
-                    self.lower_expr_to_place(builder, *tail_id)
+                    self.lower_expr_to_place(builder, *tail_id)?
                 } else {
                     let unit_ty = self.hir.types.unit();
                     let temp = builder.alloc_temp(unit_ty);
@@ -212,12 +239,12 @@ impl<'hir> MirLoweringContext<'hir> {
                     }
                 }
 
-                result_place
+                Ok(result_place)
             }
             HirExprKind::Return { value } => {
                 // Lower return value (if any) to return place
                 if let Some(val_id) = value {
-                    let operand = self.lower_expr_as_operand(builder, *val_id);
+                    let operand = self.lower_expr_as_operand(builder, *val_id)?;
                     let return_place = Place::from_local(Local::RETURN_PLACE);
                     builder.push_statement(Statement::assign(
                         return_place,
@@ -233,7 +260,7 @@ impl<'hir> MirLoweringContext<'hir> {
                 // Return a unit-typed place (won't be used)
                 let unit_ty = self.hir.types.unit();
                 let temp = builder.alloc_temp(unit_ty);
-                Place::from_local(temp)
+                Ok(Place::from_local(temp))
             }
             HirExprKind::If {
                 condition,
@@ -255,10 +282,10 @@ impl<'hir> MirLoweringContext<'hir> {
             } => self.lower_method_call_expr(builder, expr_id, *receiver, args, ty, span),
             HirExprKind::Array { elements } => {
                 // Lower each element to an operand
-                let operands: Vec<Operand> = elements
-                    .iter()
-                    .map(|e| self.lower_expr_as_operand(builder, *e))
-                    .collect();
+                let mut operands = Vec::with_capacity(elements.len());
+                for e in elements {
+                    operands.push(self.lower_expr_as_operand(builder, *e)?);
+                }
                 let temp = builder.alloc_temp(ty);
                 let place = Place::from_local(temp);
                 builder.push_statement(Statement::assign(
@@ -266,14 +293,14 @@ impl<'hir> MirLoweringContext<'hir> {
                     Rvalue::Aggregate(AggregateKind::Array, operands),
                     span,
                 ));
-                place
+                Ok(place)
             }
             HirExprKind::Tuple { elements } => {
                 // Lower each element to an operand
-                let operands: Vec<Operand> = elements
-                    .iter()
-                    .map(|e| self.lower_expr_as_operand(builder, *e))
-                    .collect();
+                let mut operands = Vec::with_capacity(elements.len());
+                for e in elements {
+                    operands.push(self.lower_expr_as_operand(builder, *e)?);
+                }
                 let temp = builder.alloc_temp(ty);
                 let place = Place::from_local(temp);
                 builder.push_statement(Statement::assign(
@@ -281,14 +308,14 @@ impl<'hir> MirLoweringContext<'hir> {
                     Rvalue::Aggregate(AggregateKind::Tuple, operands),
                     span,
                 ));
-                place
+                Ok(place)
             }
             HirExprKind::Struct { def_id, fields } => {
                 // Lower each field value to an operand (in declaration order from fields vec)
-                let operands: Vec<Operand> = fields
-                    .iter()
-                    .map(|(_, expr)| self.lower_expr_as_operand(builder, *expr))
-                    .collect();
+                let mut operands = Vec::with_capacity(fields.len());
+                for (_, expr) in fields {
+                    operands.push(self.lower_expr_as_operand(builder, *expr)?);
+                }
                 let temp = builder.alloc_temp(ty);
                 let place = Place::from_local(temp);
                 builder.push_statement(Statement::assign(
@@ -296,37 +323,37 @@ impl<'hir> MirLoweringContext<'hir> {
                     Rvalue::Aggregate(AggregateKind::Adt(*def_id), operands),
                     span,
                 ));
-                place
+                Ok(place)
             }
             HirExprKind::TupleField { base, index } => {
                 // Lower base to a place, then add a field projection
-                let base_place = self.lower_expr_to_place(builder, *base);
-                Place {
+                let base_place = self.lower_expr_to_place(builder, *base)?;
+                Ok(Place {
                     local: base_place.local,
                     projection: {
                         let mut proj = base_place.projection;
                         proj.push(PlaceElem::Field(FieldIdx(*index)));
                         proj
                     },
-                }
+                })
             }
             HirExprKind::Index { base, index } => {
                 // Lower base to a place, index to a local, then add an index projection
-                let base_place = self.lower_expr_to_place(builder, *base);
+                let base_place = self.lower_expr_to_place(builder, *base)?;
                 // Index expression needs to be lowered to a place first, then we use its local
-                let index_place = self.lower_expr_to_place(builder, *index);
-                Place {
+                let index_place = self.lower_expr_to_place(builder, *index)?;
+                Ok(Place {
                     local: base_place.local,
                     projection: {
                         let mut proj = base_place.projection;
                         proj.push(PlaceElem::Index(index_place.local));
                         proj
                     },
-                }
+                })
             }
             HirExprKind::Field { base, field } => {
                 // Lower base to a place, then add a field projection
-                let base_place = self.lower_expr_to_place(builder, *base);
+                let base_place = self.lower_expr_to_place(builder, *base)?;
                 let base_ty = self.hir.expr(*base).ty;
 
                 // Get struct DefId from base type and resolve field index
@@ -336,26 +363,30 @@ impl<'hir> MirLoweringContext<'hir> {
                             def_id.is_valid(),
                             "Field access on struct with INVALID DefId at {span:?} - type system produced invalid struct type"
                         );
-                        self.resolve_field_index(*def_id, field)
+                        self.resolve_field_index(*def_id, field, Some(span.clone()))?
                     }
-                    _ => panic!(
-                        "Field access on non-struct type: {:?}",
-                        self.hir.types.get(base_ty)
-                    ),
+                    other => {
+                        return Err(IceError::FieldAccessOnNonStruct {
+                            type_description: format!("{other:?}"),
+                            type_id: base_ty,
+                            field_name: field.clone(),
+                            span: Some(span),
+                        });
+                    }
                 };
 
-                Place {
+                Ok(Place {
                     local: base_place.local,
                     projection: {
                         let mut proj = base_place.projection;
                         proj.push(PlaceElem::Field(FieldIdx(field_idx)));
                         proj
                     },
-                }
+                })
             }
             HirExprKind::Ref { mutable, operand } => {
                 // Lower operand to a place, then create a reference to it
-                let operand_place = self.lower_expr_to_place(builder, *operand);
+                let operand_place = self.lower_expr_to_place(builder, *operand)?;
                 let borrow_kind = if *mutable {
                     BorrowKind::Mut
                 } else {
@@ -369,11 +400,11 @@ impl<'hir> MirLoweringContext<'hir> {
                     Rvalue::Ref(borrow_kind, operand_place, ty),
                     span,
                 ));
-                place
+                Ok(place)
             }
             HirExprKind::Cast { expr, target_ty } => {
                 // Lower the inner expression, determine cast kind, emit cast
-                let operand = self.lower_expr_as_operand(builder, *expr);
+                let operand = self.lower_expr_as_operand(builder, *expr)?;
                 let source_ty = self.hir.expr(*expr).ty;
                 let cast_kind = determine_cast_kind(self.hir, source_ty, *target_ty);
                 let temp = builder.alloc_temp(*target_ty);
@@ -383,11 +414,11 @@ impl<'hir> MirLoweringContext<'hir> {
                     Rvalue::Cast(cast_kind, operand, *target_ty),
                     span,
                 ));
-                place
+                Ok(place)
             }
             HirExprKind::ArrayRepeat { value, count } => {
                 // Lower the value to repeat
-                let operand = self.lower_expr_as_operand(builder, *value);
+                let operand = self.lower_expr_as_operand(builder, *value)?;
 
                 // Allocate temp for result array
                 let temp = builder.alloc_temp(ty);
@@ -399,7 +430,7 @@ impl<'hir> MirLoweringContext<'hir> {
                     Rvalue::Repeat(operand, *count),
                     span,
                 ));
-                place
+                Ok(place)
             }
             HirExprKind::Is {
                 scrutinee,
@@ -409,7 +440,7 @@ impl<'hir> MirLoweringContext<'hir> {
                 // For now, `is` expressions produce a boolean result
                 // TODO: Implement proper pattern matching lowering
                 // Currently just evaluates scrutinee and returns true/false based on pattern
-                let _scrutinee_val = self.lower_expr_as_operand(builder, *scrutinee);
+                let _scrutinee_val = self.lower_expr_as_operand(builder, *scrutinee)?;
 
                 // Check if pattern is wildcard or catch-all binding (always matches)
                 let pat = self.hir.pat(*pattern);
@@ -433,12 +464,12 @@ impl<'hir> MirLoweringContext<'hir> {
                     Rvalue::Use(Operand::Constant(Constant::Bool(result))),
                     span,
                 ));
-                place
+                Ok(place)
             }
             HirExprKind::Match { scrutinee, arms } => {
                 // For now, match expressions produce the first arm's result
                 // TODO: Implement proper pattern matching with branching
-                let _scrutinee_val = self.lower_expr_as_operand(builder, *scrutinee);
+                let _scrutinee_val = self.lower_expr_as_operand(builder, *scrutinee)?;
 
                 if let Some((_pat, _guard, body)) = arms.first() {
                     // Just lower the first arm's body for now
@@ -452,7 +483,7 @@ impl<'hir> MirLoweringContext<'hir> {
                         Rvalue::Use(Operand::Constant(Constant::Zeroed(ty))),
                         span,
                     ));
-                    place
+                    Ok(place)
                 }
             }
             HirExprKind::Missing => {
@@ -464,7 +495,7 @@ impl<'hir> MirLoweringContext<'hir> {
                     Rvalue::Use(Operand::Constant(Constant::Zeroed(ty))),
                     span,
                 ));
-                place
+                Ok(place)
             }
         }
     }
@@ -478,7 +509,7 @@ impl<'hir> MirLoweringContext<'hir> {
         rhs: ExprId,
         ty: crate::sema::types::TypeId,
         span: Span,
-    ) -> Place {
+    ) -> IceResult<Place> {
         // Handle short-circuit operators specially
         if op == HirBinOp::And {
             self.lower_short_circuit_and(builder, lhs, rhs, ty, span)
@@ -486,8 +517,8 @@ impl<'hir> MirLoweringContext<'hir> {
             self.lower_short_circuit_or(builder, lhs, rhs, ty, span)
         } else if let Some(mir_op) = hir_binop_to_mir(op) {
             // Simple binary operation
-            let lhs_operand = self.lower_expr_as_operand(builder, lhs);
-            let rhs_operand = self.lower_expr_as_operand(builder, rhs);
+            let lhs_operand = self.lower_expr_as_operand(builder, lhs)?;
+            let rhs_operand = self.lower_expr_as_operand(builder, rhs)?;
 
             let temp = builder.alloc_temp(ty);
             let place = Place::from_local(temp);
@@ -498,7 +529,7 @@ impl<'hir> MirLoweringContext<'hir> {
                 span,
             );
             builder.push_statement(stmt);
-            place
+            Ok(place)
         } else {
             // Assignment operators (=, +=, -=, etc.)
             self.lower_assignment_expr(builder, op, lhs, rhs, span)
@@ -513,11 +544,11 @@ impl<'hir> MirLoweringContext<'hir> {
         rhs: ExprId,
         ty: crate::sema::types::TypeId,
         span: Span,
-    ) -> Place {
+    ) -> IceResult<Place> {
         let result_place = Place::from_local(builder.alloc_temp(ty));
 
         // Evaluate LHS
-        let lhs_operand = self.lower_expr_as_operand(builder, lhs);
+        let lhs_operand = self.lower_expr_as_operand(builder, lhs)?;
 
         // Create blocks
         let rhs_bb = builder.alloc_block();
@@ -536,7 +567,7 @@ impl<'hir> MirLoweringContext<'hir> {
 
         // RHS block: evaluate RHS, store result, goto merge
         builder.switch_to_block(rhs_bb);
-        let rhs_operand = self.lower_expr_as_operand(builder, rhs);
+        let rhs_operand = self.lower_expr_as_operand(builder, rhs)?;
         builder.push_statement(Statement::assign(
             result_place.clone(),
             Rvalue::Use(rhs_operand),
@@ -555,7 +586,7 @@ impl<'hir> MirLoweringContext<'hir> {
 
         // Continue in merge block
         builder.switch_to_block(merge_bb);
-        result_place
+        Ok(result_place)
     }
 
     /// Lower short-circuit OR.
@@ -566,11 +597,11 @@ impl<'hir> MirLoweringContext<'hir> {
         rhs: ExprId,
         ty: crate::sema::types::TypeId,
         span: Span,
-    ) -> Place {
+    ) -> IceResult<Place> {
         let result_place = Place::from_local(builder.alloc_temp(ty));
 
         // Evaluate LHS
-        let lhs_operand = self.lower_expr_as_operand(builder, lhs);
+        let lhs_operand = self.lower_expr_as_operand(builder, lhs)?;
 
         // Create blocks
         let true_bb = builder.alloc_block();
@@ -598,7 +629,7 @@ impl<'hir> MirLoweringContext<'hir> {
 
         // RHS block: evaluate RHS, store result, goto merge
         builder.switch_to_block(rhs_bb);
-        let rhs_operand = self.lower_expr_as_operand(builder, rhs);
+        let rhs_operand = self.lower_expr_as_operand(builder, rhs)?;
         builder.push_statement(Statement::assign(
             result_place.clone(),
             Rvalue::Use(rhs_operand),
@@ -608,7 +639,7 @@ impl<'hir> MirLoweringContext<'hir> {
 
         // Continue in merge block
         builder.switch_to_block(merge_bb);
-        result_place
+        Ok(result_place)
     }
 
     /// Lower an assignment expression.
@@ -619,10 +650,10 @@ impl<'hir> MirLoweringContext<'hir> {
         lhs: ExprId,
         rhs: ExprId,
         span: Span,
-    ) -> Place {
+    ) -> IceResult<Place> {
         // Lower LHS to a place (target) and RHS to an operand (value)
-        let target_place = self.lower_expr_to_place(builder, lhs);
-        let rhs_operand = self.lower_expr_as_operand(builder, rhs);
+        let target_place = self.lower_expr_to_place(builder, lhs)?;
+        let rhs_operand = self.lower_expr_as_operand(builder, rhs)?;
 
         match op {
             HirBinOp::Assign => {
@@ -680,7 +711,7 @@ impl<'hir> MirLoweringContext<'hir> {
         // Assignment expressions return unit
         let unit_ty = self.hir.types.unit();
         let temp = builder.alloc_temp(unit_ty);
-        Place::from_local(temp)
+        Ok(Place::from_local(temp))
     }
 
     /// Lower an if expression.
@@ -692,12 +723,12 @@ impl<'hir> MirLoweringContext<'hir> {
         else_branch: Option<ExprId>,
         ty: crate::sema::types::TypeId,
         span: Span,
-    ) -> Place {
+    ) -> IceResult<Place> {
         // Allocate result place
         let result_place = Place::from_local(builder.alloc_temp(ty));
 
         // Lower condition
-        let cond_operand = self.lower_expr_as_operand(builder, condition);
+        let cond_operand = self.lower_expr_as_operand(builder, condition)?;
 
         // Create basic blocks
         let then_bb = builder.alloc_block();
@@ -720,7 +751,7 @@ impl<'hir> MirLoweringContext<'hir> {
 
         // Lower then branch
         builder.switch_to_block(then_bb);
-        let then_operand = self.lower_expr_as_operand(builder, then_branch);
+        let then_operand = self.lower_expr_as_operand(builder, then_branch)?;
         // Only add fallthrough if the branch didn't diverge (e.g., break/continue/return)
         if !builder.is_current_block_terminated() {
             builder.push_statement(Statement::assign(
@@ -734,7 +765,7 @@ impl<'hir> MirLoweringContext<'hir> {
         // Lower else branch (if present)
         if let Some(else_expr) = else_branch {
             builder.switch_to_block(else_bb);
-            let else_operand = self.lower_expr_as_operand(builder, else_expr);
+            let else_operand = self.lower_expr_as_operand(builder, else_expr)?;
             // Only add fallthrough if the branch didn't diverge
             if !builder.is_current_block_terminated() {
                 builder.push_statement(Statement::assign(
@@ -749,7 +780,7 @@ impl<'hir> MirLoweringContext<'hir> {
         // Continue in join block
         builder.switch_to_block(join_bb);
 
-        result_place
+        Ok(result_place)
     }
 
     /// Lower a loop expression.
@@ -759,7 +790,7 @@ impl<'hir> MirLoweringContext<'hir> {
         body: ExprId,
         ty: crate::sema::types::TypeId,
         span: Span,
-    ) -> Place {
+    ) -> IceResult<Place> {
         // Allocate result place (for break value)
         let result_place = Place::from_local(builder.alloc_temp(ty));
 
@@ -779,7 +810,7 @@ impl<'hir> MirLoweringContext<'hir> {
 
         // Lower body in header block
         builder.switch_to_block(header_bb);
-        let _ = self.lower_expr_to_place(builder, body);
+        let _ = self.lower_expr_to_place(builder, body)?;
 
         // If we're still in header and no terminator set, loop back
         // (This handles the case where body doesn't end in break/continue/return)
@@ -793,7 +824,7 @@ impl<'hir> MirLoweringContext<'hir> {
         // Continue in exit block
         builder.switch_to_block(exit_bb);
 
-        result_place
+        Ok(result_place)
     }
 
     /// Lower a break expression.
@@ -802,22 +833,26 @@ impl<'hir> MirLoweringContext<'hir> {
         builder: &mut MirBuilder,
         value: Option<ExprId>,
         span: Span,
-    ) -> Place {
+    ) -> IceResult<Place> {
         debug_assert!(
             !self.loop_stack.is_empty(),
             "Break expression at {span:?} with empty loop_stack - HIR should not contain break outside of loop"
         );
 
         // Get current loop context
-        let loop_ctx = self
-            .loop_stack
-            .last()
-            .expect("break outside of loop")
-            .clone();
+        let loop_ctx = match self.loop_stack.last() {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return Err(IceError::ControlFlowOutsideLoop {
+                    keyword: "break",
+                    span: Some(span),
+                });
+            }
+        };
 
         // Lower break value (if any) and assign to result place
         if let Some(val_id) = value {
-            let operand = self.lower_expr_as_operand(builder, val_id);
+            let operand = self.lower_expr_as_operand(builder, val_id)?;
             if let Some(ref result_place) = loop_ctx.result_place {
                 builder.push_statement(Statement::assign(
                     result_place.clone(),
@@ -833,22 +868,26 @@ impl<'hir> MirLoweringContext<'hir> {
         // Break doesn't produce a value (execution continues elsewhere)
         let unit_ty = self.hir.types.unit();
         let temp = builder.alloc_temp(unit_ty);
-        Place::from_local(temp)
+        Ok(Place::from_local(temp))
     }
 
     /// Lower a continue expression.
-    fn lower_continue_expr(&mut self, builder: &mut MirBuilder, span: Span) -> Place {
+    fn lower_continue_expr(&mut self, builder: &mut MirBuilder, span: Span) -> IceResult<Place> {
         debug_assert!(
             !self.loop_stack.is_empty(),
             "Continue expression at {span:?} with empty loop_stack - HIR should not contain continue outside of loop"
         );
 
         // Get current loop context
-        let loop_ctx = self
-            .loop_stack
-            .last()
-            .expect("continue outside of loop")
-            .clone();
+        let loop_ctx = match self.loop_stack.last() {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return Err(IceError::ControlFlowOutsideLoop {
+                    keyword: "continue",
+                    span: Some(span),
+                });
+            }
+        };
 
         // Jump to header block
         builder.set_terminator(TerminatorKind::Goto(loop_ctx.header_block), span.clone());
@@ -856,7 +895,7 @@ impl<'hir> MirLoweringContext<'hir> {
         // Continue doesn't produce a value
         let unit_ty = self.hir.types.unit();
         let temp = builder.alloc_temp(unit_ty);
-        Place::from_local(temp)
+        Ok(Place::from_local(temp))
     }
 
     /// Lower a call expression.
@@ -867,15 +906,15 @@ impl<'hir> MirLoweringContext<'hir> {
         args: &[ExprId],
         ty: crate::sema::types::TypeId,
         span: Span,
-    ) -> Place {
+    ) -> IceResult<Place> {
         // Lower callee - check if it's a direct function ref or expression
-        let func_operand = self.lower_callee_operand(builder, callee);
+        let func_operand = self.lower_callee_operand(builder, callee)?;
 
         // Lower arguments
-        let arg_operands: Vec<Operand> = args
-            .iter()
-            .map(|arg| self.lower_expr_as_operand(builder, *arg))
-            .collect();
+        let mut arg_operands = Vec::with_capacity(args.len());
+        for arg in args {
+            arg_operands.push(self.lower_expr_as_operand(builder, *arg)?);
+        }
 
         // Allocate result temp and continuation block
         let result_temp = builder.alloc_temp(ty);
@@ -894,7 +933,7 @@ impl<'hir> MirLoweringContext<'hir> {
         );
 
         builder.switch_to_block(cont_bb);
-        destination
+        Ok(destination)
     }
 
     /// Lower a method call expression.
@@ -906,7 +945,7 @@ impl<'hir> MirLoweringContext<'hir> {
         args: &[ExprId],
         ty: crate::sema::types::TypeId,
         span: Span,
-    ) -> Place {
+    ) -> IceResult<Place> {
         // Look up resolved method DefId
         let method_def_id = self
             .hir
@@ -921,9 +960,11 @@ impl<'hir> MirLoweringContext<'hir> {
         );
 
         // Receiver becomes first argument
-        let receiver_operand = self.lower_expr_as_operand(builder, receiver);
+        let receiver_operand = self.lower_expr_as_operand(builder, receiver)?;
         let mut arg_operands = vec![receiver_operand];
-        arg_operands.extend(args.iter().map(|a| self.lower_expr_as_operand(builder, *a)));
+        for a in args {
+            arg_operands.push(self.lower_expr_as_operand(builder, *a)?);
+        }
 
         let func_operand = Operand::Constant(Constant::FnDef(method_def_id));
         let result_temp = builder.alloc_temp(ty);
@@ -941,32 +982,36 @@ impl<'hir> MirLoweringContext<'hir> {
         );
 
         builder.switch_to_block(cont_bb);
-        destination
+        Ok(destination)
     }
 
     /// Lower an expression as an operand (no temp allocation for simple cases).
-    pub fn lower_expr_as_operand(&mut self, builder: &mut MirBuilder, expr_id: ExprId) -> Operand {
+    pub fn lower_expr_as_operand(
+        &mut self,
+        builder: &mut MirBuilder,
+        expr_id: ExprId,
+    ) -> IceResult<Operand> {
         let expr = self.hir.expr(expr_id);
         let ty = expr.ty;
 
         match &expr.kind {
             HirExprKind::Literal(lit) => {
                 // Literals can be operands directly
-                literal_to_operand(lit, ty)
+                Ok(literal_to_operand(lit, ty))
             }
             HirExprKind::Var(def_id) => {
                 // Variables can be operands directly (copy from their place)
                 if let Some(&local) = self.local_map.get(def_id) {
-                    Operand::Copy(Place::from_local(local))
+                    Ok(Operand::Copy(Place::from_local(local)))
                 } else {
                     // Variable not found - return a zeroed constant as fallback
-                    Operand::Constant(Constant::Zeroed(ty))
+                    Ok(Operand::Constant(Constant::Zeroed(ty)))
                 }
             }
             _ => {
                 // For other expressions, lower to place then copy
-                let place = self.lower_expr_to_place(builder, expr_id);
-                Operand::Copy(place)
+                let place = self.lower_expr_to_place(builder, expr_id)?;
+                Ok(Operand::Copy(place))
             }
         }
     }
@@ -976,20 +1021,24 @@ impl<'hir> MirLoweringContext<'hir> {
     /// For direct function references (`HirExprKind::Var` pointing to a function),
     /// this produces a `FnDef` constant. For function pointers in variables or
     /// complex expressions, this produces a Copy/Move operand.
-    fn lower_callee_operand(&mut self, builder: &mut MirBuilder, callee_id: ExprId) -> Operand {
+    fn lower_callee_operand(
+        &mut self,
+        builder: &mut MirBuilder,
+        callee_id: ExprId,
+    ) -> IceResult<Operand> {
         let callee = self.hir.expr(callee_id);
         if let HirExprKind::Var(def_id) = &callee.kind
             && !self.local_map.contains_key(def_id)
         {
             // Direct function reference (not a local variable)
-            return Operand::Constant(Constant::FnDef(*def_id));
+            return Ok(Operand::Constant(Constant::FnDef(*def_id)));
         }
         // Function pointer in variable or complex expression
         self.lower_expr_as_operand(builder, callee_id)
     }
 
     /// Lower a statement.
-    fn lower_stmt(&mut self, builder: &mut MirBuilder, stmt_id: StmtId) {
+    fn lower_stmt(&mut self, builder: &mut MirBuilder, stmt_id: StmtId) -> IceResult<()> {
         let stmt = self.hir.stmt(stmt_id);
         let span = stmt.span.clone();
 
@@ -1004,7 +1053,7 @@ impl<'hir> MirLoweringContext<'hir> {
                         builder.push_statement(Statement::storage_live(local, span.clone()));
 
                         if let Some(init_id) = init {
-                            let operand = self.lower_expr_as_operand(builder, *init_id);
+                            let operand = self.lower_expr_as_operand(builder, *init_id)?;
                             let place = Place::from_local(local);
                             builder.push_statement(Statement::assign(
                                 place,
@@ -1016,7 +1065,7 @@ impl<'hir> MirLoweringContext<'hir> {
                     HirPatKind::Wildcard => {
                         if let Some(init_id) = init {
                             // Evaluate the init expression for side effects, discard result
-                            let _ = self.lower_expr_to_place(builder, *init_id);
+                            let _ = self.lower_expr_to_place(builder, *init_id)?;
                         }
                     }
                     // Complex patterns need place-based destructuring
@@ -1025,9 +1074,9 @@ impl<'hir> MirLoweringContext<'hir> {
                     | HirPatKind::Ref { .. } => {
                         if let Some(init_id) = init {
                             // Lower the initializer to a place
-                            let init_place = self.lower_expr_to_place(builder, *init_id);
+                            let init_place = self.lower_expr_to_place(builder, *init_id)?;
                             // Lower the pattern, binding variables to projections of init_place
-                            self.lower_pattern(builder, *pat, init_place, span);
+                            self.lower_pattern(builder, *pat, init_place, span)?;
                         } else {
                             // No initializer - just allocate locals for bindings without assigning
                             self.lower_pattern_without_init(builder, *pat, span);
@@ -1036,16 +1085,17 @@ impl<'hir> MirLoweringContext<'hir> {
                     HirPatKind::Literal(_) | HirPatKind::Missing => {
                         // Literal patterns are for matching, Missing is error recovery
                         if let Some(init_id) = init {
-                            let _ = self.lower_expr_to_place(builder, *init_id);
+                            let _ = self.lower_expr_to_place(builder, *init_id)?;
                         }
                     }
                 }
             }
             HirStmtKind::Expr { expr, has_semi: _ } => {
                 // Evaluate expression for side effects
-                let _ = self.lower_expr_to_place(builder, *expr);
+                let _ = self.lower_expr_to_place(builder, *expr)?;
             }
         }
+        Ok(())
     }
 
     /// Lower a pattern, binding its variables to parts of the given place.
@@ -1058,7 +1108,7 @@ impl<'hir> MirLoweringContext<'hir> {
         pat_id: crate::hir::PatId,
         source: Place,
         span: Span,
-    ) {
+    ) -> IceResult<()> {
         let pat = self.hir.pat(pat_id);
         match &pat.kind {
             HirPatKind::Bind { def_id, mutable } => {
@@ -1086,7 +1136,7 @@ impl<'hir> MirLoweringContext<'hir> {
                             proj
                         },
                     };
-                    self.lower_pattern(builder, *elem_pat_id, field_place, span.clone());
+                    self.lower_pattern(builder, *elem_pat_id, field_place, span.clone())?;
                 }
             }
             HirPatKind::Struct {
@@ -1096,7 +1146,8 @@ impl<'hir> MirLoweringContext<'hir> {
             } => {
                 // For each field pattern, look up the field index and project
                 for (field_name, field_pat_id) in fields {
-                    let field_idx = self.resolve_field_index(*def_id, field_name);
+                    let field_idx =
+                        self.resolve_field_index(*def_id, field_name, Some(span.clone()))?;
                     let field_place = Place {
                         local: source.local,
                         projection: {
@@ -1105,7 +1156,7 @@ impl<'hir> MirLoweringContext<'hir> {
                             proj
                         },
                     };
-                    self.lower_pattern(builder, *field_pat_id, field_place, span.clone());
+                    self.lower_pattern(builder, *field_pat_id, field_place, span.clone())?;
                 }
             }
             HirPatKind::Ref { mutable: _, inner } => {
@@ -1118,13 +1169,14 @@ impl<'hir> MirLoweringContext<'hir> {
                         proj
                     },
                 };
-                self.lower_pattern(builder, *inner, deref_place, span);
+                self.lower_pattern(builder, *inner, deref_place, span)?;
             }
             // Wildcard doesn't bind anything (source already evaluated)
             // Literal patterns are for matching, not binding
             // Missing pattern - nothing to bind either
             HirPatKind::Wildcard | HirPatKind::Literal(_) | HirPatKind::Missing => {}
         }
+        Ok(())
     }
 
     /// Lower a pattern without an initializer (just allocate locals).
@@ -1162,22 +1214,22 @@ impl<'hir> MirLoweringContext<'hir> {
 
     /// Lower a complete function to MIR.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the function contains:
+    /// Returns an `IceError` if the function contains invariant violations:
     /// - Invalid `DefId` references (undefined variables or types)
     /// - Invalid struct field accesses (field not found in struct)
     /// - Malformed HIR expressions that violate type system invariants
     ///
     /// These conditions indicate compiler bugs, not user errors.
-    pub fn lower_function(&mut self, func: &HirFunction) -> Body {
+    pub fn lower_function(&mut self, func: &HirFunction) -> IceResult<Body> {
         let mut builder = self.start_function(func);
         let span = func.span.clone();
 
         // Lower the body if present
         if let Some(body_expr) = func.body {
             // Lower the body expression
-            let result = self.lower_expr_as_operand(&mut builder, body_expr);
+            let result = self.lower_expr_as_operand(&mut builder, body_expr)?;
 
             // Check if the return type is unit
             let is_unit = {
@@ -1197,6 +1249,6 @@ impl<'hir> MirLoweringContext<'hir> {
         builder.set_terminator(TerminatorKind::Return, span);
 
         // Preserve function metadata (def_id and name) from HIR
-        builder.finish_with_metadata(func.params.len(), func.def_id, func.name.clone())
+        Ok(builder.finish_with_metadata(func.params.len(), func.def_id, func.name.clone()))
     }
 }

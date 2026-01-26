@@ -75,7 +75,17 @@ pub fn compile_package(package: &Package) -> CompileResult {
     let hir_db = hir::lower::lower_package_to_hir(package, &infer_result);
 
     // Phase 4: MIR lowering
-    let bodies = mir::lower_hir_to_mir(&hir_db);
+    let bodies = match mir::lower_hir_to_mir(&hir_db) {
+        Ok(bodies) => bodies,
+        Err(ice) => {
+            diagnostics.push(ice.to_diagnostic());
+            return CompileResult {
+                bodies: None,
+                types: None,
+                diagnostics,
+            };
+        }
+    };
 
     // Preserve the type interner for codegen
     let types = hir_db.types;
