@@ -72,7 +72,6 @@ use folding::{
     parse_char_literal, parse_float_literal_value, parse_int_literal_value, parse_string_literal,
 };
 use rowan::ast::AstNode;
-use rustc_hash::FxHashMap;
 
 // ============================================================================
 // Public API
@@ -118,41 +117,26 @@ fn lower_package_files(package: &crate::package::Package, ctx: &mut LoweringCont
 // ============================================================================
 
 /// Context for lowering AST to HIR.
-struct LoweringContext {
+///
+/// Holds a reference to `InferResult` to avoid cloning `HashMap`s.
+struct LoweringContext<'a> {
     db: HirDatabase,
-    /// Map from expression spans to their inferred types.
-    expr_types: FxHashMap<Span, TypeId>,
-    /// Map from `DefIds` to their inferred types.
-    binding_types: FxHashMap<DefId, TypeId>,
-    /// Map from spans to resolved `DefIds`.
-    resolutions: FxHashMap<Span, DefId>,
-    /// Map from method call spans to their resolved method `DefIds`.
-    method_resolutions: FxHashMap<Span, DefId>,
-    /// Map from type annotation spans to their resolved `TypeIds`.
-    type_annotation_types: FxHashMap<Span, TypeId>,
-    /// Intrinsic methods that need special lowering (e.g., `str.ptr()` -> field 0).
-    intrinsic_methods: FxHashMap<DefId, crate::sema::infer::IntrinsicKind>,
+    /// Reference to inference results (types, resolutions, etc.).
+    infer_result: &'a InferResult,
 }
 
-impl LoweringContext {
-    fn new(infer_result: &InferResult) -> Self {
+impl<'a> LoweringContext<'a> {
+    fn new(infer_result: &'a InferResult) -> Self {
         let mut db = HirDatabase::new();
         // Clone the type interner from the inference result
         db.types = infer_result.types.clone();
 
-        Self {
-            db,
-            expr_types: infer_result.expr_types.clone(),
-            binding_types: infer_result.binding_types.clone(),
-            resolutions: infer_result.resolutions.clone(),
-            method_resolutions: infer_result.method_resolutions.clone(),
-            type_annotation_types: infer_result.type_annotation_types.clone(),
-            intrinsic_methods: infer_result.intrinsic_methods.clone(),
-        }
+        Self { db, infer_result }
     }
 
     fn into_database(mut self) -> HirDatabase {
-        self.db.binding_types = self.binding_types;
+        // Only clone binding_types at the end (the only map needed by HirDatabase)
+        self.db.binding_types = self.infer_result.binding_types.clone();
         self.db
     }
 
@@ -165,7 +149,8 @@ impl LoweringContext {
     }
 
     fn get_type(&self, span: &Span) -> TypeId {
-        self.expr_types
+        self.infer_result
+            .expr_types
             .get(span)
             .copied()
             .unwrap_or_else(|| self.db.types.error())
@@ -173,14 +158,16 @@ impl LoweringContext {
 
     /// Get the type for a type annotation (like `-> i32` or `: bool`).
     fn get_type_annotation(&self, span: &Span) -> TypeId {
-        self.type_annotation_types
+        self.infer_result
+            .type_annotation_types
             .get(span)
             .copied()
             .unwrap_or_else(|| self.db.types.error())
     }
 
     fn get_binding_type(&self, def_id: DefId) -> TypeId {
-        self.binding_types
+        self.infer_result
+            .binding_types
             .get(&def_id)
             .copied()
             .unwrap_or_else(|| self.db.types.error())
@@ -255,6 +242,7 @@ impl LoweringContext {
         // Get DefId from the function name span (use token range to match resolver)
         let name_span = Self::text_range_to_span(ident_token.text_range());
         let def_id = self
+            .infer_result
             .resolutions
             .get(&name_span)
             .copied()
@@ -307,6 +295,7 @@ impl LoweringContext {
         // Get DefId from the function name span
         let name_span = Self::text_range_to_span(ident_token.text_range());
         let def_id = self
+            .infer_result
             .resolutions
             .get(&name_span)
             .copied()
@@ -360,6 +349,7 @@ impl LoweringContext {
         // Use the token's range to match how resolutions are stored
         let name_span = Self::text_range_to_span(ident_token.text_range());
         let def_id = self
+            .infer_result
             .resolutions
             .get(&name_span)
             .copied()
@@ -398,6 +388,7 @@ impl LoweringContext {
             .and_then(|n| n.resolution_span())
             .unwrap_or_else(|| span.clone());
         let def_id = self
+            .infer_result
             .resolutions
             .get(&name_span)
             .copied()
@@ -437,6 +428,7 @@ impl LoweringContext {
             .and_then(|n| n.resolution_span())
             .unwrap_or_else(|| span.clone());
         let def_id = self
+            .infer_result
             .resolutions
             .get(&name_span)
             .copied()
@@ -466,6 +458,7 @@ impl LoweringContext {
             .and_then(|n| n.resolution_span())
             .unwrap_or_else(|| span.clone());
         let def_id = self
+            .infer_result
             .resolutions
             .get(&name_span)
             .copied()
@@ -619,6 +612,7 @@ impl LoweringContext {
                     .unwrap_or_else(|| span.clone());
 
                 let def_id = self
+                    .infer_result
                     .resolutions
                     .get(&name_span)
                     .copied()
@@ -671,6 +665,7 @@ impl LoweringContext {
                     .map(|t| Self::text_range_to_span(t.text_range()))
                     .unwrap_or_else(|| span.clone());
                 let def_id = self
+                    .infer_result
                     .resolutions
                     .get(&path_span)
                     .copied()
@@ -691,6 +686,7 @@ impl LoweringContext {
                             // Shorthand: `{ x }` means `{ x: x }`
                             let field_span = Self::text_range_to_span(f.syntax().text_range());
                             let field_def_id = self
+                                .infer_result
                                 .resolutions
                                 .get(&field_span)
                                 .copied()
@@ -867,6 +863,7 @@ impl LoweringContext {
                 .unwrap_or_else(|| span.clone());
 
             let def_id = self
+                .infer_result
                 .resolutions
                 .get(&first_span)
                 .copied()
@@ -894,6 +891,7 @@ impl LoweringContext {
             .unwrap_or_else(|| span.clone());
 
         let def_id = self
+            .infer_result
             .resolutions
             .get(&first_span)
             .copied()
@@ -1260,6 +1258,7 @@ impl LoweringContext {
             .unwrap_or_else(|| span.clone());
 
         let def_id = self
+            .infer_result
             .resolutions
             .get(&path_span)
             .copied()
@@ -1311,8 +1310,8 @@ impl LoweringContext {
                 .map(|t| Self::text_range_to_span(t.text_range()));
 
             if let Some(ref first_span) = first_span
-                && let Some(&first_def_id) = self.resolutions.get(first_span)
-                && self.binding_types.contains_key(&first_def_id)
+                && let Some(&first_def_id) = self.infer_result.resolutions.get(first_span)
+                && self.infer_result.binding_types.contains_key(&first_def_id)
             {
                 // First segment is a variable - this is an instance method call
                 return self.lower_path_method_call(call, &segments, span, ty);
@@ -1328,9 +1327,10 @@ impl LoweringContext {
             .unwrap_or_else(|| span.clone());
 
         let def_id = self
+            .infer_result
             .resolutions
             .get(&fn_span)
-            .or_else(|| self.method_resolutions.get(&span))
+            .or_else(|| self.infer_result.method_resolutions.get(&span))
             .copied()
             .unwrap_or(DefId::INVALID);
 
@@ -1356,7 +1356,7 @@ impl LoweringContext {
         let expr_id = self.db.alloc_expr(expr);
 
         // Store method resolution if present
-        if let Some(&method_def_id) = self.method_resolutions.get(&span) {
+        if let Some(&method_def_id) = self.infer_result.method_resolutions.get(&span) {
             self.db.method_resolutions.insert(expr_id, method_def_id);
         }
 
@@ -1376,8 +1376,8 @@ impl LoweringContext {
             .unwrap_or_else(|| self.lower_missing(span.clone()));
 
         // Check if this is an intrinsic method
-        if let Some(&method_def_id) = self.method_resolutions.get(&span)
-            && let Some(intrinsic) = self.intrinsic_methods.get(&method_def_id).cloned()
+        if let Some(&method_def_id) = self.infer_result.method_resolutions.get(&span)
+            && let Some(intrinsic) = self.infer_result.intrinsic_methods.get(&method_def_id).cloned()
         {
             match intrinsic {
                 crate::sema::infer::IntrinsicKind::FieldAccess(index) => {
@@ -1421,7 +1421,7 @@ impl LoweringContext {
         };
         let expr_id = self.db.alloc_expr(expr);
 
-        if let Some(&method_def_id) = self.method_resolutions.get(&span) {
+        if let Some(&method_def_id) = self.infer_result.method_resolutions.get(&span) {
             self.db.method_resolutions.insert(expr_id, method_def_id);
         }
 
@@ -1444,12 +1444,14 @@ impl LoweringContext {
             .unwrap_or_else(|| span.clone());
 
         let receiver_def_id = self
+            .infer_result
             .resolutions
             .get(&receiver_span)
             .copied()
             .unwrap_or(DefId::INVALID);
 
         let receiver_ty = self
+            .infer_result
             .binding_types
             .get(&receiver_def_id)
             .copied()
@@ -1488,7 +1490,7 @@ impl LoweringContext {
         };
         let expr_id = self.db.alloc_expr(expr);
 
-        if let Some(&method_def_id) = self.method_resolutions.get(&span) {
+        if let Some(&method_def_id) = self.infer_result.method_resolutions.get(&span) {
             self.db.method_resolutions.insert(expr_id, method_def_id);
         }
 
