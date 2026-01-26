@@ -8898,3 +8898,82 @@ fn test_match_diverging_arm() {
         "Diverging arm (return 42) should have Return terminator"
     );
 }
+
+// ========== Is Expression Tests ==========
+
+#[test]
+fn is_expr_literal_generates_comparison() {
+    // 42 is 42 should generate BinaryOp::Eq, not a constant
+    let bodies = lower_source("fn main(): bool { 42 is 42 }");
+    let body = &bodies[0];
+
+    // Find a BinaryOp::Eq statement (the comparison)
+    let has_eq_comparison = body.basic_blocks.iter().any(|bb| {
+        bb.statements
+            .iter()
+            .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Eq, _, _))))
+    });
+    assert!(
+        has_eq_comparison,
+        "is expression should generate Eq comparison for literals"
+    );
+}
+
+#[test]
+fn is_expr_wildcard_generates_constant_true() {
+    // 42 is _ should generate constant true (wildcard always matches)
+    let bodies = lower_source("fn main(): bool { 42 is _ }");
+    let body = &bodies[0];
+
+    let has_const_true = body.basic_blocks.iter().any(|bb| {
+        bb.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Bool(true))))
+            )
+        })
+    });
+    assert!(has_const_true, "is _ should generate constant true");
+}
+
+#[test]
+fn is_not_wildcard_generates_constant_false() {
+    // 42 is not _ should generate constant false
+    let bodies = lower_source("fn main(): bool { 42 is not _ }");
+    let body = &bodies[0];
+
+    let has_const_false = body.basic_blocks.iter().any(|bb| {
+        bb.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Bool(false))))
+            )
+        })
+    });
+    assert!(
+        has_const_false,
+        "is not _ should generate constant false"
+    );
+}
+
+#[test]
+fn is_not_literal_generates_ne_comparison() {
+    // 42 is not 0 should generate BinaryOp::Ne (or Eq + Not)
+    let bodies = lower_source("fn main(): bool { 42 is not 0 }");
+    let body = &bodies[0];
+
+    // Should have either Ne comparison or Eq + Not
+    let has_ne_or_negation = body.basic_blocks.iter().any(|bb| {
+        bb.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Ne, _, _))
+                    | StatementKind::Assign(_, Rvalue::UnaryOp(UnOp::Not, _))
+            )
+        })
+    });
+    assert!(
+        has_ne_or_negation,
+        "is not should generate Ne or negation"
+    );
+}

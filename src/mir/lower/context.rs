@@ -438,33 +438,44 @@ impl<'hir> MirLoweringContext<'hir> {
                 pattern,
                 negated,
             } => {
-                // For now, `is` expressions produce a boolean result
-                // TODO: Implement proper pattern matching lowering
-                // Currently just evaluates scrutinee and returns true/false based on pattern
-                let _scrutinee_val = self.lower_expr_as_operand(builder, *scrutinee)?;
-
-                // Check if pattern is wildcard or catch-all binding (always matches)
+                let scrutinee_val = self.lower_expr_as_operand(builder, *scrutinee)?;
                 let pat = self.hir.pat(*pattern);
-                let always_matches = matches!(
-                    pat.kind,
-                    crate::hir::HirPatKind::Wildcard | crate::hir::HirPatKind::Bind { .. }
-                );
-
-                let result = if always_matches {
-                    !negated
-                } else {
-                    // For literal patterns, we'd need to compare values
-                    // For now, return false for non-wildcard patterns (conservative)
-                    *negated
-                };
 
                 let temp = builder.alloc_temp(ty);
                 let place = Place::from_local(temp);
-                builder.push_statement(Statement::assign(
-                    place.clone(),
-                    Rvalue::Use(Operand::Constant(Constant::Bool(result))),
-                    span,
-                ));
+
+                match &pat.kind {
+                    // Wildcard/binding always matches
+                    crate::hir::HirPatKind::Wildcard | crate::hir::HirPatKind::Bind { .. } => {
+                        let result = !negated;
+                        builder.push_statement(Statement::assign(
+                            place.clone(),
+                            Rvalue::Use(Operand::Constant(Constant::Bool(result))),
+                            span,
+                        ));
+                    }
+
+                    // Literal patterns: compare scrutinee to literal
+                    crate::hir::HirPatKind::Literal(lit) => {
+                        let pattern_operand = literal_to_operand(lit, pat.ty);
+                        let cmp_op = if *negated { BinOp::Ne } else { BinOp::Eq };
+                        builder.push_statement(Statement::assign(
+                            place.clone(),
+                            Rvalue::BinaryOp(cmp_op, scrutinee_val, pattern_operand),
+                            span,
+                        ));
+                    }
+
+                    // Other patterns: fall back to false (conservative)
+                    _ => {
+                        builder.push_statement(Statement::assign(
+                            place.clone(),
+                            Rvalue::Use(Operand::Constant(Constant::Bool(*negated))),
+                            span,
+                        ));
+                    }
+                }
+
                 Ok(place)
             }
             HirExprKind::Match { scrutinee, arms } => {
