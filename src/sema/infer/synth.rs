@@ -277,7 +277,7 @@ impl<'a> InferEngine<'a> {
                     span: _,
                 } => self.synth_lowered_float(suffix),
                 LoweredExpr::BoolLiteral { .. } => self.types.bool(),
-                LoweredExpr::Passthrough => unreachable!(),
+                LoweredExpr::Passthrough => unreachable!("Passthrough should not appear in binary expression"),
             };
             self.expr_types.insert(span, type_id);
             return type_id;

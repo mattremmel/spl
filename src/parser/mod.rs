@@ -99,16 +99,6 @@ const STMT_RECOVERY_SET: &[SyntaxKind] = &[
     SyntaxKind::SEMI,
 ];
 
-/// Tokens that typically end expressions.
-#[allow(dead_code)]
-const EXPR_RECOVERY_SET: &[SyntaxKind] = &[
-    SyntaxKind::SEMI,
-    SyntaxKind::R_PAREN,
-    SyntaxKind::R_BRACKET,
-    SyntaxKind::R_BRACE,
-    SyntaxKind::COMMA,
-];
-
 /// Maximum number of tokens to skip during error recovery.
 /// Prevents infinite loops or excessive CPU usage on malformed input.
 const MAX_RECOVERY_TOKENS: usize = 500;
@@ -567,7 +557,7 @@ impl Marker {
         if self.pos == p.events.len() - 1 {
             match p.events.pop() {
                 Some(Event::Placeholder) => {}
-                _ => unreachable!(),
+                _ => unreachable!("Marker abandon: expected Placeholder event at position {}", self.pos),
             }
         }
     }
@@ -598,7 +588,7 @@ impl CompletedMarker {
         if let Event::Start { forward_parent, .. } = &mut p.events[self.pos] {
             *forward_parent = Some(new_pos - self.pos);
         } else {
-            unreachable!();
+            unreachable!("CompletedMarker precede: expected Start event at position {}", self.pos);
         }
 
         Marker::new(new_pos)

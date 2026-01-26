@@ -120,11 +120,13 @@ pub struct CompileResult {
 
 impl CompileResult {
     /// Returns `true` if compilation succeeded (no errors).
+    #[must_use]
     pub fn is_ok(&self) -> bool {
         self.bodies.is_some()
     }
 
     /// Returns `true` if compilation failed (has errors).
+    #[must_use]
     pub fn is_err(&self) -> bool {
         self.bodies.is_none()
     }
@@ -163,6 +165,7 @@ impl CompileResult {
 ///     }
 /// }
 /// ```
+#[must_use]
 pub fn compile(source: &str) -> CompileResult {
     let mut diagnostics = Vec::new();
 
@@ -234,44 +237,23 @@ pub fn compile(source: &str) -> CompileResult {
 // JIT Execution API
 // ============================================================================
 
+use thiserror::Error;
+
 /// Errors that can occur during JIT execution.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum JitError {
     /// Compilation failed with diagnostics.
+    #[error("compilation failed with {} error(s)", .0.len())]
     CompileError(Vec<Diagnostic>),
     /// Code generation failed.
-    CodegenError(codegen::CodegenError),
+    #[error("codegen error: {0}")]
+    CodegenError(#[from] codegen::CodegenError),
     /// Runtime error during execution.
-    RuntimeError(codegen::RuntimeError),
+    #[error("runtime error: {0}")]
+    RuntimeError(#[from] codegen::RuntimeError),
     /// No main function found in the program.
+    #[error("no main function found")]
     NoMain,
-}
-
-impl std::fmt::Display for JitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            JitError::CompileError(diags) => {
-                write!(f, "compilation failed with {} error(s)", diags.len())
-            }
-            JitError::CodegenError(e) => write!(f, "codegen error: {e}"),
-            JitError::RuntimeError(e) => write!(f, "runtime error: {e}"),
-            JitError::NoMain => write!(f, "no main function found"),
-        }
-    }
-}
-
-impl std::error::Error for JitError {}
-
-impl From<codegen::CodegenError> for JitError {
-    fn from(e: codegen::CodegenError) -> Self {
-        JitError::CodegenError(e)
-    }
-}
-
-impl From<codegen::RuntimeError> for JitError {
-    fn from(e: codegen::RuntimeError) -> Self {
-        JitError::RuntimeError(e)
-    }
 }
 
 /// Compile and execute SPL source code, returning the i32 result of `main()`.
@@ -294,6 +276,7 @@ impl From<codegen::RuntimeError> for JitError {
 /// Returns `JitError::NoMain` if no `main` function is defined.
 /// Returns `JitError::CodegenError` if code generation fails.
 /// Returns `JitError::RuntimeError` if execution fails (e.g., traps).
+#[must_use = "JIT execution result should be used"]
 pub fn jit_execute(source: &str) -> Result<i32, JitError> {
     // Compile source to MIR
     let result = compile(source);
@@ -346,61 +329,23 @@ pub fn jit_execute(source: &str) -> Result<i32, JitError> {
 use std::path::Path;
 
 /// Errors that can occur during AOT compilation.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum AotError {
     /// Compilation failed with diagnostics.
+    #[error("compilation failed with {} error(s)", .0.len())]
     CompileError(Vec<Diagnostic>),
     /// Code generation failed.
-    CodegenError(codegen::CodegenError),
+    #[error("codegen error: {0}")]
+    CodegenError(#[from] codegen::CodegenError),
     /// Linking failed.
-    LinkError(codegen::LinkError),
+    #[error("link error: {0}")]
+    LinkError(#[from] codegen::LinkError),
     /// No functions to compile.
+    #[error("no functions to compile")]
     NoFunctions,
     /// IO error (writing files, etc.).
-    Io(std::io::Error),
-}
-
-impl std::fmt::Display for AotError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AotError::CompileError(diags) => {
-                write!(f, "compilation failed with {} error(s)", diags.len())
-            }
-            AotError::CodegenError(e) => write!(f, "codegen error: {e}"),
-            AotError::LinkError(e) => write!(f, "link error: {e}"),
-            AotError::NoFunctions => write!(f, "no functions to compile"),
-            AotError::Io(e) => write!(f, "IO error: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for AotError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            AotError::CodegenError(e) => Some(e),
-            AotError::LinkError(e) => Some(e),
-            AotError::Io(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl From<codegen::CodegenError> for AotError {
-    fn from(e: codegen::CodegenError) -> Self {
-        AotError::CodegenError(e)
-    }
-}
-
-impl From<codegen::LinkError> for AotError {
-    fn from(e: codegen::LinkError) -> Self {
-        AotError::LinkError(e)
-    }
-}
-
-impl From<std::io::Error> for AotError {
-    fn from(e: std::io::Error) -> Self {
-        AotError::Io(e)
-    }
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// Compile SPL source code to an object file.
@@ -421,6 +366,7 @@ impl From<std::io::Error> for AotError {
 /// Returns `AotError::CompileError` if the source has syntax or semantic errors.
 /// Returns `AotError::NoFunctions` if no functions are defined.
 /// Returns `AotError::CodegenError` if code generation fails.
+#[must_use = "compiled object bytes should be used"]
 pub fn compile_to_object(source: &str) -> Result<Vec<u8>, AotError> {
     // Compile source to MIR
     let result = compile(source);
@@ -478,6 +424,7 @@ pub fn compile_to_object(source: &str) -> Result<Vec<u8>, AotError> {
 /// Returns `AotError::NoFunctions` if no functions are defined.
 /// Returns `AotError::CodegenError` if code generation fails.
 /// Returns `AotError::LinkError` if linking fails.
+#[must_use = "compilation result should be checked for errors"]
 pub fn compile_and_link(source: &str, output: &Path) -> Result<(), AotError> {
     let object_bytes = compile_to_object(source)?;
     codegen::link_object_to_executable(&object_bytes, output, None)?;
@@ -505,6 +452,7 @@ pub fn compile_and_link(source: &str, output: &Path) -> Result<(), AotError> {
 ///     &options,
 /// ).unwrap();
 /// ```
+#[must_use = "compilation result should be checked for errors"]
 pub fn compile_and_link_with_options(
     source: &str,
     output: &Path,

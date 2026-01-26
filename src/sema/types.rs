@@ -64,6 +64,12 @@ pub enum PrimitiveKind {
     Str,
 }
 
+impl std::fmt::Display for PrimitiveKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 impl PrimitiveKind {
     /// Validate that an integer literal value is in range for this primitive type.
     /// Returns `Ok(())` if in range, or `Err(message)` with a descriptive error.
@@ -223,6 +229,48 @@ pub enum Type {
     /// An error type for error recovery during type checking.
     /// This type unifies with anything to prevent cascading errors.
     Error,
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Primitive(p) => write!(f, "{p}"),
+            Type::Infer(var, _) => write!(f, "?{}", var.0),
+            Type::Ref(Mutability::Shared, inner) => write!(f, "&{inner:?}"),
+            Type::Ref(Mutability::Mutable, inner) => write!(f, "&mut {inner:?}"),
+            Type::RawPtr(Mutability::Shared, inner) => write!(f, "*const {inner:?}"),
+            Type::RawPtr(Mutability::Mutable, inner) => write!(f, "*mut {inner:?}"),
+            Type::Array(elem, len) => write!(f, "[{elem:?}; {len}]"),
+            Type::Slice(elem) => write!(f, "[{elem:?}]"),
+            Type::Tuple(elems) => {
+                write!(f, "(")?;
+                for (i, e) in elems.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{e:?}")?;
+                }
+                write!(f, ")")
+            }
+            Type::Struct(def_id, _) => write!(f, "struct#{}", def_id.0),
+            Type::Alias(def_id, _) => write!(f, "alias#{}", def_id.0),
+            Type::FnPtr { params, ret } => {
+                write!(f, "fn(")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{p:?}")?;
+                }
+                write!(f, ") -> {ret:?}")
+            }
+            Type::Param(def_id) => write!(f, "T#{}", def_id.0),
+            Type::SelfType => write!(f, "Self"),
+            Type::StrRef => write!(f, "&str"),
+            Type::Module(def_id) => write!(f, "mod#{}", def_id.0),
+            Type::Error => write!(f, "<error>"),
+        }
+    }
 }
 
 /// An interner for semantic types.

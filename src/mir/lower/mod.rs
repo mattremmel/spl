@@ -56,6 +56,19 @@ use crate::hir::{HirDatabase, HirItem};
 use crate::mir::body::Body;
 
 /// Lower all functions in an HIR database to MIR bodies.
+///
+/// # Panics
+///
+/// Panics if the HIR database contains invariant violations:
+/// - Unresolved types (`Type::Error` in non-error-recovery positions)
+/// - Missing expressions (`HirExprKind::Missing`) in invalid contexts
+/// - Invalid `DefId` references (variables not in scope)
+/// - Malformed struct field references
+///
+/// These conditions indicate bugs in earlier compiler phases (parsing,
+/// name resolution, type inference, or HIR lowering), not user errors.
+/// The user should have already received error diagnostics for any
+/// issues in their source code.
 pub fn lower_hir_to_mir(hir: &HirDatabase) -> Vec<Body> {
     let mut ctx = MirLoweringContext::new(hir);
 

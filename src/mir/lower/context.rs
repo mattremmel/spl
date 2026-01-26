@@ -1161,6 +1161,15 @@ impl<'hir> MirLoweringContext<'hir> {
     }
 
     /// Lower a complete function to MIR.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the function contains:
+    /// - Invalid `DefId` references (undefined variables or types)
+    /// - Invalid struct field accesses (field not found in struct)
+    /// - Malformed HIR expressions that violate type system invariants
+    ///
+    /// These conditions indicate compiler bugs, not user errors.
     pub fn lower_function(&mut self, func: &HirFunction) -> Body {
         let mut builder = self.start_function(func);
         let span = func.span.clone();

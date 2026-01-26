@@ -73,6 +73,25 @@ pub enum SymbolKind {
     Trait,
 }
 
+impl std::fmt::Display for SymbolKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Function => "function",
+            Self::Struct => "struct",
+            Self::TypeAlias => "type alias",
+            Self::Impl => "impl",
+            Self::Module => "module",
+            Self::Local => "local",
+            Self::Parameter => "parameter",
+            Self::Field => "field",
+            Self::TypeParam => "type parameter",
+            Self::SelfParam => "self parameter",
+            Self::Trait => "trait",
+        };
+        f.write_str(s)
+    }
+}
+
 /// Visibility of a symbol.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Visibility {

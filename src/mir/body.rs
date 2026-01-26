@@ -197,6 +197,11 @@ impl Body {
         self.locals.len()
     }
 
+    /// Get the entry block of this function.
+    pub fn entry_block(&self) -> BasicBlock {
+        BasicBlock::ENTRY
+    }
+
     /// Validate that all blocks have terminators and all successors are valid.
     ///
     /// Returns `Ok(())` if valid, or `Err` with a description of the problem.
