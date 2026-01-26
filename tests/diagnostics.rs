@@ -281,6 +281,12 @@ fn range_type_mismatch() {
 }
 
 #[test]
+fn range_int_float_type_mismatch() {
+    // Range with int start and float end should be a type mismatch
+    check_contains("fn main() { let r = 0..10.0; }", "type mismatch");
+}
+
+#[test]
 fn for_loop_variable_type_from_range() {
     // Loop var should be i32 from range, not compatible with bool
     check_contains(

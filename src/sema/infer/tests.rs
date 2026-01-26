@@ -5101,3 +5101,8 @@ fn alternating_struct_tuple_pattern() {
         "i32",
     );
 }
+
+#[test]
+fn range_int_float_mismatch() {
+    check_err("fn main() { let r = 0..10.0; }", &["type mismatch"]);
+}

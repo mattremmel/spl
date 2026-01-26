@@ -1095,6 +1095,21 @@ mod tests {
     }
 
     #[test]
+    fn unify_err_int_var_vs_float_var() {
+        // {int} vs {float} should fail with ConstraintViolation
+        let resolve_result = create_test_resolve_result();
+        let mut engine = create_test_engine(&resolve_result);
+        let int_var = engine.fresh_int_var();
+        let float_var = engine.fresh_float_var();
+
+        let result = engine.unify(int_var, float_var);
+        assert!(
+            result.is_err(),
+            "expected unification of {{int}} and {{float}} to fail"
+        );
+    }
+
+    #[test]
     fn unify_err_struct_def_mismatch() {
         // Foo vs Bar (different struct DefIds) should fail with TypeMismatch
         let resolve_result = create_test_resolve_result();
