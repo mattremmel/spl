@@ -18,6 +18,7 @@
 //! ```
 
 use crate::ast::SourceFile;
+use crate::lexer::Span;
 use crate::mir::{BasicBlockData, Body, Constant, Operand, Rvalue, StatementKind, TerminatorKind};
 use crate::parser::ParseError;
 use crate::sema::{InferResult, ResolveResult};
@@ -101,6 +102,59 @@ pub fn compile_err(source: &str) -> Vec<Diagnostic> {
 pub fn session(source: &str) -> CompileSession<'_> {
     CompileSession::new(source)
 }
+
+// ============================================================================
+// Span Utilities
+// ============================================================================
+
+/// Extract the source text for a span.
+///
+/// Returns the substring of `source` covered by `span`.
+///
+/// # Panics
+///
+/// Panics if the span is out of bounds for the source string.
+///
+/// # Example
+///
+/// ```
+/// use spl::testing::span_to_source;
+///
+/// let source = "let x = 42;";
+/// let span = 4..5; // 'x'
+/// assert_eq!(span_to_source(source, &span), "x");
+/// ```
+pub fn span_to_source<'a>(source: &'a str, span: &Span) -> &'a str {
+    &source[span.clone()]
+}
+
+/// Assert a span covers expected source text.
+///
+/// # Panics
+///
+/// Panics if the span doesn't cover the expected text.
+///
+/// # Example
+///
+/// ```
+/// use spl::testing::assert_span_text;
+///
+/// let source = "let x = 42;";
+/// let span = 4..5;
+/// assert_span_text(source, &span, "x");
+/// ```
+pub fn assert_span_text(source: &str, span: &Span, expected: &str) {
+    let actual = span_to_source(source, span);
+    assert_eq!(
+        actual, expected,
+        "Span {}..{} should be '{}' but was '{}'",
+        span.start, span.end, expected, actual
+    );
+}
+
+// ============================================================================
+// Diagnostic Formatting
+// ============================================================================
 
 /// Format diagnostics for display in test output.
 ///

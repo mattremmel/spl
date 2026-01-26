@@ -42,6 +42,8 @@ mod builder;
 mod context;
 mod helpers;
 #[cfg(test)]
+mod span_tests;
+#[cfg(test)]
 mod tests;
 
 pub use builder::MirBuilder;
