@@ -22,8 +22,8 @@ pub enum ResolveError {
 impl fmt::Display for ResolveError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ResolveError::FileNotFound(file) => write!(f, "file not found: {}", file),
-            ResolveError::ModuleNotFound(mod_name) => write!(f, "module not found: {}", mod_name),
+            ResolveError::FileNotFound(file) => write!(f, "file not found: {file}"),
+            ResolveError::ModuleNotFound(mod_name) => write!(f, "module not found: {mod_name}"),
         }
     }
 }
@@ -84,8 +84,8 @@ pub fn resolve_includes<S1: AsRef<str>, S2: AsRef<str>>(
     directives: &PackageDirectives,
     enabled_conditions: &[S2],
 ) -> Vec<String> {
-    let available_set: HashSet<&str> = available.iter().map(|s| s.as_ref()).collect();
-    let enabled_set: HashSet<&str> = enabled_conditions.iter().map(|s| s.as_ref()).collect();
+    let available_set: HashSet<&str> = available.iter().map(AsRef::as_ref).collect();
+    let enabled_set: HashSet<&str> = enabled_conditions.iter().map(AsRef::as_ref).collect();
 
     let mut result = if directives.no_auto_include {
         // Start with empty set, add only explicit includes
@@ -149,8 +149,8 @@ pub fn try_resolve_includes<S1: AsRef<str>, S2: AsRef<str>>(
     directives: &PackageDirectives,
     enabled_conditions: &[S2],
 ) -> Result<Vec<String>, ResolveError> {
-    let available_set: HashSet<&str> = available.iter().map(|s| s.as_ref()).collect();
-    let enabled_set: HashSet<&str> = enabled_conditions.iter().map(|s| s.as_ref()).collect();
+    let available_set: HashSet<&str> = available.iter().map(AsRef::as_ref).collect();
+    let enabled_set: HashSet<&str> = enabled_conditions.iter().map(AsRef::as_ref).collect();
 
     validate_explicit_includes(&directives.includes, &available_set, |f| {
         ResolveError::FileNotFound(f.clone())
@@ -185,8 +185,8 @@ pub fn resolve_modules<S1: AsRef<str>, S2: AsRef<str>>(
     directives: &PackageDirectives,
     enabled_conditions: &[S2],
 ) -> Vec<String> {
-    let available_set: HashSet<&str> = available.iter().map(|s| s.as_ref()).collect();
-    let enabled_set: HashSet<&str> = enabled_conditions.iter().map(|s| s.as_ref()).collect();
+    let available_set: HashSet<&str> = available.iter().map(AsRef::as_ref).collect();
+    let enabled_set: HashSet<&str> = enabled_conditions.iter().map(AsRef::as_ref).collect();
 
     let mut result = if directives.no_auto_include_modules {
         // Start with empty set, add only explicit includes
@@ -246,8 +246,8 @@ pub fn try_resolve_modules<S1: AsRef<str>, S2: AsRef<str>>(
     directives: &PackageDirectives,
     enabled_conditions: &[S2],
 ) -> Result<Vec<String>, ResolveError> {
-    let available_set: HashSet<&str> = available.iter().map(|s| s.as_ref()).collect();
-    let enabled_set: HashSet<&str> = enabled_conditions.iter().map(|s| s.as_ref()).collect();
+    let available_set: HashSet<&str> = available.iter().map(AsRef::as_ref).collect();
+    let enabled_set: HashSet<&str> = enabled_conditions.iter().map(AsRef::as_ref).collect();
 
     validate_explicit_includes(&directives.module_includes, &available_set, |m| {
         ResolveError::ModuleNotFound(m.clone())

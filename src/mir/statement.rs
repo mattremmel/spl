@@ -44,7 +44,7 @@ impl Statement {
         }
     }
 
-    /// Create a StorageLive statement.
+    /// Create a `StorageLive` statement.
     pub fn storage_live(local: Local, span: Span) -> Self {
         Statement {
             kind: StatementKind::StorageLive(local),
@@ -52,7 +52,7 @@ impl Statement {
         }
     }
 
-    /// Create a StorageDead statement.
+    /// Create a `StorageDead` statement.
     pub fn storage_dead(local: Local, span: Span) -> Self {
         Statement {
             kind: StatementKind::StorageDead(local),

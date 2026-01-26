@@ -203,8 +203,7 @@ impl From<Token> for SyntaxKind {
         match token {
             // Trivia
             Token::Whitespace => Self::WHITESPACE,
-            Token::LineComment => Self::COMMENT,
-            Token::BlockComment => Self::COMMENT,
+            Token::LineComment | Token::BlockComment => Self::COMMENT,
             // Keywords
             Token::Let => Self::LET_KW,
             Token::Mut => Self::MUT_KW,

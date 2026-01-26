@@ -78,7 +78,7 @@ impl Scope {
         }
     }
 
-    /// Define a symbol in this scope. Returns Err with the existing DefId if already defined.
+    /// Define a symbol in this scope. Returns Err with the existing `DefId` if already defined.
     pub fn define(&mut self, name: Spur, def_id: DefId) -> Result<(), DefId> {
         if let Some(&existing) = self.symbols.get(&name) {
             Err(existing)

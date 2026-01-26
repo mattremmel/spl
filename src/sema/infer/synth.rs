@@ -314,9 +314,8 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_literal(&mut self, lit: &LiteralExpr) -> TypeId {
-        let token = match lit.token() {
-            Some(t) => t,
-            None => return self.types.error(),
+        let Some(token) = lit.token() else {
+            return self.types.error();
         };
 
         match token.kind() {
@@ -390,9 +389,8 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_path(&mut self, path_expr: &PathExpr) -> TypeId {
-        let path = match path_expr.path() {
-            Some(p) => p,
-            None => return self.types.error(),
+        let Some(path) = path_expr.path() else {
+            return self.types.error();
         };
 
         let segments: Vec<_> = path.segments().collect();
@@ -402,15 +400,13 @@ impl<'a> InferEngine<'a> {
 
         // Get the type of the first segment (base variable)
         let first_segment = &segments[0];
-        let name_ref = match first_segment.name() {
-            Some(n) => n,
-            None => return self.types.error(),
+        let Some(name_ref) = first_segment.name() else {
+            return self.types.error();
         };
 
         // Use token() instead of ident_token() to handle `self` keyword
-        let token = match name_ref.token() {
-            Some(t) => t,
-            None => return self.types.error(),
+        let Some(token) = name_ref.token() else {
+            return self.types.error();
         };
 
         let span = text_range_to_span(token.text_range());
@@ -501,8 +497,7 @@ impl<'a> InferEngine<'a> {
                 deref_count += 1;
                 debug_assert!(
                     deref_count < MAX_DEREF,
-                    "invariant: auto-deref must terminate (hit {} derefs)",
-                    MAX_DEREF
+                    "invariant: auto-deref must terminate (hit {MAX_DEREF} derefs)"
                 );
             }
             let inner_resolved = self.resolve_type(*inner);
@@ -519,7 +514,7 @@ impl<'a> InferEngine<'a> {
                     // Name wasn't interned, so it definitely doesn't exist in the module
                     let span = text_range_to_span(segment.syntax().text_range());
                     self.diagnostics.push(
-                        Diagnostic::error(format!("cannot find `{}` in module", field_name))
+                        Diagnostic::error(format!("cannot find `{field_name}` in module"))
                             .with_label(span, "not found in module"),
                     );
                     return self.types.error();
@@ -532,8 +527,7 @@ impl<'a> InferEngine<'a> {
                         let span = text_range_to_span(segment.syntax().text_range());
                         self.diagnostics.push(
                             Diagnostic::error(format!(
-                                "`{}` is private and not accessible from this module",
-                                field_name
+                                "`{field_name}` is private and not accessible from this module"
                             ))
                             .with_label(span, "private item, not accessible"),
                         );
@@ -571,8 +565,7 @@ impl<'a> InferEngine<'a> {
                             let span = text_range_to_span(segment.syntax().text_range());
                             self.diagnostics.push(
                                 Diagnostic::error(format!(
-                                    "`{}` is not a valid item in module",
-                                    field_name
+                                    "`{field_name}` is not a valid item in module"
                                 ))
                                 .with_label(span, "unexpected item kind"),
                             );
@@ -584,7 +577,7 @@ impl<'a> InferEngine<'a> {
                 // Item not found in module
                 let span = text_range_to_span(segment.syntax().text_range());
                 self.diagnostics.push(
-                    Diagnostic::error(format!("cannot find `{}` in module", field_name))
+                    Diagnostic::error(format!("cannot find `{field_name}` in module"))
                         .with_label(span, "not found in module"),
                 );
                 return self.types.error();
@@ -631,8 +624,7 @@ impl<'a> InferEngine<'a> {
                                     let span = text_range_to_span(segment.syntax().text_range());
                                     self.diagnostics.push(
                                         Diagnostic::error(format!(
-                                            "field `{}` is private",
-                                            field_name
+                                            "field `{field_name}` is private"
                                         ))
                                         .with_label(span, "private field"),
                                     );
@@ -653,7 +645,7 @@ impl<'a> InferEngine<'a> {
             // Field not found
             let span = text_range_to_span(segment.syntax().text_range());
             self.diagnostics.push(
-                Diagnostic::error(format!("no field `{}` on struct", field_name))
+                Diagnostic::error(format!("no field `{field_name}` on struct"))
                     .with_label(span, "unknown field"),
             );
             return self.types.error();
@@ -737,14 +729,12 @@ impl<'a> InferEngine<'a> {
     ) -> TypeId {
         // Get the first segment
         let first_segment = &segments[0];
-        let first_name_ref = match first_segment.name() {
-            Some(n) => n,
-            None => return self.types.error(),
+        let Some(first_name_ref) = first_segment.name() else {
+            return self.types.error();
         };
 
-        let first_token = match first_name_ref.token() {
-            Some(t) => t,
-            None => return self.types.error(),
+        let Some(first_token) = first_name_ref.token() else {
+            return self.types.error();
         };
 
         let first_span = text_range_to_span(first_token.text_range());
@@ -787,14 +777,12 @@ impl<'a> InferEngine<'a> {
 
         // Get the last segment which should be the method name
         let last_segment = &segments[segments.len() - 1];
-        let method_name_ref = match last_segment.name() {
-            Some(n) => n,
-            None => return self.types.error(),
+        let Some(method_name_ref) = last_segment.name() else {
+            return self.types.error();
         };
 
-        let method_token = match method_name_ref.token() {
-            Some(t) => t,
-            None => return self.types.error(),
+        let Some(method_token) = method_name_ref.token() else {
+            return self.types.error();
         };
 
         let method_name = method_token.text().to_string();
@@ -823,7 +811,7 @@ impl<'a> InferEngine<'a> {
         // Method not found
         let method_span = text_range_to_span(method_token.text_range());
         self.diagnostics.push(
-            Diagnostic::error(format!("method `{}` not found", method_name))
+            Diagnostic::error(format!("method `{method_name}` not found"))
                 .with_label(method_span, "unknown method"),
         );
         self.types.error()
@@ -854,7 +842,7 @@ impl<'a> InferEngine<'a> {
                 let Some(interned) = self.resolve_ctx.try_get_interned(&segment_name) else {
                     let span = text_range_to_span(segment.syntax().text_range());
                     self.diagnostics.push(
-                        Diagnostic::error(format!("cannot find `{}` in module", segment_name))
+                        Diagnostic::error(format!("cannot find `{segment_name}` in module"))
                             .with_label(span, "not found in module"),
                     );
                     return self.types.error();
@@ -871,7 +859,7 @@ impl<'a> InferEngine<'a> {
                         if !self.is_scope_descendant_of(current_scope, item_scope) {
                             let span = text_range_to_span(segment.syntax().text_range());
                             self.diagnostics.push(
-                                Diagnostic::error(format!("`{}` is private", segment_name))
+                                Diagnostic::error(format!("`{segment_name}` is private"))
                                     .with_label(span, "private item"),
                             );
                             return self.types.error();
@@ -882,7 +870,7 @@ impl<'a> InferEngine<'a> {
                     if item_symbol.kind != SymbolKind::Module {
                         let span = text_range_to_span(segment.syntax().text_range());
                         self.diagnostics.push(
-                            Diagnostic::error(format!("`{}` is not a module", segment_name))
+                            Diagnostic::error(format!("`{segment_name}` is not a module"))
                                 .with_label(span, "expected module"),
                         );
                         return self.types.error();
@@ -892,7 +880,7 @@ impl<'a> InferEngine<'a> {
                 } else {
                     let span = text_range_to_span(segment.syntax().text_range());
                     self.diagnostics.push(
-                        Diagnostic::error(format!("cannot find `{}` in module", segment_name))
+                        Diagnostic::error(format!("cannot find `{segment_name}` in module"))
                             .with_label(span, "not found in module"),
                     );
                     return self.types.error();
@@ -920,7 +908,7 @@ impl<'a> InferEngine<'a> {
         let Some(interned) = self.resolve_ctx.try_get_interned(&last_name) else {
             let span = text_range_to_span(last_segment.syntax().text_range());
             self.diagnostics.push(
-                Diagnostic::error(format!("cannot find `{}` in module", last_name))
+                Diagnostic::error(format!("cannot find `{last_name}` in module"))
                     .with_label(span, "not found in module"),
             );
             return self.types.error();
@@ -929,7 +917,7 @@ impl<'a> InferEngine<'a> {
         let Some(item_def_id) = self.resolve_ctx.lookup_in_scope(interned, scope_id) else {
             let span = text_range_to_span(last_segment.syntax().text_range());
             self.diagnostics.push(
-                Diagnostic::error(format!("cannot find `{}` in module", last_name))
+                Diagnostic::error(format!("cannot find `{last_name}` in module"))
                     .with_label(span, "not found in module"),
             );
             return self.types.error();
@@ -945,7 +933,7 @@ impl<'a> InferEngine<'a> {
             if !self.is_scope_descendant_of(current_scope, item_scope) {
                 let span = text_range_to_span(last_segment.syntax().text_range());
                 self.diagnostics.push(
-                    Diagnostic::error(format!("`{}` is private", last_name))
+                    Diagnostic::error(format!("`{last_name}` is private"))
                         .with_label(span, "private item"),
                 );
                 return self.types.error();
@@ -972,7 +960,7 @@ impl<'a> InferEngine<'a> {
             _ => {
                 let span = text_range_to_span(last_segment.syntax().text_range());
                 self.diagnostics.push(
-                    Diagnostic::error(format!("`{}` is not a function or struct", last_name))
+                    Diagnostic::error(format!("`{last_name}` is not a function or struct"))
                         .with_label(span, "expected function or struct"),
                 );
                 self.types.error()
@@ -1002,8 +990,7 @@ impl<'a> InferEngine<'a> {
                 deref_count += 1;
                 debug_assert!(
                     deref_count < MAX_DEREF,
-                    "invariant: auto-deref must terminate (hit {} derefs)",
-                    MAX_DEREF
+                    "invariant: auto-deref must terminate (hit {MAX_DEREF} derefs)"
                 );
             }
             let inner_resolved = self.resolve_type(*inner);
@@ -1027,16 +1014,15 @@ impl<'a> InferEngine<'a> {
                 Type::Struct(def_id, args) => (*def_id, args.clone()),
                 Type::Ref(_, inner) => {
                     let inner_resolved = self.resolve_type(*inner);
-                    match self.types.get(inner_resolved) {
-                        Type::Struct(def_id, args) => (*def_id, args.clone()),
-                        _ => {
-                            let span = text_range_to_span(call.syntax().text_range());
-                            self.diagnostics.push(
-                                Diagnostic::error("field access on non-struct type")
-                                    .with_label(span, "not a struct"),
-                            );
-                            return self.types.error();
-                        }
+                    if let Type::Struct(def_id, args) = self.types.get(inner_resolved) {
+                        (*def_id, args.clone())
+                    } else {
+                        let span = text_range_to_span(call.syntax().text_range());
+                        self.diagnostics.push(
+                            Diagnostic::error("field access on non-struct type")
+                                .with_label(span, "not a struct"),
+                        );
+                        return self.types.error();
                     }
                 }
                 _ => {
@@ -1080,7 +1066,7 @@ impl<'a> InferEngine<'a> {
                 } else {
                     let span = text_range_to_span(call.syntax().text_range());
                     self.diagnostics.push(
-                        Diagnostic::error(format!("no field `{}` on type", field_name))
+                        Diagnostic::error(format!("no field `{field_name}` on type"))
                             .with_label(span, "unknown field"),
                     );
                     return self.types.error();
@@ -1097,14 +1083,12 @@ impl<'a> InferEngine<'a> {
 
         // Get the method name from the last segment (needed for both opaque and struct methods)
         let last_segment = &segments[segments.len() - 1];
-        let method_name_ref = match last_segment.name() {
-            Some(n) => n,
-            None => return self.types.error(),
+        let Some(method_name_ref) = last_segment.name() else {
+            return self.types.error();
         };
 
-        let method_token = match method_name_ref.token() {
-            Some(t) => t,
-            None => return self.types.error(),
+        let Some(method_token) = method_name_ref.token() else {
+            return self.types.error();
         };
 
         let method_name = method_token.text().to_string();
@@ -1151,24 +1135,24 @@ impl<'a> InferEngine<'a> {
             // Method not found on primitive type
             let span = text_range_to_span(call.syntax().text_range());
             self.diagnostics.push(
-                Diagnostic::error(format!("method `{}` not found on type `str`", method_name))
+                Diagnostic::error(format!("method `{method_name}` not found on type `str`"))
                     .with_label(span, "unknown method"),
             );
             return self.types.error();
         }
 
         // Get the struct def_id and type_args from the receiver type
-        let (struct_def_id, receiver_type_args) = match &receiver_type_val {
-            Type::Struct(def_id, type_args) => (*def_id, type_args.clone()),
-            _ => {
+        let (struct_def_id, receiver_type_args) =
+            if let Type::Struct(def_id, type_args) = &receiver_type_val {
+                (*def_id, type_args.clone())
+            } else {
                 let span = text_range_to_span(call.syntax().text_range());
                 self.diagnostics.push(
                     Diagnostic::error("method call on non-struct type")
                         .with_label(span, "not a struct"),
                 );
                 return self.types.error();
-            }
-        };
+            };
 
         // Look up the method in the struct's impl
         let method_def_ids = self
@@ -1193,7 +1177,7 @@ impl<'a> InferEngine<'a> {
                     if !self.is_scope_descendant_of(current_scope, struct_scope) {
                         let span = text_range_to_span(method_token.text_range());
                         self.diagnostics.push(
-                            Diagnostic::error(format!("method `{}` is private", method_name))
+                            Diagnostic::error(format!("method `{method_name}` is private"))
                                 .with_label(span, "private method"),
                         );
                         return self.types.error();
@@ -1217,7 +1201,7 @@ impl<'a> InferEngine<'a> {
         // Method not found
         let method_span = text_range_to_span(method_token.text_range());
         self.diagnostics.push(
-            Diagnostic::error(format!("method `{}` not found", method_name))
+            Diagnostic::error(format!("method `{method_name}` not found"))
                 .with_label(method_span, "unknown method"),
         );
         self.types.error()
@@ -1328,21 +1312,20 @@ impl<'a> InferEngine<'a> {
                 (Some(expected), Some(actual)) if expected != actual => {
                     self.diagnostics.push(
                         Diagnostic::error(format!(
-                            "expected label `{}`, found `{}`",
-                            expected, actual
+                            "expected label `{expected}`, found `{actual}`"
                         ))
                         .with_label(arg_span, "wrong label"),
                     );
                 }
                 (Some(expected), None) => {
                     self.diagnostics.push(
-                        Diagnostic::error(format!("expected labeled argument `{}`", expected))
+                        Diagnostic::error(format!("expected labeled argument `{expected}`"))
                             .with_label(arg_span, "missing label"),
                     );
                 }
                 (None, Some(actual)) => {
                     self.diagnostics.push(
-                        Diagnostic::error(format!("unexpected label `{}`", actual))
+                        Diagnostic::error(format!("unexpected label `{actual}`"))
                             .with_label(arg_span, "positional parameter"),
                     );
                 }
@@ -1439,9 +1422,8 @@ impl<'a> InferEngine<'a> {
                 }
             };
 
-            let field_name = match field_name {
-                Some(n) => n,
-                None => continue,
+            let Some(field_name) = field_name else {
+                continue;
             };
 
             // Find the field in the struct
@@ -1456,7 +1438,7 @@ impl<'a> InferEngine<'a> {
                 // Unknown field
                 let span = text_range_to_span(arg.syntax().text_range());
                 self.diagnostics.push(
-                    Diagnostic::error(format!("unknown field `{}`", field_name))
+                    Diagnostic::error(format!("unknown field `{field_name}`"))
                         .with_label(span, "unknown field"),
                 );
             }
@@ -1468,7 +1450,7 @@ impl<'a> InferEngine<'a> {
                 if !seen_fields.contains(field_name) {
                     let span = text_range_to_span(call.syntax().text_range());
                     self.diagnostics.push(
-                        Diagnostic::error(format!("missing field `{}`", field_name))
+                        Diagnostic::error(format!("missing field `{field_name}`"))
                             .with_label(span, "missing field"),
                     );
                 }
@@ -1479,19 +1461,16 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_binary(&mut self, bin: &BinExpr) -> TypeId {
-        let op = match bin.op_token() {
-            Some(t) => t,
-            None => return self.types.error(),
+        let Some(op) = bin.op_token() else {
+            return self.types.error();
         };
 
-        let lhs = match bin.lhs() {
-            Some(e) => e,
-            None => return self.types.error(),
+        let Some(lhs) = bin.lhs() else {
+            return self.types.error();
         };
 
-        let rhs = match bin.rhs() {
-            Some(e) => e,
-            None => return self.types.error(),
+        let Some(rhs) = bin.rhs() else {
+            return self.types.error();
         };
 
         match op.kind() {
@@ -1611,14 +1590,12 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_prefix(&mut self, prefix: &PrefixExpr) -> TypeId {
-        let op = match prefix.op_token() {
-            Some(t) => t,
-            None => return self.types.error(),
+        let Some(op) = prefix.op_token() else {
+            return self.types.error();
         };
 
-        let inner = match prefix.expr() {
-            Some(e) => e,
-            None => return self.types.error(),
+        let Some(inner) = prefix.expr() else {
+            return self.types.error();
         };
 
         let inner_ty = self.synth_expr(&inner);
@@ -1659,16 +1636,15 @@ impl<'a> InferEngine<'a> {
                 // Dereference
                 let resolved = self.resolve_type(inner_ty);
                 let ty = self.types.get(resolved).clone();
-                match ty {
-                    Type::Ref(_, inner) => inner,
-                    _ => {
-                        let span = text_range_to_span(inner.syntax().text_range());
-                        self.diagnostics.push(
-                            Diagnostic::error("cannot dereference non-reference type")
-                                .with_label(span, "not a reference"),
-                        );
-                        self.types.error()
-                    }
+                if let Type::Ref(_, inner_ref) = ty {
+                    inner_ref
+                } else {
+                    let span = text_range_to_span(inner.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("cannot dereference non-reference type")
+                            .with_label(span, "not a reference"),
+                    );
+                    self.types.error()
                 }
             }
             _ => self.types.error(),
@@ -1676,9 +1652,8 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_ref(&mut self, ref_expr: &RefExpr) -> TypeId {
-        let inner = match ref_expr.expr() {
-            Some(e) => e,
-            None => return self.types.error(),
+        let Some(inner) = ref_expr.expr() else {
+            return self.types.error();
         };
 
         let inner_ty = self.synth_expr(&inner);
@@ -1700,9 +1675,8 @@ impl<'a> InferEngine<'a> {
     fn synth_field(&mut self, field: &FieldExpr) -> TypeId {
         const MAX_DEREF: usize = 100;
 
-        let base = match field.expr() {
-            Some(e) => e,
-            None => return self.types.error(),
+        let Some(base) = field.expr() else {
+            return self.types.error();
         };
 
         let base_ty = self.synth_expr(&base);
@@ -1719,8 +1693,7 @@ impl<'a> InferEngine<'a> {
                 deref_count += 1;
                 debug_assert!(
                     deref_count < MAX_DEREF,
-                    "invariant: auto-deref must terminate (hit {} derefs)",
-                    MAX_DEREF
+                    "invariant: auto-deref must terminate (hit {MAX_DEREF} derefs)"
                 );
             }
 
@@ -1761,7 +1734,7 @@ impl<'a> InferEngine<'a> {
                 _ => "str has no such field",
             };
             self.diagnostics.push(
-                Diagnostic::error(format!("no field `{}` on type `str`", idx))
+                Diagnostic::error(format!("no field `{idx}` on type `str`"))
                     .with_label(span, hint),
             );
             return self.types.error();
@@ -1777,7 +1750,7 @@ impl<'a> InferEngine<'a> {
                     // Name wasn't interned, so it definitely doesn't exist in the module
                     let span = text_range_to_span(field.syntax().text_range());
                     self.diagnostics.push(
-                        Diagnostic::error(format!("cannot find `{}` in module", field_name))
+                        Diagnostic::error(format!("cannot find `{field_name}` in module"))
                             .with_label(span, "not found in module"),
                     );
                     return self.types.error();
@@ -1790,8 +1763,7 @@ impl<'a> InferEngine<'a> {
                         let span = text_range_to_span(field.syntax().text_range());
                         self.diagnostics.push(
                             Diagnostic::error(format!(
-                                "`{}` is private and not accessible from this module",
-                                field_name
+                                "`{field_name}` is private and not accessible from this module"
                             ))
                             .with_label(span, "private item, not accessible"),
                         );
@@ -1825,8 +1797,7 @@ impl<'a> InferEngine<'a> {
                             let span = text_range_to_span(field.syntax().text_range());
                             self.diagnostics.push(
                                 Diagnostic::error(format!(
-                                    "`{}` is not a valid item in module",
-                                    field_name
+                                    "`{field_name}` is not a valid item in module"
                                 ))
                                 .with_label(span, "unexpected item kind"),
                             );
@@ -1838,7 +1809,7 @@ impl<'a> InferEngine<'a> {
                 // Item not found in module
                 let span = text_range_to_span(field.syntax().text_range());
                 self.diagnostics.push(
-                    Diagnostic::error(format!("cannot find `{}` in module", field_name))
+                    Diagnostic::error(format!("cannot find `{field_name}` in module"))
                         .with_label(span, "not found in module"),
                 );
                 return self.types.error();
@@ -1888,8 +1859,7 @@ impl<'a> InferEngine<'a> {
                                     let span = text_range_to_span(field.syntax().text_range());
                                     self.diagnostics.push(
                                         Diagnostic::error(format!(
-                                            "field `{}` is private",
-                                            field_name
+                                            "field `{field_name}` is private"
                                         ))
                                         .with_label(span, "private field"),
                                     );
@@ -1904,7 +1874,7 @@ impl<'a> InferEngine<'a> {
             }
             let span = text_range_to_span(field.syntax().text_range());
             self.diagnostics.push(
-                Diagnostic::error(format!("no field `{}` on struct", field_name))
+                Diagnostic::error(format!("no field `{field_name}` on struct"))
                     .with_label(span, "unknown field"),
             );
             return self.types.error();
@@ -1918,9 +1888,8 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_call(&mut self, call: &CallExpr) -> TypeId {
-        let callee = match call.callee() {
-            Some(e) => e,
-            None => return self.types.error(),
+        let Some(callee) = call.callee() else {
+            return self.types.error();
         };
 
         // Dispatch based on callee type:
@@ -1936,9 +1905,8 @@ impl<'a> InferEngine<'a> {
 
     /// Handle call where callee is a path (function call or struct instantiation)
     fn synth_call_path(&mut self, call: &CallExpr, path_expr: &PathExpr) -> TypeId {
-        let path = match path_expr.path() {
-            Some(p) => p,
-            None => return self.types.error(),
+        let Some(path) = path_expr.path() else {
+            return self.types.error();
         };
 
         let segments: Vec<_> = path.segments().collect();
@@ -1953,14 +1921,12 @@ impl<'a> InferEngine<'a> {
 
         // Single segment path - could be struct instantiation or function call
         let segment = &segments[0];
-        let name_ref = match segment.name() {
-            Some(n) => n,
-            None => return self.types.error(),
+        let Some(name_ref) = segment.name() else {
+            return self.types.error();
         };
 
-        let token = match name_ref.token() {
-            Some(t) => t,
-            None => return self.types.error(),
+        let Some(token) = name_ref.token() else {
+            return self.types.error();
         };
 
         let span = text_range_to_span(token.text_range());
@@ -1998,9 +1964,8 @@ impl<'a> InferEngine<'a> {
 
     /// Handle call where callee is a field access (method call)
     fn synth_call_method(&mut self, call: &CallExpr, field_expr: &FieldExpr) -> TypeId {
-        let receiver = match field_expr.expr() {
-            Some(e) => e,
-            None => return self.types.error(),
+        let Some(receiver) = field_expr.expr() else {
+            return self.types.error();
         };
 
         let receiver_ty = self.synth_expr(&receiver);
@@ -2062,8 +2027,7 @@ impl<'a> InferEngine<'a> {
             let span = text_range_to_span(call.syntax().text_range());
             self.diagnostics.push(
                 Diagnostic::error(format!(
-                    "method `{}` not found on primitive type",
-                    method_name
+                    "method `{method_name}` not found on primitive type"
                 ))
                 .with_label(span, "unknown method"),
             );
@@ -2079,7 +2043,7 @@ impl<'a> InferEngine<'a> {
         self.synth_struct_method_call(call, &receiver, receiver_ty, &method_name)
     }
 
-    /// Handle module function call (e.g., module.func())
+    /// Handle module function call (e.g., `module.func()`)
     fn synth_module_function_call(
         &mut self,
         call: &CallExpr,
@@ -2091,7 +2055,7 @@ impl<'a> InferEngine<'a> {
             let Some(interned) = self.resolve_ctx.try_get_interned(method_name) else {
                 let span = text_range_to_span(call.syntax().text_range());
                 self.diagnostics.push(
-                    Diagnostic::error(format!("cannot find function `{}` in module", method_name))
+                    Diagnostic::error(format!("cannot find function `{method_name}` in module"))
                         .with_label(span, "not found in module"),
                 );
                 return self.types.error();
@@ -2103,7 +2067,7 @@ impl<'a> InferEngine<'a> {
                 if fn_symbol.visibility == Visibility::Private {
                     let span = text_range_to_span(call.syntax().text_range());
                     self.diagnostics.push(
-                        Diagnostic::error(format!("`{}` is private", method_name))
+                        Diagnostic::error(format!("`{method_name}` is private"))
                             .with_label(span, "private item"),
                     );
                     return self.types.error();
@@ -2112,7 +2076,7 @@ impl<'a> InferEngine<'a> {
                 if fn_symbol.kind != SymbolKind::Function {
                     let span = text_range_to_span(call.syntax().text_range());
                     self.diagnostics.push(
-                        Diagnostic::error(format!("`{}` is not a function", method_name))
+                        Diagnostic::error(format!("`{method_name}` is not a function"))
                             .with_label(span, "expected a function"),
                     );
                     return self.types.error();
@@ -2129,7 +2093,7 @@ impl<'a> InferEngine<'a> {
 
         let span = text_range_to_span(call.syntax().text_range());
         self.diagnostics.push(
-            Diagnostic::error(format!("cannot find function `{}` in module", method_name))
+            Diagnostic::error(format!("cannot find function `{method_name}` in module"))
                 .with_label(span, "not found in module"),
         );
         self.types.error()
@@ -2190,7 +2154,7 @@ impl<'a> InferEngine<'a> {
 
         let span = text_range_to_span(call.syntax().text_range());
         self.diagnostics.push(
-            Diagnostic::error(format!("method `{}` not found", method_name))
+            Diagnostic::error(format!("method `{method_name}` not found"))
                 .with_label(span, "unknown method"),
         );
         self.types.error()
@@ -2203,16 +2167,14 @@ impl<'a> InferEngine<'a> {
         let callee_type = self.types.get(resolved).clone();
 
         // Check if callee is a function pointer
-        let (param_types, ret_ty) = match callee_type {
-            Type::FnPtr { params, ret } => (params, ret),
-            _ => {
-                let span = text_range_to_span(callee.syntax().text_range());
-                self.diagnostics.push(
-                    Diagnostic::error("value is not a function").with_label(span, "not a function"),
-                );
-                return self.types.error();
-            }
+        let Type::FnPtr { params, ret } = callee_type else {
+            let span = text_range_to_span(callee.syntax().text_range());
+            self.diagnostics.push(
+                Diagnostic::error("value is not a function").with_label(span, "not a function"),
+            );
+            return self.types.error();
         };
+        let (param_types, ret_ty) = (params, ret);
 
         self.check_call_args(call, &param_types, ret_ty)
     }
@@ -2249,14 +2211,12 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_index(&mut self, index: &IndexExpr) -> TypeId {
-        let base = match index.base() {
-            Some(e) => e,
-            None => return self.types.error(),
+        let Some(base) = index.base() else {
+            return self.types.error();
         };
 
-        let idx = match index.index() {
-            Some(e) => e,
-            None => return self.types.error(),
+        let Some(idx) = index.index() else {
+            return self.types.error();
         };
 
         let base_ty = self.synth_expr(&base);
@@ -2274,8 +2234,7 @@ impl<'a> InferEngine<'a> {
                     let span = text_range_to_span(idx.syntax().text_range());
                     self.diagnostics.push(
                         Diagnostic::error(format!(
-                            "index {} is out of bounds for array of length {}",
-                            idx_val, len
+                            "index {idx_val} is out of bounds for array of length {len}"
                         ))
                         .with_label(span, "index out of bounds"),
                     );
@@ -2295,9 +2254,8 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_slice(&mut self, slice: &SliceExpr) -> TypeId {
-        let base = match slice.base() {
-            Some(e) => e,
-            None => return self.types.error(),
+        let Some(base) = slice.base() else {
+            return self.types.error();
         };
 
         let base_ty = self.synth_expr(&base);
@@ -2565,8 +2523,7 @@ impl<'a> InferEngine<'a> {
             let target_str = self.type_to_string(resolved_target);
             self.diagnostics.push(
                 Diagnostic::error(format!(
-                    "invalid cast from `{}` to `{}`",
-                    source_str, target_str
+                    "invalid cast from `{source_str}` to `{target_str}`"
                 ))
                 .with_label(span, "invalid cast"),
             );
@@ -2581,20 +2538,19 @@ impl<'a> InferEngine<'a> {
         let target_ty = self.types.get(target);
 
         match (source_ty, target_ty) {
-            // Error type can be cast to anything (to avoid cascading errors)
-            (Type::Error, _) | (_, Type::Error) => true,
+            // Error types, type variables allowed (to avoid cascading errors, inference not complete)
+            (Type::Error, _)
+            | (_, Type::Error)
+            | (Type::Infer(_, _), _)
+            | (_, Type::Infer(_, _)) => true,
 
             // Numeric types can be cast to each other
             (Type::Primitive(s), Type::Primitive(t)) => is_numeric_type(*s) && is_numeric_type(*t),
 
             // Raw pointers can be cast to integers (for FFI, pointer arithmetic, etc.)
-            (Type::RawPtr(_, _), Type::Primitive(t)) => is_numeric_type(*t),
-
             // Integers can be cast to raw pointers
-            (Type::Primitive(s), Type::RawPtr(_, _)) => is_numeric_type(*s),
-
-            // Type variables are allowed (inference not complete)
-            (Type::Infer(_, _), _) | (_, Type::Infer(_, _)) => true,
+            (Type::RawPtr(_, _), Type::Primitive(t))
+            | (Type::Primitive(t), Type::RawPtr(_, _)) => is_numeric_type(*t),
 
             // All other casts are invalid
             _ => false,
@@ -2614,24 +2570,24 @@ impl<'a> InferEngine<'a> {
             Type::Ref(mutability, inner) => {
                 let inner_str = self.type_to_string(*inner);
                 match mutability {
-                    Mutability::Shared => format!("&{}", inner_str),
-                    Mutability::Mutable => format!("&mut {}", inner_str),
+                    Mutability::Shared => format!("&{inner_str}"),
+                    Mutability::Mutable => format!("&mut {inner_str}"),
                 }
             }
             Type::RawPtr(mutability, pointee) => {
                 let pointee_str = self.type_to_string(*pointee);
                 match mutability {
-                    Mutability::Shared => format!("*{}", pointee_str),
-                    Mutability::Mutable => format!("*mut {}", pointee_str),
+                    Mutability::Shared => format!("*{pointee_str}"),
+                    Mutability::Mutable => format!("*mut {pointee_str}"),
                 }
             }
             Type::Array(elem, len) => {
                 let elem_str = self.type_to_string(*elem);
-                format!("[{}; {}]", elem_str, len)
+                format!("[{elem_str}; {len}]")
             }
             Type::Slice(elem) => {
                 let elem_str = self.type_to_string(*elem);
-                format!("[{}]", elem_str)
+                format!("[{elem_str}]")
             }
             Type::Tuple(elems) => {
                 if elems.is_empty() {
@@ -2641,7 +2597,7 @@ impl<'a> InferEngine<'a> {
                     format!("({})", elem_strs.join(", "))
                 }
             }
-            Type::Struct(def_id, _) => {
+            Type::Struct(def_id, _) | Type::Param(def_id) => {
                 let symbol = self.resolve_ctx.get_symbol(*def_id);
                 self.resolve_ctx.resolve(symbol.name).to_string()
             }
@@ -2653,10 +2609,6 @@ impl<'a> InferEngine<'a> {
             Type::StrRef => "str".to_string(),
             Type::Error => "<error>".to_string(),
             Type::Alias(_, _) => "<alias>".to_string(),
-            Type::Param(def_id) => {
-                let symbol = self.resolve_ctx.get_symbol(*def_id);
-                self.resolve_ctx.resolve(symbol.name).to_string()
-            }
             Type::SelfType => "Self".to_string(),
             Type::Module(def_id) => {
                 let symbol = self.resolve_ctx.get_symbol(*def_id);
@@ -2755,12 +2707,6 @@ impl<'a> InferEngine<'a> {
     /// This doesn't define bindings; it just validates the pattern structure.
     fn check_pattern_type(&mut self, pat: &Pat, expected_ty: TypeId) {
         match pat {
-            Pat::Ident(_) => {
-                // Binding patterns are always compatible
-            }
-            Pat::Wildcard(_) => {
-                // Wildcard is always compatible
-            }
             Pat::Literal(lit_pat) => {
                 // Check that the literal type matches the expected type
                 if let Some(token) = lit_pat.token() {
@@ -2805,7 +2751,11 @@ impl<'a> InferEngine<'a> {
                 let ty_data = self.types.get(resolved).clone();
                 if let Type::Tuple(elem_types) = ty_data {
                     let patterns: Vec<_> = tuple_pat.patterns().collect();
-                    if patterns.len() != elem_types.len() {
+                    if patterns.len() == elem_types.len() {
+                        for (inner_pat, elem_ty) in patterns.iter().zip(elem_types.iter()) {
+                            self.check_pattern_type(inner_pat, *elem_ty);
+                        }
+                    } else {
                         let span = text_range_to_span(tuple_pat.syntax().text_range());
                         self.diagnostics.push(
                             Diagnostic::error(format!(
@@ -2815,10 +2765,6 @@ impl<'a> InferEngine<'a> {
                             ))
                             .with_label(span, "wrong number of elements"),
                         );
-                    } else {
-                        for (inner_pat, elem_ty) in patterns.iter().zip(elem_types.iter()) {
-                            self.check_pattern_type(inner_pat, *elem_ty);
-                        }
                     }
                 } else {
                     let span = text_range_to_span(tuple_pat.syntax().text_range());
@@ -2892,9 +2838,9 @@ impl<'a> InferEngine<'a> {
                     );
                 }
             }
-            _ => {
-                // Other patterns (Rest, Range, Slice) - not fully implemented
-            }
+            // Binding patterns, wildcards, and other patterns (Rest, Range, Slice)
+            // are always compatible or not fully implemented
+            _ => {}
         }
     }
 
@@ -3006,9 +2952,8 @@ impl<'a> InferEngine<'a> {
     /// Validate that an integer literal is in range for its resolved type.
     fn validate_literal_range(&mut self, expr: &Expr, expected: TypeId) {
         // Extract the literal value from the expression, handling negation
-        let (value, span) = match self.extract_int_literal_value(expr) {
-            Some(v) => v,
-            None => return,
+        let Some((value, span)) = self.extract_int_literal_value(expr) else {
+            return;
         };
 
         // Get the resolved type
@@ -3169,9 +3114,7 @@ impl<'a> InferEngine<'a> {
                     }
                 }
             }
-            Pat::Wildcard(_) => {
-                // Wildcard doesn't bind anything
-            }
+            // Wildcard and other patterns don't bind anything
             _ => {}
         }
     }

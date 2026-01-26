@@ -51,22 +51,20 @@ fn inner_attribute(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser:
     }
 
     // Tolerate missing content but emit error
-    if !p.at(SyntaxKind::R_BRACKET) {
-        if let Err(err) = attr_content(p) {
-            p.error(err);
-            // Skip to closing bracket or item-starting token (with limit)
-            let mut skip_count = 0;
-            while p.current().is_some()
-                && !p.at(SyntaxKind::R_BRACKET)
-                && !p.current().is_some_and(is_item_start)
-                && skip_count < 100
-            {
-                p.bump();
-                skip_count += 1;
-            }
-        }
-    } else {
+    if p.at(SyntaxKind::R_BRACKET) {
         p.error(p.error_at_current("expected attribute name".to_string()));
+    } else if let Err(err) = attr_content(p) {
+        p.error(err);
+        // Skip to closing bracket or item-starting token (with limit)
+        let mut skip_count = 0;
+        while p.current().is_some()
+            && !p.at(SyntaxKind::R_BRACKET)
+            && !p.current().is_some_and(is_item_start)
+            && skip_count < 100
+        {
+            p.bump();
+            skip_count += 1;
+        }
     }
 
     // Consume ] if present
@@ -106,19 +104,17 @@ fn attribute(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
     }
 
     // Tolerate missing content but emit error
-    if !p.at(SyntaxKind::R_BRACKET) {
-        if let Err(err) = attr_content(p) {
-            p.error(err);
-            // Skip to closing bracket or item-starting token
-            while p.current().is_some()
-                && !p.at(SyntaxKind::R_BRACKET)
-                && !p.current().is_some_and(is_item_start)
-            {
-                p.bump();
-            }
-        }
-    } else {
+    if p.at(SyntaxKind::R_BRACKET) {
         p.error(p.error_at_current("expected attribute name".to_string()));
+    } else if let Err(err) = attr_content(p) {
+        p.error(err);
+        // Skip to closing bracket or item-starting token
+        while p.current().is_some()
+            && !p.at(SyntaxKind::R_BRACKET)
+            && !p.current().is_some_and(is_item_start)
+        {
+            p.bump();
+        }
     }
 
     // Consume ] if present, otherwise just emit error
@@ -191,10 +187,10 @@ fn attr_input_paren(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser
     }
 
     // Don't fail if R_PAREN missing - just emit error and continue
-    if !p.at(SyntaxKind::R_PAREN) {
-        p.error(p.error_at_current("expected `)`".to_string()));
-    } else {
+    if p.at(SyntaxKind::R_PAREN) {
         p.bump();
+    } else {
+        p.error(p.error_at_current("expected `)`".to_string()));
     }
     Ok(m.complete(p, SyntaxKind::AttrInput))
 }
@@ -780,7 +776,7 @@ fn visibility_lookahead(p: &mut Parser<'_>) -> usize {
 }
 
 /// Calculate lookahead to skip past visibility modifier, starting at a given offset.
-/// Returns the number of tokens to skip (relative to start_offset).
+/// Returns the number of tokens to skip (relative to `start_offset`).
 fn visibility_lookahead_at(p: &mut Parser<'_>, start_offset: usize) -> usize {
     if p.peek(start_offset) != Some(SyntaxKind::PUB_KW) {
         return 0;
@@ -897,10 +893,10 @@ pub(crate) fn use_decl(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::par
 
 /// Parse a use tree: path segments with optional glob, rename, or grouping.
 ///
-/// UseTree = path ["as" IDENT]
+/// `UseTree` = path ["as" IDENT]
 ///         | path "." "*"
-///         | path "." "{" UseTreeList "}"
-///         | "{" UseTreeList "}"
+///         | path "." "{" `UseTreeList` "}"
+///         | "{" `UseTreeList` "}"
 fn use_tree(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
 
@@ -967,7 +963,7 @@ fn is_use_path_segment_start(token: Option<SyntaxKind>) -> bool {
     )
 }
 
-/// Check if a SyntaxKind can be a use path segment.
+/// Check if a `SyntaxKind` can be a use path segment.
 fn is_use_path_segment_kind(kind: SyntaxKind) -> bool {
     matches!(
         kind,

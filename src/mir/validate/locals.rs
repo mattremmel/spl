@@ -19,27 +19,25 @@ pub fn validate_locals(body: &Body) {
     for (block_idx, block) in body.basic_blocks.iter().enumerate() {
         // Validate statements
         for (stmt_idx, stmt) in block.statements.iter().enumerate() {
-            let ctx = || format!("BasicBlock({}).statements[{}]", block_idx, stmt_idx);
+            let ctx = || format!("BasicBlock({block_idx}).statements[{stmt_idx}]");
             validate_statement_locals(&stmt.kind, num_locals, &ctx);
         }
 
         // Validate terminator
         if let Some(term) = &block.terminator {
-            let ctx = || format!("BasicBlock({}).terminator", block_idx);
+            let ctx = || format!("BasicBlock({block_idx}).terminator");
             validate_terminator_locals(&term.kind, num_locals, &ctx);
         }
     }
 }
 
 fn validate_local(local: Local, num_locals: usize, context: &dyn Fn() -> String) {
-    if local.index() as usize >= num_locals {
-        panic!(
-            "Local validation failed: Local({}) out of bounds (only {} locals exist) at {}",
-            local.index(),
-            num_locals,
-            context()
-        );
-    }
+    assert!(
+        (local.index() as usize) < num_locals,
+        "Local validation failed: Local({}) out of bounds (only {num_locals} locals exist) at {}",
+        local.index(),
+        context()
+    );
 }
 
 fn validate_place_locals(place: &Place, num_locals: usize, context: &dyn Fn() -> String) {
@@ -63,7 +61,10 @@ fn validate_operand_locals(operand: &Operand, num_locals: usize, context: &dyn F
 
 fn validate_rvalue_locals(rvalue: &Rvalue, num_locals: usize, context: &dyn Fn() -> String) {
     match rvalue {
-        Rvalue::Use(operand) => {
+        Rvalue::Use(operand)
+        | Rvalue::UnaryOp(_, operand)
+        | Rvalue::Cast(_, operand, _)
+        | Rvalue::Repeat(operand, _) => {
             validate_operand_locals(operand, num_locals, context);
         }
         Rvalue::Ref(_, place, _)
@@ -75,9 +76,6 @@ fn validate_rvalue_locals(rvalue: &Rvalue, num_locals: usize, context: &dyn Fn()
         Rvalue::BinaryOp(_, lhs, rhs) => {
             validate_operand_locals(lhs, num_locals, context);
             validate_operand_locals(rhs, num_locals, context);
-        }
-        Rvalue::UnaryOp(_, operand) | Rvalue::Cast(_, operand, _) | Rvalue::Repeat(operand, _) => {
-            validate_operand_locals(operand, num_locals, context);
         }
         Rvalue::Aggregate(_, operands) => {
             for operand in operands {

@@ -4,7 +4,7 @@ use crate::lexer::SpannedToken;
 use crate::syntax::SyntaxKind;
 use std::ops::Range;
 
-/// Token with its SyntaxKind.
+/// Token with its `SyntaxKind`.
 #[derive(Debug, Clone)]
 pub struct Token<'src> {
     pub kind: SyntaxKind,

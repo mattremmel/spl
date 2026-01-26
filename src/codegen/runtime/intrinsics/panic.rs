@@ -17,7 +17,7 @@
 //! }
 //! ```
 //!
-//! ## Raw syscalls (Linux x86_64)
+//! ## Raw syscalls (Linux `x86_64`)
 //! ```text
 //! // SYS_exit_group = 231
 //! mov rax, 231

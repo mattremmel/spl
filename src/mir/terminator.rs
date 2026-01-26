@@ -181,14 +181,13 @@ impl Terminator {
     /// Get all successor blocks of this terminator.
     pub fn successors(&self) -> Vec<BasicBlock> {
         match &self.kind {
-            TerminatorKind::Return => vec![],
+            TerminatorKind::Return | TerminatorKind::Unreachable | TerminatorKind::Resume => vec![],
             TerminatorKind::Goto(bb) => vec![*bb],
             TerminatorKind::SwitchInt { targets, .. } => targets.all_targets().collect(),
             TerminatorKind::Call { target, .. } => target.iter().copied().collect(),
-            TerminatorKind::Drop { target, .. } => vec![*target],
-            TerminatorKind::Assert { target, .. } => vec![*target],
-            TerminatorKind::Unreachable => vec![],
-            TerminatorKind::Resume => vec![],
+            TerminatorKind::Drop { target, .. } | TerminatorKind::Assert { target, .. } => {
+                vec![*target]
+            }
         }
     }
 }

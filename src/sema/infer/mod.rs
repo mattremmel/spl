@@ -60,17 +60,17 @@ pub struct InferResult {
     pub types: TypeInterner,
     /// Map from expression spans to their inferred types.
     pub expr_types: FxHashMap<Span, TypeId>,
-    /// Map from local bindings (DefId) to their inferred types.
+    /// Map from local bindings (`DefId`) to their inferred types.
     pub binding_types: FxHashMap<DefId, TypeId>,
-    /// Map from spans to resolved DefIds (preserved from resolution).
+    /// Map from spans to resolved `DefIds` (preserved from resolution).
     pub resolutions: FxHashMap<Span, DefId>,
-    /// Map from method call expression spans to their resolved method DefIds.
+    /// Map from method call expression spans to their resolved method `DefIds`.
     pub method_resolutions: FxHashMap<Span, DefId>,
-    /// Map from type annotation spans to their resolved TypeIds.
+    /// Map from type annotation spans to their resolved `TypeIds`.
     /// Includes return type annotations (-> i32), parameter types (x: bool), etc.
     pub type_annotation_types: FxHashMap<Span, TypeId>,
     /// Intrinsic methods that need special lowering during HIR lowering.
-    /// Maps method DefId to how it should be lowered (e.g., str.ptr() -> field 0).
+    /// Maps method `DefId` to how it should be lowered (e.g., `str.ptr()` -> field 0).
     pub intrinsic_methods: FxHashMap<DefId, IntrinsicKind>,
     /// Diagnostics produced during inference.
     pub diagnostics: Vec<Diagnostic>,
@@ -125,31 +125,31 @@ impl InferResult {
             Type::Ref(mutability, inner) => {
                 let inner_str = self.type_to_string(*inner, ctx);
                 match mutability {
-                    Mutability::Shared => format!("&{}", inner_str),
-                    Mutability::Mutable => format!("&mut {}", inner_str),
+                    Mutability::Shared => format!("&{inner_str}"),
+                    Mutability::Mutable => format!("&mut {inner_str}"),
                 }
             }
             Type::RawPtr(mutability, pointee) => {
                 let pointee_str = self.type_to_string(*pointee, ctx);
                 match mutability {
-                    Mutability::Shared => format!("*{}", pointee_str),
-                    Mutability::Mutable => format!("*mut {}", pointee_str),
+                    Mutability::Shared => format!("*{pointee_str}"),
+                    Mutability::Mutable => format!("*mut {pointee_str}"),
                 }
             }
             Type::Array(elem, len) => {
                 let elem_str = self.type_to_string(*elem, ctx);
-                format!("[{}; {}]", elem_str, len)
+                format!("[{elem_str}; {len}]")
             }
             Type::Slice(elem) => {
                 let elem_str = self.type_to_string(*elem, ctx);
-                format!("[{}]", elem_str)
+                format!("[{elem_str}]")
             }
             Type::Tuple(elems) => {
                 if elems.is_empty() {
                     "()".to_string()
                 } else if elems.len() == 1 {
                     let elem_str = self.type_to_string(elems[0], ctx);
-                    format!("({},)", elem_str)
+                    format!("({elem_str},)")
                 } else {
                     let elem_strs: Vec<_> =
                         elems.iter().map(|e| self.type_to_string(*e, ctx)).collect();
@@ -187,7 +187,7 @@ impl InferResult {
 /// Run type inference on a source file.
 ///
 /// Takes the resolved AST and produces type assignments for all expressions and bindings.
-/// The ResolveResult is borrowed, allowing it to be reused after inference completes.
+/// The `ResolveResult` is borrowed, allowing it to be reused after inference completes.
 pub fn infer(source_file: &SourceFile, resolve_result: &ResolveResult) -> InferResult {
     let mut engine = InferEngine::new(resolve_result);
     engine.infer_source_file(source_file);

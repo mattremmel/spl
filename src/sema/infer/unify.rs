@@ -48,12 +48,12 @@ impl<'a> InferEngine<'a> {
     // Contract Helpers
     // =========================================================================
 
-    /// Check if a TypeId is valid (within bounds of the type interner).
+    /// Check if a `TypeId` is valid (within bounds of the type interner).
     pub(super) fn is_valid_type_id(&self, id: TypeId) -> bool {
         (id.0 as usize) < self.types.types_len()
     }
 
-    /// Extract the TypeVar from a type if it's a variable type.
+    /// Extract the `TypeVar` from a type if it's a variable type.
     fn extract_type_var(&self, id: TypeId) -> Option<TypeVar> {
         match self.types.get(id) {
             Type::Infer(v, _) => Some(*v),
@@ -137,12 +137,12 @@ impl<'a> InferEngine<'a> {
         match ty {
             Type::Infer(v, _) => *v == var,
             Type::Tuple(tys) => tys.iter().any(|t| self.occurs_in(var, *t)),
-            Type::Array(elem, _) => self.occurs_in(var, *elem),
-            Type::Slice(elem) => self.occurs_in(var, *elem),
-            Type::Ref(_, inner) => self.occurs_in(var, *inner),
-            Type::RawPtr(_, pointee) => self.occurs_in(var, *pointee),
-            Type::Struct(_, args) => args.iter().any(|t| self.occurs_in(var, *t)),
-            Type::Alias(_, args) => args.iter().any(|t| self.occurs_in(var, *t)),
+            Type::Array(elem, _) | Type::Slice(elem) | Type::Ref(_, elem) | Type::RawPtr(_, elem) => {
+                self.occurs_in(var, *elem)
+            }
+            Type::Struct(_, args) | Type::Alias(_, args) => {
+                args.iter().any(|t| self.occurs_in(var, *t))
+            }
             Type::FnPtr { params, ret } => {
                 params.iter().any(|t| self.occurs_in(var, *t)) || self.occurs_in(var, *ret)
             }
@@ -246,12 +246,13 @@ impl<'a> InferEngine<'a> {
         let ty_b = self.types.get(b).clone();
 
         let result: Result<(), UnifyError> = match (&ty_a, &ty_b) {
-            // Error type unifies with anything
-            (Type::Error, _) | (_, Type::Error) => Ok(()),
-
-            // Never type unifies with anything (it's the bottom type)
-            (Type::Primitive(PrimitiveKind::Never), _)
-            | (_, Type::Primitive(PrimitiveKind::Never)) => Ok(()),
+            // Error type and Never type unify with anything (Never is the bottom type)
+            // StrRef with StrRef also returns Ok
+            (Type::Error, _)
+            | (_, Type::Error)
+            | (Type::Primitive(PrimitiveKind::Never), _)
+            | (_, Type::Primitive(PrimitiveKind::Never))
+            | (Type::StrRef, Type::StrRef) => Ok(()),
 
             // General type variable binds to anything (with occurs check)
             (Type::Infer(var, InferKind::General), _) => {
@@ -280,8 +281,9 @@ impl<'a> InferEngine<'a> {
                 self.substitution.insert(*var, a);
                 Ok(())
             }
-            (Type::Infer(var1, InferKind::Int), Type::Infer(var2, InferKind::Int)) => {
-                // Bind one to the other (same variable is OK - identity)
+            // Bind Int or Float type vars to each other (same variable is OK - identity)
+            (Type::Infer(var1, InferKind::Int), Type::Infer(var2, InferKind::Int))
+            | (Type::Infer(var1, InferKind::Float), Type::Infer(var2, InferKind::Float)) => {
                 if var1 != var2 {
                     self.substitution.insert(*var1, b);
                 }
@@ -297,7 +299,7 @@ impl<'a> InferEngine<'a> {
                 actual: a,
             }),
 
-            // Float variable binds to any float type or another float variable (with occurs check)
+            // Float variable binds to any float type (with occurs check)
             (Type::Infer(var, InferKind::Float), Type::Primitive(prim)) if is_float_type(*prim) => {
                 // No occurs check needed - primitives can't contain type variables
                 self.substitution.insert(*var, b);
@@ -306,13 +308,6 @@ impl<'a> InferEngine<'a> {
             (Type::Primitive(prim), Type::Infer(var, InferKind::Float)) if is_float_type(*prim) => {
                 // No occurs check needed - primitives can't contain type variables
                 self.substitution.insert(*var, a);
-                Ok(())
-            }
-            (Type::Infer(var1, InferKind::Float), Type::Infer(var2, InferKind::Float)) => {
-                // Bind one to the other (same variable is OK - identity)
-                if var1 != var2 {
-                    self.substitution.insert(*var1, b);
-                }
                 Ok(())
             }
             // Float variable vs non-float type
@@ -350,25 +345,11 @@ impl<'a> InferEngine<'a> {
                 }
             }
 
-            // References: mutability must match or coerce, inner types must unify.
-            // Coercion: &mut T -> &T is allowed (mutable can become shared),
-            // but &T -> &mut T is forbidden (can't gain mutability).
-            (Type::Ref(m1, inner1), Type::Ref(m2, inner2)) => {
-                let mutability_ok =
-                    m1 == m2 || (*m1 == Mutability::Mutable && *m2 == Mutability::Shared);
-                if !mutability_ok {
-                    return Err(UnifyError::MutabilityMismatch {
-                        expected: *m1,
-                        actual: *m2,
-                    });
-                }
-                self.unify(*inner1, *inner2)
-            }
-
-            // Raw pointers: mutability must match or coerce, pointee types must unify.
-            // Coercion: *mut T -> *T is allowed (mutable can become shared),
-            // but *T -> *mut T is forbidden (can't gain mutability).
-            (Type::RawPtr(m1, inner1), Type::RawPtr(m2, inner2)) => {
+            // References and raw pointers: mutability must match or coerce, inner types must unify.
+            // Coercion: &mut T -> &T or *mut T -> *T is allowed (mutable can become shared),
+            // but &T -> &mut T or *T -> *mut T is forbidden (can't gain mutability).
+            (Type::Ref(m1, inner1), Type::Ref(m2, inner2))
+            | (Type::RawPtr(m1, inner1), Type::RawPtr(m2, inner2)) => {
                 let mutability_ok =
                     m1 == m2 || (*m1 == Mutability::Mutable && *m2 == Mutability::Shared);
                 if !mutability_ok {
@@ -451,10 +432,7 @@ impl<'a> InferEngine<'a> {
                 self.unify(*r1, *r2)
             }
 
-            // StrRef type must match exactly
-            (Type::StrRef, Type::StrRef) => Ok(()),
-
-            // Everything else fails
+            // Everything else fails (StrRef must match exactly)
             _ => Err(UnifyError::TypeMismatch {
                 expected: a,
                 actual: b,
@@ -480,7 +458,7 @@ impl<'a> InferEngine<'a> {
     // =========================================================================
 
     /// Instantiate a generic function signature with fresh type variables.
-    /// Returns (instantiated_param_types, instantiated_return_type).
+    /// Returns (`instantiated_param_types`, `instantiated_return_type`).
     pub(super) fn instantiate_signature(&mut self, sig: &FnSignature) -> (Vec<TypeId>, TypeId) {
         if sig.type_params.is_empty() {
             // No generics, return as-is
@@ -508,7 +486,7 @@ impl<'a> InferEngine<'a> {
     }
 
     /// Instantiate a generic function signature with fresh type variables.
-    /// Returns (instantiated_param_infos_with_labels, instantiated_return_type).
+    /// Returns (`instantiated_param_infos_with_labels`, `instantiated_return_type`).
     pub(super) fn instantiate_signature_with_labels(
         &mut self,
         sig: &FnSignature,
@@ -646,7 +624,7 @@ impl<'a> InferEngine<'a> {
         let mut defaults: Vec<(TypeVar, TypeId)> = Vec::new();
 
         // Go through all bindings and apply defaults
-        for (_def_id, &type_id) in self.binding_types.iter() {
+        for &type_id in self.binding_types.values() {
             self.collect_defaults(type_id, &mut defaults);
         }
 
@@ -691,22 +669,13 @@ impl<'a> InferEngine<'a> {
                     defaults.push((var, self.types.f64()));
                 }
             }
-            Type::Infer(_, InferKind::General) => {
-                // General type variables don't have defaults - this is an error
-                // For now, we'll leave them as-is
-            }
-            Type::Ref(_, inner) => self.collect_defaults(inner, defaults),
-            Type::RawPtr(_, pointee) => self.collect_defaults(pointee, defaults),
-            Type::Array(elem, _) => self.collect_defaults(elem, defaults),
-            Type::Slice(elem) => self.collect_defaults(elem, defaults),
-            Type::Tuple(elems) => {
+            Type::Ref(_, inner)
+            | Type::RawPtr(_, inner)
+            | Type::Array(inner, _)
+            | Type::Slice(inner) => self.collect_defaults(inner, defaults),
+            Type::Tuple(elems) | Type::Struct(_, elems) => {
                 for elem in elems {
                     self.collect_defaults(elem, defaults);
-                }
-            }
-            Type::Struct(_, args) => {
-                for arg in args {
-                    self.collect_defaults(arg, defaults);
                 }
             }
             Type::FnPtr { params, ret } => {
@@ -715,6 +684,7 @@ impl<'a> InferEngine<'a> {
                 }
                 self.collect_defaults(ret, defaults);
             }
+            // General type variables don't have defaults; other types have no defaults
             _ => {}
         }
     }

@@ -88,7 +88,7 @@ use crate::sema::types::TypeInterner;
 /// compiling multiple MIR bodies as a complete program.
 ///
 /// # Arguments
-/// * `bodies` - Slice of (DefId, name, Body) tuples to compile
+/// * `bodies` - Slice of (`DefId`, name, Body) tuples to compile
 /// * `types` - The type interner for type lookups
 ///
 /// # Returns

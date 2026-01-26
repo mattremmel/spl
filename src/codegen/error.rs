@@ -40,19 +40,19 @@ impl fmt::Display for CodegenError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CodegenError::UnsupportedTarget(target) => {
-                write!(f, "unsupported target: {}", target)
+                write!(f, "unsupported target: {target}")
             }
             CodegenError::IsaConfiguration(msg) => {
-                write!(f, "ISA configuration error: {}", msg)
+                write!(f, "ISA configuration error: {msg}")
             }
             CodegenError::ModuleError(msg) => {
-                write!(f, "module error: {}", msg)
+                write!(f, "module error: {msg}")
             }
             CodegenError::UnsupportedType(ty) => {
-                write!(f, "unsupported type for code generation: {}", ty)
+                write!(f, "unsupported type for code generation: {ty}")
             }
             CodegenError::Internal(msg) => {
-                write!(f, "internal codegen error: {}", msg)
+                write!(f, "internal codegen error: {msg}")
             }
         }
     }
@@ -81,7 +81,7 @@ impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RuntimeError::MainNotFound => write!(f, "main function not found"),
-            RuntimeError::Trap { code: Some(c) } => write!(f, "trap occurred: code {}", c),
+            RuntimeError::Trap { code: Some(c) } => write!(f, "trap occurred: code {c}"),
             RuntimeError::Trap { code: None } => write!(f, "trap occurred"),
         }
     }

@@ -49,7 +49,7 @@
 //!
 //! # Self-Hosting
 //!
-//! ## Raw syscalls (Linux x86_64)
+//! ## Raw syscalls (Linux `x86_64`)
 //! ```text
 //! // SYS_write = 1
 //! mov rax, 1      // syscall number

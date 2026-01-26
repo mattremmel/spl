@@ -227,7 +227,7 @@ pub enum Type {
 
 /// An interner for semantic types.
 ///
-/// Types are interned so that type equality can be checked via TypeId comparison.
+/// Types are interned so that type equality can be checked via `TypeId` comparison.
 /// Primitive types are pre-interned with stable IDs.
 #[derive(Clone, Debug)]
 pub struct TypeInterner {
@@ -477,7 +477,7 @@ impl TypeInterner {
         self.error_id
     }
 
-    /// Get the StrRef type (fat pointer to UTF-8 data, like Rust's `&str`).
+    /// Get the `StrRef` type (fat pointer to UTF-8 data, like Rust's `&str`).
     pub fn str_ref(&self) -> TypeId {
         self.str_ref_id
     }
@@ -500,7 +500,7 @@ impl TypeInterner {
     // ===== Contract Helpers =====
 
     /// Returns the number of interned types.
-    /// Used for contract assertions to validate TypeId bounds.
+    /// Used for contract assertions to validate `TypeId` bounds.
     pub fn types_len(&self) -> usize {
         self.types.len()
     }

@@ -1,7 +1,7 @@
 //! High-level Intermediate Representation (HIR).
 //!
 //! HIR differs from AST:
-//! - Names resolved to DefIds
+//! - Names resolved to `DefId`s
 //! - Types attached to all expressions
 //! - Desugared constructs (while → loop, etc.)
 //! - Arena-allocated with stable IDs
@@ -64,11 +64,11 @@ pub struct HirDatabase {
     pub items: Vec<HirItem>,
     /// Type interner for all types in the HIR.
     pub types: TypeInterner,
-    /// Map from binding DefIds to their types.
+    /// Map from binding `DefId`s to their types.
     pub binding_types: FxHashMap<DefId, TypeId>,
     /// Map from expression IDs to their source spans (for diagnostics).
     pub expr_spans: FxHashMap<ExprId, Span>,
-    /// Map from method call expression IDs to their resolved method DefIds.
+    /// Map from method call expression IDs to their resolved method `DefId`s.
     pub method_resolutions: FxHashMap<ExprId, DefId>,
 }
 

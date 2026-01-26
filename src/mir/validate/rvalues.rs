@@ -23,7 +23,7 @@ use crate::sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
 pub fn validate_rvalues(body: &Body, types: &TypeInterner) {
     for (block_idx, block) in body.basic_blocks.iter().enumerate() {
         for (stmt_idx, stmt) in block.statements.iter().enumerate() {
-            let ctx = format!("BasicBlock({}).statements[{}]", block_idx, stmt_idx);
+            let ctx = format!("BasicBlock({block_idx}).statements[{stmt_idx}]");
 
             if let StatementKind::Assign(place, rvalue) = &stmt.kind {
                 validate_rvalue(rvalue, place, body, types, &ctx);
@@ -44,7 +44,7 @@ fn validate_rvalue(
             validate_len(place, body, types, context);
         }
         Rvalue::Cast(kind, operand, target_ty) => {
-            validate_cast(kind, operand, *target_ty, body, types, context);
+            validate_cast(*kind, operand, *target_ty, body, types, context);
         }
         Rvalue::Aggregate(agg_kind, operands) => {
             validate_aggregate(agg_kind, operands, dest_place, body, types, context);
@@ -102,23 +102,16 @@ fn validate_len(place: &Place, body: &Body, types: &TypeInterner, context: &str)
         return;
     }
 
-    match types.get(ty) {
-        Type::Array(_, _) | Type::Slice(_) => {
-            // Valid - Len works on arrays and slices
-        }
-        _ => {
-            panic!(
-                "Rvalue validation failed: Len requires array or slice type at {}: \
-                got {:?}",
-                context,
-                types.get(ty)
-            );
-        }
-    }
+    assert!(
+        matches!(types.get(ty), Type::Array(_, _) | Type::Slice(_)),
+        "Rvalue validation failed: Len requires array or slice type at {context}: \
+        got {:?}",
+        types.get(ty)
+    );
 }
 
 fn validate_cast(
-    kind: &CastKind,
+    kind: CastKind,
     operand: &crate::mir::operand::Operand,
     target_ty: TypeId,
     body: &Body,
@@ -137,68 +130,52 @@ fn validate_cast(
 
     match kind {
         CastKind::IntToInt => {
-            if !is_integer_type(source_type) {
-                panic!(
-                    "Rvalue validation failed: IntToInt cast from non-integer type at {}: \
-                    source is {:?}",
-                    context, source_type
-                );
-            }
-            if !is_integer_type(target_type) {
-                panic!(
-                    "Rvalue validation failed: IntToInt cast to non-integer type at {}: \
-                    target is {:?}",
-                    context, target_type
-                );
-            }
+            assert!(
+                is_integer_type(source_type),
+                "Rvalue validation failed: IntToInt cast from non-integer type at {context}: \
+                source is {source_type:?}"
+            );
+            assert!(
+                is_integer_type(target_type),
+                "Rvalue validation failed: IntToInt cast to non-integer type at {context}: \
+                target is {target_type:?}"
+            );
         }
         CastKind::IntToFloat => {
-            if !is_integer_type(source_type) {
-                panic!(
-                    "Rvalue validation failed: IntToFloat cast from non-integer type at {}: \
-                    source is {:?}",
-                    context, source_type
-                );
-            }
-            if !is_float_type(target_type) {
-                panic!(
-                    "Rvalue validation failed: IntToFloat cast to non-float type at {}: \
-                    target is {:?}",
-                    context, target_type
-                );
-            }
+            assert!(
+                is_integer_type(source_type),
+                "Rvalue validation failed: IntToFloat cast from non-integer type at {context}: \
+                source is {source_type:?}"
+            );
+            assert!(
+                is_float_type(target_type),
+                "Rvalue validation failed: IntToFloat cast to non-float type at {context}: \
+                target is {target_type:?}"
+            );
         }
         CastKind::FloatToInt => {
-            if !is_float_type(source_type) {
-                panic!(
-                    "Rvalue validation failed: FloatToInt cast from non-float type at {}: \
-                    source is {:?}",
-                    context, source_type
-                );
-            }
-            if !is_integer_type(target_type) {
-                panic!(
-                    "Rvalue validation failed: FloatToInt cast to non-integer type at {}: \
-                    target is {:?}",
-                    context, target_type
-                );
-            }
+            assert!(
+                is_float_type(source_type),
+                "Rvalue validation failed: FloatToInt cast from non-float type at {context}: \
+                source is {source_type:?}"
+            );
+            assert!(
+                is_integer_type(target_type),
+                "Rvalue validation failed: FloatToInt cast to non-integer type at {context}: \
+                target is {target_type:?}"
+            );
         }
         CastKind::FloatToFloat => {
-            if !is_float_type(source_type) {
-                panic!(
-                    "Rvalue validation failed: FloatToFloat cast from non-float type at {}: \
-                    source is {:?}",
-                    context, source_type
-                );
-            }
-            if !is_float_type(target_type) {
-                panic!(
-                    "Rvalue validation failed: FloatToFloat cast to non-float type at {}: \
-                    target is {:?}",
-                    context, target_type
-                );
-            }
+            assert!(
+                is_float_type(source_type),
+                "Rvalue validation failed: FloatToFloat cast from non-float type at {context}: \
+                source is {source_type:?}"
+            );
+            assert!(
+                is_float_type(target_type),
+                "Rvalue validation failed: FloatToFloat cast to non-float type at {context}: \
+                target is {target_type:?}"
+            );
         }
         CastKind::PtrToPtr | CastKind::Unsize => {
             // These require more complex validation involving pointer/reference types
@@ -217,14 +194,12 @@ fn get_operand_type(
     match operand {
         Operand::Copy(place) | Operand::Move(place) => get_place_type(place, body, types),
         Operand::Constant(constant) => match constant {
-            Constant::Int(_, ty) => *ty,
-            Constant::Float(_, ty) => *ty,
+            Constant::Int(_, ty) | Constant::Float(_, ty) | Constant::Zeroed(ty) => *ty,
             Constant::Bool(_) => types.bool(),
             Constant::Char(_) => types.char(),
             Constant::String(_) => types.str_ref(),
             Constant::Unit => types.unit(),
             Constant::FnDef(_) => types.error(),
-            Constant::Zeroed(ty) => *ty,
         },
     }
 }
@@ -248,38 +223,28 @@ fn validate_aggregate(
 
     match agg_kind {
         AggregateKind::Tuple => {
-            match types.get(dest_ty) {
-                Type::Tuple(fields) => {
-                    if fields.len() != operands.len() {
-                        panic!(
-                            "Rvalue validation failed: tuple expects {} fields, got {} at {}",
-                            fields.len(),
-                            operands.len(),
-                            context
-                        );
-                    }
-                }
-                _ => {
-                    // Destination is not a tuple type - this would be caught by type validation
-                }
+            if let Type::Tuple(fields) = types.get(dest_ty) {
+                assert!(
+                    fields.len() == operands.len(),
+                    "Rvalue validation failed: tuple expects {} fields, got {} at {}",
+                    fields.len(),
+                    operands.len(),
+                    context
+                );
             }
+            // Destination is not a tuple type - this would be caught by type validation
         }
         AggregateKind::Array => {
-            match types.get(dest_ty) {
-                Type::Array(_, len) => {
-                    if *len as usize != operands.len() {
-                        panic!(
-                            "Rvalue validation failed: array expects {} elements, got {} at {}",
-                            len,
-                            operands.len(),
-                            context
-                        );
-                    }
-                }
-                _ => {
-                    // Destination is not an array type - this would be caught by type validation
-                }
+            if let Type::Array(_, len) = types.get(dest_ty) {
+                assert!(
+                    *len as usize == operands.len(),
+                    "Rvalue validation failed: array expects {} elements, got {} at {}",
+                    len,
+                    operands.len(),
+                    context
+                );
             }
+            // Destination is not an array type - this would be caught by type validation
         }
         AggregateKind::Adt(_def_id) => {
             // ADT field count validation would require access to struct/enum definitions
@@ -296,16 +261,11 @@ fn validate_discriminant(place: &Place, body: &Body, types: &TypeInterner, _cont
         return;
     }
 
-    match types.get(ty) {
-        Type::Struct(_, _) => {
-            // Enums are represented as Struct with a discriminant
-            // This is a simplification - real impl would check if it's actually an enum
-        }
-        _ => {
-            // Note: In a full implementation, we'd check for enum types specifically
-            // For now, warn but don't panic since enum representation varies
-        }
-    }
+    // Enums are represented as Struct with a discriminant
+    // This is a simplification - real impl would check if it's actually an enum
+    // Note: In a full implementation, we'd check for enum types specifically
+    // For now, we accept struct types since enum representation varies
+    let _ = types.get(ty);
 }
 
 fn is_integer_type(ty: &Type) -> bool {

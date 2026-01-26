@@ -268,11 +268,11 @@ impl SemanticContext {
         Ok(def_id)
     }
 
-    /// Define an alias (import binding) to an existing DefId in the current scope.
+    /// Define an alias (import binding) to an existing `DefId` in the current scope.
     ///
     /// Unlike `define`, this doesn't create a new symbol. Instead, it creates a
-    /// name binding that resolves to an existing DefId. This is used for imports
-    /// where we want `use foo as bar` to make `bar` resolve to the same DefId as `foo`.
+    /// name binding that resolves to an existing `DefId`. This is used for imports
+    /// where we want `use foo as bar` to make `bar` resolve to the same `DefId` as `foo`.
     ///
     /// Returns `Ok(())` if the alias was created, or `Err(DefId)` if the name
     /// already exists in the current scope.
@@ -296,7 +296,7 @@ impl SemanticContext {
 
     /// Look up a symbol by name, searching the current scope and all parent scopes.
     ///
-    /// Returns the DefId of the first matching symbol found, or None if not found.
+    /// Returns the `DefId` of the first matching symbol found, or None if not found.
     pub fn lookup(&self, name: Spur) -> Option<DefId> {
         let mut scope_id = Some(self.current_scope);
 
@@ -327,7 +327,7 @@ impl SemanticContext {
         self.scopes[scope_id.0 as usize].lookup(name)
     }
 
-    /// Get a symbol by its DefId.
+    /// Get a symbol by its `DefId`.
     pub fn get_symbol(&self, def_id: DefId) -> &Symbol {
         debug_assert!(
             self.is_valid_def_id(def_id),
@@ -368,13 +368,13 @@ impl SemanticContext {
 
     // ===== ID Validation Helpers =====
 
-    /// Returns true if the given ScopeId is valid (within bounds).
+    /// Returns true if the given `ScopeId` is valid (within bounds).
     /// Used in debug assertions; trivial enough to always compile.
     fn is_valid_scope_id(&self, scope_id: ScopeId) -> bool {
         (scope_id.0 as usize) < self.scopes.len()
     }
 
-    /// Returns true if the given DefId is valid (within bounds).
+    /// Returns true if the given `DefId` is valid (within bounds).
     /// Used in debug assertions; trivial enough to always compile.
     fn is_valid_def_id(&self, def_id: DefId) -> bool {
         (def_id.0 as usize) < self.symbols.len()
@@ -395,7 +395,7 @@ impl SemanticContext {
 /// | Public (pub) | Visible to all |
 /// | Crate (pub(crate)) | Future - visible within crate only (treated as Public for now) |
 /// | Super (pub(super)) | Future - visible to parent module (treated as Public for now) |
-/// | PubSelf (pub(self)) | Future - same as Private (treated as Public for now) |
+/// | `PubSelf` (pub(self)) | Future - same as Private (treated as Public for now) |
 ///
 /// Key semantics:
 /// - Child modules CAN access parent's private items (descendants see ancestors' private items)
@@ -408,14 +408,13 @@ pub fn is_visible(
     tree: &ModuleTree,
 ) -> bool {
     match visibility {
-        Visibility::Public => true,
+        // Public and future visibility levels are treated as public
+        Visibility::Public | Visibility::Crate | Visibility::Super | Visibility::PubSelf => true,
         Visibility::Private => {
             // Private items are visible to same module and descendants
             // i.e., accessor must be item_module or a descendant of item_module
             is_same_or_descendant(accessor_module, item_module, tree)
         }
-        // Future visibility levels - currently treated as public
-        Visibility::Crate | Visibility::Super | Visibility::PubSelf => true,
     }
 }
 

@@ -239,11 +239,11 @@ impl UseTree {
         token(&self.0, SyntaxKind::STAR).is_some()
     }
 
-    /// Get all path segments (NameRef tokens).
+    /// Get all path segments (`NameRef` tokens).
     pub fn path_segments(&self) -> impl Iterator<Item = SyntaxToken> {
         self.0
             .children_with_tokens()
-            .filter_map(|child| child.into_token())
+            .filter_map(rowan::NodeOrToken::into_token)
             .filter(|token| {
                 matches!(
                     token.kind(),
@@ -423,7 +423,7 @@ impl NameRef {
     }
 
     /// Get the token for this name reference.
-    /// Returns an IDENT, SELF_VALUE_KW (for `self`), or SELF_TYPE_KW (for `Self`) token.
+    /// Returns an `IDENT`, `SELF_VALUE_KW` (for `self`), or `SELF_TYPE_KW` (for `Self`) token.
     pub fn token(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::IDENT)
             .or_else(|| token(&self.0, SyntaxKind::SELF_VALUE_KW))
@@ -508,7 +508,7 @@ impl AttrPath {
     pub fn segments(&self) -> impl Iterator<Item = SyntaxToken> {
         self.0
             .children_with_tokens()
-            .filter_map(|c| c.into_token())
+            .filter_map(rowan::NodeOrToken::into_token)
             .filter(|t| t.kind() == SyntaxKind::IDENT)
     }
 
@@ -547,7 +547,7 @@ impl AttrArg {
                     // Check if next non-trivia is EQ
                     for next in iter {
                         match next {
-                            rowan::NodeOrToken::Token(t2) if t2.kind().is_trivia() => continue,
+                            rowan::NodeOrToken::Token(t2) if t2.kind().is_trivia() => {}
                             rowan::NodeOrToken::Token(t2) if t2.kind() == SyntaxKind::EQ => {
                                 return Some(t);
                             }
@@ -556,7 +556,7 @@ impl AttrArg {
                     }
                     return None;
                 }
-                rowan::NodeOrToken::Token(t) if t.kind().is_trivia() => continue,
+                rowan::NodeOrToken::Token(t) if t.kind().is_trivia() => {}
                 _ => return None,
             }
         }

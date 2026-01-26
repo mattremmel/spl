@@ -10,7 +10,7 @@ use crate::sema::types::{TypeId, TypeInterner};
 
 use super::{OptimizationPass, PassResult};
 
-/// ConstantFolding optimization pass.
+/// `ConstantFolding` optimization pass.
 ///
 /// Evaluates binary operations on constants at compile time.
 pub struct ConstantFolding;

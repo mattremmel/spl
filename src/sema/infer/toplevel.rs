@@ -225,14 +225,12 @@ impl<'a> InferEngine<'a> {
     }
 
     pub(super) fn collect_function_signature(&mut self, func: &FunctionDef) {
-        let name = match func.name() {
-            Some(n) => n,
-            None => return,
+        let Some(name) = func.name() else {
+            return;
         };
 
-        let token = match name.ident_token() {
-            Some(t) => t,
-            None => return,
+        let Some(token) = name.ident_token() else {
+            return;
         };
 
         let span = text_range_to_span(token.text_range());
@@ -306,14 +304,12 @@ impl<'a> InferEngine<'a> {
 
     /// Collect the signature of an extern function declaration.
     pub(super) fn collect_extern_fn_signature(&mut self, extern_fn: &ExternFn) {
-        let name = match extern_fn.name() {
-            Some(n) => n,
-            None => return,
+        let Some(name) = extern_fn.name() else {
+            return;
         };
 
-        let token = match name.ident_token() {
-            Some(t) => t,
-            None => return,
+        let Some(token) = name.ident_token() else {
+            return;
         };
 
         let span = text_range_to_span(token.text_range());
@@ -393,7 +389,7 @@ impl<'a> InferEngine<'a> {
                 let symbol = self.resolve_ctx.get_symbol(struct_id);
                 let name = self.resolve_ctx.resolve(symbol.name);
                 self.diagnostics.push(
-                    Diagnostic::error(format!("recursive type `{}` has infinite size", name))
+                    Diagnostic::error(format!("recursive type `{name}` has infinite size"))
                         .with_label(symbol.span.clone(), "recursive without indirection"),
                 );
             }
@@ -439,13 +435,12 @@ impl<'a> InferEngine<'a> {
         false
     }
 
-    /// Get the struct DefId if this type directly contains a struct (not through a reference).
+    /// Get the struct `DefId` if this type directly contains a struct (not through a reference).
     /// Returns None if the type is a reference, primitive, or other non-struct type.
     fn get_direct_struct_dependency(&self, type_id: TypeId) -> Option<DefId> {
         let ty = self.types.get(type_id);
         match ty {
             Type::Struct(def_id, _) => Some(*def_id),
-            Type::Ref(_, _) => None, // References break the cycle
             Type::Array(elem, _) => self.get_direct_struct_dependency(*elem),
             Type::Tuple(elems) => {
                 // Check if any tuple element contains a struct directly
@@ -456,20 +451,19 @@ impl<'a> InferEngine<'a> {
                 }
                 None
             }
+            // References and raw pointers break the cycle; all other types have no dependency
             _ => None,
         }
     }
 
     /// Collect type alias information (public for multi-file inference).
     pub(super) fn collect_type_alias_info(&mut self, type_alias: &crate::ast::TypeAlias) {
-        let name = match type_alias.name() {
-            Some(n) => n,
-            None => return,
+        let Some(name) = type_alias.name() else {
+            return;
         };
 
-        let token = match name.ident_token() {
-            Some(t) => t,
-            None => return,
+        let Some(token) = name.ident_token() else {
+            return;
         };
 
         let span = text_range_to_span(token.text_range());
@@ -498,7 +492,7 @@ impl<'a> InferEngine<'a> {
                 let symbol = self.resolve_ctx.get_symbol(alias_id);
                 let name = self.resolve_ctx.resolve(symbol.name);
                 self.diagnostics.push(
-                    Diagnostic::error(format!("cyclic type alias definition for `{}`", name))
+                    Diagnostic::error(format!("cyclic type alias definition for `{name}`"))
                         .with_label(symbol.span.clone(), "cyclic reference"),
                 );
                 cyclic_aliases.push(alias_id);
@@ -543,22 +537,15 @@ impl<'a> InferEngine<'a> {
         false
     }
 
-    /// Get the alias DefId if this type directly references a type alias.
+    /// Get the alias `DefId` if this type directly references a type alias.
     /// Also traverses arrays and tuples to find aliases in compound types.
     fn get_referenced_alias(&self, type_id: TypeId) -> Option<DefId> {
         let ty = self.types.get(type_id);
         match ty {
             // mk_struct is used for both structs and type aliases
-            // Check if the DefId is actually a type alias
-            Type::Struct(def_id, _) => {
-                if self.type_alias_targets.contains_key(def_id) {
-                    Some(*def_id)
-                } else {
-                    None
-                }
-            }
             // Type::Alias is also used for type aliases
-            Type::Alias(def_id, _) => {
+            // Check if the DefId is actually a type alias
+            Type::Struct(def_id, _) | Type::Alias(def_id, _) => {
                 if self.type_alias_targets.contains_key(def_id) {
                     Some(*def_id)
                 } else {
@@ -575,14 +562,12 @@ impl<'a> InferEngine<'a> {
 
     /// Collect struct information (public for multi-file inference).
     pub(super) fn collect_struct_info(&mut self, struct_def: &crate::ast::StructDef) {
-        let name = match struct_def.name() {
-            Some(n) => n,
-            None => return,
+        let Some(name) = struct_def.name() else {
+            return;
         };
 
-        let token = match name.ident_token() {
-            Some(t) => t,
-            None => return,
+        let Some(token) = name.ident_token() else {
+            return;
         };
 
         let span = text_range_to_span(token.text_range());
@@ -624,7 +609,7 @@ impl<'a> InferEngine<'a> {
         self.struct_fields.insert(def_id, fields);
     }
 
-    /// Get the struct DefId for an impl block.
+    /// Get the struct `DefId` for an impl block.
     fn get_impl_struct_def_id(&self, impl_block: &crate::ast::ImplBlock) -> Option<DefId> {
         let ty = impl_block.self_ty()?;
         // For a path type like `impl S`, get the struct's DefId
@@ -640,7 +625,7 @@ impl<'a> InferEngine<'a> {
         }
     }
 
-    /// Get the DefId for a function definition.
+    /// Get the `DefId` for a function definition.
     fn get_function_def_id(&self, func: &FunctionDef) -> Option<DefId> {
         let name = func.name()?;
         let token = name.ident_token()?;
@@ -753,14 +738,12 @@ impl<'a> InferEngine<'a> {
     }
 
     fn infer_function(&mut self, func: &FunctionDef) {
-        let name = match func.name() {
-            Some(n) => n,
-            None => return,
+        let Some(name) = func.name() else {
+            return;
         };
 
-        let token = match name.ident_token() {
-            Some(t) => t,
-            None => return,
+        let Some(token) = name.ident_token() else {
+            return;
         };
 
         let span = text_range_to_span(token.text_range());
@@ -878,7 +861,7 @@ impl<'a> InferEngine<'a> {
         self.current_return_type = None;
     }
 
-    /// Check if a type is the unit type (either Primitive::Unit or empty tuple)
+    /// Check if a type is the unit type (either `Primitive::Unit` or empty tuple)
     fn is_unit_type(&self, type_id: TypeId) -> bool {
         match self.types.get(type_id) {
             Type::Primitive(PrimitiveKind::Unit) => true,

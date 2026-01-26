@@ -102,14 +102,11 @@ pub extern "C" fn __getenv(name_ptr: *const u8, name_len: i64) -> StringResult {
 
     // SAFETY: Caller guarantees valid pointer
     let name_slice = unsafe { std::slice::from_raw_parts(name_ptr, name_len as usize) };
-    let name = match std::str::from_utf8(name_slice) {
-        Ok(s) => s,
-        Err(_) => {
-            return StringResult {
-                ptr: std::ptr::null(),
-                len: 0,
-            };
-        }
+    let Ok(name) = std::str::from_utf8(name_slice) else {
+        return StringResult {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
     };
 
     match std::env::var(name) {

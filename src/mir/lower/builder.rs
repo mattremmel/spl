@@ -10,7 +10,7 @@ use crate::sema::types::TypeId;
 
 /// Builder for constructing MIR bodies incrementally.
 ///
-/// MirBuilder provides a convenient API for building MIR function bodies
+/// `MirBuilder` provides a convenient API for building MIR function bodies
 /// one statement at a time. It manages local allocation, basic block creation,
 /// and ensures the return place is always Local(0).
 pub struct MirBuilder {
@@ -25,10 +25,10 @@ pub struct MirBuilder {
 }
 
 impl MirBuilder {
-    /// Create a new MirBuilder with the given return type.
+    /// Create a new `MirBuilder` with the given return type.
     ///
     /// The return place (Local 0) is automatically created as mutable.
-    /// An entry block (BasicBlock 0) is also created.
+    /// An entry block (`BasicBlock` 0) is also created.
     pub fn new(ret_ty: TypeId) -> Self {
         // Create return place as Local(0)
         let return_local = LocalDecl::new(ret_ty, true);
@@ -122,7 +122,7 @@ impl MirBuilder {
 
     /// Finish building and produce a MIR Body with function metadata.
     ///
-    /// Consumes the builder and returns the completed Body with def_id and name.
+    /// Consumes the builder and returns the completed Body with `def_id` and name.
     pub fn finish_with_metadata(self, arg_count: usize, def_id: DefId, name: String) -> Body {
         Body {
             def_id: Some(def_id),

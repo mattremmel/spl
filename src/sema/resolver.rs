@@ -51,18 +51,18 @@ use rustc_hash::FxHashMap;
 pub struct ResolveResult {
     /// The semantic context with symbol table.
     pub ctx: SemanticContext,
-    /// Map from NameRef locations to their resolved DefIds.
+    /// Map from `NameRef` locations to their resolved `DefIds`.
     pub resolutions: FxHashMap<Span, DefId>,
     /// Diagnostics produced during resolution.
     pub diagnostics: Vec<Diagnostic>,
-    /// Map from module DefId to its scope ID (for qualified module access).
+    /// Map from module `DefId` to its scope ID (for qualified module access).
     pub module_scopes: FxHashMap<DefId, crate::sema::ScopeId>,
 }
 
 /// A pending import from a use declaration.
 #[derive(Debug)]
 struct PendingImport {
-    /// The path segments (e.g., ["utils", "helper"]).
+    /// The path segments (e.g., `["utils", "helper"]`).
     path: Vec<String>,
     /// The local name (may differ if `as` was used).
     local_name: String,
@@ -81,7 +81,7 @@ pub struct Resolver<'ctx> {
     diagnostics: Vec<Diagnostic>,
     /// Pending imports from use declarations.
     pending_imports: Vec<PendingImport>,
-    /// Map from module DefId to its scope ID (for re-entering during pass 2).
+    /// Map from module `DefId` to its scope ID (for re-entering during pass 2).
     module_scopes: FxHashMap<DefId, crate::sema::ScopeId>,
 }
 
@@ -202,19 +202,16 @@ impl<'ctx> Resolver<'ctx> {
         let span = Self::text_range_to_span(token.text_range());
         let interned = self.ctx.intern(&name_text);
 
-        match self.ctx.lookup(interned) {
-            Some(def_id) => {
-                self.resolutions.insert(span, def_id);
-                Some(def_id)
-            }
-            None => {
-                self.error_undefined(&name_text, span);
-                None
-            }
+        if let Some(def_id) = self.ctx.lookup(interned) {
+            self.resolutions.insert(span, def_id);
+            Some(def_id)
+        } else {
+            self.error_undefined(&name_text, span);
+            None
         }
     }
 
-    fn convert_visibility(&self, vis: &Option<crate::ast::Visibility>) -> Visibility {
+    fn convert_visibility(&self, vis: Option<&crate::ast::Visibility>) -> Visibility {
         match vis {
             None => Visibility::Private,
             Some(v) => {
@@ -376,7 +373,7 @@ impl<'ctx> Resolver<'ctx> {
                 self.add_import_binding(import, def_id, name);
             } else {
                 self.diagnostics.push(
-                    Diagnostic::error(format!("cannot find `{}` in this scope", name))
+                    Diagnostic::error(format!("cannot find `{name}` in this scope"))
                         .with_label(import.span.clone(), "not found"),
                 );
             }
@@ -429,7 +426,7 @@ impl<'ctx> Resolver<'ctx> {
     /// Add an import binding to the current scope.
     ///
     /// For imports with rename (`use foo as bar`), creates an alias that references
-    /// the original DefId. For same-name imports (`use self.foo`), creates a binding
+    /// the original `DefId`. For same-name imports (`use self.foo`), creates a binding
     /// only if one doesn't already exist in the current scope.
     fn add_import_binding(&mut self, import: &PendingImport, def_id: DefId, _original_name: &str) {
         let local_interned = self.ctx.intern(&import.local_name);
@@ -515,7 +512,7 @@ impl<'ctx> Resolver<'ctx> {
             };
 
             // Convert to &str for resolve_path
-            let mod_refs: Vec<&str> = mod_path_owned.iter().map(|s| s.as_str()).collect();
+            let mod_refs: Vec<&str> = mod_path_owned.iter().map(String::as_str).collect();
 
             // Resolve module path
             let current_module = self.ctx.current_module;
@@ -568,7 +565,7 @@ impl<'ctx> Resolver<'ctx> {
             }
             Err(Some(_)) => {
                 self.diagnostics.push(
-                    Diagnostic::error(format!("`{}` is private", item_name))
+                    Diagnostic::error(format!("`{item_name}` is private"))
                         .with_label(import.span.clone(), "private item"),
                 );
             }
@@ -613,7 +610,7 @@ impl<'ctx> Resolver<'ctx> {
             return;
         };
 
-        let mod_refs: Vec<&str> = path.iter().map(|s| s.as_str()).collect();
+        let mod_refs: Vec<&str> = path.iter().map(String::as_str).collect();
         let current_module = self.ctx.current_module;
 
         match tree.resolve_path(current_module, &mod_refs) {
@@ -664,21 +661,21 @@ impl<'ctx> Resolver<'ctx> {
 
     fn collect_function(&mut self, func: &FunctionDef) {
         if let Some(name) = func.name() {
-            let vis = self.convert_visibility(&func.visibility());
+            let vis = self.convert_visibility(func.visibility().as_ref());
             self.define_name(&name, SymbolKind::Function, vis, false);
         }
     }
 
     fn collect_struct(&mut self, struct_def: &StructDef) {
         if let Some(name) = struct_def.name() {
-            let vis = self.convert_visibility(&struct_def.visibility());
+            let vis = self.convert_visibility(struct_def.visibility().as_ref());
             self.define_name(&name, SymbolKind::Struct, vis, false);
         }
     }
 
     fn collect_type_alias(&mut self, type_alias: &TypeAlias) {
         if let Some(name) = type_alias.name() {
-            let vis = self.convert_visibility(&type_alias.visibility());
+            let vis = self.convert_visibility(type_alias.visibility().as_ref());
             self.define_name(&name, SymbolKind::TypeAlias, vis, false);
         }
     }
@@ -710,7 +707,7 @@ impl<'ctx> Resolver<'ctx> {
             if let Item::Function(func) = item
                 && let Some(name) = func.name()
             {
-                let vis = self.convert_visibility(&func.visibility());
+                let vis = self.convert_visibility(func.visibility().as_ref());
                 self.define_name(&name, SymbolKind::Function, vis, false);
             }
         }
@@ -727,14 +724,14 @@ impl<'ctx> Resolver<'ctx> {
 
     fn collect_extern_fn(&mut self, extern_fn: &ExternFn) {
         if let Some(name) = extern_fn.name() {
-            let vis = self.convert_visibility(&extern_fn.visibility());
+            let vis = self.convert_visibility(extern_fn.visibility().as_ref());
             self.define_name(&name, SymbolKind::Function, vis, false);
         }
     }
 
     fn collect_module_def(&mut self, module_def: &crate::ast::ModuleDef) {
         let module_def_id = if let Some(name) = module_def.name() {
-            let vis = self.convert_visibility(&module_def.visibility());
+            let vis = self.convert_visibility(module_def.visibility().as_ref());
             self.define_name(&name, SymbolKind::Module, vis, false)
         } else {
             None
@@ -825,7 +822,7 @@ impl<'ctx> Resolver<'ctx> {
     fn resolve_field_def(&mut self, field: &FieldDef) {
         // Define the field name
         if let Some(name) = field.name() {
-            let vis = self.convert_visibility(&field.visibility());
+            let vis = self.convert_visibility(field.visibility().as_ref());
             self.define_name(&name, SymbolKind::Field, vis, false);
         }
 
@@ -1059,7 +1056,8 @@ impl<'ctx> Resolver<'ctx> {
 
     fn resolve_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Literal(_) => {}
+            // Literals and Continue have nothing to resolve
+            Expr::Literal(_) | Expr::Continue(_) => {}
             Expr::Path(path_expr) => {
                 if let Some(path) = path_expr.path() {
                     self.resolve_path(&path);
@@ -1159,7 +1157,6 @@ impl<'ctx> Resolver<'ctx> {
                     self.resolve_expr(&value);
                 }
             }
-            Expr::Continue(_) => {}
             Expr::Return(return_expr) => {
                 if let Some(value) = return_expr.expr() {
                     self.resolve_expr(&value);
@@ -1369,12 +1366,6 @@ impl<'ctx> Resolver<'ctx> {
                     }
                 }
             }
-            Pat::Wildcard(_) => {}
-            Pat::Literal(_) => {}
-            Pat::Range(_range_pat) => {
-                // Range patterns contain literal tokens, not binding patterns
-                // No bindings to define
-            }
             Pat::Tuple(tuple_pat) => {
                 // For `let mut (a, b) = ...`, all bindings are mutable
                 // For `let (mut a, b) = ...`, only `a` is mutable (handled by ident_pat.mut_kw())
@@ -1393,7 +1384,8 @@ impl<'ctx> Resolver<'ctx> {
                     self.define_pattern(&inner, outer_mutable);
                 }
             }
-            Pat::Rest(_) => {}
+            // Wildcards, literals, range, and rest patterns have no bindings to define
+            Pat::Wildcard(_) | Pat::Literal(_) | Pat::Range(_) | Pat::Rest(_) => {}
         }
     }
 
@@ -1492,7 +1484,7 @@ impl<'ctx> Resolver<'ctx> {
     }
 }
 
-/// Helper to define built-in types and traits in a SemanticContext.
+/// Helper to define built-in types and traits in a `SemanticContext`.
 fn define_builtins(ctx: &mut SemanticContext) {
     // Pre-define built-in primitive types
     for builtin in &[
@@ -1597,7 +1589,7 @@ pub fn resolve_package(package: &Package) -> ResolveResult {
 /// Phase 1: Collect all items from all modules through Resolver.
 ///
 /// This populates:
-/// - The symbol table (via Resolver.collect_item)
+/// - The symbol table (via `Resolver.collect_item`)
 /// - The resolutions map (span→DefId for definitions)
 /// - The module tree (items and exports)
 fn collect_all_items_through_resolver(

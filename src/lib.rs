@@ -95,7 +95,7 @@ use rowan::ast::AstNode;
 /// This prevents overwhelming output on heavily broken code.
 const MAX_DIAGNOSTICS: usize = 100;
 
-/// Truncate diagnostics to MAX_DIAGNOSTICS if exceeded, adding an "error limit reached" note.
+/// Truncate diagnostics to `MAX_DIAGNOSTICS` if exceeded, adding an "error limit reached" note.
 fn truncate_diagnostics_if_needed(diagnostics: &mut Vec<Diagnostic>) {
     if diagnostics.len() > MAX_DIAGNOSTICS {
         diagnostics.truncate(MAX_DIAGNOSTICS);
@@ -253,8 +253,8 @@ impl std::fmt::Display for JitError {
             JitError::CompileError(diags) => {
                 write!(f, "compilation failed with {} error(s)", diags.len())
             }
-            JitError::CodegenError(e) => write!(f, "codegen error: {}", e),
-            JitError::RuntimeError(e) => write!(f, "runtime error: {}", e),
+            JitError::CodegenError(e) => write!(f, "codegen error: {e}"),
+            JitError::RuntimeError(e) => write!(f, "runtime error: {e}"),
             JitError::NoMain => write!(f, "no main function found"),
         }
     }
@@ -274,7 +274,7 @@ impl From<codegen::RuntimeError> for JitError {
     }
 }
 
-/// Compile and execute SPL source code, returning the i32 result of main().
+/// Compile and execute SPL source code, returning the i32 result of `main()`.
 ///
 /// This is a convenience function for JIT compilation and execution of SPL programs.
 /// The program must have a `main` function that returns `i32`.
@@ -366,10 +366,10 @@ impl std::fmt::Display for AotError {
             AotError::CompileError(diags) => {
                 write!(f, "compilation failed with {} error(s)", diags.len())
             }
-            AotError::CodegenError(e) => write!(f, "codegen error: {}", e),
-            AotError::LinkError(e) => write!(f, "link error: {}", e),
+            AotError::CodegenError(e) => write!(f, "codegen error: {e}"),
+            AotError::LinkError(e) => write!(f, "link error: {e}"),
             AotError::NoFunctions => write!(f, "no functions to compile"),
-            AotError::Io(e) => write!(f, "IO error: {}", e),
+            AotError::Io(e) => write!(f, "IO error: {e}"),
         }
     }
 }

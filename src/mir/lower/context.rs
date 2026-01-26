@@ -36,13 +36,13 @@ pub struct LoopContext {
 ///
 /// This maintains state during the lowering process, including:
 /// - Reference to the HIR database
-/// - Mapping from DefIds to MIR locals
+/// - Mapping from `DefIds` to MIR locals
 /// - The collection of lowered function bodies
 /// - Stack of loop contexts for break/continue handling
 pub struct MirLoweringContext<'hir> {
     /// Reference to the HIR database.
     pub hir: &'hir HirDatabase,
-    /// Map from binding DefIds to their MIR locals.
+    /// Map from binding `DefIds` to their MIR locals.
     pub(crate) local_map: FxHashMap<DefId, Local>,
     /// Lowered function bodies.
     pub bodies: Vec<Body>,
@@ -97,8 +97,7 @@ impl<'hir> MirLoweringContext<'hir> {
     fn resolve_field_index(&self, struct_def_id: DefId, field_name: &str) -> u32 {
         debug_assert!(
             struct_def_id.is_valid(),
-            "Cannot resolve field '{}' with invalid struct DefId - this indicates a resolution bug in HIR lowering",
-            field_name
+            "Cannot resolve field '{field_name}' with invalid struct DefId - this indicates a resolution bug in HIR lowering"
         );
         for item in &self.hir.items {
             if let HirItem::Struct(s) = item
@@ -113,8 +112,7 @@ impl<'hir> MirLoweringContext<'hir> {
             }
         }
         panic!(
-            "Struct with DefId {:?} not found for field '{}'",
-            struct_def_id, field_name
+            "Struct with DefId {struct_def_id:?} not found for field '{field_name}'"
         );
     }
 
@@ -141,8 +139,7 @@ impl<'hir> MirLoweringContext<'hir> {
             HirExprKind::Var(def_id) => {
                 debug_assert!(
                     def_id.is_valid(),
-                    "Variable reference with INVALID DefId at {:?} - HIR lowering produced invalid variable reference",
-                    span
+                    "Variable reference with INVALID DefId at {span:?} - HIR lowering produced invalid variable reference"
                 );
 
                 // Look up the local for this variable
@@ -337,8 +334,7 @@ impl<'hir> MirLoweringContext<'hir> {
                     Type::Struct(def_id, _) => {
                         debug_assert!(
                             def_id.is_valid(),
-                            "Field access on struct with INVALID DefId at {:?} - type system produced invalid struct type",
-                            span
+                            "Field access on struct with INVALID DefId at {span:?} - type system produced invalid struct type"
                         );
                         self.resolve_field_index(*def_id, field)
                     }
@@ -809,8 +805,7 @@ impl<'hir> MirLoweringContext<'hir> {
     ) -> Place {
         debug_assert!(
             !self.loop_stack.is_empty(),
-            "Break expression at {:?} with empty loop_stack - HIR should not contain break outside of loop",
-            span
+            "Break expression at {span:?} with empty loop_stack - HIR should not contain break outside of loop"
         );
 
         // Get current loop context
@@ -845,8 +840,7 @@ impl<'hir> MirLoweringContext<'hir> {
     fn lower_continue_expr(&mut self, builder: &mut MirBuilder, span: Span) -> Place {
         debug_assert!(
             !self.loop_stack.is_empty(),
-            "Continue expression at {:?} with empty loop_stack - HIR should not contain continue outside of loop",
-            span
+            "Continue expression at {span:?} with empty loop_stack - HIR should not contain continue outside of loop"
         );
 
         // Get current loop context
@@ -923,8 +917,7 @@ impl<'hir> MirLoweringContext<'hir> {
 
         debug_assert!(
             method_def_id.is_valid(),
-            "Method call at expr {:?} resolved to INVALID DefId - type inference failed to resolve this method",
-            expr_id
+            "Method call at expr {expr_id:?} resolved to INVALID DefId - type inference failed to resolve this method"
         );
 
         // Receiver becomes first argument
@@ -980,8 +973,8 @@ impl<'hir> MirLoweringContext<'hir> {
 
     /// Lower a callee expression to an operand.
     ///
-    /// For direct function references (HirExprKind::Var pointing to a function),
-    /// this produces a FnDef constant. For function pointers in variables or
+    /// For direct function references (`HirExprKind::Var` pointing to a function),
+    /// this produces a `FnDef` constant. For function pointers in variables or
     /// complex expressions, this produces a Copy/Move operand.
     fn lower_callee_operand(&mut self, builder: &mut MirBuilder, callee_id: ExprId) -> Operand {
         let callee = self.hir.expr(callee_id);
@@ -1082,10 +1075,6 @@ impl<'hir> MirLoweringContext<'hir> {
                     span,
                 ));
             }
-            HirPatKind::Wildcard => {
-                // Wildcard doesn't bind anything - just evaluate source for side effects
-                // (source is already evaluated)
-            }
             HirPatKind::Tuple { elements } => {
                 // For each element pattern, project the field and recursively lower
                 for (idx, elem_pat_id) in elements.iter().enumerate() {
@@ -1131,12 +1120,10 @@ impl<'hir> MirLoweringContext<'hir> {
                 };
                 self.lower_pattern(builder, *inner, deref_place, span);
             }
-            HirPatKind::Literal(_) => {
-                // Literal patterns are for matching, not binding - nothing to do
-            }
-            HirPatKind::Missing => {
-                // Missing pattern - nothing to bind
-            }
+            // Wildcard doesn't bind anything (source already evaluated)
+            // Literal patterns are for matching, not binding
+            // Missing pattern - nothing to bind either
+            HirPatKind::Wildcard | HirPatKind::Literal(_) | HirPatKind::Missing => {}
         }
     }
 

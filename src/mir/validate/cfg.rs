@@ -16,27 +16,22 @@ use crate::mir::Body;
 pub fn validate_cfg(body: &Body) {
     // Check all blocks have terminators
     for (idx, block) in body.basic_blocks.iter().enumerate() {
-        if block.terminator.is_none() {
-            panic!(
-                "CFG validation failed: BasicBlock({}) has no terminator",
-                idx
-            );
-        }
+        assert!(
+            block.terminator.is_some(),
+            "CFG validation failed: BasicBlock({idx}) has no terminator"
+        );
     }
 
     // Check all successors are valid block indices
     let num_blocks = body.num_blocks();
     for (idx, block) in body.basic_blocks.iter().enumerate() {
         for successor in block.successors() {
-            if successor.index() as usize >= num_blocks {
-                panic!(
-                    "CFG validation failed: BasicBlock({}) has invalid successor BasicBlock({}), \
-                    but only {} blocks exist",
-                    idx,
-                    successor.index(),
-                    num_blocks
-                );
-            }
+            assert!(
+                (successor.index() as usize) < num_blocks,
+                "CFG validation failed: BasicBlock({}) has invalid successor BasicBlock({}), \
+                but only {} blocks exist",
+                idx, successor.index(), num_blocks
+            );
         }
     }
 }

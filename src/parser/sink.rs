@@ -1,4 +1,4 @@
-//! Converts parse events into a rowan GreenNode tree.
+//! Converts parse events into a rowan `GreenNode` tree.
 
 use crate::parser::Parse;
 use crate::parser::event::{Event, ParseError};
@@ -91,7 +91,7 @@ impl<'src> Sink<'src> {
         }
     }
 
-    /// Compute which events are targets of forward_parent links.
+    /// Compute which events are targets of `forward_parent` links.
     fn compute_forward_linked(&self) -> Vec<bool> {
         let mut forward_linked = vec![false; self.events.len()];
 

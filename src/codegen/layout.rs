@@ -51,8 +51,7 @@ impl<'a> LayoutComputer<'a> {
         let pointer_size = pointer_type.bytes();
         debug_assert!(
             pointer_size == 4 || pointer_size == 8,
-            "precondition: pointer_size must be 4 or 8, got {}",
-            pointer_size
+            "precondition: pointer_size must be 4 or 8, got {pointer_size}"
         );
         Self {
             types,
@@ -60,7 +59,7 @@ impl<'a> LayoutComputer<'a> {
         }
     }
 
-    /// Returns the TypeId for a pointer-sized integer type.
+    /// Returns the `TypeId` for a pointer-sized integer type.
     fn pointer_sized_int_type(&self) -> TypeId {
         if self.pointer_size == 4 {
             self.types.i32()
@@ -80,9 +79,9 @@ impl<'a> LayoutComputer<'a> {
             Type::Primitive(prim) => self.primitive_layout(*prim),
 
             // References and pointers are pointer-sized
-            Type::Ref(_, _) => TypeLayout::new(self.pointer_size, self.pointer_size),
-            Type::RawPtr(_, _) => TypeLayout::new(self.pointer_size, self.pointer_size),
-            Type::FnPtr { .. } => TypeLayout::new(self.pointer_size, self.pointer_size),
+            Type::Ref(_, _) | Type::RawPtr(_, _) | Type::FnPtr { .. } => {
+                TypeLayout::new(self.pointer_size, self.pointer_size)
+            }
 
             // Arrays: element_size * count, element alignment
             Type::Array(elem_ty, count) => {
@@ -117,20 +116,19 @@ impl<'a> LayoutComputer<'a> {
             }
 
             // Slices are unsized, but &[T] is a fat pointer (2 pointers)
-            Type::Slice(_) => TypeLayout::new(self.pointer_size * 2, self.pointer_size),
-
             // StrRef is pointer + length (like Rust's &str)
-            Type::StrRef => TypeLayout::new(self.pointer_size * 2, self.pointer_size),
+            Type::Slice(_) | Type::StrRef => {
+                TypeLayout::new(self.pointer_size * 2, self.pointer_size)
+            }
 
             // These should not reach layout computation
+            // Error type is also ZST
             Type::Infer(_, _)
             | Type::Param(_)
             | Type::SelfType
             | Type::Alias(_, _)
-            | Type::Module(_) => TypeLayout::zst(),
-
-            // Error type
-            Type::Error => TypeLayout::zst(),
+            | Type::Module(_)
+            | Type::Error => TypeLayout::zst(),
         }
     }
 
@@ -168,8 +166,7 @@ impl<'a> LayoutComputer<'a> {
             Type::StrRef => {
                 debug_assert!(
                     field_idx < 2,
-                    "precondition: field_idx {} must be < 2 for StrRef",
-                    field_idx
+                    "precondition: field_idx {field_idx} must be < 2 for StrRef"
                 );
                 if field_idx == 0 {
                     0 // ptr at offset 0
@@ -230,8 +227,7 @@ impl<'a> LayoutComputer<'a> {
             Type::StrRef => {
                 debug_assert!(
                     field_idx < 2,
-                    "precondition: field_idx {} must be < 2 for StrRef",
-                    field_idx
+                    "precondition: field_idx {field_idx} must be < 2 for StrRef"
                 );
                 if field_idx < 2 {
                     Some(self.pointer_sized_int_type())
@@ -259,8 +255,7 @@ impl<'a> LayoutComputer<'a> {
     pub fn element_type(&self, ty: TypeId) -> Option<TypeId> {
         let ty_data = self.types.get(ty);
         match ty_data {
-            Type::Array(elem_ty, _) => Some(*elem_ty),
-            Type::Slice(elem_ty) => Some(*elem_ty),
+            Type::Array(elem_ty, _) | Type::Slice(elem_ty) => Some(*elem_ty),
             _ => None,
         }
     }
@@ -277,38 +272,30 @@ impl<'a> LayoutComputer<'a> {
     /// Layout for primitive types.
     fn primitive_layout(&self, prim: PrimitiveKind) -> TypeLayout {
         match prim {
-            // Signed integers
-            PrimitiveKind::I8 => TypeLayout::new(1, 1),
-            PrimitiveKind::I16 => TypeLayout::new(2, 2),
-            PrimitiveKind::I32 => TypeLayout::new(4, 4),
-            PrimitiveKind::I64 => TypeLayout::new(8, 8),
-            PrimitiveKind::I128 => TypeLayout::new(16, 16),
-            PrimitiveKind::Isize => TypeLayout::new(self.pointer_size, self.pointer_size),
+            // 1-byte types
+            PrimitiveKind::I8 | PrimitiveKind::U8 | PrimitiveKind::Bool => TypeLayout::new(1, 1),
 
-            // Unsigned integers (same sizes as signed)
-            PrimitiveKind::U8 => TypeLayout::new(1, 1),
-            PrimitiveKind::U16 => TypeLayout::new(2, 2),
-            PrimitiveKind::U32 => TypeLayout::new(4, 4),
-            PrimitiveKind::U64 => TypeLayout::new(8, 8),
-            PrimitiveKind::U128 => TypeLayout::new(16, 16),
-            PrimitiveKind::Usize => TypeLayout::new(self.pointer_size, self.pointer_size),
+            // 2-byte types
+            PrimitiveKind::I16 | PrimitiveKind::U16 => TypeLayout::new(2, 2),
 
-            // Floating point
-            PrimitiveKind::F32 => TypeLayout::new(4, 4),
-            PrimitiveKind::F64 => TypeLayout::new(8, 8),
+            // 4-byte types
+            PrimitiveKind::I32 | PrimitiveKind::U32 | PrimitiveKind::F32 | PrimitiveKind::Char => {
+                TypeLayout::new(4, 4)
+            }
 
-            // Bool is 1 byte
-            PrimitiveKind::Bool => TypeLayout::new(1, 1),
+            // 8-byte types
+            PrimitiveKind::I64 | PrimitiveKind::U64 | PrimitiveKind::F64 => TypeLayout::new(8, 8),
 
-            // Char is 4 bytes (Unicode scalar)
-            PrimitiveKind::Char => TypeLayout::new(4, 4),
+            // 16-byte types
+            PrimitiveKind::I128 | PrimitiveKind::U128 => TypeLayout::new(16, 16),
+
+            // Pointer-sized types
+            PrimitiveKind::Isize | PrimitiveKind::Usize => {
+                TypeLayout::new(self.pointer_size, self.pointer_size)
+            }
 
             // ZSTs
-            PrimitiveKind::Unit => TypeLayout::zst(),
-            PrimitiveKind::Never => TypeLayout::zst(),
-
-            // Str is unsized
-            PrimitiveKind::Str => TypeLayout::zst(),
+            PrimitiveKind::Unit | PrimitiveKind::Never | PrimitiveKind::Str => TypeLayout::zst(),
         }
     }
 }

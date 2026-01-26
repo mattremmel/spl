@@ -221,7 +221,7 @@ fn lower_negated_literal(prefix: &PrefixExpr) -> Option<LoweredExpr> {
     None
 }
 
-/// Convert a rowan TextRange to our Span type.
+/// Convert a rowan `TextRange` to our Span type.
 fn text_range_to_span(range: rowan::TextRange) -> Span {
     range.start().into()..range.end().into()
 }
@@ -290,21 +290,21 @@ fn lower_binary_literal(bin: &BinExpr) -> Option<LoweredExpr> {
             &lhs_lowered,
             &rhs_lowered,
             span,
-            |a, b| a.checked_add(b),
+            i128::checked_add,
             |a, b| a + b,
         ),
         SyntaxKind::MINUS => fold_arithmetic(
             &lhs_lowered,
             &rhs_lowered,
             span,
-            |a, b| a.checked_sub(b),
+            i128::checked_sub,
             |a, b| a - b,
         ),
         SyntaxKind::STAR => fold_arithmetic(
             &lhs_lowered,
             &rhs_lowered,
             span,
-            |a, b| a.checked_mul(b),
+            i128::checked_mul,
             |a, b| a * b,
         ),
         SyntaxKind::SLASH => fold_div(&lhs_lowered, &rhs_lowered, span),
@@ -333,7 +333,7 @@ fn lower_binary_literal(bin: &BinExpr) -> Option<LoweredExpr> {
             span,
             |a, b| a < b,
             |a: f64, b: f64| a < b,
-            |a, b| !a & b,
+            |a, b| !a && b,
         ),
         SyntaxKind::GT => fold_comparison(
             &lhs_lowered,
@@ -341,7 +341,7 @@ fn lower_binary_literal(bin: &BinExpr) -> Option<LoweredExpr> {
             span,
             |a, b| a > b,
             |a: f64, b: f64| a > b,
-            |a, b| a & !b,
+            |a, b| a && !b,
         ),
         SyntaxKind::LE => fold_comparison(
             &lhs_lowered,
@@ -357,7 +357,7 @@ fn lower_binary_literal(bin: &BinExpr) -> Option<LoweredExpr> {
             span,
             |a, b| a >= b,
             |a: f64, b: f64| a >= b,
-            |a, b| a | !b,
+            |a, b| a || !b,
         ),
 
         // Logical operators

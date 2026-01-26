@@ -18,7 +18,7 @@ pub enum ScanError {
 impl fmt::Display for ScanError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ScanError::Io(e) => write!(f, "I/O error: {}", e),
+            ScanError::Io(e) => write!(f, "I/O error: {e}"),
             ScanError::NotADirectory(p) => write!(f, "not a directory: {}", p.display()),
         }
     }

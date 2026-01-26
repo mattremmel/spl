@@ -155,9 +155,7 @@ pub fn format_parse_errors(errors: &[ParseError]) -> String {
 /// ```
 pub fn parse_ok(source: &str) -> SourceFile {
     let parse = crate::parser::parse(source);
-    if !parse.ok() {
-        panic!("parse failed:\n{}", format_parse_errors(parse.errors()));
-    }
+    assert!(parse.ok(), "parse failed:\n{}", format_parse_errors(parse.errors()));
     SourceFile::cast(parse.syntax()).expect("cast to SourceFile")
 }
 
@@ -179,9 +177,7 @@ pub fn parse_ok(source: &str) -> SourceFile {
 /// ```
 pub fn parse_err(source: &str) -> Vec<ParseError> {
     let parse = crate::parser::parse(source);
-    if parse.ok() {
-        panic!("expected parse errors but parsing succeeded");
-    }
+    assert!(!parse.ok(), "expected parse errors but parsing succeeded");
     parse.errors().to_vec()
 }
 
@@ -204,12 +200,10 @@ pub fn parse_err(source: &str) -> Vec<ParseError> {
 pub fn resolve_ok(source: &str) -> ResolveResult {
     let ast = parse_ok(source);
     let result = crate::sema::resolve(&ast);
-    if !result.diagnostics.is_empty() {
-        panic!(
-            "resolution failed:\n{}",
-            format_diagnostics(&result.diagnostics)
-        );
-    }
+    assert!(result.diagnostics.is_empty(), 
+        "resolution failed:\n{}",
+        format_diagnostics(&result.diagnostics)
+    );
     result
 }
 
@@ -232,9 +226,7 @@ pub fn resolve_ok(source: &str) -> ResolveResult {
 pub fn resolve_err(source: &str) -> Vec<Diagnostic> {
     let ast = parse_ok(source);
     let result = crate::sema::resolve(&ast);
-    if result.diagnostics.is_empty() {
-        panic!("expected resolution errors but resolution succeeded");
-    }
+    assert!(!result.diagnostics.is_empty(), "expected resolution errors but resolution succeeded");
     result.diagnostics
 }
 
@@ -257,19 +249,15 @@ pub fn resolve_err(source: &str) -> Vec<Diagnostic> {
 pub fn infer_ok(source: &str) -> InferResult {
     let ast = parse_ok(source);
     let resolve_result = crate::sema::resolve(&ast);
-    if !resolve_result.diagnostics.is_empty() {
-        panic!(
-            "resolution failed:\n{}",
-            format_diagnostics(&resolve_result.diagnostics)
-        );
-    }
+    assert!(resolve_result.diagnostics.is_empty(), 
+        "resolution failed:\n{}",
+        format_diagnostics(&resolve_result.diagnostics)
+    );
     let infer_result = crate::sema::infer(&ast, &resolve_result);
-    if !infer_result.diagnostics.is_empty() {
-        panic!(
-            "type inference failed:\n{}",
-            format_diagnostics(&infer_result.diagnostics)
-        );
-    }
+    assert!(infer_result.diagnostics.is_empty(), 
+        "type inference failed:\n{}",
+        format_diagnostics(&infer_result.diagnostics)
+    );
     infer_result
 }
 
@@ -294,9 +282,7 @@ pub fn infer_err(source: &str) -> Vec<Diagnostic> {
     let ast = parse_ok(source);
     let resolve_result = crate::sema::resolve(&ast);
     let infer_result = crate::sema::infer(&ast, &resolve_result);
-    if infer_result.diagnostics.is_empty() {
-        panic!("expected type inference errors but inference succeeded");
-    }
+    assert!(!infer_result.diagnostics.is_empty(), "expected type inference errors but inference succeeded");
     infer_result.diagnostics
 }
 
@@ -421,11 +407,10 @@ impl<'a> BodyInspector<'a> {
 /// Helper to check if an rvalue contains a specific integer constant.
 fn rvalue_has_const(rvalue: &Rvalue, value: i64) -> bool {
     match rvalue {
-        Rvalue::Use(operand) => operand_has_const(operand, value),
+        Rvalue::Use(operand) | Rvalue::UnaryOp(_, operand) => operand_has_const(operand, value),
         Rvalue::BinaryOp(_, lhs, rhs) => {
             operand_has_const(lhs, value) || operand_has_const(rhs, value)
         }
-        Rvalue::UnaryOp(_, operand) => operand_has_const(operand, value),
         _ => false,
     }
 }
@@ -537,7 +522,7 @@ pub fn package_ok(name: &str) -> Package {
         .join("tests")
         .join("packages")
         .join(name);
-    Package::load(&path).unwrap_or_else(|e| panic!("failed to load package '{}': {:?}", name, e))
+    Package::load(&path).unwrap_or_else(|e| panic!("failed to load package '{name}': {e:?}"))
 }
 
 /// Load a package from `tests/packages/` and expect it to fail.
@@ -561,7 +546,7 @@ pub fn package_err(name: &str) -> PackageError {
         .join("packages")
         .join(name);
     match Package::load(&path) {
-        Ok(_) => panic!("expected package '{}' to fail, but it succeeded", name),
+        Ok(_) => panic!("expected package '{name}' to fail, but it succeeded"),
         Err(e) => e,
     }
 }
@@ -686,13 +671,11 @@ pub fn compile_fixture_err(name: &str) -> Vec<Diagnostic> {
 /// assert_has_error(&diags, "cannot find");
 /// ```
 pub fn assert_has_error(diags: &[Diagnostic], pattern: &str) {
-    if !diags.iter().any(|d| d.message.contains(pattern)) {
-        panic!(
-            "no diagnostic matching '{}'\nActual diagnostics:\n{}",
-            pattern,
-            format_diagnostics(diags)
-        );
-    }
+    assert!(diags.iter().any(|d| d.message.contains(pattern)), 
+        "no diagnostic matching '{}'\nActual diagnostics:\n{}",
+        pattern,
+        format_diagnostics(diags)
+    );
 }
 
 /// Assert that exactly `expected` error diagnostics exist.
@@ -716,14 +699,10 @@ pub fn assert_error_count(diags: &[Diagnostic], expected: usize) {
         .iter()
         .filter(|d| d.severity == Severity::Error)
         .count();
-    if actual != expected {
-        panic!(
-            "expected {} errors, found {}\nDiagnostics:\n{}",
-            expected,
-            actual,
-            format_diagnostics(diags)
-        );
-    }
+    assert!(actual == expected,
+        "expected {expected} errors, found {actual}\nDiagnostics:\n{}",
+        format_diagnostics(diags)
+    );
 }
 
 // ============================================================================
@@ -748,7 +727,7 @@ pub struct TestDirectives {
     pub run_pass: bool,
     /// Test should fail to compile.
     pub compile_fail: bool,
-    /// Expected return value from main().
+    /// Expected return value from `main()`.
     pub expect_return: Option<i32>,
     /// Expected substring in stdout.
     pub expect_stdout: Option<String>,
@@ -766,7 +745,7 @@ pub struct TestDirectives {
 ///
 /// - `run-pass` - Expect successful compilation and execution (default)
 /// - `compile-fail` - Expect compilation to fail
-/// - `expect-return: N` - Assert main() returns N
+/// - `expect-return: N` - Assert `main()` returns N
 /// - `expect-stdout: text` - Assert stdout contains text
 /// - `expect-error: pattern` - Assert error message contains pattern
 /// - `ignore` - Skip this test
@@ -826,7 +805,7 @@ pub fn parse_directives(source: &str) -> TestDirectives {
 /// Result of executing an SPL program.
 #[derive(Debug)]
 pub struct ExecuteResult {
-    /// The return value from main().
+    /// The return value from `main()`.
     pub return_value: i32,
     /// Standard output from the program.
     pub stdout: String,

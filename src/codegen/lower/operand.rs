@@ -18,8 +18,7 @@ impl<'a> FunctionLowerer<'a> {
         operand: &Operand,
     ) -> Result<Option<Value>, CodegenError> {
         match operand {
-            Operand::Copy(place) => self.lower_place_read(place),
-            Operand::Move(place) => self.lower_place_read(place),
+            Operand::Copy(place) | Operand::Move(place) => self.lower_place_read(place),
             Operand::Constant(constant) => self.lower_constant(constant),
         }
     }
@@ -49,7 +48,7 @@ impl<'a> FunctionLowerer<'a> {
                 None => {
                     return Err(CodegenError::Internal(format!(
                         "local {:?} not found in local_map",
-                        place.local
+                        place.local  // Debug formatting required
                     )));
                 }
             }
@@ -140,10 +139,8 @@ impl<'a> FunctionLowerer<'a> {
                         .layout
                         .field_type(current_ty, field_idx.index() as usize)
                         .ok_or_else(|| {
-                            CodegenError::Internal(format!(
-                                "field {} not found in type",
-                                field_idx.index()
-                            ))
+                            let idx = field_idx.index();
+                            CodegenError::Internal(format!("field {idx} not found in type"))
                         })?;
                 }
 
@@ -231,8 +228,7 @@ impl<'a> FunctionLowerer<'a> {
                 // This is a limitation - we need to allocate a temporary stack slot
                 // For now, error out - the caller should handle this case
                 Err(CodegenError::Internal(format!(
-                    "cannot take address of SSA variable {:?}",
-                    local
+                    "cannot take address of SSA variable {local:?}"
                 )))
             }
             Some(LocalStorage::Zst) => {
@@ -241,8 +237,7 @@ impl<'a> FunctionLowerer<'a> {
                 Ok(self.builder.ins().iconst(ptr_ty, 0))
             }
             None => Err(CodegenError::Internal(format!(
-                "local {:?} not found in local_map",
-                local
+                "local {local:?} not found in local_map"
             ))),
         }
     }
@@ -286,7 +281,7 @@ impl<'a> FunctionLowerer<'a> {
                 })?;
 
                 let func_info = registry.get(*def_id).ok_or_else(|| {
-                    CodegenError::Internal(format!("function {:?} not found in registry", def_id))
+                    CodegenError::Internal(format!("function {def_id:?} not found in registry"))
                 })?;
 
                 // Get the module to import the function reference
@@ -356,8 +351,7 @@ impl<'a> FunctionLowerer<'a> {
                     }
                 } else {
                     Err(CodegenError::Internal(format!(
-                        "cannot coerce {:?} to {:?}",
-                        actual_ty, expected_ty
+                        "cannot coerce {actual_ty:?} to {expected_ty:?}"
                     )))
                 }
             }

@@ -19,7 +19,7 @@
 //!
 //! - `substitution`: Maps type variables to their resolved types (union-find)
 //! - `expr_types`: Maps expression spans to inferred types
-//! - `binding_types`: Maps DefIds (locals, params) to their types
+//! - `binding_types`: Maps `DefIds` (locals, params) to their types
 //! - `fn_signatures`: Pre-collected function signatures for call resolution
 //!
 //! # Bidirectional Flow
@@ -48,7 +48,7 @@ use super::{InferResult, SelfParam};
 /// How to lower an intrinsic method during HIR lowering.
 #[derive(Clone, Debug)]
 pub enum IntrinsicKind {
-    /// Lower to tuple field access (e.g., str.ptr() -> field 0)
+    /// Lower to tuple field access (e.g., `str.ptr()` -> field 0)
     FieldAccess(u32),
 }
 
@@ -98,15 +98,15 @@ pub(super) struct InferEngine<'a> {
     pub(super) resolve_ctx: &'a SemanticContext,
 
     /// Current scope being type-checked. Used for visibility checking.
-    /// This is separate from resolve_ctx.current_scope because we need to track
+    /// This is separate from `resolve_ctx.current_scope` because we need to track
     /// which function/module we're checking from, not the scope chain state.
     pub(super) current_inference_scope: crate::sema::ScopeId,
 
     /// Owned type interner for creating types during inference.
     pub(super) types: TypeInterner,
 
-    /// Name resolutions from the resolver phase (span → DefId).
-    /// Cloned from ResolveResult to allow modification during inference.
+    /// Name resolutions from the resolver phase (span → `DefId`).
+    /// Cloned from `ResolveResult` to allow modification during inference.
     pub(super) resolutions: FxHashMap<Span, DefId>,
 
     // === Inference Results ===
@@ -114,7 +114,7 @@ pub(super) struct InferEngine<'a> {
     /// Populated during the inference pass as expressions are visited.
     pub(super) expr_types: FxHashMap<Span, TypeId>,
 
-    /// Map from local bindings (DefId) to their inferred types.
+    /// Map from local bindings (`DefId`) to their inferred types.
     /// Includes locals, parameters, and other named bindings.
     pub(super) binding_types: FxHashMap<DefId, TypeId>,
 
@@ -130,16 +130,16 @@ pub(super) struct InferEngine<'a> {
     /// Function signatures collected in first pass, enabling forward references.
     pub(super) fn_signatures: FxHashMap<DefId, FnSignature>,
 
-    /// Struct field info: maps struct DefId to (field_name, field_type, field_def_id) triples.
+    /// Struct field info: maps struct `DefId` to (`field_name`, `field_type`, `field_def_id`) triples.
     pub(super) struct_fields: FxHashMap<DefId, Vec<(String, TypeId, DefId)>>,
 
-    /// Struct type parameters: maps struct DefId to its generic param DefIds.
+    /// Struct type parameters: maps struct `DefId` to its generic param `DefIds`.
     pub(super) struct_type_params: FxHashMap<DefId, Vec<DefId>>,
 
-    /// Methods associated with each struct (struct DefId → method DefIds).
+    /// Methods associated with each struct (struct `DefId` → method `DefIds`).
     pub(super) struct_methods: FxHashMap<DefId, Vec<DefId>>,
 
-    /// Type alias targets collected in first pass (alias DefId → resolved type).
+    /// Type alias targets collected in first pass (alias `DefId` → resolved type).
     pub(super) type_alias_targets: FxHashMap<DefId, TypeId>,
 
     // === Context Stack (tracks position in AST) ===
@@ -163,29 +163,29 @@ pub(super) struct InferEngine<'a> {
     /// Used to validate break/continue: only `loop` allows `break value`.
     pub(super) current_loop_kind: Option<LoopKind>,
 
-    /// Method resolutions: maps method call spans to resolved method DefIds.
+    /// Method resolutions: maps method call spans to resolved method `DefIds`.
     /// Separate from `resolutions` because method lookup happens during inference.
     pub(super) method_resolutions: FxHashMap<Span, DefId>,
 
-    /// Map from type annotation spans to their TypeIds.
+    /// Map from type annotation spans to their `TypeIds`.
     /// Records the types of explicit type annotations like `-> i32`, `: bool`, etc.
     /// These are separate from `expr_types` because type annotations are not expressions.
     pub(super) type_annotation_types: FxHashMap<Span, TypeId>,
 
     // === Primitive Type Methods ===
-    /// Methods on primitive types (TypeId → method DefIds).
-    /// Similar to struct_methods but keyed by TypeId for primitives like str.
+    /// Methods on primitive types (`TypeId` → method `DefIds`).
+    /// Similar to `struct_methods` but keyed by `TypeId` for primitives like str.
     pub(super) primitive_methods: FxHashMap<TypeId, Vec<DefId>>,
 
     /// Intrinsic methods that need special lowering during HIR lowering.
-    /// Maps method DefId to how it should be lowered.
+    /// Maps method `DefId` to how it should be lowered.
     pub intrinsic_methods: FxHashMap<DefId, IntrinsicKind>,
 
-    /// Names of builtin methods (DefId → name).
+    /// Names of builtin methods (`DefId` → name).
     /// Used during method resolution since builtins aren't in the symbol table.
     pub(super) builtin_method_names: FxHashMap<DefId, String>,
 
-    /// Map from module DefId to its scope ID (for qualified module access).
+    /// Map from module `DefId` to its scope ID (for qualified module access).
     /// Used to look up items within inline modules, e.g., `module.Item`.
     pub(super) module_scopes: FxHashMap<DefId, crate::sema::ScopeId>,
 }
@@ -224,7 +224,7 @@ impl<'a> InferEngine<'a> {
 
     /// Register methods on primitive types (str, etc.).
     ///
-    /// This creates synthetic DefIds for builtin methods and registers them
+    /// This creates synthetic `DefIds` for builtin methods and registers them
     /// in the same structures used for struct methods, enabling unified
     /// method resolution.
     fn register_builtin_primitive_methods(&mut self) {
@@ -248,10 +248,10 @@ impl<'a> InferEngine<'a> {
             .insert(len_def_id, IntrinsicKind::FieldAccess(1));
     }
 
-    /// Create a builtin method with a synthetic DefId and register its signature.
+    /// Create a builtin method with a synthetic `DefId` and register its signature.
     ///
-    /// Returns a DefId for the builtin method. The DefId uses a high range
-    /// (starting at u32::MAX / 2) to avoid conflicts with user-defined symbols.
+    /// Returns a `DefId` for the builtin method. The `DefId` uses a high range
+    /// (starting at `u32::MAX` / 2) to avoid conflicts with user-defined symbols.
     fn create_builtin_method(
         &mut self,
         name: &str,

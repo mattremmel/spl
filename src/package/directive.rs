@@ -38,9 +38,9 @@ pub enum DirectiveError {
 impl fmt::Display for DirectiveError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DirectiveError::ParseError(msg) => write!(f, "parse error: {}", msg),
+            DirectiveError::ParseError(msg) => write!(f, "parse error: {msg}"),
             DirectiveError::MalformedDirective { directive, reason } => {
-                write!(f, "malformed directive '{}': {}", directive, reason)
+                write!(f, "malformed directive '{directive}': {reason}")
             }
         }
     }

@@ -166,10 +166,10 @@ impl<'a> FunctionLowerer<'a> {
         self.builder.switch_to_block(entry_block);
 
         // Declare locals as Cranelift variables
-        self.declare_locals()?;
+        self.declare_locals();
 
         // Initialize arguments from block params
-        self.init_arguments(entry_block)?;
+        self.init_arguments(entry_block);
 
         // Seal the entry block (all predecessors known - none for entry)
         self.builder.seal_block(entry_block);
@@ -196,7 +196,7 @@ impl<'a> FunctionLowerer<'a> {
     }
 
     /// Declare Cranelift variables for all MIR locals.
-    fn declare_locals(&mut self) -> Result<(), CodegenError> {
+    fn declare_locals(&mut self) {
         for i in 0..self.body.num_locals() {
             let local = Local::new(i as u32);
             let decl = self.body.local_decl(local);
@@ -224,11 +224,10 @@ impl<'a> FunctionLowerer<'a> {
                 }
             }
         }
-        Ok(())
     }
 
     /// Initialize function arguments from entry block parameters.
-    fn init_arguments(&mut self, entry_block: Block) -> Result<(), CodegenError> {
+    fn init_arguments(&mut self, entry_block: Block) {
         let block_params = self.builder.block_params(entry_block).to_vec();
         let mut param_idx = 0;
 
@@ -270,7 +269,6 @@ impl<'a> FunctionLowerer<'a> {
                 param_idx += 1;
             }
         }
-        Ok(())
     }
 
     /// Lower a single MIR basic block.
@@ -362,7 +360,7 @@ impl<'a> FunctionLowerer<'a> {
         self.local_map.get(local)
     }
 
-    /// Declare a string constant in the data section and return a GlobalValue for it.
+    /// Declare a string constant in the data section and return a `GlobalValue` for it.
     ///
     /// Strings are deduplicated within the same function.
     fn declare_string_data(&mut self, s: &str) -> Result<GlobalValue, CodegenError> {

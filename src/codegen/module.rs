@@ -18,7 +18,7 @@ use crate::mir::body::Body;
 use crate::sema::symbol::DefId;
 use crate::sema::types::TypeInterner;
 
-/// A function definition with its DefId and MIR body.
+/// A function definition with its `DefId` and MIR body.
 pub struct FunctionDef<'a> {
     /// The unique identifier for this function.
     pub def_id: DefId,
@@ -41,19 +41,19 @@ impl<'a> FunctionDef<'a> {
 
 /// Result of module compilation.
 pub struct CompiledModule {
-    /// Map from DefId to function pointer.
+    /// Map from `DefId` to function pointer.
     function_ptrs: rustc_hash::FxHashMap<DefId, *const u8>,
-    /// The DefId of the main function (if any).
+    /// The `DefId` of the main function (if any).
     main_def_id: Option<DefId>,
 }
 
 impl CompiledModule {
-    /// Get a function pointer by DefId.
+    /// Get a function pointer by `DefId`.
     pub fn get_function_ptr(&self, def_id: DefId) -> Option<*const u8> {
         self.function_ptrs.get(&def_id).copied()
     }
 
-    /// Get a function pointer by DefId, or panic if not found.
+    /// Get a function pointer by `DefId`, or panic if not found.
     ///
     /// # Panics
     /// Panics if the function is not in the module.
@@ -61,7 +61,7 @@ impl CompiledModule {
         self.function_ptrs
             .get(&def_id)
             .copied()
-            .unwrap_or_else(|| panic!("function {:?} not found in module", def_id))
+            .unwrap_or_else(|| panic!("function {def_id:?} not found in module"))
     }
 
     /// Get the number of functions in the module.
@@ -74,17 +74,17 @@ impl CompiledModule {
         self.function_ptrs.is_empty()
     }
 
-    /// Set the main function DefId.
+    /// Set the main function `DefId`.
     pub fn set_main(&mut self, def_id: DefId) {
         self.main_def_id = Some(def_id);
     }
 
-    /// Get the main function DefId.
+    /// Get the main function `DefId`.
     pub fn main_def_id(&self) -> Option<DefId> {
         self.main_def_id
     }
 
-    /// Run a function by DefId and return its i32 result.
+    /// Run a function by `DefId` and return its i32 result.
     ///
     /// # Safety
     /// The function must have signature `fn() -> i32`.
@@ -273,9 +273,9 @@ impl ModuleCompiler {
 pub struct CompiledObjectFile {
     /// The raw object file bytes.
     bytes: Vec<u8>,
-    /// Map from DefId to function name (for symbol lookup).
+    /// Map from `DefId` to function name (for symbol lookup).
     function_names: rustc_hash::FxHashMap<DefId, String>,
-    /// The DefId of the main function (if any).
+    /// The `DefId` of the main function (if any).
     main_def_id: Option<DefId>,
 }
 
@@ -290,9 +290,9 @@ impl CompiledObjectFile {
         self.bytes
     }
 
-    /// Get the function name for a DefId.
+    /// Get the function name for a `DefId`.
     pub fn get_function_name(&self, def_id: DefId) -> Option<&str> {
-        self.function_names.get(&def_id).map(|s| s.as_str())
+        self.function_names.get(&def_id).map(String::as_str)
     }
 
     /// Get the number of functions in the object file.
@@ -305,12 +305,12 @@ impl CompiledObjectFile {
         self.function_names.is_empty()
     }
 
-    /// Set the main function DefId.
+    /// Set the main function `DefId`.
     pub fn set_main(&mut self, def_id: DefId) {
         self.main_def_id = Some(def_id);
     }
 
-    /// Get the main function DefId.
+    /// Get the main function `DefId`.
     pub fn main_def_id(&self) -> Option<DefId> {
         self.main_def_id
     }

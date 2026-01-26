@@ -157,7 +157,7 @@ pub(super) fn postfix_expr(
 }
 
 /// Parse a call expression: expr(args)
-/// Uses the unified call_expr_rest for parsing arguments with named arg support.
+/// Uses the unified `call_expr_rest` for parsing arguments with named arg support.
 fn call_expr(
     p: &mut Parser<'_>,
     lhs: CompletedMarker,
@@ -217,7 +217,7 @@ fn index_or_slice_expr(
 }
 
 /// Parse field access or method call: expr.field or expr.method(args) or expr.0 (tuple)
-/// Method calls are now unified as CallExpr with FieldExpr as callee.
+/// Method calls are now unified as `CallExpr` with `FieldExpr` as callee.
 fn field_or_method_expr(
     p: &mut Parser<'_>,
     lhs: CompletedMarker,

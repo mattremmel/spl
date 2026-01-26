@@ -50,7 +50,7 @@ impl LiteralPat {
         // Skip whitespace/trivia tokens to get the actual literal token
         self.0
             .children_with_tokens()
-            .filter_map(|it| it.into_token())
+            .filter_map(rowan::NodeOrToken::into_token)
             .find(|it| !it.kind().is_trivia())
     }
 }
@@ -60,7 +60,7 @@ impl RangePat {
     pub fn start(&self) -> Option<SyntaxToken> {
         self.0
             .children_with_tokens()
-            .filter_map(|it| it.into_token())
+            .filter_map(rowan::NodeOrToken::into_token)
             .find(|t| {
                 matches!(
                     t.kind(),
@@ -120,7 +120,7 @@ impl StructPat {
 }
 
 impl StructPatField {
-    /// Get the field name (always wrapped in NameRef).
+    /// Get the field name (always wrapped in `NameRef`).
     pub fn name(&self) -> Option<NameRef> {
         child(&self.0)
     }

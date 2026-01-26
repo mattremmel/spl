@@ -160,10 +160,10 @@ impl Diagnostic {
             let ariadne_label =
                 AriadneLabel::new((file_name, label.span.clone())).with_color(color);
 
-            let ariadne_label = if !label.message.is_empty() {
-                ariadne_label.with_message(&label.message)
-            } else {
+            let ariadne_label = if label.message.is_empty() {
                 ariadne_label
+            } else {
+                ariadne_label.with_message(&label.message)
             };
 
             builder = builder.with_label(ariadne_label);

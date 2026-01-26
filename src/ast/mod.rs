@@ -18,8 +18,8 @@ pub use types::*;
 
 /// Macro to define simple AST node wrappers.
 ///
-/// Generates a struct that wraps SyntaxNode and implements rowan::ast::AstNode.
-/// The SyntaxKind variant must match the struct name.
+/// Generates a struct that wraps `SyntaxNode` and implements `rowan::ast::AstNode`.
+/// The `SyntaxKind` variant must match the struct name.
 macro_rules! ast_node {
     ($name:ident) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -49,10 +49,10 @@ macro_rules! ast_node {
 }
 pub(crate) use ast_node;
 
-/// Macro to define AST enum wrappers implementing AstNode.
+/// Macro to define AST enum wrappers implementing `AstNode`.
 ///
 /// Generates an enum where each variant wraps a typed AST node struct,
-/// with automatic AstNode implementation that dispatches to variants.
+/// with automatic `AstNode` implementation that dispatches to variants.
 ///
 /// # Syntax
 /// ```ignore
@@ -62,7 +62,7 @@ pub(crate) use ast_node;
 /// });
 /// ```
 ///
-/// The SyntaxKind is derived from the struct type name (e.g., `BinExpr` -> `SyntaxKind::BinExpr`).
+/// The `SyntaxKind` is derived from the struct type name (e.g., `BinExpr` -> `SyntaxKind::BinExpr`).
 macro_rules! ast_enum {
     (
         $(#[$meta:meta])*
@@ -118,7 +118,7 @@ pub fn children<N: AstNode<Language = crate::syntax::Lang>>(
 pub fn token(parent: &SyntaxNode, kind: SyntaxKind) -> Option<SyntaxToken> {
     parent
         .children_with_tokens()
-        .filter_map(|it| it.into_token())
+        .filter_map(rowan::NodeOrToken::into_token)
         .find(|it| it.kind() == kind)
 }
 

@@ -53,7 +53,7 @@ pub enum PackageError {
     DirectiveError(DirectiveError),
     /// Parse errors in source files.
     ///
-    /// Contains a list of (file_path, errors) for each file with parse errors.
+    /// Contains a list of (`file_path`, errors) for each file with parse errors.
     /// All files with errors are included, not just the first one.
     ParseErrors {
         errors: Vec<(PathBuf, Vec<ParseError>)>,
@@ -67,23 +67,22 @@ pub enum PackageError {
 impl fmt::Display for PackageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PackageError::Io(e) => write!(f, "I/O error: {}", e),
+            PackageError::Io(e) => write!(f, "I/O error: {e}"),
             PackageError::NotADirectory(p) => write!(f, "not a directory: {}", p.display()),
             PackageError::NoSourceFiles(p) => {
                 write!(f, "no source files found in: {}", p.display())
             }
-            PackageError::DirectiveError(e) => write!(f, "directive error: {}", e),
+            PackageError::DirectiveError(e) => write!(f, "directive error: {e}"),
             PackageError::ParseErrors { errors } => {
                 let total_errors: usize = errors.iter().map(|(_, errs)| errs.len()).sum();
                 let file_count = errors.len();
                 write!(
                     f,
-                    "parse errors in {} file(s): {} total error(s)",
-                    file_count, total_errors
+                    "parse errors in {file_count} file(s): {total_errors} total error(s)"
                 )
             }
-            PackageError::ResolveError(e) => write!(f, "resolve error: {}", e),
-            PackageError::ScanError(e) => write!(f, "scan error: {}", e),
+            PackageError::ResolveError(e) => write!(f, "resolve error: {e}"),
+            PackageError::ScanError(e) => write!(f, "scan error: {e}"),
         }
     }
 }
@@ -143,7 +142,7 @@ impl fmt::Display for PackageWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PackageWarning::ModuleLoadFailed { name, error } => {
-                write!(f, "failed to load module '{}': {}", name, error)
+                write!(f, "failed to load module '{name}': {error}")
             }
         }
     }

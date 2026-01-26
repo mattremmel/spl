@@ -7,7 +7,7 @@
 //! The parser uses an event-based architecture with error recovery to produce
 //! partial results even when the input contains syntax errors.
 //!
-//! ## ParseError Type
+//! ## `ParseError` Type
 //!
 //! Errors are represented as [`ParseError`], which contains:
 //! - A human-readable message describing what went wrong
@@ -296,7 +296,7 @@ impl<'src> Parser<'src> {
         if self.eat(kind) {
             Ok(())
         } else {
-            Err(self.error_at_current(format!("expected {:?}", kind)))
+            Err(self.error_at_current(format!("expected {kind:?}")))
         }
     }
 
@@ -329,7 +329,7 @@ impl<'src> Parser<'src> {
     /// Returns the marker for the error node wrapping the skipped tokens.
     ///
     /// This function is bounded to prevent infinite loops on malformed input.
-    /// At most MAX_RECOVERY_TOKENS tokens will be skipped.
+    /// At most `MAX_RECOVERY_TOKENS` tokens will be skipped.
     ///
     /// IMPORTANT: Always consumes at least one token to ensure progress.
     /// This prevents infinite loops when we're already at a recovery token
@@ -575,9 +575,10 @@ impl Marker {
 
 impl Drop for Marker {
     fn drop(&mut self) {
-        if !self.completed {
-            panic!("Marker dropped without being completed or abandoned");
-        }
+        assert!(
+            self.completed,
+            "Marker dropped without being completed or abandoned"
+        );
     }
 }
 

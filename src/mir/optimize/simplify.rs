@@ -1,4 +1,4 @@
-//! SimplifyCfg optimization pass.
+//! `SimplifyCfg` optimization pass.
 //!
 //! Simplifies the control flow graph by removing trivial goto chains.
 //! For example: `bb0: goto -> bb1; bb1: return` becomes `bb0: return`.
@@ -11,7 +11,7 @@ use crate::sema::types::TypeInterner;
 
 use super::{OptimizationPass, PassResult};
 
-/// SimplifyCfg optimization pass.
+/// `SimplifyCfg` optimization pass.
 ///
 /// Removes trivial goto chains where a block only contains a goto to another block
 /// that has a single predecessor.

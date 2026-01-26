@@ -15,7 +15,7 @@ use std::path::Path;
 /// This function receives the path and contents from `datatest-stable`
 /// when using the `include_dir!` macro for embedding test files.
 fn run_test(path: &Path, contents: String) -> datatest_stable::Result<()> {
-    run_spl_test(path, &contents).map_err(|e| e.into())
+    run_spl_test(path, &contents).map_err(std::convert::Into::into)
 }
 
 datatest_stable::harness! {

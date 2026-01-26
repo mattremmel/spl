@@ -1,7 +1,7 @@
 //! Terminator-specific validation for MIR.
 //!
 //! Validates terminator-specific invariants:
-//! - SwitchInt discriminant must be integer type
+//! - `SwitchInt` discriminant must be integer type
 //! - Assert condition must be bool
 
 use crate::mir::Body;
@@ -15,12 +15,12 @@ use crate::sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
 /// # Panics
 ///
 /// Panics if:
-/// - SwitchInt discriminant is not an integer type
+/// - `SwitchInt` discriminant is not an integer type
 /// - Assert condition is not bool
 pub fn validate_terminators(body: &Body, types: &TypeInterner) {
     for (block_idx, block) in body.basic_blocks.iter().enumerate() {
         if let Some(term) = &block.terminator {
-            let ctx = format!("BasicBlock({}).terminator", block_idx);
+            let ctx = format!("BasicBlock({block_idx}).terminator");
             validate_terminator(&term.kind, body, types, &ctx);
         }
     }
@@ -60,13 +60,11 @@ fn validate_switch_int_discr(discr: &Operand, body: &Body, types: &TypeInterner,
     let discr_type = types.get(discr_ty);
 
     // SwitchInt discriminant must be an integer type (including bool, which is treated as integer)
-    if !is_switchable_type(discr_type) {
-        panic!(
-            "Terminator validation failed: SwitchInt discriminant must be integer type at {}: \
-            got {:?}",
-            context, discr_type
-        );
-    }
+    assert!(
+        is_switchable_type(discr_type),
+        "Terminator validation failed: SwitchInt discriminant must be integer type at {context}: \
+        got {discr_type:?}"
+    );
 }
 
 fn validate_assert_cond(cond: &Operand, body: &Body, types: &TypeInterner, context: &str) {
@@ -80,13 +78,11 @@ fn validate_assert_cond(cond: &Operand, body: &Body, types: &TypeInterner, conte
     let cond_type = types.get(cond_ty);
 
     // Assert condition must be bool
-    if !matches!(cond_type, Type::Primitive(PrimitiveKind::Bool)) {
-        panic!(
-            "Terminator validation failed: Assert condition must be bool at {}: \
-            got {:?}",
-            context, cond_type
-        );
-    }
+    assert!(
+        matches!(cond_type, Type::Primitive(PrimitiveKind::Bool)),
+        "Terminator validation failed: Assert condition must be bool at {context}: \
+        got {cond_type:?}"
+    );
 }
 
 fn is_switchable_type(ty: &Type) -> bool {
@@ -117,14 +113,12 @@ fn get_operand_type(operand: &Operand, body: &Body, types: &TypeInterner) -> Typ
     match operand {
         Operand::Copy(place) | Operand::Move(place) => get_place_type(place, body, types),
         Operand::Constant(constant) => match constant {
-            Constant::Int(_, ty) => *ty,
-            Constant::Float(_, ty) => *ty,
+            Constant::Int(_, ty) | Constant::Float(_, ty) | Constant::Zeroed(ty) => *ty,
             Constant::Bool(_) => types.bool(),
             Constant::Char(_) => types.char(),
             Constant::String(_) => types.str_ref(),
             Constant::Unit => types.unit(),
             Constant::FnDef(_) => types.error(),
-            Constant::Zeroed(ty) => *ty,
         },
     }
 }

@@ -6,11 +6,11 @@
 //!
 //! # Binding Power Theory
 //!
-//! Each operator has a left binding power (l_bp) and right binding power (r_bp).
-//! The parser collects operands until it encounters an operator with l_bp less
+//! Each operator has a left binding power (`l_bp`) and right binding power (`r_bp`).
+//! The parser collects operands until it encounters an operator with `l_bp` less
 //! than the current minimum, then returns to let the caller handle it.
 //!
-//! Associativity emerges from the relationship between l_bp and r_bp:
+//! Associativity emerges from the relationship between `l_bp` and `r_bp`:
 //! - **Left-associative** (`l_bp > r_bp`): `a + b + c` parses as `(a + b) + c`
 //! - **Right-associative** (`l_bp < r_bp`): `a = b = c` parses as `a = (b = c)`
 //!
@@ -20,8 +20,8 @@
 //! > "lhs holds the leftmost operand that binds at least as tightly as min_bp"
 //!
 //! When we see an operator:
-//! 1. If its l_bp < min_bp, stop (this operand belongs to caller)
-//! 2. Otherwise, recursively parse RHS with r_bp as the new min_bp
+//! 1. If its `l_bp` < `min_bp`, stop (this operand belongs to caller)
+//! 2. Otherwise, recursively parse RHS with `r_bp` as the new `min_bp`
 //! 3. Combine into a new lhs and continue
 //!
 //! # References
@@ -61,7 +61,7 @@ pub(crate) fn expr_no_struct(
 /// whose left binding power meets or exceeds this threshold.
 ///
 /// The `depth` parameter tracks recursion depth to prevent stack overflow on
-/// deeply nested expressions. Returns an error if depth exceeds MAX_EXPR_DEPTH.
+/// deeply nested expressions. Returns an error if depth exceeds `MAX_EXPR_DEPTH`.
 fn expr_bp(
     p: &mut Parser<'_>,
     min_bp: u8,
@@ -74,9 +74,8 @@ fn expr_bp(
 
     let start_offset = p.current_offset();
 
-    let mut lhs = match lhs(p, allow_struct, depth)? {
-        Some(lhs) => lhs,
-        None => return Ok(None),
+    let Some(mut lhs) = lhs(p, allow_struct, depth)? else {
+        return Ok(None);
     };
 
     // Loop invariant: lhs is the leftmost expression that binds at min_bp or tighter.
@@ -118,9 +117,8 @@ fn lhs(
     allow_struct: bool,
     depth: usize,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    let current = match p.current() {
-        Some(kind) => kind,
-        None => return Ok(None),
+    let Some(current) = p.current() else {
+        return Ok(None);
     };
 
     // Check for prefix operators
@@ -157,7 +155,7 @@ const BP_PREFIX: u8 = 21;
 const BP_POSTFIX: u8 = 23;
 
 /// Maximum expression nesting depth to prevent stack overflow on malicious input.
-/// 256 levels is sufficient for any reasonable code while preventing DoS attacks.
+/// 256 levels is sufficient for any reasonable code while preventing `DoS` attacks.
 const MAX_EXPR_DEPTH: usize = 256;
 
 /// Prefix operator binding power ((), right).

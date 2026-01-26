@@ -40,7 +40,7 @@ pub struct Module {
     name: Spur,
     parent: Option<ModuleId>,
     children: FxHashMap<Spur, ModuleId>,
-    /// Items defined in this module (name -> DefId).
+    /// Items defined in this module (name -> `DefId`).
     items: FxHashMap<Spur, DefId>,
     /// Publicly exported items (subset of items or re-exports).
     exports: FxHashMap<Spur, DefId>,
@@ -241,10 +241,10 @@ impl ModuleTree {
         self.interner.resolve(&spur)
     }
 
-    /// Build a ModuleTree from a Package hierarchy.
+    /// Build a `ModuleTree` from a Package hierarchy.
     ///
     /// Creates module nodes for each child module. Items and exports are populated
-    /// later during resolution after DefIds are assigned.
+    /// later during resolution after `DefIds` are assigned.
     pub fn from_package_structure(package: &Package) -> Self {
         let mut tree = Self::new();
         let root_id = tree.root_id();

@@ -4,26 +4,26 @@
 //! variables, parameters, etc. Each symbol has a unique `DefId` that serves
 //! as its identity throughout compilation.
 //!
-//! # DefId: The Universal Identifier
+//! # `DefId`: The Universal Identifier
 //!
 //! `DefId` is a simple index into the symbol table. Once assigned, it never
 //! changes, making it safe to store in:
-//! - Resolution maps (span → DefId)
-//! - Type information (binding_types: DefId → TypeId)
-//! - HIR nodes (variable references store DefId, not names)
+//! - Resolution maps (span → `DefId`)
+//! - Type information (`binding_types`: `DefId` → `TypeId`)
+//! - HIR nodes (variable references store `DefId`, not names)
 //!
 //! # Symbol Kinds
 //!
 //! The `SymbolKind` distinguishes different definition types:
 //! - **Function**: A function definition (including methods)
 //! - **Struct**: A struct type definition
-//! - **TypeAlias**: A type alias (`type Foo = Bar`)
+//! - **`TypeAlias`**: A type alias (`type Foo = Bar`)
 //! - **Impl**: An impl block (tracked for method lookup)
 //! - **Local**: A local variable (`let x = ...`)
 //! - **Parameter**: A function parameter
 //! - **Field**: A struct field
-//! - **TypeParam**: A generic type parameter (`<T>`)
-//! - **SelfParam**: The `self` parameter in methods
+//! - **`TypeParam`**: A generic type parameter (`<T>`)
+//! - **`SelfParam`**: The `self` parameter in methods
 //!
 //! # Mutability
 //!
@@ -41,16 +41,16 @@ pub struct DefId(pub u32);
 
 impl DefId {
     /// Sentinel value for unresolved/invalid definitions.
-    /// Uses u32::MAX to avoid collision with real DefIds (assigned from 0).
+    /// Uses `u32::MAX` to avoid collision with real `DefIds` (assigned from 0).
     pub const INVALID: DefId = DefId(u32::MAX);
 
-    /// Check if this DefId is the invalid sentinel.
+    /// Check if this `DefId` is the invalid sentinel.
     #[inline]
     pub fn is_invalid(self) -> bool {
         self == Self::INVALID
     }
 
-    /// Check if this DefId is valid (not the sentinel).
+    /// Check if this `DefId` is valid (not the sentinel).
     #[inline]
     pub fn is_valid(self) -> bool {
         self != Self::INVALID

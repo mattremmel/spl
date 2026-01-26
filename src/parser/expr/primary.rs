@@ -19,7 +19,7 @@ pub(super) fn primary_expr(
     match_token!(p, {
         // Literals
         INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL | TRUE_KW | FALSE_KW => {
-            literal_expr(p)
+            Ok(Some(literal_expr(p)))
         },
         // Identifier / path (including path-starting keywords like module, super, crate)
         IDENT | SELF_VALUE_KW | SELF_TYPE_KW | MODULE_KW | SUPER_KW | CRATE_KW => {
@@ -121,12 +121,10 @@ fn match_arm(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
 }
 
 /// Parse a literal expression.
-pub(super) fn literal_expr(
-    p: &mut Parser<'_>,
-) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+pub(super) fn literal_expr(p: &mut Parser<'_>) -> CompletedMarker {
     let m = p.start();
     p.bump();
-    Ok(Some(m.complete(p, SyntaxKind::LiteralExpr)))
+    m.complete(p, SyntaxKind::LiteralExpr)
 }
 
 /// Parse a path or call expression.

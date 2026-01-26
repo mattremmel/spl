@@ -20,7 +20,7 @@ pub enum AbiRepr {
     Scalar(ClifType),
     /// Zero-sized type, no runtime representation.
     Zst,
-    /// Fat pointer: multiple pointer-sized fields (StrRef, slices).
+    /// Fat pointer: multiple pointer-sized fields (`StrRef`, slices).
     /// `num_fields` indicates how many pointer-sized values make up this type.
     FatPointer { num_fields: usize },
     /// Passed by reference (large structs, arrays).
@@ -59,80 +59,57 @@ impl TypeMapper {
             Type::Primitive(prim) => self.map_primitive(*prim),
 
             // References, raw pointers, and function pointers are pointer-sized
-            Type::Ref(_, _) => Some(self.pointer_type),
-            Type::RawPtr(_, _) => Some(self.pointer_type),
-            Type::FnPtr { .. } => Some(self.pointer_type),
+            Type::Ref(_, _) | Type::RawPtr(_, _) | Type::FnPtr { .. } => Some(self.pointer_type),
 
-            // Infer types should be resolved before codegen
-            Type::Infer(_, _) => None,
-
-            // Compound types - require stack allocation
-            Type::Array(_, _) => None,
-            Type::Slice(_) => None,
-            Type::Tuple(elems) => {
-                // Empty tuple is unit (ZST)
-                if elems.is_empty() {
-                    None
-                } else {
-                    // Non-empty tuples are compound
-                    None
-                }
-            }
-            Type::Struct(_, _) => None,
-            Type::Alias(_, _) => None,
-
-            // Type parameters should be monomorphized before codegen
-            Type::Param(_) => None,
-
-            // Self type should be resolved before codegen
-            Type::SelfType => None,
-
-            // StrRef is a compound type (ptr + len), like Rust's &str
-            Type::StrRef => None,
-
-            // Error types should not reach codegen
-            Type::Error => None,
-
-            // Module types are for namespace access, not runtime values
-            Type::Module(_) => None,
+            // All other types return None:
+            // - Infer types should be resolved before codegen
+            // - Compound types (Array, Slice, Tuple, Struct, Alias) require stack allocation
+            // - Type parameters should be monomorphized before codegen
+            // - Self type should be resolved before codegen
+            // - StrRef is a compound type (ptr + len), like Rust's &str
+            // - Error types should not reach codegen
+            // - Module types are for namespace access, not runtime values
+            Type::Infer(_, _)
+            | Type::Array(_, _)
+            | Type::Slice(_)
+            | Type::Tuple(_)
+            | Type::Struct(_, _)
+            | Type::Alias(_, _)
+            | Type::Param(_)
+            | Type::SelfType
+            | Type::StrRef
+            | Type::Error
+            | Type::Module(_) => None,
         }
     }
 
     /// Map a primitive type to a Cranelift type.
     fn map_primitive(&self, prim: PrimitiveKind) -> Option<ClifType> {
         match prim {
-            // Signed integers
-            PrimitiveKind::I8 => Some(types::I8),
-            PrimitiveKind::I16 => Some(types::I16),
-            PrimitiveKind::I32 => Some(types::I32),
-            PrimitiveKind::I64 => Some(types::I64),
-            PrimitiveKind::I128 => Some(types::I128),
-            PrimitiveKind::Isize => Some(self.pointer_type),
+            // 1-byte types
+            PrimitiveKind::I8 | PrimitiveKind::U8 | PrimitiveKind::Bool => Some(types::I8),
 
-            // Unsigned integers (same Cranelift types as signed)
-            PrimitiveKind::U8 => Some(types::I8),
-            PrimitiveKind::U16 => Some(types::I16),
-            PrimitiveKind::U32 => Some(types::I32),
-            PrimitiveKind::U64 => Some(types::I64),
-            PrimitiveKind::U128 => Some(types::I128),
-            PrimitiveKind::Usize => Some(self.pointer_type),
+            // 2-byte types
+            PrimitiveKind::I16 | PrimitiveKind::U16 => Some(types::I16),
+
+            // 4-byte types (Char is Unicode scalar value)
+            PrimitiveKind::I32 | PrimitiveKind::U32 | PrimitiveKind::Char => Some(types::I32),
+
+            // 8-byte types
+            PrimitiveKind::I64 | PrimitiveKind::U64 => Some(types::I64),
+
+            // 16-byte types
+            PrimitiveKind::I128 | PrimitiveKind::U128 => Some(types::I128),
+
+            // Pointer-sized types
+            PrimitiveKind::Isize | PrimitiveKind::Usize => Some(self.pointer_type),
 
             // Floating point
             PrimitiveKind::F32 => Some(types::F32),
             PrimitiveKind::F64 => Some(types::F64),
 
-            // Bool is represented as I8 (0 or 1)
-            PrimitiveKind::Bool => Some(types::I8),
-
-            // Char is represented as I32 (Unicode scalar value)
-            PrimitiveKind::Char => Some(types::I32),
-
-            // ZSTs have no runtime representation
-            PrimitiveKind::Unit => None,
-            PrimitiveKind::Never => None,
-
-            // Str is unsized, cannot be mapped directly
-            PrimitiveKind::Str => None,
+            // ZSTs have no runtime representation; Str is unsized
+            PrimitiveKind::Unit | PrimitiveKind::Never | PrimitiveKind::Str => None,
         }
     }
 
@@ -146,14 +123,11 @@ impl TypeMapper {
 
     fn is_zst_inner(&self, ty: &Type, interner: &TypeInterner) -> bool {
         match ty {
-            Type::Primitive(PrimitiveKind::Unit) => true,
-            Type::Primitive(PrimitiveKind::Never) => true,
+            // Unit, Never, and zero-length array are all ZSTs
+            Type::Primitive(PrimitiveKind::Unit | PrimitiveKind::Never) | Type::Array(_, 0) => true,
 
-            // Empty tuple is ZST
+            // Empty tuple is a ZST
             Type::Tuple(elems) if elems.is_empty() => true,
-
-            // Zero-length array is ZST
-            Type::Array(_, 0) => true,
 
             // Array of ZSTs is ZST
             Type::Array(elem, _) => self.is_zst(*elem, interner),
@@ -192,8 +166,7 @@ impl TypeMapper {
         // Check for fat pointer types
         let ty = interner.get(type_id);
         match ty {
-            Type::StrRef => AbiRepr::FatPointer { num_fields: 2 },
-            Type::Slice(_) => AbiRepr::FatPointer { num_fields: 2 },
+            Type::StrRef | Type::Slice(_) => AbiRepr::FatPointer { num_fields: 2 },
             // Everything else that's not scalar or ZST is passed indirectly
             _ => AbiRepr::Indirect,
         }
@@ -220,7 +193,7 @@ impl TypeMapper {
         }
     }
 
-    /// Check if a type is a fat pointer (StrRef, slice, etc.).
+    /// Check if a type is a fat pointer (`StrRef`, slice, etc.).
     ///
     /// Fat pointers are compound types that are passed as multiple
     /// pointer-sized values at the ABI level.

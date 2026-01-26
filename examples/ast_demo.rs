@@ -1,6 +1,6 @@
 //! Demo of the AST pretty-printer.
 //!
-//! Run with: cargo run --example ast_demo
+//! Run with: cargo run --example `ast_demo`
 
 use rowan::ast::AstNode;
 use spl::ast::SourceFile;
@@ -11,7 +11,7 @@ fn main() {
     println!("=== SPL AST Pretty-Printer Demo ===\n");
 
     // A non-trivial SPL program demonstrating various language features
-    let source = r#"
+    let source = r"
 struct Point {
     x: i32,
     y: i32
@@ -65,7 +65,7 @@ fn main() {
 
     result
 }
-"#;
+";
 
     // Parse the source
     let parsed = parse(source);
@@ -74,7 +74,7 @@ fn main() {
     if !parsed.ok() {
         println!("Parse errors:");
         for error in parsed.errors() {
-            println!("  - {:?}", error);
+            println!("  - {error:?}");
         }
         println!();
     }
@@ -90,7 +90,7 @@ fn main() {
 
     println!("AST structure:");
     println!("─────────────────────────────────────────");
-    print!("{}", ast_output);
+    print!("{ast_output}");
     println!("─────────────────────────────────────────\n");
 
     // Also show the raw syntax tree for comparison
@@ -98,7 +98,7 @@ fn main() {
     println!("─────────────────────────────────────────");
     let debug_tree = parsed.debug_tree();
     for (i, line) in debug_tree.lines().take(100).enumerate() {
-        println!("{}", line);
+        println!("{line}");
         if i == 99 {
             println!("... (truncated)");
         }

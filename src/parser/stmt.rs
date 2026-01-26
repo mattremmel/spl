@@ -111,11 +111,10 @@ pub(crate) fn type_annotation(
             let _ = expr::expr(p)?;
             p.expect(SyntaxKind::R_BRACKET)?;
             return Ok(m.complete(p, SyntaxKind::ArrayType));
-        } else {
-            // Slice type [T]
-            p.expect(SyntaxKind::R_BRACKET)?;
-            return Ok(m.complete(p, SyntaxKind::SliceType));
         }
+        // Slice type [T]
+        p.expect(SyntaxKind::R_BRACKET)?;
+        return Ok(m.complete(p, SyntaxKind::SliceType));
     }
 
     // Tuple type: (T1, T2, ...)

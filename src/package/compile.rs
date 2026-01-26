@@ -9,7 +9,7 @@ use crate::{CompileResult, Diagnostic, Severity, hir, mir, sema};
 /// Maximum number of diagnostics to report before stopping.
 const MAX_DIAGNOSTICS: usize = 100;
 
-/// Truncate diagnostics to MAX_DIAGNOSTICS if exceeded.
+/// Truncate diagnostics to `MAX_DIAGNOSTICS` if exceeded.
 fn truncate_diagnostics_if_needed(diagnostics: &mut Vec<Diagnostic>) {
     if diagnostics.len() > MAX_DIAGNOSTICS {
         diagnostics.truncate(MAX_DIAGNOSTICS);

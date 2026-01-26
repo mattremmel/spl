@@ -40,7 +40,7 @@ impl CompilationUnit {
 
     /// Returns an iterator over parsed source files.
     ///
-    /// Each item is a tuple of (FileId, SourceFile AST node).
+    /// Each item is a tuple of (`FileId`, `SourceFile` AST node).
     pub fn source_files(&self) -> impl Iterator<Item = (FileId, AstSourceFile)> + '_ {
         self.parsed_files.iter().filter_map(|(id, parse)| {
             let sf = AstSourceFile::cast(parse.syntax())?;
@@ -50,7 +50,7 @@ impl CompilationUnit {
 
     /// Returns an iterator over all items from all files.
     ///
-    /// Each item is a tuple of (FileId, Item).
+    /// Each item is a tuple of (`FileId`, Item).
     pub fn items(&self) -> impl Iterator<Item = (FileId, Item)> + '_ {
         self.source_files().flat_map(|(id, sf)| {
             // Collect items to avoid lifetime issues with the iterator
@@ -63,7 +63,7 @@ impl CompilationUnit {
 
     /// Returns an iterator over all parse errors from all files.
     ///
-    /// Each error is a tuple of (FileId, ParseError).
+    /// Each error is a tuple of (`FileId`, `ParseError`).
     pub fn errors(&self) -> impl Iterator<Item = (FileId, &ParseError)> + '_ {
         self.parsed_files
             .iter()

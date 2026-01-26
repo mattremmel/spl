@@ -110,7 +110,7 @@ fn run_package_test(path: &Path) -> datatest_stable::Result<()> {
                 Err(err) => {
                     // Check error pattern if specified
                     if let Some(pattern) = &config.expect_error {
-                        let err_str = format!("{:?}", err);
+                        let err_str = format!("{err:?}");
                         if !err_str.to_lowercase().contains(&pattern.to_lowercase()) {
                             return Err(format!(
                                 "{}: expected error containing '{}', got: {}",

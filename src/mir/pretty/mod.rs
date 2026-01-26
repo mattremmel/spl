@@ -103,7 +103,7 @@ impl MirPrinter {
             PlaceElem::Index(local) => format!("{base}[{}]", self.print_local(*local)),
             PlaceElem::ConstantIndex { offset, from_end } => {
                 if *from_end {
-                    format!("{base}[-{}]", offset)
+                    format!("{base}[-{offset}]")
                 } else {
                     format!("{base}[{offset}]")
                 }

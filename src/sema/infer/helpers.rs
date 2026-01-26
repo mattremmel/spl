@@ -3,7 +3,7 @@
 use crate::lexer::Span;
 use crate::sema::types::PrimitiveKind;
 
-/// Convert a rowan TextRange to a Span.
+/// Convert a rowan `TextRange` to a Span.
 pub fn text_range_to_span(range: rowan::TextRange) -> Span {
     range.start().into()..range.end().into()
 }

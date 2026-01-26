@@ -113,7 +113,7 @@ impl<'a> FunctionLowerer<'a> {
                 })?;
 
                 let func_info = registry.get(def_id).ok_or_else(|| {
-                    CodegenError::Internal(format!("function {:?} not found in registry", def_id))
+                    CodegenError::Internal(format!("function {def_id:?} not found in registry"))
                 })?;
 
                 // Get the module to import the function reference
@@ -140,7 +140,7 @@ impl<'a> FunctionLowerer<'a> {
                             // Get the result type after applying all projections
                             Some(self.compute_place_result_type(place))
                         }
-                        _ => None,
+                        Operand::Constant(_) => None,
                     };
 
                     let is_fat_pointer =
@@ -278,7 +278,7 @@ impl<'a> FunctionLowerer<'a> {
 
     /// Lower a fat pointer operand to its component values.
     ///
-    /// Fat pointers (StrRef, slices) must be passed as separate values
+    /// Fat pointers (`StrRef`, slices) must be passed as separate values
     /// at the ABI level. Currently supports 2-field fat pointers.
     fn lower_fat_pointer_operand(
         &mut self,
@@ -312,7 +312,7 @@ impl<'a> FunctionLowerer<'a> {
 
                 Ok((field_0, field_1))
             }
-            _ => Err(CodegenError::Internal(
+            Operand::Constant(_) => Err(CodegenError::Internal(
                 "unexpected operand for fat pointer".to_string(),
             )),
         }
@@ -343,8 +343,8 @@ impl<'a> FunctionLowerer<'a> {
                     // Get the element type
                     self.layout.element_type(current_ty).unwrap_or(current_ty)
                 }
-                PlaceElem::Subslice { .. } => current_ty, // Slice type unchanged
-                PlaceElem::Downcast(_) => current_ty,     // Enum variant type
+                // Subslice preserves slice type, Downcast preserves enum variant type
+                PlaceElem::Subslice { .. } | PlaceElem::Downcast(_) => current_ty,
             };
         }
 

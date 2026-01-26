@@ -22,7 +22,7 @@ use crate::sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
 pub fn validate_types(body: &Body, types: &TypeInterner) {
     for (block_idx, block) in body.basic_blocks.iter().enumerate() {
         for (stmt_idx, stmt) in block.statements.iter().enumerate() {
-            let ctx = format!("BasicBlock({}).statements[{}]", block_idx, stmt_idx);
+            let ctx = format!("BasicBlock({block_idx}).statements[{stmt_idx}]");
             validate_statement_types(&stmt.kind, body, types, &ctx);
         }
     }
@@ -43,15 +43,13 @@ fn validate_statement_types(
             return;
         }
 
-        if place_ty != rvalue_ty {
-            panic!(
-                "Type validation failed: type mismatch in assignment at {}: \
-                place has type {:?} but rvalue has type {:?}",
-                context,
-                types.get(place_ty),
-                types.get(rvalue_ty)
-            );
-        }
+        assert!(
+            place_ty == rvalue_ty,
+            "Type validation failed: type mismatch in assignment at {context}: \
+            place has type {:?} but rvalue has type {:?}",
+            types.get(place_ty),
+            types.get(rvalue_ty)
+        );
 
         // Validate rvalue-specific type constraints
         validate_rvalue_type_constraints(rvalue, body, types, context);
@@ -76,16 +74,13 @@ fn validate_rvalue_type_constraints(
 
             // For now, validate that operands have the same type for most binops
             // (In a real compiler, we'd have more nuanced rules per operator)
-            if !is_binop_valid(op, lhs_ty, rhs_ty, types) {
-                panic!(
-                    "Type validation failed: incompatible types for {:?} at {}: \
-                    lhs has type {:?}, rhs has type {:?}",
-                    op,
-                    context,
-                    types.get(lhs_ty),
-                    types.get(rhs_ty)
-                );
-            }
+            assert!(
+                is_binop_valid(*op, lhs_ty, rhs_ty, types),
+                "Type validation failed: incompatible types for {op:?} at {context}: \
+                lhs has type {:?}, rhs has type {:?}",
+                types.get(lhs_ty),
+                types.get(rhs_ty)
+            );
         }
         Rvalue::UnaryOp(op, operand) => {
             let operand_ty = get_operand_type(operand, body, types);
@@ -94,22 +89,19 @@ fn validate_rvalue_type_constraints(
                 return;
             }
 
-            if !is_unop_valid(op, operand_ty, types) {
-                panic!(
-                    "Type validation failed: {:?} requires {} type at {}: \
-                    operand has type {:?}",
-                    op,
-                    unop_type_requirement(op),
-                    context,
-                    types.get(operand_ty)
-                );
-            }
+            assert!(
+                is_unop_valid(*op, operand_ty, types),
+                "Type validation failed: {op:?} requires {} type at {context}: \
+                operand has type {:?}",
+                unop_type_requirement(*op),
+                types.get(operand_ty)
+            );
         }
         _ => {}
     }
 }
 
-fn is_binop_valid(op: &BinOp, lhs_ty: TypeId, rhs_ty: TypeId, types: &TypeInterner) -> bool {
+fn is_binop_valid(op: BinOp, lhs_ty: TypeId, rhs_ty: TypeId, types: &TypeInterner) -> bool {
     // Operands should have the same type (simplified rule)
     if lhs_ty != rhs_ty {
         return false;
@@ -130,7 +122,7 @@ fn is_binop_valid(op: &BinOp, lhs_ty: TypeId, rhs_ty: TypeId, types: &TypeIntern
     }
 }
 
-fn is_unop_valid(op: &UnOp, operand_ty: TypeId, types: &TypeInterner) -> bool {
+fn is_unop_valid(op: UnOp, operand_ty: TypeId, types: &TypeInterner) -> bool {
     let operand_type = types.get(operand_ty);
 
     match op {
@@ -142,7 +134,7 @@ fn is_unop_valid(op: &UnOp, operand_ty: TypeId, types: &TypeInterner) -> bool {
     }
 }
 
-fn unop_type_requirement(op: &UnOp) -> &'static str {
+fn unop_type_requirement(op: UnOp) -> &'static str {
     match op {
         UnOp::Neg => "numeric",
         UnOp::Not => "integer or bool",
@@ -245,16 +237,12 @@ fn project_type(ty: TypeId, elem: &PlaceElem, types: &TypeInterner) -> TypeId {
                 _ => types.error(),
             }
         }
-        PlaceElem::Index(_) => match types.get(ty) {
+        PlaceElem::Index(_) | PlaceElem::ConstantIndex { .. } => match types.get(ty) {
             Type::Array(elem, _) | Type::Slice(elem) => *elem,
             _ => types.error(),
         },
-        PlaceElem::ConstantIndex { .. } => match types.get(ty) {
-            Type::Array(elem, _) | Type::Slice(elem) => *elem,
-            _ => types.error(),
-        },
-        PlaceElem::Subslice { .. } => ty, // Subslice preserves type
-        PlaceElem::Downcast(_) => ty,     // Downcast preserves base type
+        // Subslice preserves type; Downcast preserves base type
+        PlaceElem::Subslice { .. } | PlaceElem::Downcast(_) => ty,
     }
 }
 
@@ -271,49 +259,31 @@ fn get_constant_type(constant: &crate::mir::operand::Constant, types: &TypeInter
     use crate::mir::operand::Constant;
 
     match constant {
-        Constant::Int(_, ty) => *ty,
-        Constant::Float(_, ty) => *ty,
+        Constant::Int(_, ty) | Constant::Float(_, ty) | Constant::Zeroed(ty) => *ty,
         Constant::Bool(_) => types.bool(),
         Constant::Char(_) => types.char(),
         Constant::String(_) => types.str_ref(),
         Constant::Unit => types.unit(),
         Constant::FnDef(_) => types.error(), // Would need function signature lookup
-        Constant::Zeroed(ty) => *ty,
     }
 }
 
 /// Get the type of an rvalue.
 fn get_rvalue_type(rvalue: &Rvalue, body: &Body, types: &TypeInterner) -> TypeId {
     match rvalue {
-        Rvalue::Use(operand) => get_operand_type(operand, body, types),
-        Rvalue::Ref(_, _, ref_ty) => *ref_ty,
-        Rvalue::AddressOf(_, _, ptr_ty) => *ptr_ty,
+        Rvalue::Use(operand) | Rvalue::UnaryOp(_, operand) | Rvalue::Repeat(operand, _) => {
+            get_operand_type(operand, body, types)
+        }
+        Rvalue::Ref(_, _, ref_ty) | Rvalue::AddressOf(_, _, ref_ty) | Rvalue::Cast(_, _, ref_ty) => {
+            *ref_ty
+        }
         Rvalue::BinaryOp(op, lhs, _) => match op {
             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => types.bool(),
             _ => get_operand_type(lhs, body, types),
         },
-        Rvalue::UnaryOp(_, operand) => get_operand_type(operand, body, types),
-        Rvalue::Cast(_, _, target_ty) => *target_ty,
-        Rvalue::Len(_) => {
-            // Len returns usize, but we can't create types without mutable interner
-            // Return error type - actual Len validation is in rvalues.rs
-            types.error()
-        }
-        Rvalue::Aggregate(_, _) => {
-            // Would need aggregate type info
-            types.error()
-        }
-        Rvalue::Discriminant(_) => {
-            // Discriminant is typically isize, but we can't create types without mutable interner
-            // Return error type - actual Discriminant validation is in rvalues.rs
-            types.error()
-        }
-        Rvalue::Repeat(operand, count) => {
-            let elem_ty = get_operand_type(operand, body, types);
-            // Can't create array type without mutable interner
-            let _ = count;
-            elem_ty
-        }
+        // These return usize/isize or need aggregate type info which requires mutable interner
+        // Return error type - actual validation is in rvalues.rs
+        Rvalue::Len(_) | Rvalue::Aggregate(_, _) | Rvalue::Discriminant(_) => types.error(),
     }
 }
 

@@ -70,7 +70,7 @@ impl LiteralExpr {
         // Skip whitespace/trivia tokens to get the actual literal token
         self.0
             .children_with_tokens()
-            .filter_map(|it| it.into_token())
+            .filter_map(rowan::NodeOrToken::into_token)
             .find(|it| !it.kind().is_trivia())
     }
 }
@@ -138,7 +138,7 @@ impl CallArg {
     }
 
     /// Get the argument name token directly (for named args where
-    /// the name is stored as a raw IDENT token, not wrapped in NameRef).
+    /// the name is stored as a raw IDENT token, not wrapped in `NameRef`).
     pub fn name_token(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::IDENT)
     }
@@ -161,7 +161,7 @@ impl BinExpr {
     pub fn op_token(&self) -> Option<SyntaxToken> {
         self.0
             .children_with_tokens()
-            .filter_map(|it| it.into_token())
+            .filter_map(rowan::NodeOrToken::into_token)
             .find(|t| {
                 matches!(
                     t.kind(),
@@ -197,7 +197,7 @@ impl PrefixExpr {
     pub fn op_token(&self) -> Option<SyntaxToken> {
         self.0
             .children_with_tokens()
-            .filter_map(|it| it.into_token())
+            .filter_map(rowan::NodeOrToken::into_token)
             .find(|t| {
                 matches!(
                     t.kind(),
@@ -231,7 +231,7 @@ impl FieldExpr {
     }
 
     /// Get the field name token directly (for field expressions where
-    /// the field name is stored as a raw IDENT token, not wrapped in NameRef).
+    /// the field name is stored as a raw IDENT token, not wrapped in `NameRef`).
     pub fn name_token(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::IDENT)
     }

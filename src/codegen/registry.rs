@@ -1,6 +1,6 @@
 //! Function registry for multi-function compilation.
 //!
-//! Maps SPL function DefIds to Cranelift FuncIds for cross-function calls.
+//! Maps SPL function `DefId`s to Cranelift `FuncId`s for cross-function calls.
 
 use cranelift_codegen::ir::Signature;
 use cranelift_module::FuncId;
@@ -24,7 +24,7 @@ impl FunctionInfo {
     }
 }
 
-/// Registry mapping DefIds to Cranelift function information.
+/// Registry mapping `DefId`s to Cranelift function information.
 ///
 /// Used during multi-function compilation to resolve function references
 /// when lowering call instructions.
@@ -46,7 +46,7 @@ impl FunctionRegistry {
         self.functions.insert(def_id, info);
     }
 
-    /// Look up a function by its DefId.
+    /// Look up a function by its `DefId`.
     pub fn get(&self, def_id: DefId) -> Option<&FunctionInfo> {
         self.functions.get(&def_id)
     }

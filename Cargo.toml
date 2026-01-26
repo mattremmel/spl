@@ -10,6 +10,43 @@ module_name_repetitions = "allow"
 must_use_candidate = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
+# Borrow checker issues - map_or_else suggestions break with &mut self
+option_if_let_else = "allow"
+# Variable naming - too subjective
+similar_names = "allow"
+# Function length - complexity varies by domain
+too_many_lines = "allow"
+# Raw string hashes - stylistic in tests
+needless_raw_string_hashes = "allow"
+# Wildcard imports - acceptable in certain modules like tests
+wildcard_imports = "allow"
+# Items after statements - acceptable in local scopes
+items_after_statements = "allow"
+# Struct complexity - some structs legitimately need many bools
+struct_excessive_bools = "allow"
+# Large stack allocations - acceptable for compiler internals
+large_stack_arrays = "allow"
+# Casting - we target 64-bit platforms and know value ranges
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+cast_lossless = "allow"
+# Float comparison - sometimes we want exact comparison for constants
+float_cmp = "allow"
+# Macro patterns - unnested is clearer in declarative macros
+unnested_or_patterns = "allow"
+# Self returning methods - covered by must_use_candidate
+return_self_not_must_use = "allow"
+# Explicit lifetimes - can improve readability
+elidable_lifetime_names = "allow"
+# Unused self - needed for trait impls and future use
+unused_self = "allow"
+# Comparison chains - if/else can be clearer than match
+comparison_chain = "allow"
+# Self recursion - acceptable pattern for recursive algorithms
+self_only_used_in_recursion = "allow"
+# Map unwrap patterns - map/unwrap_or can be clearer and avoids borrow issues
+map_unwrap_or = "allow"
 
 [dependencies]
 ariadne = "0.5"

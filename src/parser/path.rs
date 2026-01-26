@@ -1,6 +1,6 @@
 //! Path parsing: `segment (. segment)*`
 //!
-//! Produces structured Path nodes with PathSegment and NameRef children.
+//! Produces structured Path nodes with `PathSegment` and `NameRef` children.
 
 use crate::parser::{CompletedMarker, ParseError, Parser};
 use crate::syntax::SyntaxKind;

@@ -78,7 +78,7 @@ impl BasicBlockData {
     pub fn successors(&self) -> Vec<BasicBlock> {
         self.terminator
             .as_ref()
-            .map(|t| t.successors())
+            .map(Terminator::successors)
             .unwrap_or_default()
     }
 }
@@ -122,7 +122,7 @@ impl Body {
 
     /// Create a new MIR body with a return type and argument types.
     ///
-    /// Arguments are allocated as locals 1..=arg_count.
+    /// Arguments are allocated as locals `1..=arg_count`.
     pub fn with_args(return_ty: TypeId, arg_types: &[(TypeId, bool)]) -> Self {
         let mut locals = vec![LocalDecl::new(return_ty, true)];
         for (ty, mutable) in arg_types {
@@ -176,7 +176,7 @@ impl Body {
         self.locals[0].ty
     }
 
-    /// Get argument locals (Local 1..=arg_count).
+    /// Get argument locals (Local `1..=arg_count`).
     pub fn args(&self) -> impl Iterator<Item = Local> {
         (1..=self.arg_count).map(|i| Local(i as u32))
     }
@@ -204,7 +204,7 @@ impl Body {
         // Check all blocks have terminators
         for (idx, block) in self.basic_blocks.iter().enumerate() {
             if block.terminator.is_none() {
-                return Err(format!("BasicBlock {} has no terminator", idx));
+                return Err(format!("BasicBlock {idx} has no terminator"));
             }
         }
 

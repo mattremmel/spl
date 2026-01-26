@@ -40,10 +40,11 @@ pub fn hir_binop_to_mir(op: HirBinOp) -> Option<BinOp> {
         HirBinOp::Le => Some(BinOp::Le),
         HirBinOp::Gt => Some(BinOp::Gt),
         HirBinOp::Ge => Some(BinOp::Ge),
-        // Short-circuit: handled by control flow lowering
-        HirBinOp::And | HirBinOp::Or => None,
-        // Assignment: handled by statement lowering
-        HirBinOp::Assign
+        // Short-circuit (And/Or) handled by control flow lowering
+        // Assignment handled by statement lowering
+        HirBinOp::And
+        | HirBinOp::Or
+        | HirBinOp::Assign
         | HirBinOp::AddAssign
         | HirBinOp::SubAssign
         | HirBinOp::MulAssign

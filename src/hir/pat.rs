@@ -1,7 +1,7 @@
 //! HIR pattern representation.
 //!
 //! This module defines the HIR pattern types which are arena-allocated
-//! and have bindings resolved to DefIds.
+//! and have bindings resolved to `DefIds`.
 
 use crate::lexer::Span;
 use crate::sema::symbol::DefId;

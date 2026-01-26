@@ -138,7 +138,7 @@ pub extern "C" fn __float_to_string(value: f64) -> StringResult {
         };
     }
 
-    __memcpy(ptr, s.as_ptr() as *mut u8, len);
+    __memcpy(ptr, s.as_ptr().cast_mut(), len);
     StringResult { ptr, len }
 }
 

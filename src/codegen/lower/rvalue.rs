@@ -231,8 +231,7 @@ impl<'a> FunctionLowerer<'a> {
             }
             None => {
                 return Err(CodegenError::Internal(format!(
-                    "local {:?} not found in local_map",
-                    dest
+                    "local {dest:?} not found in local_map"
                 )));
             }
         };

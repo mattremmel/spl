@@ -1,6 +1,6 @@
 //! Demo of the diagnostic system.
 //!
-//! Run with: cargo run --example diagnostic_demo
+//! Run with: cargo run --example `diagnostic_demo`
 
 use spl::diagnostic::{Diagnostic, DiagnosticRenderer, RenderConfig};
 

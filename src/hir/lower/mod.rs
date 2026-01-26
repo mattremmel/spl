@@ -4,7 +4,7 @@
 //! - Literal folding for negated integers
 //! - Desugaring (while → loop)
 //! - Type attachment from inference results
-//! - Name resolution to DefIds
+//! - Name resolution to `DefId`s
 //!
 //! # Error Handling: Fallback Values
 //!
@@ -122,15 +122,15 @@ struct LoweringContext {
     db: HirDatabase,
     /// Map from expression spans to their inferred types.
     expr_types: FxHashMap<Span, TypeId>,
-    /// Map from DefIds to their inferred types.
+    /// Map from `DefIds` to their inferred types.
     binding_types: FxHashMap<DefId, TypeId>,
-    /// Map from spans to resolved DefIds.
+    /// Map from spans to resolved `DefIds`.
     resolutions: FxHashMap<Span, DefId>,
-    /// Map from method call spans to their resolved method DefIds.
+    /// Map from method call spans to their resolved method `DefIds`.
     method_resolutions: FxHashMap<Span, DefId>,
-    /// Map from type annotation spans to their resolved TypeIds.
+    /// Map from type annotation spans to their resolved `TypeIds`.
     type_annotation_types: FxHashMap<Span, TypeId>,
-    /// Intrinsic methods that need special lowering (e.g., str.ptr() -> field 0).
+    /// Intrinsic methods that need special lowering (e.g., `str.ptr()` -> field 0).
     intrinsic_methods: FxHashMap<DefId, crate::sema::infer::IntrinsicKind>,
 }
 
@@ -221,7 +221,7 @@ impl LoweringContext {
             Item::TypeAlias(type_alias) => {
                 self.lower_type_alias(type_alias).map(HirItem::TypeAlias)
             }
-            Item::Impl(impl_block) => self.lower_impl(impl_block).map(HirItem::Impl),
+            Item::Impl(impl_block) => Some(HirItem::Impl(self.lower_impl(impl_block))),
             Item::Extern(extern_block) => {
                 // Lower each extern function declaration
                 for extern_fn in extern_block.extern_fns() {
@@ -262,9 +262,7 @@ impl LoweringContext {
 
         debug_assert!(
             def_id.is_valid(),
-            "Function '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this name",
-            name,
-            name_span
+            "Function '{name}' resolved to INVALID DefId at {name_span:?} - resolution phase failed to register this name"
         );
 
         // Lower type parameters
@@ -316,9 +314,7 @@ impl LoweringContext {
 
         debug_assert!(
             def_id.is_valid(),
-            "Extern function '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this name",
-            name,
-            name_span
+            "Extern function '{name}' resolved to INVALID DefId at {name_span:?} - resolution phase failed to register this name"
         );
 
         // No type parameters for extern functions (currently)
@@ -360,7 +356,7 @@ impl LoweringContext {
 
         // Create a simple bind pattern for the parameter
         let ident_token = param.name()?.ident_token()?;
-        let _name = ident_token.text().to_string();
+        let name = ident_token.text().to_string();
         // Use the token's range to match how resolutions are stored
         let name_span = Self::text_range_to_span(ident_token.text_range());
         let def_id = self
@@ -371,9 +367,7 @@ impl LoweringContext {
 
         debug_assert!(
             def_id.is_valid(),
-            "Parameter '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this binding",
-            _name,
-            name_span
+            "Parameter '{name}' resolved to INVALID DefId at {name_span:?} - resolution phase failed to register this binding"
         );
 
         let ty = self.get_binding_type(def_id);
@@ -411,9 +405,7 @@ impl LoweringContext {
 
         debug_assert!(
             def_id.is_valid(),
-            "Struct '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this type",
-            name,
-            name_span
+            "Struct '{name}' resolved to INVALID DefId at {name_span:?} - resolution phase failed to register this type"
         );
 
         let type_params = Vec::new(); // TODO
@@ -452,9 +444,7 @@ impl LoweringContext {
 
         debug_assert!(
             def_id.is_valid(),
-            "Field '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this field",
-            name,
-            name_span
+            "Field '{name}' resolved to INVALID DefId at {name_span:?} - resolution phase failed to register this field"
         );
 
         let ty = self.get_binding_type(def_id);
@@ -483,9 +473,7 @@ impl LoweringContext {
 
         debug_assert!(
             def_id.is_valid(),
-            "Type alias '{}' resolved to INVALID DefId at {:?} - resolution phase failed to register this alias",
-            name,
-            name_span
+            "Type alias '{name}' resolved to INVALID DefId at {name_span:?} - resolution phase failed to register this alias"
         );
 
         let ty = self.get_type(&span);
@@ -499,7 +487,7 @@ impl LoweringContext {
         })
     }
 
-    fn lower_impl(&mut self, impl_block: &crate::ast::ImplBlock) -> Option<HirImpl> {
+    fn lower_impl(&mut self, impl_block: &crate::ast::ImplBlock) -> HirImpl {
         let span = Self::text_range_to_span(impl_block.syntax().text_range());
         let self_ty = self.get_type(&span);
 
@@ -508,12 +496,12 @@ impl LoweringContext {
             .filter_map(|item| self.lower_item(&item))
             .collect();
 
-        Some(HirImpl {
+        HirImpl {
             type_params: Vec::new(),
             self_ty,
             items,
             span,
-        })
+        }
     }
 
     // ========================================================================
@@ -559,9 +547,7 @@ impl LoweringContext {
                         }
                     }
                     Stmt::Let(let_stmt) => {
-                        if let Some(stmt_id) = self.lower_let_stmt(let_stmt) {
-                            stmts.push(stmt_id);
-                        }
+                        stmts.push(self.lower_let_stmt(let_stmt));
                     }
                 }
             } else if let Some(expr) = Expr::cast(child.clone()) {
@@ -579,7 +565,7 @@ impl LoweringContext {
         self.db.alloc_expr(expr)
     }
 
-    fn lower_let_stmt(&mut self, let_stmt: &LetStmt) -> Option<StmtId> {
+    fn lower_let_stmt(&mut self, let_stmt: &LetStmt) -> StmtId {
         let span = Self::text_range_to_span(let_stmt.syntax().text_range());
 
         let pat = let_stmt
@@ -612,7 +598,7 @@ impl LoweringContext {
             },
             span,
         };
-        Some(self.db.alloc_stmt(stmt))
+        self.db.alloc_stmt(stmt)
     }
 
     // ========================================================================
@@ -640,8 +626,7 @@ impl LoweringContext {
 
                 debug_assert!(
                     def_id.is_valid(),
-                    "Pattern binding resolved to INVALID DefId at {:?} - resolution phase failed to register this binding",
-                    name_span
+                    "Pattern binding resolved to INVALID DefId at {name_span:?} - resolution phase failed to register this binding"
                 );
 
                 let ty = self.get_binding_type(def_id);
@@ -693,8 +678,7 @@ impl LoweringContext {
 
                 debug_assert!(
                     def_id.is_valid(),
-                    "Struct pattern path resolved to INVALID DefId at {:?} - resolution phase failed to register this struct type",
-                    path_span
+                    "Struct pattern path resolved to INVALID DefId at {path_span:?} - resolution phase failed to register this struct type"
                 );
 
                 let fields: Vec<_> = struct_pat
@@ -808,17 +792,16 @@ impl LoweringContext {
             Expr::Ref(ref_expr) => self.lower_ref_expr(ref_expr, span, ty),
             Expr::Field(field) => self.lower_field_expr(field, span, ty),
             Expr::Index(index) => self.lower_index_expr(index, span, ty),
-            Expr::Slice(_) => self.lower_missing(span), // TODO
+            // TODO: Slice, For, and Range are not yet implemented
+            Expr::Slice(_) | Expr::For(_) | Expr::Range(_) => self.lower_missing(span),
             Expr::If(if_expr) => self.lower_if_expr(if_expr, span, ty),
             Expr::While(while_expr) => self.lower_while_expr(while_expr, span),
-            Expr::For(_) => self.lower_missing(span), // TODO: desugar for
             Expr::Loop(loop_expr) => self.lower_loop_expr(loop_expr, span, ty),
             Expr::Break(break_expr) => self.lower_break_expr(break_expr, span),
             Expr::Continue(_) => self.lower_continue_expr(span),
             Expr::Return(return_expr) => self.lower_return_expr(return_expr, span),
             Expr::Block(block_expr) => self.lower_block_expr(block_expr),
             Expr::Cast(cast) => self.lower_cast_expr(cast, span, ty),
-            Expr::Range(_) => self.lower_missing(span), // TODO
             Expr::Is(is_expr) => self.lower_is_expr(is_expr, span, ty),
             Expr::Match(match_expr) => self.lower_match_expr(match_expr, span, ty),
         }
@@ -864,9 +847,8 @@ impl LoweringContext {
     }
 
     fn lower_path_expr(&mut self, path_expr: &PathExpr, span: Span, ty: TypeId) -> ExprId {
-        let path = match path_expr.path() {
-            Some(p) => p,
-            None => return self.lower_missing(span),
+        let Some(path) = path_expr.path() else {
+            return self.lower_missing(span);
         };
 
         let segments: Vec<_> = path.segments().collect();
@@ -892,8 +874,7 @@ impl LoweringContext {
 
             debug_assert!(
                 def_id.is_valid(),
-                "Path expression resolved to INVALID DefId at {:?} - resolution phase failed to register this name",
-                first_span
+                "Path expression resolved to INVALID DefId at {first_span:?} - resolution phase failed to register this name"
             );
 
             return self.db.alloc_expr(HirExpr {
@@ -920,8 +901,7 @@ impl LoweringContext {
 
         debug_assert!(
             def_id.is_valid(),
-            "Multi-segment path first segment resolved to INVALID DefId at {:?} - resolution phase failed to register this name",
-            first_span
+            "Multi-segment path first segment resolved to INVALID DefId at {first_span:?} - resolution phase failed to register this name"
         );
 
         // Start with the first segment as a Var expression
@@ -1081,7 +1061,6 @@ impl LoweringContext {
         let op = bin
             .op_token()
             .map(|t| match t.kind() {
-                SyntaxKind::PLUS => BinOp::Add,
                 SyntaxKind::MINUS => BinOp::Sub,
                 SyntaxKind::STAR => BinOp::Mul,
                 SyntaxKind::SLASH => BinOp::Div,
@@ -1100,7 +1079,8 @@ impl LoweringContext {
                 SyntaxKind::STAR_EQ => BinOp::MulAssign,
                 SyntaxKind::SLASH_EQ => BinOp::DivAssign,
                 SyntaxKind::PERCENT_EQ => BinOp::RemAssign,
-                _ => BinOp::Add, // fallback
+                // SyntaxKind::PLUS and any other fallback
+                _ => BinOp::Add,
             })
             .unwrap_or(BinOp::Add);
 
@@ -1157,8 +1137,8 @@ impl LoweringContext {
             .op_token()
             .map(|t| match t.kind() {
                 SyntaxKind::BANG => UnaryOp::Not,
-                SyntaxKind::MINUS => UnaryOp::Neg,
                 SyntaxKind::STAR => UnaryOp::Deref,
+                // SyntaxKind::MINUS and any other fallback
                 _ => UnaryOp::Neg,
             })
             .unwrap_or(UnaryOp::Neg);
@@ -1227,9 +1207,8 @@ impl LoweringContext {
     }
 
     fn lower_call_expr(&mut self, call: &CallExpr, span: Span, ty: TypeId) -> ExprId {
-        let callee = match call.callee() {
-            Some(c) => c,
-            None => return self.lower_missing(span),
+        let Some(callee) = call.callee() else {
+            return self.lower_missing(span);
         };
 
         // Dispatch based on callee type
@@ -1314,9 +1293,8 @@ impl LoweringContext {
         span: Span,
         ty: TypeId,
     ) -> ExprId {
-        let path = match path_expr.path() {
-            Some(p) => p,
-            None => return self.lower_missing(span),
+        let Some(path) = path_expr.path() else {
+            return self.lower_missing(span);
         };
 
         let segments: Vec<_> = path.segments().collect();
@@ -1344,7 +1322,7 @@ impl LoweringContext {
         // Get the function DefId from the path
         let fn_span = segments
             .last()
-            .and_then(|seg| seg.name())
+            .and_then(crate::ast::PathSegment::name)
             .and_then(|n| n.token())
             .map(|t| Self::text_range_to_span(t.text_range()))
             .unwrap_or_else(|| span.clone());
@@ -1489,7 +1467,7 @@ impl LoweringContext {
         // Get method name from last segment
         let method_name = segments
             .last()
-            .and_then(|seg| seg.name())
+            .and_then(crate::ast::PathSegment::name)
             .and_then(|n| n.token())
             .map(|t| t.text().to_string())
             .unwrap_or_default();

@@ -68,17 +68,17 @@ pub enum LinkError {
 impl std::fmt::Display for LinkError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LinkError::WriteObjectFile(e) => write!(f, "failed to write object file: {}", e),
-            LinkError::SpawnLinker(e) => write!(f, "failed to spawn linker: {}", e),
+            LinkError::WriteObjectFile(e) => write!(f, "failed to write object file: {e}"),
+            LinkError::SpawnLinker(e) => write!(f, "failed to spawn linker: {e}"),
             LinkError::LinkerFailed { status, stderr, .. } => {
                 if let Some(code) = status {
-                    write!(f, "linker failed with exit code {}: {}", code, stderr)
+                    write!(f, "linker failed with exit code {code}: {stderr}")
                 } else {
-                    write!(f, "linker terminated by signal: {}", stderr)
+                    write!(f, "linker terminated by signal: {stderr}")
                 }
             }
-            LinkError::ReadBinary(e) => write!(f, "failed to read binary: {}", e),
-            LinkError::Io(e) => write!(f, "IO error: {}", e),
+            LinkError::ReadBinary(e) => write!(f, "failed to read binary: {e}"),
+            LinkError::Io(e) => write!(f, "IO error: {e}"),
         }
     }
 }
@@ -175,12 +175,12 @@ impl CcLinker {
 
         // Library search paths
         for path in &options.library_paths {
-            args.push(format!("-L{}", path.display()));
+            args.push(format!("-L{}", path.display()));  // path.display() can't be inlined
         }
 
         // Libraries
         for lib in &options.libraries {
-            args.push(format!("-l{}", lib));
+            args.push(format!("-l{lib}"));
         }
 
         // Extra arguments

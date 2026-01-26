@@ -21,7 +21,7 @@ pub fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
         // Wildcard, identifier, or struct pattern
         IDENT => {
             if p.current_text() == Some("_") {
-                wildcard_pat(p)
+                Ok(wildcard_pat(p))
             } else {
                 // Could be ident, path, or struct pattern
                 // Lookahead to check if this is a struct pattern (path followed by {)
@@ -34,10 +34,10 @@ pub fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
             path_or_struct_or_enum_pat(p)
         },
         // Rest pattern: ..
-        DOT_DOT => rest_pat(p),
+        DOT_DOT => Ok(rest_pat(p)),
         // Literal patterns (may be range pattern if followed by ..)
         INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL | TRUE_KW | FALSE_KW => {
-            literal_or_range_pat(p)
+            Ok(literal_or_range_pat(p))
         },
         _ => {
             let err = p.error_at_current("expected pattern".to_string());
@@ -56,10 +56,10 @@ fn ref_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
 }
 
 /// Parse a wildcard pattern: `_`
-fn wildcard_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+fn wildcard_pat(p: &mut Parser<'_>) -> CompletedMarker {
     let m = p.start();
     p.bump(); // consume `_`
-    Ok(m.complete(p, SyntaxKind::WildcardPat))
+    m.complete(p, SyntaxKind::WildcardPat)
 }
 
 /// Parse an identifier pattern: `x`, `foo`
@@ -189,7 +189,7 @@ fn parse_struct_fields(p: &mut Parser<'_>) -> Result<(), ParseError> {
 fn struct_pat_field(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     // Check for rest pattern `..`
     if p.at(SyntaxKind::DOT_DOT) {
-        return rest_pat(p);
+        return Ok(rest_pat(p));
     }
 
     let m = p.start();
@@ -204,14 +204,14 @@ fn struct_pat_field(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
 }
 
 /// Parse a rest pattern: `..`
-fn rest_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+fn rest_pat(p: &mut Parser<'_>) -> CompletedMarker {
     let m = p.start();
     p.bump(); // consume `..`
-    Ok(m.complete(p, SyntaxKind::RestPat))
+    m.complete(p, SyntaxKind::RestPat)
 }
 
 /// Parse a literal pattern, or a range pattern if followed by `..`
-fn literal_or_range_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+fn literal_or_range_pat(p: &mut Parser<'_>) -> CompletedMarker {
     let m = p.start();
     p.bump(); // consume the literal
 
@@ -229,9 +229,9 @@ fn literal_or_range_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseErro
             p.bump(); // consume end literal
         }
 
-        Ok(m.complete(p, SyntaxKind::RangePat))
+        m.complete(p, SyntaxKind::RangePat)
     } else {
-        Ok(m.complete(p, SyntaxKind::LiteralPat))
+        m.complete(p, SyntaxKind::LiteralPat)
     }
 }
 

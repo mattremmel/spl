@@ -109,7 +109,7 @@ pub enum HirExprKind {
     /// A literal value.
     Literal(Literal),
 
-    /// A variable reference (resolved to DefId).
+    /// A variable reference (resolved to `DefId`).
     Var(DefId),
 
     /// A binary operation.
