@@ -15,8 +15,10 @@
 //! ```
 
 use crate::Span;
+use crate::package::FileId;
 use ariadne::{Color, Config, Label as AriadneLabel, Report, ReportKind, Source};
 use std::io;
+use std::path::PathBuf;
 
 /// Severity level of a diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,6 +90,12 @@ pub struct Diagnostic {
     pub notes: Vec<String>,
     /// Hints suggesting fixes.
     pub hints: Vec<String>,
+    /// Optional file ID where the diagnostic originated.
+    /// Used internally during compilation; converted to `file_path` for output.
+    pub file_id: Option<FileId>,
+    /// Optional file path where the diagnostic originated.
+    /// Set for multi-file package compilation; `None` for single-file compilation.
+    pub file_path: Option<PathBuf>,
 }
 
 impl Diagnostic {
@@ -99,6 +107,8 @@ impl Diagnostic {
             labels: Vec::new(),
             notes: Vec::new(),
             hints: Vec::new(),
+            file_id: None,
+            file_path: None,
         }
     }
 
@@ -110,7 +120,21 @@ impl Diagnostic {
             labels: Vec::new(),
             notes: Vec::new(),
             hints: Vec::new(),
+            file_id: None,
+            file_path: None,
         }
+    }
+
+    /// Set the file ID for this diagnostic (internal use during compilation).
+    pub fn with_file_id(mut self, file_id: FileId) -> Self {
+        self.file_id = Some(file_id);
+        self
+    }
+
+    /// Set the file path for this diagnostic.
+    pub fn with_file_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.file_path = Some(path.into());
+        self
     }
 
     /// Add a primary label at the given span.

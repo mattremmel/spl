@@ -1,0 +1,4 @@
+// Error in this file: undefined_var is not defined
+pub fn helper(): i32 {
+    undefined_var
+}

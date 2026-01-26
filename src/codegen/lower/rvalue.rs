@@ -864,15 +864,16 @@ impl<'a> FunctionLowerer<'a> {
                                     idx.index()
                                 ))
                             })?,
-                        PlaceElem::Index(_) | PlaceElem::ConstantIndex { .. } => self
-                            .layout
-                            .element_type(current_ty)
-                            .ok_or_else(|| {
+                        PlaceElem::Index(_) | PlaceElem::ConstantIndex { .. } => {
+                            self.layout.element_type(current_ty).ok_or_else(|| {
                                 CodegenError::Internal("element type not found".to_string())
-                            })?,
-                        PlaceElem::Deref => self.layout.pointee_type(current_ty).ok_or_else(
-                            || CodegenError::Internal("pointee type not found".to_string()),
-                        )?,
+                            })?
+                        }
+                        PlaceElem::Deref => {
+                            self.layout.pointee_type(current_ty).ok_or_else(|| {
+                                CodegenError::Internal("pointee type not found".to_string())
+                            })?
+                        }
                         PlaceElem::Subslice { .. } => {
                             return Err(CodegenError::Internal(
                                 "subslice not yet supported".to_string(),

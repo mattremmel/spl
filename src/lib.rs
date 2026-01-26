@@ -480,6 +480,54 @@ pub fn compile_and_link_with_options(
     Ok(())
 }
 
+// ============================================================================
+// Project Compilation API
+// ============================================================================
+
+/// Errors that can occur when compiling a project.
+#[derive(Debug, Error)]
+pub enum ProjectError {
+    /// Failed to load package from directory.
+    #[error("failed to load package: {0}")]
+    PackageLoad(#[from] package::PackageError),
+}
+
+/// Compile a project directory through the full pipeline.
+///
+/// This loads a package from the given directory path and compiles it through
+/// the full pipeline: resolution, type inference, HIR lowering, and MIR lowering.
+///
+/// # Example
+///
+/// ```ignore
+/// use spl::compile_project;
+/// use std::path::Path;
+///
+/// let result = compile_project(Path::new("path/to/project"));
+/// match result {
+///     Ok(compile_result) => {
+///         if compile_result.is_ok() {
+///             println!("Compilation succeeded!");
+///         } else {
+///             for diag in compile_result.errors() {
+///                 println!("Error: {}", diag.message);
+///             }
+///         }
+///     }
+///     Err(e) => println!("Failed to load project: {e}"),
+/// }
+/// ```
+///
+/// # Errors
+///
+/// Returns `ProjectError::PackageLoad` if the directory cannot be loaded as a package
+/// (e.g., path doesn't exist, not a directory, no source files, parse errors).
+#[must_use = "compilation result should be checked"]
+pub fn compile_project(path: &Path) -> Result<CompileResult, ProjectError> {
+    let pkg = package::Package::load(path)?;
+    Ok(package::compile_package(&pkg))
+}
+
 #[cfg(test)]
 mod jit_tests {
     use super::*;
@@ -670,6 +718,121 @@ mod compile_tests {
         let result = compile("fn main() {}");
         let warning_count = result.warnings().count();
         assert_eq!(warning_count, 0);
+    }
+
+    // === Backward compatibility: single-file compile ===
+
+    #[test]
+    fn compile_single_file_backward_compat() {
+        // Verify that single-file compile() still works as expected
+        let result = compile("fn main(): i32 { 42 }");
+        assert!(result.is_ok(), "errors: {:?}", result.diagnostics);
+    }
+
+    #[test]
+    fn compile_single_file_no_file_path() {
+        // Single-file compilation should not have file paths in diagnostics
+        let result = compile("fn main() { undefined; }");
+        assert!(result.is_err());
+        let has_file_path = result.diagnostics.iter().any(|d| d.file_path.is_some());
+        assert!(
+            !has_file_path,
+            "single-file compile should not have file paths in diagnostics"
+        );
+    }
+
+    // === compile_project tests ===
+
+    #[test]
+    fn compile_project_simple_package() {
+        let path = Path::new("tests/packages/simple");
+        let result = compile_project(path);
+        assert!(result.is_ok(), "load error: {:?}", result.err());
+        let result = result.unwrap();
+        assert!(result.is_ok(), "compile errors: {:?}", result.diagnostics);
+    }
+
+    #[test]
+    fn compile_project_missing_directory() {
+        let result = compile_project(Path::new("/nonexistent/path"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn compile_project_cross_module_imports() {
+        let path = Path::new("tests/packages/imports_simple");
+        let result = compile_project(path).unwrap();
+        assert!(result.is_ok(), "errors: {:?}", result.diagnostics);
+    }
+
+    // === compile_project diagnostics with file paths ===
+
+    #[test]
+    fn compile_project_diagnostics_have_file_path() {
+        let path = Path::new("tests/packages/error_in_submodule");
+        let result = compile_project(path).unwrap();
+        assert!(result.is_err());
+
+        let has_file_path = result.diagnostics.iter().any(|d| d.file_path.is_some());
+        assert!(
+            has_file_path,
+            "expected diagnostics to include file paths, got: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn compile_project_diagnostic_file_path_correct() {
+        let path = Path::new("tests/packages/error_in_submodule");
+        let result = compile_project(path).unwrap();
+        assert!(result.is_err());
+
+        // Error is in utils/utils.spl
+        let has_utils_error = result.diagnostics.iter().any(|d| {
+            d.file_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().contains("utils.spl"))
+                .unwrap_or(false)
+        });
+        assert!(
+            has_utils_error,
+            "expected error in utils.spl, got paths: {:?}",
+            result
+                .diagnostics
+                .iter()
+                .map(|d| &d.file_path)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    // === Verify existing visibility and module resolution tests ===
+
+    #[test]
+    fn compile_project_private_visibility_error() {
+        let path = Path::new("tests/packages/import_private");
+        let result = compile_project(path).unwrap();
+        assert!(result.is_err());
+        assert!(
+            result
+                .errors()
+                .any(|d| d.message.contains("private") || d.message.contains("not visible")),
+            "expected private visibility error, got: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn compile_project_missing_module_error() {
+        let path = Path::new("tests/packages/import_missing");
+        let result = compile_project(path).unwrap();
+        assert!(result.is_err());
+        assert!(
+            result
+                .errors()
+                .any(|d| d.message.contains("not found") || d.message.contains("cannot find")),
+            "expected module not found error, got: {:?}",
+            result.diagnostics
+        );
     }
 }
 

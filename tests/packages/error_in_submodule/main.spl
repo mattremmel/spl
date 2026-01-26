@@ -1,0 +1,6 @@
+// Test: Error occurs in submodule, diagnostic should have file path
+use utils.helper;
+
+fn main(): i32 {
+    helper()
+}

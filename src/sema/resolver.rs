@@ -83,6 +83,8 @@ pub struct Resolver<'ctx> {
     pending_imports: Vec<PendingImport>,
     /// Map from module `DefId` to its scope ID (for re-entering during pass 2).
     module_scopes: FxHashMap<DefId, crate::sema::ScopeId>,
+    /// Current file path being processed (for attaching to diagnostics).
+    current_file_path: Option<std::path::PathBuf>,
 }
 
 impl<'ctx> Resolver<'ctx> {
@@ -94,7 +96,21 @@ impl<'ctx> Resolver<'ctx> {
             diagnostics: Vec::new(),
             pending_imports: Vec::new(),
             module_scopes: FxHashMap::default(),
+            current_file_path: None,
         }
+    }
+
+    /// Set the current file being processed by path.
+    pub fn set_current_file_path(&mut self, path: impl Into<std::path::PathBuf>) {
+        self.current_file_path = Some(path.into());
+    }
+
+    /// Emit a diagnostic, attaching the current file path if set.
+    fn emit_diagnostic(&mut self, mut diagnostic: Diagnostic) {
+        if let Some(path) = &self.current_file_path {
+            diagnostic.file_path = Some(path.clone());
+        }
+        self.diagnostics.push(diagnostic);
     }
 
     /// Resolve names in a source file.
@@ -145,14 +161,14 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn error_undefined(&mut self, name: &str, span: Span) {
-        self.diagnostics.push(
+        self.emit_diagnostic(
             Diagnostic::error(format!("cannot find `{name}` in this scope"))
                 .with_label(span, "not found in this scope"),
         );
     }
 
     fn error_duplicate(&mut self, name: &str, span: Span, first_span: Span) {
-        self.diagnostics.push(
+        self.emit_diagnostic(
             Diagnostic::error(format!("the name `{name}` is defined multiple times"))
                 .with_label(span, "redefined here")
                 .with_secondary_label(first_span, "first definition here"),
@@ -355,7 +371,7 @@ impl<'ctx> Resolver<'ctx> {
 
         // After stripping prefix, we should have the item name
         if path.is_empty() {
-            self.diagnostics.push(
+            self.emit_diagnostic(
                 Diagnostic::error("expected item name after path prefix".to_string())
                     .with_label(import.span.clone(), "missing item name"),
             );
@@ -372,7 +388,7 @@ impl<'ctx> Resolver<'ctx> {
                 // Check visibility if needed (for now, all items in same module are visible)
                 self.add_import_binding(import, def_id, name);
             } else {
-                self.diagnostics.push(
+                self.emit_diagnostic(
                     Diagnostic::error(format!("cannot find `{name}` in this scope"))
                         .with_label(import.span.clone(), "not found"),
                 );
@@ -409,7 +425,7 @@ impl<'ctx> Resolver<'ctx> {
                     // Pass through with "super" prefix intact - tree.resolve_path handles it
                     (Some(path.to_vec()), true)
                 } else {
-                    self.diagnostics.push(
+                    self.emit_diagnostic(
                         Diagnostic::error("cannot use `super` at module root".to_string())
                             .with_label(span.clone(), "no parent module"),
                     );
@@ -446,7 +462,7 @@ impl<'ctx> Resolver<'ctx> {
             }
             // Different DefId means duplicate definition
             let existing = self.ctx.get_symbol(existing_def_id);
-            self.diagnostics.push(
+            self.emit_diagnostic(
                 Diagnostic::error(format!(
                     "the name `{}` is defined multiple times",
                     import.local_name
@@ -501,7 +517,7 @@ impl<'ctx> Resolver<'ctx> {
         let lookup_result: Result<DefId, Option<String>> = {
             let Some(tree) = &self.ctx.module_tree else {
                 // Single-file mode, no cross-module possible
-                self.diagnostics.push(
+                self.emit_diagnostic(
                     Diagnostic::error(format!(
                         "cross-module imports require multi-file compilation: `{}`",
                         path.join(".")
@@ -519,14 +535,14 @@ impl<'ctx> Resolver<'ctx> {
             let target_module = match tree.resolve_path(current_module, &mod_refs) {
                 Ok(id) => id,
                 Err(crate::sema::PathResolveError::SuperAtRoot) => {
-                    self.diagnostics.push(
+                    self.emit_diagnostic(
                         Diagnostic::error("cannot use `super` at module root")
                             .with_label(import.span.clone(), "invalid super"),
                     );
                     return;
                 }
                 Err(crate::sema::PathResolveError::ModuleNotFound) => {
-                    self.diagnostics.push(
+                    self.emit_diagnostic(
                         Diagnostic::error(format!(
                             "module `{}` not found",
                             mod_path_owned.join(".")
@@ -564,13 +580,13 @@ impl<'ctx> Resolver<'ctx> {
                 self.add_import_binding(import, def_id, &item_name);
             }
             Err(Some(_)) => {
-                self.diagnostics.push(
+                self.emit_diagnostic(
                     Diagnostic::error(format!("`{item_name}` is private"))
                         .with_label(import.span.clone(), "private item"),
                 );
             }
             Err(None) => {
-                self.diagnostics.push(
+                self.emit_diagnostic(
                     Diagnostic::error(format!(
                         "cannot find `{}` in module `{}`",
                         item_name,
@@ -600,7 +616,7 @@ impl<'ctx> Resolver<'ctx> {
 
         // Cross-module glob: import all visible items from target module
         let Some(tree) = &self.ctx.module_tree else {
-            self.diagnostics.push(
+            self.emit_diagnostic(
                 Diagnostic::error(format!(
                     "cross-module glob imports require multi-file compilation: `{}.*`",
                     path.join(".")
@@ -645,13 +661,13 @@ impl<'ctx> Resolver<'ctx> {
                 }
             }
             Err(crate::sema::PathResolveError::SuperAtRoot) => {
-                self.diagnostics.push(
+                self.emit_diagnostic(
                     Diagnostic::error("cannot use `super` at module root")
                         .with_label(import.span.clone(), "invalid super"),
                 );
             }
             Err(crate::sema::PathResolveError::ModuleNotFound) => {
-                self.diagnostics.push(
+                self.emit_diagnostic(
                     Diagnostic::error(format!("module `{}` not found", path.join(".")))
                         .with_label(import.span.clone(), "unknown module"),
                 );
@@ -1604,7 +1620,11 @@ fn collect_all_items_through_resolver(
     resolver.ctx.current_module = module_id;
 
     // Collect items (but not use declarations yet - those come in phase 2)
-    for (_file_id, source_file) in package.compilation_unit().source_files() {
+    let source_map = package.compilation_unit().source_map();
+    for (file_id, source_file) in package.compilation_unit().source_files() {
+        if let Some(path) = source_map.get_path(file_id) {
+            resolver.set_current_file_path(path);
+        }
         for item in source_file.items() {
             match &item {
                 Item::Use(_) => {
@@ -1727,7 +1747,11 @@ fn resolve_all_imports(
     resolver.ctx.current_module = module_id;
 
     // Collect use declarations
-    for (_file_id, source_file) in package.compilation_unit().source_files() {
+    let source_map = package.compilation_unit().source_map();
+    for (file_id, source_file) in package.compilation_unit().source_files() {
+        if let Some(path) = source_map.get_path(file_id) {
+            resolver.set_current_file_path(path);
+        }
         for item in source_file.items() {
             if let Item::Use(use_decl) = item {
                 resolver.collect_item(&Item::Use(use_decl));
@@ -1767,7 +1791,11 @@ fn resolve_all_bodies(
     resolver.ctx.current_module = module_id;
 
     // Resolve bodies
-    for (_file_id, source_file) in package.compilation_unit().source_files() {
+    let source_map = package.compilation_unit().source_map();
+    for (file_id, source_file) in package.compilation_unit().source_files() {
+        if let Some(path) = source_map.get_path(file_id) {
+            resolver.set_current_file_path(path);
+        }
         resolver.resolve_source_file(&source_file);
     }
 

@@ -3,7 +3,7 @@
 //! Compiles packages through the full pipeline: resolution, type inference,
 //! HIR lowering, and MIR lowering.
 
-use super::Package;
+use super::{Package, SourceMap};
 use crate::{CompileResult, Diagnostic, Severity, hir, mir, sema};
 
 /// Maximum number of diagnostics to report before stopping.
@@ -24,6 +24,17 @@ fn has_errors(diagnostics: &[Diagnostic]) -> bool {
     diagnostics.iter().any(|d| d.severity == Severity::Error)
 }
 
+/// Convert `file_id` to `file_path` in all diagnostics using the source map.
+fn attach_file_paths(diagnostics: &mut [Diagnostic], source_map: &SourceMap) {
+    for diag in diagnostics {
+        if let Some(file_id) = diag.file_id
+            && let Some(path) = source_map.get_path(file_id)
+        {
+            diag.file_path = Some(path.to_path_buf());
+        }
+    }
+}
+
 /// Compile a package through the full pipeline.
 ///
 /// Runs resolution, type inference, HIR lowering, and MIR lowering
@@ -42,6 +53,7 @@ fn has_errors(diagnostics: &[Diagnostic]) -> bool {
 /// ```
 pub fn compile_package(package: &Package) -> CompileResult {
     let mut diagnostics = Vec::new();
+    let source_map = package.compilation_unit().source_map();
 
     // Phase 1: Multi-file name resolution
     let mut resolve_result = sema::resolve_package(package);
@@ -50,6 +62,7 @@ pub fn compile_package(package: &Package) -> CompileResult {
 
     // Check for errors before type inference
     if has_errors(&diagnostics) {
+        attach_file_paths(&mut diagnostics, source_map);
         return CompileResult {
             bodies: None,
             types: None,
@@ -64,6 +77,7 @@ pub fn compile_package(package: &Package) -> CompileResult {
 
     // Check for errors before lowering
     if has_errors(&diagnostics) {
+        attach_file_paths(&mut diagnostics, source_map);
         return CompileResult {
             bodies: None,
             types: None,
@@ -79,6 +93,7 @@ pub fn compile_package(package: &Package) -> CompileResult {
         Ok(bodies) => bodies,
         Err(ice) => {
             diagnostics.push(ice.to_diagnostic());
+            attach_file_paths(&mut diagnostics, source_map);
             return CompileResult {
                 bodies: None,
                 types: None,
@@ -89,6 +104,9 @@ pub fn compile_package(package: &Package) -> CompileResult {
 
     // Preserve the type interner for codegen
     let types = hir_db.types;
+
+    // Attach file paths to any remaining diagnostics (warnings)
+    attach_file_paths(&mut diagnostics, source_map);
 
     CompileResult {
         bodies: Some(bodies),
