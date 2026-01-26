@@ -34,7 +34,7 @@
 
 use crate::DefId;
 use crate::ast::{
-    ApplyExpr, Block, Expr, ExternBlock, ExternFn, FieldDef, FunctionDef, GenericParam, ImplBlock,
+    Block, CallExpr, Expr, ExternBlock, ExternFn, FieldDef, FunctionDef, GenericParam, ImplBlock,
     Item, LetStmt, Name, NameRef, Param, ParamList, Pat, Path, PathSegment, SelfParam, SourceFile,
     Stmt, StructDef, StructExpr, StructExprField, StructPat, StructPatField, Type, TypeAlias,
     WhereClause,
@@ -1082,7 +1082,7 @@ impl<'ctx> Resolver<'ctx> {
                 }
             }
             Expr::Struct(struct_expr) => self.resolve_struct_expr(struct_expr),
-            Expr::Apply(apply_expr) => self.resolve_apply_expr(apply_expr),
+            Expr::Call(call_expr) => self.resolve_call_expr(call_expr),
             Expr::Binary(bin_expr) => {
                 if let Some(lhs) = bin_expr.lhs() {
                     self.resolve_expr(&lhs);
@@ -1106,29 +1106,6 @@ impl<'ctx> Resolver<'ctx> {
                 // Note: Field name resolution requires type info (deferred to type checking)
                 if let Some(base) = field_expr.expr() {
                     self.resolve_expr(&base);
-                }
-            }
-            Expr::MethodCall(method_call) => {
-                // Resolve the receiver
-                // Note: Method resolution requires type info (deferred to type checking)
-                if let Some(receiver) = method_call.receiver() {
-                    self.resolve_expr(&receiver);
-                }
-                // Resolve arguments
-                if let Some(arg_list) = method_call.arg_list() {
-                    for arg in arg_list.args() {
-                        self.resolve_expr(&arg);
-                    }
-                }
-            }
-            Expr::Call(call_expr) => {
-                if let Some(callee) = call_expr.callee() {
-                    self.resolve_expr(&callee);
-                }
-                if let Some(arg_list) = call_expr.arg_list() {
-                    for arg in arg_list.args() {
-                        self.resolve_expr(&arg);
-                    }
                 }
             }
             Expr::Index(index_expr) => {
@@ -1275,14 +1252,14 @@ impl<'ctx> Resolver<'ctx> {
         }
     }
 
-    fn resolve_apply_expr(&mut self, apply_expr: &ApplyExpr) {
-        // Resolve the path (could be struct type or function)
-        if let Some(path) = apply_expr.path() {
-            self.resolve_path(&path);
+    fn resolve_call_expr(&mut self, call_expr: &CallExpr) {
+        // Resolve the callee expression
+        if let Some(callee) = call_expr.callee() {
+            self.resolve_expr(&callee);
         }
 
         // Resolve argument values
-        for arg in apply_expr.args() {
+        for arg in call_expr.args() {
             // Note: Named argument name resolution requires type info (deferred to type checking)
             // Just resolve the value expression
             if let Some(value) = arg.value() {

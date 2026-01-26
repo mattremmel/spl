@@ -4307,7 +4307,6 @@ fn method_call_simple() {
 }
 
 #[test]
-#[ignore = "method chaining on mutable self returns causes parser issues"]
 fn method_chain_two_calls() {
     check(
         r#"
@@ -4315,7 +4314,7 @@ fn method_chain_two_calls() {
         impl Builder {
             fn add(&mut self, n: i32): &mut Builder {
                 self.value = self.value + n;
-                self
+                return self;
             }
             fn build(&self): i32 { self.value }
         }
@@ -4329,7 +4328,6 @@ fn method_chain_two_calls() {
 }
 
 #[test]
-#[ignore = "method chaining on mutable self returns causes parser issues"]
 fn method_chain_three_calls() {
     check(
         r#"
@@ -4337,11 +4335,11 @@ fn method_chain_three_calls() {
         impl Builder {
             fn add(&mut self, n: i32): &mut Builder {
                 self.value = self.value + n;
-                self
+                return self;
             }
             fn mul(&mut self, n: i32): &mut Builder {
                 self.value = self.value * n;
-                self
+                return self;
             }
             fn build(&self): i32 { self.value }
         }
@@ -4355,7 +4353,6 @@ fn method_chain_three_calls() {
 }
 
 #[test]
-#[ignore = "field access chained with method call causes parser issues"]
 fn method_chain_with_field_access() {
     check(
         r#"
@@ -4508,7 +4505,7 @@ fn type_alias_generic() {
     // SPL uses `where T` syntax for generic type aliases
     check(
         r#"
-        type Pair = (T, T) where T
+        type Pair = (T, T) where T;
         fn make_pair(): Pair(i32) { (1, 2) }
         fn main() { let x = make_pair(); }
         "#,
@@ -4602,7 +4599,6 @@ fn infer_loop_break_value() {
 // =============================================================================
 
 #[test]
-#[ignore = "nested struct patterns not yet fully supported in type inference"]
 fn struct_pattern_nested() {
     // SPL uses parentheses syntax for struct patterns
     // Note: check() tests the first binding, so we need a helper function
@@ -4620,7 +4616,6 @@ fn struct_pattern_nested() {
 }
 
 #[test]
-#[ignore = "struct patterns with rest (..) not yet fully supported in type inference"]
 fn struct_pattern_with_rest() {
     check(
         r#"

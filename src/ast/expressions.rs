@@ -11,14 +11,12 @@ ast_node!(TupleExpr);
 ast_node!(ArrayExpr);
 ast_node!(StructExpr);
 ast_node!(StructExprField);
-ast_node!(ApplyExpr);
-ast_node!(ApplyArg);
+ast_node!(CallExpr);
+ast_node!(CallArg);
 ast_node!(BinExpr);
 ast_node!(PrefixExpr);
 ast_node!(RefExpr);
 ast_node!(FieldExpr);
-ast_node!(MethodCallExpr);
-ast_node!(CallExpr);
 ast_node!(IndexExpr);
 ast_node!(SliceExpr);
 ast_node!(IfExpr);
@@ -34,7 +32,6 @@ ast_node!(RangeExpr);
 ast_node!(IsExpr);
 ast_node!(MatchExpr);
 ast_node!(MatchArm);
-ast_node!(ArgList);
 ast_node!(Path);
 ast_node!(PathSegment);
 
@@ -47,13 +44,11 @@ ast_enum!(
         Tuple(TupleExpr),
         Array(ArrayExpr),
         Struct(StructExpr),
-        Apply(ApplyExpr),
+        Call(CallExpr),
         Binary(BinExpr),
         Prefix(PrefixExpr),
         Ref(RefExpr),
         Field(FieldExpr),
-        MethodCall(MethodCallExpr),
-        Call(CallExpr),
         Index(IndexExpr),
         Slice(SliceExpr),
         If(IfExpr),
@@ -152,14 +147,14 @@ impl StructExprField {
     }
 }
 
-impl ApplyExpr {
-    /// Get the path being applied (the callee - could be a function or struct).
-    pub fn path(&self) -> Option<Path> {
+impl CallExpr {
+    /// Get the callee expression (function path, method access, or arbitrary expression).
+    pub fn callee(&self) -> Option<Expr> {
         child(&self.0)
     }
 
-    /// Get all arguments to this application.
-    pub fn args(&self) -> impl Iterator<Item = ApplyArg> {
+    /// Get all arguments to this call.
+    pub fn args(&self) -> impl Iterator<Item = CallArg> {
         children(&self.0)
     }
 
@@ -169,8 +164,8 @@ impl ApplyExpr {
     }
 }
 
-impl ApplyArg {
-    /// Get the argument name if this is a named argument (`name = value`).
+impl CallArg {
+    /// Get the argument name if this is a named argument (`name: value`).
     /// Returns `None` for positional arguments.
     pub fn name(&self) -> Option<NameRef> {
         child(&self.0)
@@ -278,42 +273,6 @@ impl FieldExpr {
     /// Get the tuple index token for tuple field access (e.g., `t.0`, `t.1`).
     pub fn tuple_index_token(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::INT_LITERAL)
-    }
-}
-
-impl MethodCallExpr {
-    pub fn receiver(&self) -> Option<Expr> {
-        child(&self.0)
-    }
-
-    pub fn name(&self) -> Option<NameRef> {
-        child(&self.0)
-    }
-
-    /// Get the method name token directly (for method calls where
-    /// the method name is stored as a raw IDENT token, not wrapped in NameRef).
-    pub fn name_token(&self) -> Option<SyntaxToken> {
-        token(&self.0, SyntaxKind::IDENT)
-    }
-
-    pub fn arg_list(&self) -> Option<ArgList> {
-        child(&self.0)
-    }
-}
-
-impl CallExpr {
-    pub fn callee(&self) -> Option<Expr> {
-        child(&self.0)
-    }
-
-    pub fn arg_list(&self) -> Option<ArgList> {
-        child(&self.0)
-    }
-}
-
-impl ArgList {
-    pub fn args(&self) -> impl Iterator<Item = Expr> {
-        children(&self.0)
     }
 }
 
@@ -750,22 +709,21 @@ mod tests {
     }
 
     // =========================================================================
-    // ApplyExpr Tests (function calls and struct instantiation)
+    // CallExpr Tests (function calls, struct instantiation, method calls)
     // =========================================================================
 
     #[test]
-    fn apply_expr_no_args() {
-        // In SPL, foo() is an ApplyExpr, not CallExpr
-        let apply: ApplyExpr = parse_expr("fn main() { foo() }");
-        assert!(apply.path().is_some());
-        assert_eq!(apply.args().count(), 0);
+    fn call_expr_no_args() {
+        let call: CallExpr = parse_expr("fn main() { foo() }");
+        assert!(call.callee().is_some());
+        assert_eq!(call.args().count(), 0);
     }
 
     #[test]
-    fn apply_expr_with_args() {
-        let apply: ApplyExpr = parse_expr("fn main() { foo(1, 2) }");
-        assert!(apply.path().is_some());
-        assert_eq!(apply.args().count(), 2);
+    fn call_expr_with_args() {
+        let call: CallExpr = parse_expr("fn main() { foo(1, 2) }");
+        assert!(call.callee().is_some());
+        assert_eq!(call.args().count(), 2);
     }
 
     // =========================================================================
@@ -946,22 +904,47 @@ mod tests {
     }
 
     // =========================================================================
-    // MethodCallExpr Tests
+    // Method Call Tests (unified under CallExpr)
     // =========================================================================
 
     #[test]
     fn method_call_chained() {
-        // In SPL, MethodCallExpr is for method calls on expression results
-        // obj.method() is an ApplyExpr (path call), but get_obj().method() chains into MethodCallExpr
-        let method: MethodCallExpr = parse_expr("fn get(): Point { Point(x: 1, y: 2) } fn main() { get().method() }");
-        assert!(method.receiver().is_some());
-        assert!(method.name().is_some() || method.name_token().is_some());
+        // Method calls on identifiers are parsed as CallExpr with a PathExpr callee (multi-segment path)
+        // obj.method() is CallExpr { callee: PathExpr { Path { obj, method } } }
+        // Only method calls on expressions (like get().method()) produce FieldExpr callees
+        let call: CallExpr = parse_expr("fn main() { obj.method() }");
+        assert!(call.callee().is_some());
+        // The callee should be a PathExpr with a multi-segment path
+        if let Some(Expr::Path(path_expr)) = call.callee() {
+            let path = path_expr.path().expect("expected path");
+            assert_eq!(path.segments().count(), 2); // obj.method
+        } else {
+            panic!("expected callee to be a PathExpr");
+        }
+        assert_eq!(call.args().count(), 0);
+    }
+
+    #[test]
+    fn method_call_on_expr() {
+        // Method calls on expressions (not identifiers) produce FieldExpr callees
+        // (1 + 2).method() is CallExpr { callee: FieldExpr { expr: ParenExpr(1 + 2), field: method } }
+        let call: CallExpr = parse_expr("fn main() { (1 + 2).method() }");
+        assert!(call.callee().is_some());
+        if let Some(Expr::Field(field_expr)) = call.callee() {
+            assert!(field_expr.expr().is_some());
+            // Field name is stored as raw IDENT token, not wrapped in NameRef
+            assert!(field_expr.name_token().is_some());
+            assert_eq!(field_expr.name_token().unwrap().text(), "method");
+        } else {
+            panic!("expected callee to be a FieldExpr");
+        }
+        assert_eq!(call.args().count(), 0);
     }
 
     #[test]
     fn method_call_with_args_chained() {
-        let method: MethodCallExpr = parse_expr("fn get(): Point { Point(x: 1, y: 2) } fn main() { get().method(1, 2) }");
-        let arg_list = method.arg_list().expect("expected arg list");
-        assert_eq!(arg_list.args().count(), 2);
+        let call: CallExpr = parse_expr("fn main() { obj.method(1, 2) }");
+        assert!(call.callee().is_some());
+        assert_eq!(call.args().count(), 2);
     }
 }

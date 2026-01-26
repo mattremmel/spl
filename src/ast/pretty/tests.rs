@@ -339,7 +339,7 @@ mod statements {
                     ParamList
                     Block
                       ExprStmt
-                        ApplyExpr "foo"
+                        CallExpr "foo"
             "#]],
         );
     }
@@ -549,7 +549,7 @@ mod expressions {
                     ParamList
                     Block
                       TailExpr
-                        ApplyExpr "Point"
+                        CallExpr "Point"
                           NamedArg "x"
                             Literal 1
                           NamedArg "y"
@@ -568,7 +568,7 @@ mod expressions {
                     ParamList
                     Block
                       TailExpr
-                        ApplyExpr "Point"
+                        CallExpr "Point"
                           NamedArg "x"
                             Literal 1
             "#]],
@@ -751,7 +751,7 @@ mod expressions {
                     ParamList
                     Block
                       TailExpr
-                        ApplyExpr "x.foo"
+                        CallExpr "x.foo"
             "#]],
         );
     }
@@ -766,7 +766,7 @@ mod expressions {
                     ParamList
                     Block
                       TailExpr
-                        ApplyExpr "x.foo"
+                        CallExpr "x.foo"
                           PositionalArg
                             Literal 1
                           PositionalArg
@@ -785,7 +785,7 @@ mod expressions {
                     ParamList
                     Block
                       TailExpr
-                        ApplyExpr "foo"
+                        CallExpr "foo"
                           PositionalArg
                             Literal 1
                           PositionalArg
@@ -1519,7 +1519,7 @@ p.distance();
                         Path "Point"
                       Block
                         TailExpr
-                          ApplyExpr "Point"
+                          CallExpr "Point"
                             NamedArg "x"
                               Path "x"
                             NamedArg "y"
@@ -1540,13 +1540,13 @@ p.distance();
                       LetStmt
                         IdentPat "p"
                         Initializer
-                          ApplyExpr "Point.new"
+                          CallExpr "Point.new"
                             PositionalArg
                               Literal 3
                             PositionalArg
                               Literal 4
                       ExprStmt
-                        ApplyExpr "p.distance"
+                        CallExpr "p.distance"
             "#]],
         );
     }
@@ -1622,10 +1622,8 @@ count
                             TailExpr
                               IfExpr
                                 Condition
-                                  CallExpr
-                                    Callee
-                                      Path "filter"
-                                    ArgList
+                                  CallExpr "filter"
+                                    PositionalArg
                                       Path "item"
                                 Then
                                   Block

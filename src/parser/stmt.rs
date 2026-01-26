@@ -45,25 +45,36 @@ fn can_start_stmt_or_expr(p: &mut Parser<'_>) -> bool {
 /// Parse a let statement: `let [mut] pattern [: type] [= expr];`
 fn let_stmt(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::LET_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::LET_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Optional mut
     p.eat(SyntaxKind::MUT_KW);
 
     // Pattern
-    pattern::pattern(p)?;
+    if let Err(e) = pattern::pattern(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Optional type annotation
-    if p.eat(SyntaxKind::COLON) {
-        type_annotation(p)?;
+    if p.eat(SyntaxKind::COLON) && let Err(e) = type_annotation(p) {
+        m.abandon(p);
+        return Err(e);
     }
 
     // Optional initializer
-    if p.eat(SyntaxKind::EQ) {
-        let _ = expr::expr(p)?;
+    if p.eat(SyntaxKind::EQ) && let Err(e) = expr::expr(p) {
+        m.abandon(p);
+        return Err(e);
     }
 
-    p.expect(SyntaxKind::SEMI)?;
+    if let Err(e) = p.expect(SyntaxKind::SEMI) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(m.complete(p, SyntaxKind::LetStmt))
 }
 
@@ -142,15 +153,22 @@ pub(crate) fn type_annotation(
     }
 
     // Use structured path parsing
-    crate::parser::path::path(p)?;
-
-    Ok(m.complete(p, SyntaxKind::PathType))
+    match crate::parser::path::path(p) {
+        Ok(_) => Ok(m.complete(p, SyntaxKind::PathType)),
+        Err(e) => {
+            m.abandon(p);
+            Err(e)
+        }
+    }
 }
 
 /// Parse a block with statements: `{ stmt* [expr] }`
 pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::L_BRACE)?;
+    if let Err(e) = p.expect(SyntaxKind::L_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Parse statements until we hit the closing brace
     while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
@@ -207,7 +225,10 @@ pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser
         }
     }
 
-    p.expect(SyntaxKind::R_BRACE)?;
+    if let Err(e) = p.expect(SyntaxKind::R_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(m.complete(p, SyntaxKind::Block))
 }
 
@@ -315,12 +336,13 @@ mod tests {
                   Block@0..10
                     L_BRACE@0..1 "{"
                     ExprStmt@1..8
-                      ApplyExpr@1..7
-                        Path@1..5
-                          PathSegment@1..5
-                            NameRef@1..5
-                              WHITESPACE@1..2 " "
-                              IDENT@2..5 "foo"
+                      CallExpr@1..7
+                        PathExpr@1..5
+                          Path@1..5
+                            PathSegment@1..5
+                              NameRef@1..5
+                                WHITESPACE@1..2 " "
+                                IDENT@2..5 "foo"
                         L_PAREN@5..6 "("
                         R_PAREN@6..7 ")"
                       SEMI@7..8 ";"
@@ -420,21 +442,23 @@ mod tests {
                   Block@0..16
                     L_BRACE@0..1 "{"
                     ExprStmt@1..8
-                      ApplyExpr@1..7
-                        Path@1..5
-                          PathSegment@1..5
-                            NameRef@1..5
-                              WHITESPACE@1..2 " "
-                              IDENT@2..5 "foo"
+                      CallExpr@1..7
+                        PathExpr@1..5
+                          Path@1..5
+                            PathSegment@1..5
+                              NameRef@1..5
+                                WHITESPACE@1..2 " "
+                                IDENT@2..5 "foo"
                         L_PAREN@5..6 "("
                         R_PAREN@6..7 ")"
                       SEMI@7..8 ";"
-                    ApplyExpr@8..14
-                      Path@8..12
-                        PathSegment@8..12
-                          NameRef@8..12
-                            WHITESPACE@8..9 " "
-                            IDENT@9..12 "bar"
+                    CallExpr@8..14
+                      PathExpr@8..12
+                        Path@8..12
+                          PathSegment@8..12
+                            NameRef@8..12
+                              WHITESPACE@8..9 " "
+                              IDENT@9..12 "bar"
                       L_PAREN@12..13 "("
                       R_PAREN@13..14 ")"
                     WHITESPACE@14..15 " "

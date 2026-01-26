@@ -10,10 +10,16 @@ use crate::syntax::SyntaxKind;
 /// Used for type annotations where generic args are allowed.
 pub fn path(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
-    path_segment(p, true)?;
+    if let Err(e) = path_segment(p, true) {
+        m.abandon(p);
+        return Err(e);
+    }
     while p.at(SyntaxKind::DOT) && is_path_segment_start(p.peek(1)) {
         p.bump();
-        path_segment(p, true)?;
+        if let Err(e) = path_segment(p, true) {
+            m.abandon(p);
+            return Err(e);
+        }
     }
     Ok(m.complete(p, SyntaxKind::Path))
 }
@@ -23,10 +29,16 @@ pub fn path(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
 /// Used for expressions and patterns where generics are handled separately.
 pub fn path_no_generics(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
-    path_segment(p, false)?;
+    if let Err(e) = path_segment(p, false) {
+        m.abandon(p);
+        return Err(e);
+    }
     while p.at(SyntaxKind::DOT) && is_path_segment_start(p.peek(1)) {
         p.bump();
-        path_segment(p, false)?;
+        if let Err(e) = path_segment(p, false) {
+            m.abandon(p);
+            return Err(e);
+        }
     }
     Ok(m.complete(p, SyntaxKind::Path))
 }
@@ -47,9 +59,13 @@ fn is_path_segment_start(token: Option<SyntaxKind>) -> bool {
 /// Parse a single path segment: `ident [(T, ...)]`
 fn path_segment(p: &mut Parser<'_>, allow_generics: bool) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
-    name_ref(p)?;
-    if allow_generics && p.at(SyntaxKind::L_PAREN) {
-        generic_args_paren(p)?;
+    if let Err(e) = name_ref(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if allow_generics && p.at(SyntaxKind::L_PAREN) && let Err(e) = generic_args_paren(p) {
+        m.abandon(p);
+        return Err(e);
     }
     Ok(m.complete(p, SyntaxKind::PathSegment))
 }
@@ -57,12 +73,21 @@ fn path_segment(p: &mut Parser<'_>, allow_generics: bool) -> Result<CompletedMar
 /// Parse generic arguments with parentheses: `(T, U, ...)`
 fn generic_args_paren(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::L_PAREN)?;
-    p.parse_delimited(SyntaxKind::R_PAREN, |p| {
+    if let Err(e) = p.expect(SyntaxKind::L_PAREN) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = p.parse_delimited(SyntaxKind::R_PAREN, |p| {
         super::stmt::type_annotation(p)?;
         Ok(())
-    })?;
-    p.expect(SyntaxKind::R_PAREN)?;
+    }) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = p.expect(SyntaxKind::R_PAREN) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(m.complete(p, SyntaxKind::GenericArgs))
 }
 
@@ -278,15 +303,16 @@ mod tests {
         check_expr(
             "Vec.new()",
             &expect![[r#"
-                ApplyExpr@0..9
-                  Path@0..7
-                    PathSegment@0..3
-                      NameRef@0..3
-                        IDENT@0..3 "Vec"
-                    DOT@3..4 "."
-                    PathSegment@4..7
-                      NameRef@4..7
-                        IDENT@4..7 "new"
+                CallExpr@0..9
+                  PathExpr@0..7
+                    Path@0..7
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "Vec"
+                      DOT@3..4 "."
+                      PathSegment@4..7
+                        NameRef@4..7
+                          IDENT@4..7 "new"
                   L_PAREN@7..8 "("
                   R_PAREN@8..9 ")"
             "#]],

@@ -53,20 +53,29 @@ pub(super) fn prefix_expr(
     if op == SyntaxKind::AMP {
         p.bump(); // &
         p.eat(SyntaxKind::MUT_KW); // optional mut
-        let _ = expr_bp(p, r_bp, allow_struct, depth)?;
+        if let Err(e) = expr_bp(p, r_bp, allow_struct, depth) {
+            m.abandon(p);
+            return Err(e);
+        }
         return Ok(Some(m.complete(p, SyntaxKind::RefExpr)));
     }
 
     // Handle range prefix specially (..expr or ..)
     if op == SyntaxKind::DOT_DOT {
         p.bump(); // ..
-        let _ = expr_bp(p, r_bp, allow_struct, depth)?; // Optional RHS
+        if let Err(e) = expr_bp(p, r_bp, allow_struct, depth) {
+            m.abandon(p);
+            return Err(e);
+        }
         return Ok(Some(m.complete(p, SyntaxKind::RangeExpr)));
     }
 
     // Regular prefix operator
     p.bump();
-    let _ = expr_bp(p, r_bp, allow_struct, depth)?;
+    if let Err(e) = expr_bp(p, r_bp, allow_struct, depth) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     let kind = match op {
         SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::PLUS | SyntaxKind::STAR => {
@@ -95,7 +104,10 @@ pub(super) fn infix_expr(
     if op == SyntaxKind::AS_KW {
         p.bump();
         // Parse type (simplified: just an identifier for now)
-        type_expr(p)?;
+        if let Err(e) = type_expr(p) {
+            m.abandon(p);
+            return Err(e);
+        }
         return Ok(m.complete(p, SyntaxKind::CastExpr));
     }
 
@@ -107,13 +119,19 @@ pub(super) fn infix_expr(
         p.eat(SyntaxKind::NOT_KW);
 
         // Parse pattern
-        crate::parser::pattern::pattern(p)?;
+        if let Err(e) = crate::parser::pattern::pattern(p) {
+            m.abandon(p);
+            return Err(e);
+        }
         return Ok(m.complete(p, SyntaxKind::IsExpr));
     }
 
     // Regular binary operator
     p.bump();
-    let _ = expr_bp(p, r_bp, allow_struct, depth)?;
+    if let Err(e) = expr_bp(p, r_bp, allow_struct, depth) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Determine the node kind based on operator
     let kind = match op {
@@ -139,29 +157,18 @@ pub(super) fn postfix_expr(
 }
 
 /// Parse a call expression: expr(args)
+/// Uses the unified call_expr_rest for parsing arguments with named arg support.
 fn call_expr(
     p: &mut Parser<'_>,
     lhs: CompletedMarker,
 ) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = lhs.precede(p);
-    arg_list(p)?;
-    Ok(m.complete(p, SyntaxKind::CallExpr))
-}
-
-/// Parse an argument list: (expr, expr, ...)
-pub(super) fn arg_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
-    let m = p.start();
-    p.expect(SyntaxKind::L_PAREN)?;
-
-    while !p.at(SyntaxKind::R_PAREN) && p.current().is_some() {
-        let _ = expr(p)?;
-        if !p.at(SyntaxKind::R_PAREN) {
-            p.expect(SyntaxKind::COMMA)?;
-        }
+    // call_expr_rest expects the marker and handles L_PAREN, args, R_PAREN
+    match super::primary::call_expr_rest(p, m) {
+        Ok(Some(cm)) => Ok(cm),
+        Ok(None) => unreachable!("call_expr_rest should always return Some"),
+        Err(e) => Err(e),
     }
-
-    p.expect(SyntaxKind::R_PAREN)?;
-    Ok(m.complete(p, SyntaxKind::ArgList))
 }
 
 /// Parse index or slice expression: expr[idx] or expr[start:end]
@@ -170,12 +177,16 @@ fn index_or_slice_expr(
     lhs: CompletedMarker,
 ) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = lhs.precede(p);
-    p.expect(SyntaxKind::L_BRACKET)?;
+    if let Err(e) = p.expect(SyntaxKind::L_BRACKET) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Parse optional start expression (skip if immediately at colon)
     let is_slice = p.at(SyntaxKind::COLON);
-    if !is_slice {
-        let _ = expr(p)?;
+    if !is_slice && let Err(e) = expr(p) {
+        m.abandon(p);
+        return Err(e);
     }
 
     // Determine if slice (has colon) or index (no colon)
@@ -186,41 +197,54 @@ fn index_or_slice_expr(
         if !p.at(SyntaxKind::R_BRACKET) {
             if p.at(SyntaxKind::DOLLAR) {
                 p.bump(); // $ (slice to end)
-            } else {
-                let _ = expr(p)?;
+            } else if let Err(e) = expr(p) {
+                m.abandon(p);
+                return Err(e);
             }
         }
-        p.expect(SyntaxKind::R_BRACKET)?;
+        if let Err(e) = p.expect(SyntaxKind::R_BRACKET) {
+            m.abandon(p);
+            return Err(e);
+        }
         Ok(m.complete(p, SyntaxKind::SliceExpr))
     } else {
-        p.expect(SyntaxKind::R_BRACKET)?;
+        if let Err(e) = p.expect(SyntaxKind::R_BRACKET) {
+            m.abandon(p);
+            return Err(e);
+        }
         Ok(m.complete(p, SyntaxKind::IndexExpr))
     }
 }
 
 /// Parse field access or method call: expr.field or expr.method(args) or expr.0 (tuple)
+/// Method calls are now unified as CallExpr with FieldExpr as callee.
 fn field_or_method_expr(
     p: &mut Parser<'_>,
     lhs: CompletedMarker,
 ) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = lhs.precede(p);
-    p.expect(SyntaxKind::DOT)?;
+    if let Err(e) = p.expect(SyntaxKind::DOT) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Accept identifier or integer literal (for tuple field access like t.0)
     if p.at(SyntaxKind::IDENT) {
         p.bump();
-        // Check for method call (only for identifier, not for tuple index)
+        // First complete as FieldExpr
+        let field_expr = m.complete(p, SyntaxKind::FieldExpr);
+        // Check for method call - if followed by (, wrap in CallExpr
         if p.at(SyntaxKind::L_PAREN) {
-            arg_list(p)?;
-            Ok(m.complete(p, SyntaxKind::MethodCallExpr))
+            call_expr(p, field_expr)
         } else {
-            Ok(m.complete(p, SyntaxKind::FieldExpr))
+            Ok(field_expr)
         }
     } else if p.at(SyntaxKind::INT_LITERAL) {
         // Tuple field access: t.0, t.1, etc.
         p.bump();
         Ok(m.complete(p, SyntaxKind::FieldExpr))
     } else {
+        m.abandon(p);
         Err(p.error_at_current("expected identifier or integer after '.'".to_string()))
     }
 }
@@ -236,7 +260,10 @@ fn type_expr(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
     }
 
     // Use structured path parsing (no generics for cast expressions)
-    crate::parser::path::path_no_generics(p)?;
+    if let Err(e) = crate::parser::path::path_no_generics(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     Ok(m.complete(p, SyntaxKind::PathType))
 }
@@ -369,11 +396,12 @@ mod tests {
             &expect![[r#"
                 PrefixExpr@0..6
                   MINUS@0..1 "-"
-                  ApplyExpr@1..6
-                    Path@1..4
-                      PathSegment@1..4
-                        NameRef@1..4
-                          IDENT@1..4 "foo"
+                  CallExpr@1..6
+                    PathExpr@1..4
+                      Path@1..4
+                        PathSegment@1..4
+                          NameRef@1..4
+                            IDENT@1..4 "foo"
                     L_PAREN@4..5 "("
                     R_PAREN@5..6 ")"
             "#]],
@@ -405,17 +433,18 @@ mod tests {
         check_expr(
             "foo(1, 2)",
             &expect![[r#"
-                ApplyExpr@0..9
-                  Path@0..3
-                    PathSegment@0..3
-                      NameRef@0..3
-                        IDENT@0..3 "foo"
+                CallExpr@0..9
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "foo"
                   L_PAREN@3..4 "("
-                  ApplyArg@4..5
+                  CallArg@4..5
                     LiteralExpr@4..5
                       INT_LITERAL@4..5 "1"
                   COMMA@5..6 ","
-                  ApplyArg@6..8
+                  CallArg@6..8
                     LiteralExpr@6..8
                       WHITESPACE@6..7 " "
                       INT_LITERAL@7..8 "2"
@@ -429,20 +458,21 @@ mod tests {
         check_expr(
             "foo(a, b,)",
             &expect![[r#"
-                ApplyExpr@0..10
-                  Path@0..3
-                    PathSegment@0..3
-                      NameRef@0..3
-                        IDENT@0..3 "foo"
+                CallExpr@0..10
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "foo"
                   L_PAREN@3..4 "("
-                  ApplyArg@4..5
+                  CallArg@4..5
                     PathExpr@4..5
                       Path@4..5
                         PathSegment@4..5
                           NameRef@4..5
                             IDENT@4..5 "a"
                   COMMA@5..6 ","
-                  ApplyArg@6..8
+                  CallArg@6..8
                     PathExpr@6..8
                       Path@6..8
                         PathSegment@6..8
@@ -460,25 +490,28 @@ mod tests {
         check_expr(
             "foo(bar(baz()))",
             &expect![[r#"
-                ApplyExpr@0..15
-                  Path@0..3
-                    PathSegment@0..3
-                      NameRef@0..3
-                        IDENT@0..3 "foo"
+                CallExpr@0..15
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "foo"
                   L_PAREN@3..4 "("
-                  ApplyArg@4..14
-                    ApplyExpr@4..14
-                      Path@4..7
-                        PathSegment@4..7
-                          NameRef@4..7
-                            IDENT@4..7 "bar"
+                  CallArg@4..14
+                    CallExpr@4..14
+                      PathExpr@4..7
+                        Path@4..7
+                          PathSegment@4..7
+                            NameRef@4..7
+                              IDENT@4..7 "bar"
                       L_PAREN@7..8 "("
-                      ApplyArg@8..13
-                        ApplyExpr@8..13
-                          Path@8..11
-                            PathSegment@8..11
-                              NameRef@8..11
-                                IDENT@8..11 "baz"
+                      CallArg@8..13
+                        CallExpr@8..13
+                          PathExpr@8..11
+                            Path@8..11
+                              PathSegment@8..11
+                                NameRef@8..11
+                                  IDENT@8..11 "baz"
                           L_PAREN@11..12 "("
                           R_PAREN@12..13 ")"
                       R_PAREN@13..14 ")"
@@ -495,22 +528,23 @@ mod tests {
                 CallExpr@0..15
                   ParenExpr@0..10
                     L_PAREN@0..1 "("
-                    ApplyExpr@1..9
-                      Path@1..7
-                        PathSegment@1..7
-                          NameRef@1..7
-                            IDENT@1..7 "get_fn"
+                    CallExpr@1..9
+                      PathExpr@1..7
+                        Path@1..7
+                          PathSegment@1..7
+                            NameRef@1..7
+                              IDENT@1..7 "get_fn"
                       L_PAREN@7..8 "("
                       R_PAREN@8..9 ")"
                     R_PAREN@9..10 ")"
-                  ArgList@10..15
-                    L_PAREN@10..11 "("
+                  L_PAREN@10..11 "("
+                  CallArg@11..14
                     PathExpr@11..14
                       Path@11..14
                         PathSegment@11..14
                           NameRef@11..14
                             IDENT@11..14 "arg"
-                    R_PAREN@14..15 ")"
+                  R_PAREN@14..15 ")"
             "#]],
         );
     }
@@ -538,15 +572,16 @@ mod tests {
         check_expr(
             "point.distance()",
             &expect![[r#"
-                ApplyExpr@0..16
-                  Path@0..14
-                    PathSegment@0..5
-                      NameRef@0..5
-                        IDENT@0..5 "point"
-                    DOT@5..6 "."
-                    PathSegment@6..14
-                      NameRef@6..14
-                        IDENT@6..14 "distance"
+                CallExpr@0..16
+                  PathExpr@0..14
+                    Path@0..14
+                      PathSegment@0..5
+                        NameRef@0..5
+                          IDENT@0..5 "point"
+                      DOT@5..6 "."
+                      PathSegment@6..14
+                        NameRef@6..14
+                          IDENT@6..14 "distance"
                   L_PAREN@14..15 "("
                   R_PAREN@15..16 ")"
             "#]],
@@ -585,11 +620,12 @@ mod tests {
             "get_obj().field",
             &expect![[r#"
                 FieldExpr@0..15
-                  ApplyExpr@0..9
-                    Path@0..7
-                      PathSegment@0..7
-                        NameRef@0..7
-                          IDENT@0..7 "get_obj"
+                  CallExpr@0..9
+                    PathExpr@0..7
+                      Path@0..7
+                        PathSegment@0..7
+                          NameRef@0..7
+                            IDENT@0..7 "get_obj"
                     L_PAREN@7..8 "("
                     R_PAREN@8..9 ")"
                   DOT@9..10 "."
@@ -603,29 +639,30 @@ mod tests {
         check_expr(
             "obj.a().b().c()",
             &expect![[r#"
-                MethodCallExpr@0..15
-                  MethodCallExpr@0..11
-                    ApplyExpr@0..7
-                      Path@0..5
-                        PathSegment@0..3
-                          NameRef@0..3
-                            IDENT@0..3 "obj"
-                        DOT@3..4 "."
-                        PathSegment@4..5
-                          NameRef@4..5
-                            IDENT@4..5 "a"
-                      L_PAREN@5..6 "("
-                      R_PAREN@6..7 ")"
-                    DOT@7..8 "."
-                    IDENT@8..9 "b"
-                    ArgList@9..11
+                CallExpr@0..15
+                  FieldExpr@0..13
+                    CallExpr@0..11
+                      FieldExpr@0..9
+                        CallExpr@0..7
+                          PathExpr@0..5
+                            Path@0..5
+                              PathSegment@0..3
+                                NameRef@0..3
+                                  IDENT@0..3 "obj"
+                              DOT@3..4 "."
+                              PathSegment@4..5
+                                NameRef@4..5
+                                  IDENT@4..5 "a"
+                          L_PAREN@5..6 "("
+                          R_PAREN@6..7 ")"
+                        DOT@7..8 "."
+                        IDENT@8..9 "b"
                       L_PAREN@9..10 "("
                       R_PAREN@10..11 ")"
-                  DOT@11..12 "."
-                  IDENT@12..13 "c"
-                  ArgList@13..15
-                    L_PAREN@13..14 "("
-                    R_PAREN@14..15 ")"
+                    DOT@11..12 "."
+                    IDENT@12..13 "c"
+                  L_PAREN@13..14 "("
+                  R_PAREN@14..15 ")"
             "#]],
         );
     }

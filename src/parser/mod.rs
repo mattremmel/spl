@@ -1349,7 +1349,7 @@ pub(crate) mod tests {
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
         let tree = parse.debug_tree();
         assert!(tree.contains("FunctionDef"));
-        assert!(tree.contains("ApplyExpr"));
+        assert!(tree.contains("CallExpr"));
     }
 
     #[test]

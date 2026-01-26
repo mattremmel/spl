@@ -10,7 +10,10 @@ pub(super) fn block_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
-    block(p)?;
+    if let Err(e) = block(p) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(Some(m.complete(p, SyntaxKind::BlockExpr)))
 }
 
@@ -24,17 +27,32 @@ pub(super) fn if_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::IF_KW)?;
-    let _ = expr_no_struct(p)?;
-    block(p)?;
+    if let Err(e) = p.expect(SyntaxKind::IF_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = expr_no_struct(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = block(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     if p.eat(SyntaxKind::ELSE_KW) {
         if p.at(SyntaxKind::IF_KW) {
             // else if
-            let _ = if_expr(p)?;
+            if let Err(e) = if_expr(p) {
+                m.abandon(p);
+                return Err(e);
+            }
         } else {
             // else block
-            block(p)?;
+            if let Err(e) = block(p) {
+                m.abandon(p);
+                return Err(e);
+            }
         }
     }
 
@@ -46,9 +64,18 @@ pub(super) fn while_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::WHILE_KW)?;
-    let _ = expr_no_struct(p)?;
-    block(p)?;
+    if let Err(e) = p.expect(SyntaxKind::WHILE_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = expr_no_struct(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = block(p) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(Some(m.complete(p, SyntaxKind::WhileExpr)))
 }
 
@@ -88,8 +115,14 @@ pub(super) fn loop_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::LOOP_KW)?;
-    block(p)?;
+    if let Err(e) = p.expect(SyntaxKind::LOOP_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = block(p) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(Some(m.complete(p, SyntaxKind::LoopExpr)))
 }
 
@@ -98,15 +131,20 @@ pub(super) fn break_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::BREAK_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::BREAK_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Optional value
     if p.current().is_some()
         && !p.at(SyntaxKind::SEMI)
         && !p.at(SyntaxKind::R_BRACE)
         && !p.at(SyntaxKind::R_PAREN)
+        && let Err(e) = expr(p)
     {
-        let _ = expr(p)?;
+        m.abandon(p);
+        return Err(e);
     }
 
     Ok(Some(m.complete(p, SyntaxKind::BreakExpr)))
@@ -117,7 +155,10 @@ pub(super) fn continue_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::CONTINUE_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::CONTINUE_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(Some(m.complete(p, SyntaxKind::ContinueExpr)))
 }
 
@@ -126,15 +167,20 @@ pub(super) fn return_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::RETURN_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::RETURN_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Optional value
     if p.current().is_some()
         && !p.at(SyntaxKind::SEMI)
         && !p.at(SyntaxKind::R_BRACE)
         && !p.at(SyntaxKind::R_PAREN)
+        && let Err(e) = expr(p)
     {
-        let _ = expr(p)?;
+        m.abandon(p);
+        return Err(e);
     }
 
     Ok(Some(m.complete(p, SyntaxKind::ReturnExpr)))

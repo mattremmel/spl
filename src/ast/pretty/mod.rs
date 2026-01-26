@@ -325,13 +325,11 @@ impl AstPrinter {
             Expr::Tuple(t) => self.print_tuple_expr(t),
             Expr::Array(a) => self.print_array_expr(a),
             Expr::Struct(s) => self.print_struct_expr(s),
-            Expr::Apply(a) => self.print_apply_expr(a),
+            Expr::Call(c) => self.print_call_expr(c),
             Expr::Binary(b) => self.print_binary_expr(b),
             Expr::Prefix(p) => self.print_prefix_expr(p),
             Expr::Ref(r) => self.print_ref_expr(r),
             Expr::Field(f) => self.print_field_expr(f),
-            Expr::MethodCall(m) => self.print_method_call_expr(m),
-            Expr::Call(c) => self.print_call_expr(c),
             Expr::Index(i) => self.print_index_expr(i),
             Expr::Slice(s) => self.print_slice_expr(s),
             Expr::If(i) => self.print_if_expr(i),
@@ -512,23 +510,56 @@ impl AstPrinter {
         });
     }
 
-    fn print_apply_expr(&mut self, a: &ApplyExpr) {
-        let path_str = a
-            .path()
-            .map(|p| {
-                p.segments()
-                    .filter_map(|s| {
-                        s.name()
-                            .and_then(|n| n.token())
-                            .map(|t| t.text().to_string())
-                    })
-                    .collect::<Vec<_>>()
-                    .join(".")
-            })
-            .unwrap_or_else(|| "?".to_string());
-        self.line(&format!("ApplyExpr \"{path_str}\""));
+    fn print_call_expr(&mut self, call: &CallExpr) {
+        // Try to extract a meaningful name for the call
+        let callee_str = if let Some(callee) = call.callee() {
+            match &callee {
+                Expr::Path(path_expr) => {
+                    path_expr
+                        .path()
+                        .map(|p| {
+                            p.segments()
+                                .filter_map(|s| {
+                                    s.name()
+                                        .and_then(|n| n.token())
+                                        .map(|t| t.text().to_string())
+                                })
+                                .collect::<Vec<_>>()
+                                .join(".")
+                        })
+                        .unwrap_or_else(|| "?".to_string())
+                }
+                Expr::Field(field_expr) => {
+                    let field_name = field_expr
+                        .name_token()
+                        .or_else(|| field_expr.tuple_index_token())
+                        .map(|t| t.text().to_string())
+                        .or_else(|| {
+                            field_expr
+                                .name()
+                                .and_then(|n| n.token())
+                                .map(|t| t.text().to_string())
+                        })
+                        .unwrap_or_else(|| "?".to_string());
+                    format!(".{field_name}")
+                }
+                _ => "expr".to_string(),
+            }
+        } else {
+            "?".to_string()
+        };
+
+        self.line(&format!("CallExpr \"{callee_str}\""));
         self.indented(|p| {
-            for arg in a.args() {
+            // Print receiver for method calls (callee is FieldExpr)
+            if let Some(Expr::Field(field_expr)) = call.callee()
+                && let Some(recv) = field_expr.expr()
+            {
+                p.line("Receiver");
+                p.indented(|p| p.print_expr(&recv));
+            }
+            // Print arguments
+            for arg in call.args() {
                 let name = arg.name_token().map(|t| t.text().to_string()).or_else(|| {
                     arg.name()
                         .and_then(|n| n.token())
@@ -603,51 +634,6 @@ impl AstPrinter {
         self.indented(|p| {
             if let Some(expr) = field.expr() {
                 p.print_expr(&expr);
-            }
-        });
-    }
-
-    fn print_method_call_expr(&mut self, method: &MethodCallExpr) {
-        let name = method
-            .name_token()
-            .map(|t| t.text().to_string())
-            .or_else(|| {
-                method
-                    .name()
-                    .and_then(|n| n.token())
-                    .map(|t| t.text().to_string())
-            })
-            .unwrap_or_else(|| "?".to_string());
-        self.line(&format!("MethodCallExpr \".{name}()\""));
-        self.indented(|p| {
-            if let Some(recv) = method.receiver() {
-                p.line("Receiver");
-                p.indented(|p| p.print_expr(&recv));
-            }
-            if let Some(args) = method.arg_list() {
-                p.print_arg_list(&args);
-            }
-        });
-    }
-
-    fn print_call_expr(&mut self, call: &CallExpr) {
-        self.line("CallExpr");
-        self.indented(|p| {
-            if let Some(callee) = call.callee() {
-                p.line("Callee");
-                p.indented(|p| p.print_expr(&callee));
-            }
-            if let Some(args) = call.arg_list() {
-                p.print_arg_list(&args);
-            }
-        });
-    }
-
-    fn print_arg_list(&mut self, args: &ArgList) {
-        self.line("ArgList");
-        self.indented(|p| {
-            for arg in args.args() {
-                p.print_expr(&arg);
             }
         });
     }

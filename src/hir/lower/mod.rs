@@ -55,7 +55,7 @@ pub use folding::try_lower_expr;
 use crate::ast::{
     ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, ExternFn, FieldExpr,
     FunctionDef, IfExpr, IndexExpr, IsExpr, Item, LetStmt, LiteralExpr, LoopExpr, MatchExpr,
-    MethodCallExpr, ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt,
+    ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt,
     StructExpr, TupleExpr, WhileExpr,
 };
 use crate::hir::{
@@ -803,13 +803,11 @@ impl LoweringContext {
             Expr::Tuple(tuple) => self.lower_tuple_expr(tuple, span, ty),
             Expr::Array(array) => self.lower_array_expr(array, span, ty),
             Expr::Struct(struct_expr) => self.lower_struct_expr(struct_expr, span, ty),
-            Expr::Apply(apply_expr) => self.lower_apply_expr(apply_expr, span, ty),
+            Expr::Call(call) => self.lower_call_expr(call, span, ty),
             Expr::Binary(bin) => self.lower_binary_expr(bin, span, ty),
             Expr::Prefix(prefix) => self.lower_prefix_expr(prefix, span, ty),
             Expr::Ref(ref_expr) => self.lower_ref_expr(ref_expr, span, ty),
             Expr::Field(field) => self.lower_field_expr(field, span, ty),
-            Expr::MethodCall(call) => self.lower_method_call_expr(call, span, ty),
-            Expr::Call(call) => self.lower_call_expr(call, span, ty),
             Expr::Index(index) => self.lower_index_expr(index, span, ty),
             Expr::Slice(_) => self.lower_missing(span), // TODO
             Expr::If(if_expr) => self.lower_if_expr(if_expr, span, ty),
@@ -1075,234 +1073,6 @@ impl LoweringContext {
         self.db.alloc_expr(expr)
     }
 
-    fn lower_apply_expr(
-        &mut self,
-        apply_expr: &crate::ast::ApplyExpr,
-        span: Span,
-        ty: TypeId,
-    ) -> ExprId {
-        // Check if the expression's type is a struct type - if so, it's struct instantiation
-        let is_struct = matches!(self.db.types.get(ty), Type::Struct(_, _));
-
-        if is_struct {
-            // Lower as struct instantiation
-            self.lower_apply_as_struct(apply_expr, span, ty)
-        } else {
-            // Lower as function call
-            self.lower_apply_as_call(apply_expr, span, ty)
-        }
-    }
-
-    fn lower_apply_as_struct(
-        &mut self,
-        apply_expr: &crate::ast::ApplyExpr,
-        span: Span,
-        ty: TypeId,
-    ) -> ExprId {
-        // Get the struct DefId from the path - use token range to match resolver
-        let path_span = apply_expr
-            .path()
-            .and_then(|p| p.segments().next())
-            .and_then(|seg| seg.name())
-            .and_then(|n| n.token())
-            .map(|t| Self::text_range_to_span(t.text_range()))
-            .unwrap_or_else(|| span.clone());
-
-        let def_id = self
-            .resolutions
-            .get(&path_span)
-            .copied()
-            .unwrap_or(DefId::INVALID);
-
-        debug_assert!(
-            def_id.is_valid(),
-            "Apply expression struct path resolved to INVALID DefId at {:?} - resolution phase failed to register this struct type",
-            path_span
-        );
-
-        // Lower field initializers from arguments
-        let fields: Vec<_> = apply_expr
-            .args()
-            .filter_map(|arg| {
-                // Get field name from named argument
-                let name = arg.name_token().map(|t| t.text().to_string()).or_else(|| {
-                    arg.name()
-                        .and_then(|n| n.token().map(|t| t.text().to_string()))
-                })?;
-                let value = arg.value().map(|e| self.lower_expr(&e))?;
-                Some((name, value))
-            })
-            .collect();
-
-        let expr = HirExpr {
-            kind: HirExprKind::Struct { def_id, fields },
-            ty,
-            span,
-        };
-        self.db.alloc_expr(expr)
-    }
-
-    fn lower_apply_as_call(
-        &mut self,
-        apply_expr: &crate::ast::ApplyExpr,
-        span: Span,
-        ty: TypeId,
-    ) -> ExprId {
-        let path = match apply_expr.path() {
-            Some(p) => p,
-            None => return self.lower_missing(span),
-        };
-
-        let segments: Vec<_> = path.segments().collect();
-        if segments.is_empty() {
-            return self.lower_missing(span);
-        }
-
-        // Check if this is a method call (multi-segment path where first segment is a variable)
-        if segments.len() >= 2 {
-            let first_segment = &segments[0];
-            let first_span = first_segment
-                .name()
-                .and_then(|n| n.token())
-                .map(|t| Self::text_range_to_span(t.text_range()));
-
-            if let Some(ref first_span) = first_span
-                && let Some(&first_def_id) = self.resolutions.get(first_span)
-                // Check if first segment resolves to a binding (variable)
-                && self.binding_types.contains_key(&first_def_id)
-            {
-                // This is a method call like p.distance()
-                return self.lower_apply_as_method_call(apply_expr, &segments, span, ty);
-            }
-        }
-
-        // Regular function call
-        // Build a synthetic callee expression from the path
-        let callee = {
-            // Get the DefId for the path
-            let def_id = path
-                .segments()
-                .next()
-                .and_then(|seg| seg.name())
-                .and_then(|n| n.token())
-                .map(|t| Self::text_range_to_span(t.text_range()))
-                .and_then(|span| self.resolutions.get(&span).copied())
-                .unwrap_or(DefId::INVALID);
-
-            // Get the type for the path (function type)
-            let path_span = Self::text_range_to_span(path.syntax().text_range());
-            let path_ty = self.get_type(&path_span);
-
-            let expr = HirExpr {
-                kind: HirExprKind::Var(def_id),
-                ty: path_ty,
-                span: path_span,
-            };
-            self.db.alloc_expr(expr)
-        };
-
-        // Lower arguments
-        let args: Vec<_> = apply_expr
-            .args()
-            .filter_map(|arg| arg.value().map(|e| self.lower_expr(&e)))
-            .collect();
-
-        let expr = HirExpr {
-            kind: HirExprKind::Call { callee, args },
-            ty,
-            span,
-        };
-        self.db.alloc_expr(expr)
-    }
-
-    fn lower_apply_as_method_call(
-        &mut self,
-        apply_expr: &crate::ast::ApplyExpr,
-        segments: &[crate::ast::PathSegment],
-        span: Span,
-        ty: TypeId,
-    ) -> ExprId {
-        // Get the receiver (first segment)
-        let first_segment = &segments[0];
-        let first_span = first_segment
-            .name()
-            .and_then(|n| n.token())
-            .map(|t| Self::text_range_to_span(t.text_range()))
-            .unwrap_or_else(|| span.clone());
-
-        let first_def_id = self
-            .resolutions
-            .get(&first_span)
-            .copied()
-            .unwrap_or(DefId::INVALID);
-
-        let receiver_ty = self.get_binding_type(first_def_id);
-        let receiver = self.db.alloc_expr(HirExpr {
-            kind: HirExprKind::Var(first_def_id),
-            ty: receiver_ty,
-            span: first_span,
-        });
-
-        // Check if this is an intrinsic method that needs special lowering
-        if let Some(&method_def_id) = self.method_resolutions.get(&span)
-            && let Some(intrinsic) = self.intrinsic_methods.get(&method_def_id).cloned()
-        {
-            match intrinsic {
-                crate::sema::infer::IntrinsicKind::FieldAccess(index) => {
-                    // Lower intrinsic method call to tuple field access
-                    let expr = HirExpr {
-                        kind: HirExprKind::TupleField {
-                            base: receiver,
-                            index,
-                        },
-                        ty,
-                        span,
-                    };
-                    return self.db.alloc_expr(expr);
-                }
-            }
-        }
-
-        // Get the method name (last segment)
-        let last_segment = &segments[segments.len() - 1];
-        let method = last_segment
-            .name()
-            .and_then(|n| n.token())
-            .map(|t| t.text().to_string())
-            .unwrap_or_default();
-
-        // Get method span for resolution lookup
-        let method_span = last_segment
-            .name()
-            .and_then(|n| n.token())
-            .map(|t| Self::text_range_to_span(t.text_range()))
-            .unwrap_or_else(|| span.clone());
-
-        // Lower arguments
-        let args: Vec<_> = apply_expr
-            .args()
-            .filter_map(|arg| arg.value().map(|e| self.lower_expr(&e)))
-            .collect();
-
-        let expr = HirExpr {
-            kind: HirExprKind::MethodCall {
-                receiver,
-                method,
-                args,
-            },
-            ty,
-            span: span.clone(),
-        };
-        let expr_id = self.db.alloc_expr(expr);
-
-        // Store the resolved method DefId for MIR lowering
-        if let Some(&method_def_id) = self.method_resolutions.get(&method_span) {
-            self.db.method_resolutions.insert(expr_id, method_def_id);
-        }
-
-        expr_id
-    }
-
     fn lower_binary_expr(&mut self, bin: &BinExpr, span: Span, ty: TypeId) -> ExprId {
         // First, try to fold as a constant expression
         let full_expr = Expr::Binary(bin.clone());
@@ -1496,19 +1266,186 @@ impl LoweringContext {
         self.db.alloc_expr(expr)
     }
 
-    fn lower_method_call_expr(&mut self, call: &MethodCallExpr, span: Span, ty: TypeId) -> ExprId {
-        let receiver = call
-            .receiver()
+    fn lower_call_expr(&mut self, call: &CallExpr, span: Span, ty: TypeId) -> ExprId {
+        let callee = match call.callee() {
+            Some(c) => c,
+            None => return self.lower_missing(span),
+        };
+
+        // Dispatch based on callee type
+        match &callee {
+            Expr::Path(path_expr) => {
+                // Check if the result type is a struct type - if so, it's struct instantiation
+                let is_struct = matches!(self.db.types.get(ty), Type::Struct(_, _));
+                if is_struct {
+                    self.lower_call_as_struct(call, path_expr, span, ty)
+                } else {
+                    self.lower_call_as_function(call, path_expr, span, ty)
+                }
+            }
+            Expr::Field(field_expr) => {
+                self.lower_call_as_method(call, field_expr, span, ty)
+            }
+            _ => {
+                // Arbitrary callable expression
+                let callee_id = self.lower_expr(&callee);
+                let args: Vec<_> = call.args().filter_map(|a| a.value().map(|e| self.lower_expr(&e))).collect();
+                let expr = HirExpr {
+                    kind: HirExprKind::Call { callee: callee_id, args },
+                    ty,
+                    span,
+                };
+                self.db.alloc_expr(expr)
+            }
+        }
+    }
+
+    fn lower_call_as_struct(
+        &mut self,
+        call: &CallExpr,
+        path_expr: &PathExpr,
+        span: Span,
+        ty: TypeId,
+    ) -> ExprId {
+        // Get the struct DefId from the path
+        let path_span = path_expr
+            .path()
+            .and_then(|p| p.segments().next())
+            .and_then(|seg| seg.name())
+            .and_then(|n| n.token())
+            .map(|t| Self::text_range_to_span(t.text_range()))
+            .unwrap_or_else(|| span.clone());
+
+        let def_id = self
+            .resolutions
+            .get(&path_span)
+            .copied()
+            .unwrap_or(DefId::INVALID);
+
+        // Lower field initializers from arguments
+        let fields: Vec<_> = call
+            .args()
+            .filter_map(|arg| {
+                let name = arg.name_token().map(|t| t.text().to_string()).or_else(|| {
+                    arg.name()
+                        .and_then(|n| n.token().map(|t| t.text().to_string()))
+                })?;
+                let value = arg.value().map(|e| self.lower_expr(&e))?;
+                Some((name, value))
+            })
+            .collect();
+
+        let expr = HirExpr {
+            kind: HirExprKind::Struct { def_id, fields },
+            ty,
+            span,
+        };
+        self.db.alloc_expr(expr)
+    }
+
+    fn lower_call_as_function(
+        &mut self,
+        call: &CallExpr,
+        path_expr: &PathExpr,
+        span: Span,
+        ty: TypeId,
+    ) -> ExprId {
+        let path = match path_expr.path() {
+            Some(p) => p,
+            None => return self.lower_missing(span),
+        };
+
+        let segments: Vec<_> = path.segments().collect();
+        if segments.is_empty() {
+            return self.lower_missing(span);
+        }
+
+        // Check if this is a method call (multi-segment path where first segment is a variable)
+        if segments.len() >= 2 {
+            let first_segment = &segments[0];
+            let first_span = first_segment
+                .name()
+                .and_then(|n| n.token())
+                .map(|t| Self::text_range_to_span(t.text_range()));
+
+            if let Some(ref first_span) = first_span
+                && let Some(&first_def_id) = self.resolutions.get(first_span)
+                && self.binding_types.contains_key(&first_def_id)
+            {
+                // First segment is a variable - this is an instance method call
+                return self.lower_path_method_call(call, &segments, span, ty);
+            }
+        }
+
+        // Get the function DefId from the path
+        let fn_span = segments
+            .last()
+            .and_then(|seg| seg.name())
+            .and_then(|n| n.token())
+            .map(|t| Self::text_range_to_span(t.text_range()))
+            .unwrap_or_else(|| span.clone());
+
+        let def_id = self
+            .resolutions
+            .get(&fn_span)
+            .or_else(|| self.method_resolutions.get(&span))
+            .copied()
+            .unwrap_or(DefId::INVALID);
+
+        // Build callee expression (a Var pointing to the function)
+        let fn_span = segments
+            .last()
+            .and_then(|seg| seg.name())
+            .and_then(|n| n.token())
+            .map(|t| Self::text_range_to_span(t.text_range()))
+            .unwrap_or_else(|| span.clone());
+
+        let fn_ty = self.get_type(&fn_span);
+        let callee = self.db.alloc_expr(HirExpr {
+            kind: HirExprKind::Var(def_id),
+            ty: fn_ty,
+            span: fn_span,
+        });
+
+        // Lower arguments
+        let args: Vec<_> = call
+            .args()
+            .filter_map(|arg| arg.value().map(|e| self.lower_expr(&e)))
+            .collect();
+
+        let expr = HirExpr {
+            kind: HirExprKind::Call { callee, args },
+            ty,
+            span: span.clone(),
+        };
+        let expr_id = self.db.alloc_expr(expr);
+
+        // Store method resolution if present
+        if let Some(&method_def_id) = self.method_resolutions.get(&span) {
+            self.db.method_resolutions.insert(expr_id, method_def_id);
+        }
+
+        expr_id
+    }
+
+    fn lower_call_as_method(
+        &mut self,
+        call: &CallExpr,
+        field_expr: &FieldExpr,
+        span: Span,
+        ty: TypeId,
+    ) -> ExprId {
+        let receiver = field_expr
+            .expr()
             .map(|e| self.lower_expr(&e))
             .unwrap_or_else(|| self.lower_missing(span.clone()));
 
-        // Check if this is an intrinsic method that needs special lowering
+        // Check if this is an intrinsic method
         if let Some(&method_def_id) = self.method_resolutions.get(&span)
             && let Some(intrinsic) = self.intrinsic_methods.get(&method_def_id).cloned()
         {
             match intrinsic {
                 crate::sema::infer::IntrinsicKind::FieldAccess(index) => {
-                    // Lower intrinsic method call to tuple field access
                     let expr = HirExpr {
                         kind: HirExprKind::TupleField {
                             base: receiver,
@@ -1522,20 +1459,21 @@ impl LoweringContext {
             }
         }
 
-        let method = call
+        let method = field_expr
             .name_token()
             .map(|t| t.text().to_string())
             .or_else(|| {
-                call.name()
+                field_expr
+                    .name()
                     .and_then(|n| n.token())
                     .map(|t| t.text().to_string())
             })
             .unwrap_or_default();
 
         let args: Vec<_> = call
-            .arg_list()
-            .map(|al| al.args().map(|a| self.lower_expr(&a)).collect())
-            .unwrap_or_default();
+            .args()
+            .filter_map(|arg| arg.value().map(|e| self.lower_expr(&e)))
+            .collect();
 
         let expr = HirExpr {
             kind: HirExprKind::MethodCall {
@@ -1548,7 +1486,6 @@ impl LoweringContext {
         };
         let expr_id = self.db.alloc_expr(expr);
 
-        // Store the resolved method DefId for MIR lowering
         if let Some(&method_def_id) = self.method_resolutions.get(&span) {
             self.db.method_resolutions.insert(expr_id, method_def_id);
         }
@@ -1556,23 +1493,71 @@ impl LoweringContext {
         expr_id
     }
 
-    fn lower_call_expr(&mut self, call: &CallExpr, span: Span, ty: TypeId) -> ExprId {
-        let callee = call
-            .callee()
-            .map(|e| self.lower_expr(&e))
-            .unwrap_or_else(|| self.lower_missing(span.clone()));
+    fn lower_path_method_call(
+        &mut self,
+        call: &CallExpr,
+        segments: &[crate::ast::PathSegment],
+        span: Span,
+        ty: TypeId,
+    ) -> ExprId {
+        // Lower the receiver (first segment)
+        let first_segment = &segments[0];
+        let receiver_span = first_segment
+            .name()
+            .and_then(|n| n.token())
+            .map(|t| Self::text_range_to_span(t.text_range()))
+            .unwrap_or_else(|| span.clone());
 
-        let args: Vec<_> = call
-            .arg_list()
-            .map(|al| al.args().map(|a| self.lower_expr(&a)).collect())
+        let receiver_def_id = self
+            .resolutions
+            .get(&receiver_span)
+            .copied()
+            .unwrap_or(DefId::INVALID);
+
+        let receiver_ty = self
+            .binding_types
+            .get(&receiver_def_id)
+            .copied()
+            .unwrap_or_else(|| self.db.types.error());
+
+        let receiver = {
+            let expr = HirExpr {
+                kind: HirExprKind::Var(receiver_def_id),
+                ty: receiver_ty,
+                span: receiver_span,
+            };
+            self.db.alloc_expr(expr)
+        };
+
+        // Get method name from last segment
+        let method_name = segments
+            .last()
+            .and_then(|seg| seg.name())
+            .and_then(|n| n.token())
+            .map(|t| t.text().to_string())
             .unwrap_or_default();
 
+        let args: Vec<_> = call
+            .args()
+            .filter_map(|arg| arg.value().map(|e| self.lower_expr(&e)))
+            .collect();
+
         let expr = HirExpr {
-            kind: HirExprKind::Call { callee, args },
+            kind: HirExprKind::MethodCall {
+                receiver,
+                method: method_name,
+                args,
+            },
             ty,
-            span,
+            span: span.clone(),
         };
-        self.db.alloc_expr(expr)
+        let expr_id = self.db.alloc_expr(expr);
+
+        if let Some(&method_def_id) = self.method_resolutions.get(&span) {
+            self.db.method_resolutions.insert(expr_id, method_def_id);
+        }
+
+        expr_id
     }
 
     fn lower_index_expr(&mut self, index: &IndexExpr, span: Span, ty: TypeId) -> ExprId {

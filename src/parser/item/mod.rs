@@ -304,26 +304,40 @@ pub(crate) fn function_def(
     opt_visibility(p);
 
     // fn keyword
-    p.expect(SyntaxKind::FN_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::FN_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Function name
-    name(p)?;
+    if let Err(e) = name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Parameter list
-    param_list(p)?;
+    if let Err(e) = param_list(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Optional return type with `:` syntax
-    if p.eat(SyntaxKind::COLON) {
-        stmt::type_annotation(p)?;
+    if p.eat(SyntaxKind::COLON) && let Err(e) = stmt::type_annotation(p) {
+        m.abandon(p);
+        return Err(e);
     }
 
     // Optional where clause (new syntax: `where T, U: Clone`)
-    if p.at(SyntaxKind::WHERE_KW) {
-        where_clause(p)?;
+    if p.at(SyntaxKind::WHERE_KW) && let Err(e) = where_clause(p) {
+        m.abandon(p);
+        return Err(e);
     }
 
     // Function body
-    expr::block(p)?;
+    if let Err(e) = expr::block(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     Ok(m.complete(p, SyntaxKind::FunctionDef))
 }
@@ -331,11 +345,17 @@ pub(crate) fn function_def(
 /// Parse a where clause: `where T, U: Clone, ...`
 fn where_clause(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::WHERE_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::WHERE_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Parse comma-separated type parameters with optional bounds
     loop {
-        where_type_param(p)?;
+        if let Err(e) = where_type_param(p) {
+            m.abandon(p);
+            return Err(e);
+        }
 
         if !p.eat(SyntaxKind::COMMA) {
             break;
@@ -355,16 +375,25 @@ fn where_type_param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser
     let m = p.start();
 
     // Type parameter name
-    name(p)?;
+    if let Err(e) = name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Optional bounds
     if p.eat(SyntaxKind::COLON) {
         // Parse first bound
-        type_bound(p)?;
+        if let Err(e) = type_bound(p) {
+            m.abandon(p);
+            return Err(e);
+        }
 
         // Parse additional bounds separated by +
         while p.eat(SyntaxKind::PLUS) {
-            type_bound(p)?;
+            if let Err(e) = type_bound(p) {
+                m.abandon(p);
+                return Err(e);
+            }
         }
     }
 
@@ -376,7 +405,10 @@ fn type_bound(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Pars
     let m = p.start();
 
     // Parse the path (trait name, possibly with generics)
-    crate::parser::path::path(p)?;
+    if let Err(e) = crate::parser::path::path(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     Ok(m.complete(p, SyntaxKind::TypeBound))
 }
@@ -405,7 +437,10 @@ const PARAM_RECOVERY_SET: &[SyntaxKind] = &[
 /// Parse a parameter list: `(self_param?, params...)`
 fn param_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::L_PAREN)?;
+    if let Err(e) = p.expect(SyntaxKind::L_PAREN) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Check for self parameter first
     if is_self_param_start(p) {
@@ -424,7 +459,10 @@ fn param_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Pars
         Ok(())
     });
 
-    p.expect(SyntaxKind::R_PAREN)?;
+    if let Err(e) = p.expect(SyntaxKind::R_PAREN) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(m.complete(p, SyntaxKind::ParamList))
 }
 
@@ -444,7 +482,10 @@ fn self_param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Pars
         p.eat(SyntaxKind::MUT_KW);
     }
 
-    p.expect(SyntaxKind::SELF_VALUE_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::SELF_VALUE_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(m.complete(p, SyntaxKind::SelfParam))
 }
 
@@ -500,10 +541,16 @@ pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
     opt_visibility(p);
 
     // struct keyword
-    p.expect(SyntaxKind::STRUCT_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::STRUCT_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Struct name
-    name(p)?;
+    if let Err(e) = name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Check what follows to determine struct type:
     // - `;` -> unit struct
@@ -513,24 +560,33 @@ pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
         // Unit struct: struct S;
     } else if p.at(SyntaxKind::L_PAREN) {
         // Parenthesized struct: struct Point(x: i32, y: i32)
-        paren_field_list(p)?;
+        if let Err(e) = paren_field_list(p) {
+            m.abandon(p);
+            return Err(e);
+        }
 
         // Optional where clause
-        if p.at(SyntaxKind::WHERE_KW) {
-            where_clause(p)?;
+        if p.at(SyntaxKind::WHERE_KW) && let Err(e) = where_clause(p) {
+            m.abandon(p);
+            return Err(e);
         }
 
         // Optional trailing semicolon
         p.eat(SyntaxKind::SEMI);
     } else if p.at(SyntaxKind::WHERE_KW) {
         // Where clause before body (must have parens after)
-        where_clause(p)?;
+        if let Err(e) = where_clause(p) {
+            m.abandon(p);
+            return Err(e);
+        }
         // Expect field list
-        if p.at(SyntaxKind::L_PAREN) {
-            paren_field_list(p)?;
+        if p.at(SyntaxKind::L_PAREN) && let Err(e) = paren_field_list(p) {
+            m.abandon(p);
+            return Err(e);
         }
     } else {
         // Error: expected ( or ;
+        m.abandon(p);
         return Err(p.error_at_current("expected '(' or ';' after struct name".to_string()));
     }
 
@@ -543,7 +599,10 @@ fn paren_field_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser
     use std::cell::Cell;
 
     let m = p.start();
-    p.expect(SyntaxKind::L_PAREN)?;
+    if let Err(e) = p.expect(SyntaxKind::L_PAREN) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     let index = Cell::new(0u32);
     p.parse_delimited_with_recovery(SyntaxKind::L_PAREN, SyntaxKind::R_PAREN, |p| {
@@ -553,7 +612,10 @@ fn paren_field_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser
         Ok(())
     });
 
-    p.expect(SyntaxKind::R_PAREN)?;
+    if let Err(e) = p.expect(SyntaxKind::R_PAREN) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(m.complete(p, SyntaxKind::FieldList))
 }
 
@@ -574,15 +636,27 @@ fn paren_field_def(
 
     if is_named {
         // Named field: name: Type
-        name(p)?;
-        p.expect(SyntaxKind::COLON)?;
-        stmt::type_annotation(p)?;
+        if let Err(e) = name(p) {
+            m.abandon(p);
+            return Err(e);
+        }
+        if let Err(e) = p.expect(SyntaxKind::COLON) {
+            m.abandon(p);
+            return Err(e);
+        }
+        if let Err(e) = stmt::type_annotation(p) {
+            m.abandon(p);
+            return Err(e);
+        }
     } else {
         // Tuple field: just Type - use synthetic index name
         let name_m = p.start();
         p.emit_synthetic_token(SyntaxKind::INT_LITERAL, index.to_string());
         name_m.complete(p, SyntaxKind::Name);
-        stmt::type_annotation(p)?;
+        if let Err(e) = stmt::type_annotation(p) {
+            m.abandon(p);
+            return Err(e);
+        }
     }
 
     Ok(m.complete(p, SyntaxKind::FieldDef))
@@ -599,22 +673,38 @@ pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
     opt_visibility(p);
 
     // type keyword
-    p.expect(SyntaxKind::TYPE_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::TYPE_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Alias name
-    name(p)?;
+    if let Err(e) = name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // = Type
-    p.expect(SyntaxKind::EQ)?;
-    stmt::type_annotation(p)?;
+    if let Err(e) = p.expect(SyntaxKind::EQ) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = stmt::type_annotation(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Optional where clause (new syntax)
-    if p.at(SyntaxKind::WHERE_KW) {
-        where_clause(p)?;
+    if p.at(SyntaxKind::WHERE_KW) && let Err(e) = where_clause(p) {
+        m.abandon(p);
+        return Err(e);
     }
 
     // Semicolon
-    p.expect(SyntaxKind::SEMI)?;
+    if let Err(e) = p.expect(SyntaxKind::SEMI) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     Ok(m.complete(p, SyntaxKind::TypeAlias))
 }
@@ -633,18 +723,28 @@ pub(crate) fn impl_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
     opt_attributes(p);
 
     // impl keyword
-    p.expect(SyntaxKind::IMPL_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::IMPL_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Self type
-    stmt::type_annotation(p)?;
+    if let Err(e) = stmt::type_annotation(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Optional where clause (new syntax)
-    if p.at(SyntaxKind::WHERE_KW) {
-        where_clause(p)?;
+    if p.at(SyntaxKind::WHERE_KW) && let Err(e) = where_clause(p) {
+        m.abandon(p);
+        return Err(e);
     }
 
     // Items block
-    p.expect(SyntaxKind::L_BRACE)?;
+    if let Err(e) = p.expect(SyntaxKind::L_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
         if let Err(err) = item(p) {
@@ -653,7 +753,10 @@ pub(crate) fn impl_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::p
         }
     }
 
-    p.expect(SyntaxKind::R_BRACE)?;
+    if let Err(e) = p.expect(SyntaxKind::R_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     Ok(m.complete(p, SyntaxKind::ImplBlock))
 }

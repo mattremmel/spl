@@ -1,8 +1,8 @@
 //! Expression type synthesis and checking.
 
 use crate::ast::{
-    ApplyExpr, ArrayExpr, BinExpr, BlockExpr, BreakExpr, CallExpr, CastExpr, ContinueExpr, Expr,
-    FieldExpr, ForExpr, IfExpr, IndexExpr, IsExpr, LoopExpr, MatchExpr, MethodCallExpr, ParenExpr,
+    ArrayExpr, BinExpr, BlockExpr, BreakExpr, CallExpr, CastExpr, ContinueExpr, Expr,
+    FieldExpr, ForExpr, IfExpr, IndexExpr, IsExpr, LoopExpr, MatchExpr, ParenExpr,
     Pat, PathExpr, PrefixExpr, RangeExpr, RefExpr, ReturnExpr, SliceExpr, StructExpr, TupleExpr,
     WhileExpr,
 };
@@ -291,13 +291,11 @@ impl<'a> InferEngine<'a> {
             Expr::Tuple(tuple) => self.synth_tuple(tuple),
             Expr::Array(array) => self.synth_array(array),
             Expr::Struct(struct_expr) => self.synth_struct(struct_expr),
-            Expr::Apply(apply_expr) => self.synth_apply(apply_expr),
+            Expr::Call(call) => self.synth_call(call),
             Expr::Binary(bin) => self.synth_binary(bin),
             Expr::Prefix(prefix) => self.synth_prefix(prefix),
             Expr::Ref(ref_expr) => self.synth_ref(ref_expr),
             Expr::Field(field) => self.synth_field(field),
-            Expr::MethodCall(method) => self.synth_method_call(method),
-            Expr::Call(call) => self.synth_call(call),
             Expr::Index(index) => self.synth_index(index),
             Expr::Slice(slice) => self.synth_slice(slice),
             Expr::If(if_expr) => self.synth_if(if_expr),
@@ -880,74 +878,10 @@ impl<'a> InferEngine<'a> {
         result
     }
 
-    fn synth_apply(&mut self, apply_expr: &ApplyExpr) -> TypeId {
-        // Get the path from the apply expression
-        let path = match apply_expr.path() {
-            Some(p) => p,
-            None => return self.types.error(),
-        };
-
-        // Collect all path segments
-        let segments: Vec<_> = path.segments().collect();
-        if segments.is_empty() {
-            return self.types.error();
-        }
-
-        // Handle multi-segment paths like `S::new` (associated function call)
-        if segments.len() >= 2 {
-            return self.synth_apply_qualified_path(apply_expr, &segments);
-        }
-
-        // Single segment path - could be struct instantiation or function call
-        let segment = &segments[0];
-        let name_ref = match segment.name() {
-            Some(n) => n,
-            None => return self.types.error(),
-        };
-
-        let token = match name_ref.token() {
-            Some(t) => t,
-            None => return self.types.error(),
-        };
-
-        let span = text_range_to_span(token.text_range());
-        let def_id = match self.resolutions.get(&span) {
-            Some(id) => *id,
-            None => return self.types.error(),
-        };
-
-        // Determine if this is a function or struct based on what's in the resolution
-        // Check if it's a function (has a function signature)
-        if let Some(sig) = self.fn_signatures.get(&def_id).cloned() {
-            // It's a function call
-            return self.synth_apply_as_call(apply_expr, &sig);
-        }
-
-        // Check if it's a struct (has struct fields)
-        if self.struct_fields.contains_key(&def_id) {
-            return self.synth_apply_as_struct(apply_expr, def_id);
-        }
-
-        // Check if it's a type alias that resolves to a struct
-        if let Some(&target_ty) = self.type_alias_targets.get(&def_id) {
-            let resolved = self.resolve_type(target_ty);
-            if let Type::Struct(actual_def_id, _) = self.types.get(resolved) {
-                return self.synth_apply_as_struct(apply_expr, *actual_def_id);
-            }
-        }
-
-        // Unknown - emit error
-        self.diagnostics.push(
-            Diagnostic::error("cannot apply: not a function or struct")
-                .with_label(span, "not callable or instantiable"),
-        );
-        self.types.error()
-    }
-
     /// Handle qualified paths like `S.new()` or `instance.method()`
-    fn synth_apply_qualified_path(
+    fn synth_call_qualified_path(
         &mut self,
-        apply_expr: &ApplyExpr,
+        apply_expr: &CallExpr,
         segments: &[crate::ast::PathSegment],
     ) -> TypeId {
         // Get the first segment
@@ -1031,7 +965,7 @@ impl<'a> InferEngine<'a> {
                 let method_span = text_range_to_span(method_token.text_range());
                 self.method_resolutions.insert(method_span, method_def_id);
 
-                return self.synth_apply_as_call(apply_expr, &sig);
+                return self.synth_call_as_function(apply_expr, &sig);
             }
         }
 
@@ -1047,7 +981,7 @@ impl<'a> InferEngine<'a> {
     /// Handle module-qualified calls like `module.func()` or `outer.inner.func()`
     fn synth_module_qualified_call(
         &mut self,
-        apply_expr: &ApplyExpr,
+        apply_expr: &CallExpr,
         segments: &[crate::ast::PathSegment],
         initial_module_def_id: crate::sema::symbol::DefId,
     ) -> TypeId {
@@ -1176,13 +1110,13 @@ impl<'a> InferEngine<'a> {
                     let method_span = text_range_to_span(last_segment.syntax().text_range());
                     self.method_resolutions.insert(method_span, item_def_id);
 
-                    return self.synth_apply_as_call(apply_expr, &sig);
+                    return self.synth_call_as_function(apply_expr, &sig);
                 }
                 self.types.error()
             }
             SymbolKind::Struct => {
                 // It's a struct - instantiate it
-                self.synth_apply_as_struct(apply_expr, item_def_id)
+                self.synth_call_as_struct(apply_expr, item_def_id)
             }
             _ => {
                 let span = text_range_to_span(last_segment.syntax().text_range());
@@ -1195,10 +1129,10 @@ impl<'a> InferEngine<'a> {
         }
     }
 
-    /// Handle instance method calls like `instance.method()`
+    /// Handle instance method calls like `instance.method()` or `instance.field.method()`
     fn synth_instance_method_call(
         &mut self,
-        apply_expr: &ApplyExpr,
+        apply_expr: &CallExpr,
         segments: &[crate::ast::PathSegment],
         receiver_type: TypeId,
     ) -> TypeId {
@@ -1224,6 +1158,83 @@ impl<'a> InferEngine<'a> {
             let inner_resolved = self.resolve_type(*inner);
             current_resolved = inner_resolved;
             receiver_type_val = self.types.get(inner_resolved).clone();
+        }
+
+        // Handle intermediate segments as field accesses
+        // For c.inner.get(), segments are [c, inner, get]:
+        // - First segment (index 0) is the receiver variable
+        // - Intermediate segments (indices 1..n-1) are field accesses
+        // - Last segment (index n-1) is the method name
+        for field_segment in &segments[1..segments.len() - 1] {
+            let field_name = match field_segment.name().and_then(|n| n.token()) {
+                Some(t) => t.text().to_string(),
+                None => return self.types.error(),
+            };
+
+            // Look up the field in the current struct type
+            let (struct_def_id, type_args) = match &receiver_type_val {
+                Type::Struct(def_id, args) => (*def_id, args.clone()),
+                Type::Ref(_, inner) => {
+                    let inner_resolved = self.resolve_type(*inner);
+                    match self.types.get(inner_resolved) {
+                        Type::Struct(def_id, args) => (*def_id, args.clone()),
+                        _ => {
+                            let span = text_range_to_span(apply_expr.syntax().text_range());
+                            self.diagnostics.push(
+                                Diagnostic::error("field access on non-struct type")
+                                    .with_label(span, "not a struct"),
+                            );
+                            return self.types.error();
+                        }
+                    }
+                }
+                _ => {
+                    let span = text_range_to_span(apply_expr.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("field access on non-struct type")
+                            .with_label(span, "not a struct"),
+                    );
+                    return self.types.error();
+                }
+            };
+
+            // Find the field
+            if let Some(fields) = self.struct_fields.get(&struct_def_id).cloned() {
+                if let Some((_, field_ty, _)) = fields.iter().find(|(name, _, _)| name == &field_name) {
+                    // Build substitution map from struct type params to type args
+                    let struct_type_params = self.struct_type_params.get(&struct_def_id).cloned().unwrap_or_default();
+                    let mut subst: rustc_hash::FxHashMap<crate::DefId, TypeId> = rustc_hash::FxHashMap::default();
+                    for (param, arg) in struct_type_params.iter().zip(type_args.iter()) {
+                        subst.insert(*param, *arg);
+                    }
+
+                    // Substitute type params if needed
+                    let instantiated_ty = self.substitute_type_params(*field_ty, &subst);
+                    current_resolved = self.resolve_type(instantiated_ty);
+                    receiver_type_val = self.types.get(current_resolved).clone();
+
+                    // Auto-deref if needed
+                    while let Type::Ref(_, inner) = &receiver_type_val {
+                        let inner_resolved = self.resolve_type(*inner);
+                        current_resolved = inner_resolved;
+                        receiver_type_val = self.types.get(inner_resolved).clone();
+                    }
+                } else {
+                    let span = text_range_to_span(apply_expr.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("no field `{}` on type", field_name))
+                            .with_label(span, "unknown field"),
+                    );
+                    return self.types.error();
+                }
+            } else {
+                let span = text_range_to_span(apply_expr.syntax().text_range());
+                self.diagnostics.push(
+                    Diagnostic::error("field access on non-struct type")
+                        .with_label(span, "not a struct"),
+                );
+                return self.types.error();
+            }
         }
 
         // Get the method name from the last segment (needed for both opaque and struct methods)
@@ -1360,7 +1371,7 @@ impl<'a> InferEngine<'a> {
     /// Synthesize type for an instance method call with a receiver
     fn synth_method_call_with_receiver(
         &mut self,
-        apply_expr: &ApplyExpr,
+        apply_expr: &CallExpr,
         sig: &super::engine::FnSignature,
         struct_def_id: crate::DefId,
         receiver_type_args: &[TypeId],
@@ -1423,9 +1434,9 @@ impl<'a> InferEngine<'a> {
     }
 
     /// Synthesize type for an apply expression being used as a function call
-    fn synth_apply_as_call(
+    fn synth_call_as_function(
         &mut self,
-        apply_expr: &ApplyExpr,
+        apply_expr: &CallExpr,
         sig: &super::engine::FnSignature,
     ) -> TypeId {
         let (param_infos, ret_ty) = self.instantiate_signature_with_labels(sig);
@@ -1493,9 +1504,9 @@ impl<'a> InferEngine<'a> {
     }
 
     /// Synthesize type for an apply expression being used as struct instantiation
-    fn synth_apply_as_struct(
+    fn synth_call_as_struct(
         &mut self,
-        apply_expr: &ApplyExpr,
+        apply_expr: &CallExpr,
         struct_def_id: crate::DefId,
     ) -> TypeId {
         // Get struct type params and create substitution map
@@ -2055,18 +2066,98 @@ impl<'a> InferEngine<'a> {
         self.types.error()
     }
 
-    fn synth_method_call(&mut self, method: &MethodCallExpr) -> TypeId {
-        let receiver = match method.receiver() {
+    fn synth_call(&mut self, call: &CallExpr) -> TypeId {
+        let callee = match call.callee() {
+            Some(e) => e,
+            None => return self.types.error(),
+        };
+
+        // Dispatch based on callee type:
+        // - PathExpr: function call or struct instantiation (old synth_apply)
+        // - FieldExpr: method call (old synth_method_call)
+        // - Other: arbitrary callable expression
+        match &callee {
+            Expr::Path(path_expr) => self.synth_call_path(call, path_expr),
+            Expr::Field(field_expr) => self.synth_call_method(call, field_expr),
+            _ => self.synth_call_arbitrary(call, &callee),
+        }
+    }
+
+    /// Handle call where callee is a path (function call or struct instantiation)
+    fn synth_call_path(&mut self, call: &CallExpr, path_expr: &PathExpr) -> TypeId {
+        let path = match path_expr.path() {
+            Some(p) => p,
+            None => return self.types.error(),
+        };
+
+        let segments: Vec<_> = path.segments().collect();
+        if segments.is_empty() {
+            return self.types.error();
+        }
+
+        // Handle multi-segment paths like `S.new` (associated function call)
+        if segments.len() >= 2 {
+            return self.synth_call_qualified_path(call, &segments);
+        }
+
+        // Single segment path - could be struct instantiation or function call
+        let segment = &segments[0];
+        let name_ref = match segment.name() {
+            Some(n) => n,
+            None => return self.types.error(),
+        };
+
+        let token = match name_ref.token() {
+            Some(t) => t,
+            None => return self.types.error(),
+        };
+
+        let span = text_range_to_span(token.text_range());
+        let def_id = match self.resolutions.get(&span) {
+            Some(id) => *id,
+            None => return self.types.error(),
+        };
+
+        // Determine if this is a function or struct based on resolution
+        if let Some(sig) = self.fn_signatures.get(&def_id).cloned() {
+            // It's a function call
+            return self.synth_call_as_function(call, &sig);
+        }
+
+        // Check if it's a struct (has struct fields)
+        if self.struct_fields.contains_key(&def_id) {
+            return self.synth_call_as_struct(call, def_id);
+        }
+
+        // Check if it's a type alias that resolves to a struct
+        if let Some(&target_ty) = self.type_alias_targets.get(&def_id) {
+            let resolved = self.resolve_type(target_ty);
+            if let Type::Struct(actual_def_id, _) = self.types.get(resolved) {
+                return self.synth_call_as_struct(call, *actual_def_id);
+            }
+        }
+
+        // Unknown - emit error
+        self.diagnostics.push(
+            Diagnostic::error("cannot call: not a function or struct")
+                .with_label(span, "not callable or instantiable"),
+        );
+        self.types.error()
+    }
+
+    /// Handle call where callee is a field access (method call)
+    fn synth_call_method(&mut self, call: &CallExpr, field_expr: &FieldExpr) -> TypeId {
+        let receiver = match field_expr.expr() {
             Some(e) => e,
             None => return self.types.error(),
         };
 
         let receiver_ty = self.synth_expr(&receiver);
 
-        // Get method name from raw IDENT token first, then try NameRef
-        let method_name = match method.name_token() {
+        // Get method name
+        let method_name = match field_expr.name_token() {
             Some(t) => t.text().to_string(),
-            None => match method.name() {
+            None => match field_expr.name() {
                 Some(n) => match n.ident_token() {
                     Some(t) => t.text().to_string(),
                     None => return self.types.error(),
@@ -2082,7 +2173,6 @@ impl<'a> InferEngine<'a> {
         // Check primitive type methods first (e.g., str.ptr(), str.len())
         if let Some(method_def_ids) = self.primitive_methods.get(&resolved).cloned() {
             for method_def_id in &method_def_ids {
-                // Look up method name from builtin_method_names
                 let fn_name = match self.builtin_method_names.get(method_def_id) {
                     Some(name) => name.as_str(),
                     None => continue,
@@ -2091,13 +2181,9 @@ impl<'a> InferEngine<'a> {
                 if fn_name == method_name
                     && let Some(sig) = self.fn_signatures.get(method_def_id).cloned()
                 {
-                    // Check argument count
-                    let args: Vec<_> = method
-                        .arg_list()
-                        .map(|a| a.args().collect())
-                        .unwrap_or_default();
+                    let args: Vec<_> = call.args().collect();
                     if args.len() != sig.params.len() {
-                        let span = text_range_to_span(method.syntax().text_range());
+                        let span = text_range_to_span(call.syntax().text_range());
                         self.diagnostics.push(
                             Diagnostic::error(format!(
                                 "expected {} argument{}, found {}",
@@ -2111,18 +2197,20 @@ impl<'a> InferEngine<'a> {
                     }
                     // Type check arguments
                     for (arg, param) in args.iter().zip(&sig.params) {
-                        self.check_expr(arg, param.ty);
+                        if let Some(value) = arg.value() {
+                            self.check_expr(&value, param.ty);
+                        }
                     }
-                    // Store resolution for HIR lowering (same as struct methods)
-                    let call_span = text_range_to_span(method.syntax().text_range());
+                    // Store resolution for HIR lowering
+                    let call_span = text_range_to_span(call.syntax().text_range());
                     self.method_resolutions.insert(call_span, *method_def_id);
                     return sig.ret;
                 }
             }
             // Method not found on primitive type
-            let span = text_range_to_span(method.syntax().text_range());
+            let span = text_range_to_span(call.syntax().text_range());
             self.diagnostics.push(
-                Diagnostic::error(format!("method `{}` not found on type `str`", method_name))
+                Diagnostic::error(format!("method `{}` not found on primitive type", method_name))
                     .with_label(span, "unknown method"),
             );
             return self.types.error();
@@ -2130,107 +2218,79 @@ impl<'a> InferEngine<'a> {
 
         // Handle module function call (e.g., math.add(1, 2))
         if let Type::Module(module_def_id) = &receiver_type {
-            let module_def_id = *module_def_id;
+            return self.synth_module_function_call(call, *module_def_id, &method_name);
+        }
 
-            // Look up the method name in the module's scope
-            if let Some(&scope_id) = self.module_scopes.get(&module_def_id) {
-                let Some(interned) = self.resolve_ctx.try_get_interned(&method_name) else {
-                    // Name wasn't interned, so it definitely doesn't exist in the module
-                    let span = text_range_to_span(method.syntax().text_range());
-                    self.diagnostics.push(
-                        Diagnostic::error(format!(
-                            "cannot find function `{}` in module",
-                            method_name
-                        ))
-                        .with_label(span, "not found in module"),
-                    );
-                    return self.types.error();
-                };
+        // Handle struct method call
+        self.synth_struct_method_call(call, &receiver, receiver_ty, &method_name)
+    }
 
-                if let Some(fn_def_id) = self.resolve_ctx.lookup_in_scope(interned, scope_id) {
-                    let fn_symbol = self.resolve_ctx.get_symbol(fn_def_id);
-
-                    // Check visibility
-                    if fn_symbol.visibility == Visibility::Private {
-                        let span = text_range_to_span(method.syntax().text_range());
-                        self.diagnostics.push(
-                            Diagnostic::error(format!(
-                                "`{}` is private and not accessible from this module",
-                                method_name
-                            ))
-                            .with_label(span, "private item, not accessible"),
-                        );
-                        return self.types.error();
-                    }
-
-                    // Must be a function
-                    if fn_symbol.kind != SymbolKind::Function {
-                        let span = text_range_to_span(method.syntax().text_range());
-                        self.diagnostics.push(
-                            Diagnostic::error(format!("`{}` is not a function", method_name))
-                                .with_label(span, "expected a function"),
-                        );
-                        return self.types.error();
-                    }
-
-                    // Look up signature and check args
-                    if let Some(sig) = self.fn_signatures.get(&fn_def_id).cloned() {
-                        // Store the resolution for HIR lowering
-                        let call_span = text_range_to_span(method.syntax().text_range());
-                        self.method_resolutions.insert(call_span, fn_def_id);
-
-                        // Instantiate the signature (handle generics)
-                        let (param_infos, ret_ty) = self.instantiate_signature(&sig);
-
-                        // Check argument count
-                        let args: Vec<_> = method
-                            .arg_list()
-                            .map(|a| a.args().collect())
-                            .unwrap_or_default();
-
-                        if args.len() != param_infos.len() {
-                            let span = text_range_to_span(method.syntax().text_range());
-                            self.diagnostics.push(
-                                Diagnostic::error(format!(
-                                    "expected {} argument{}, found {}",
-                                    param_infos.len(),
-                                    if param_infos.len() == 1 { "" } else { "s" },
-                                    args.len()
-                                ))
-                                .with_label(span, "wrong number of arguments"),
-                            );
-                            return self.types.error();
-                        }
-
-                        // Type check arguments
-                        for (arg, expected_ty) in args.iter().zip(param_infos.iter()) {
-                            self.check_expr(arg, *expected_ty);
-                        }
-
-                        return ret_ty;
-                    }
-
-                    // Signature not found (shouldn't happen for valid functions)
-                    return self.types.error();
-                }
-
-                // Function not found in module
-                let span = text_range_to_span(method.syntax().text_range());
+    /// Handle module function call (e.g., module.func())
+    fn synth_module_function_call(
+        &mut self,
+        call: &CallExpr,
+        module_def_id: crate::DefId,
+        method_name: &str,
+    ) -> TypeId {
+        // Look up the method name in the module's scope
+        if let Some(&scope_id) = self.module_scopes.get(&module_def_id) {
+            let Some(interned) = self.resolve_ctx.try_get_interned(method_name) else {
+                let span = text_range_to_span(call.syntax().text_range());
                 self.diagnostics.push(
                     Diagnostic::error(format!("cannot find function `{}` in module", method_name))
                         .with_label(span, "not found in module"),
                 );
                 return self.types.error();
-            }
+            };
 
-            // Module scope not found (shouldn't happen for valid modules)
-            let span = text_range_to_span(method.syntax().text_range());
-            self.diagnostics.push(
-                Diagnostic::error("internal error: module scope not found")
-                    .with_label(span, "module scope missing"),
-            );
-            return self.types.error();
+            if let Some(fn_def_id) = self.resolve_ctx.lookup_in_scope(interned, scope_id) {
+                let fn_symbol = self.resolve_ctx.get_symbol(fn_def_id);
+
+                if fn_symbol.visibility == Visibility::Private {
+                    let span = text_range_to_span(call.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("`{}` is private", method_name))
+                            .with_label(span, "private item"),
+                    );
+                    return self.types.error();
+                }
+
+                if fn_symbol.kind != SymbolKind::Function {
+                    let span = text_range_to_span(call.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("`{}` is not a function", method_name))
+                            .with_label(span, "expected a function"),
+                    );
+                    return self.types.error();
+                }
+
+                if let Some(sig) = self.fn_signatures.get(&fn_def_id).cloned() {
+                    let call_span = text_range_to_span(call.syntax().text_range());
+                    self.method_resolutions.insert(call_span, fn_def_id);
+                    let (param_types, ret_ty) = self.instantiate_signature(&sig);
+                    return self.check_call_args(call, &param_types, ret_ty);
+                }
+            }
         }
+
+        let span = text_range_to_span(call.syntax().text_range());
+        self.diagnostics.push(
+            Diagnostic::error(format!("cannot find function `{}` in module", method_name))
+                .with_label(span, "not found in module"),
+        );
+        self.types.error()
+    }
+
+    /// Handle struct method call
+    fn synth_struct_method_call(
+        &mut self,
+        call: &CallExpr,
+        _receiver: &Expr,
+        receiver_ty: TypeId,
+        method_name: &str,
+    ) -> TypeId {
+        let resolved = self.resolve_type(receiver_ty);
+        let receiver_type = self.types.get(resolved).clone();
 
         // Handle reference receivers (auto-deref) and get type args
         let (struct_def_id, receiver_type_args) = match &receiver_type {
@@ -2247,123 +2307,30 @@ impl<'a> InferEngine<'a> {
             _ => (None, vec![]),
         };
 
-        // Look up method in struct_def_id's methods
         if let Some(def_id) = struct_def_id {
-            // Get struct type params for building substitution map
-            let struct_type_params = self
-                .struct_type_params
-                .get(&def_id)
-                .cloned()
-                .unwrap_or_default();
+            let method_def_ids = self.struct_methods.get(&def_id).cloned().unwrap_or_default();
 
-            // Build substitution map from struct's type params to receiver's type args
-            let mut subst: FxHashMap<_, _> = FxHashMap::default();
-            for (param_def_id, type_arg) in struct_type_params.iter().zip(receiver_type_args.iter())
-            {
-                subst.insert(*param_def_id, *type_arg);
-            }
-
-            // Get the list of methods for this struct
-            let method_def_ids = self
-                .struct_methods
-                .get(&def_id)
-                .cloned()
-                .unwrap_or_default();
-
-            // Search for method with matching name
-            let mut found_method = None;
             for method_def_id in method_def_ids {
                 let symbol = self.resolve_ctx.get_symbol(method_def_id);
                 let fn_name = self.resolve_ctx.resolve(symbol.name);
                 if fn_name == method_name
                     && let Some(sig) = self.fn_signatures.get(&method_def_id).cloned()
                 {
-                    found_method = Some((sig, method_def_id));
-                    break;
+                    // Store resolution
+                    let method_span = text_range_to_span(call.syntax().text_range());
+                    self.method_resolutions.insert(method_span, method_def_id);
+
+                    return self.synth_method_call_with_receiver(
+                        call,
+                        &sig,
+                        def_id,
+                        &receiver_type_args,
+                    );
                 }
-            }
-
-            if let Some((sig, resolved_method_def_id)) = found_method {
-                // Check method visibility
-                let method_symbol = self.resolve_ctx.get_symbol(resolved_method_def_id);
-                if method_symbol.visibility == Visibility::Private {
-                    // Private methods: check if accessor is in same module as the struct/method
-                    let struct_symbol = self.resolve_ctx.get_symbol(def_id);
-                    let current_scope = self.current_inference_scope;
-                    let struct_scope = struct_symbol.scope_id;
-                    // Check if current scope is NOT the struct's defining scope or a child of it
-                    if !self.is_scope_descendant_of(current_scope, struct_scope) {
-                        let span = text_range_to_span(method.syntax().text_range());
-                        self.diagnostics.push(
-                            Diagnostic::error(format!(
-                                "method `{}` is private",
-                                method_name
-                            ))
-                            .with_label(span, "private method"),
-                        );
-                        return self.types.error();
-                    }
-                }
-
-                // Store the resolved method DefId for MIR lowering
-                let method_span = text_range_to_span(method.syntax().text_range());
-                self.method_resolutions
-                    .insert(method_span, resolved_method_def_id);
-                // Map impl type params to receiver type args by position.
-                // sig.type_params structure: [impl_params..., method_params...]
-                // where impl_params.len() == struct_type_params.len()
-                let impl_param_count = struct_type_params.len();
-                for (i, &param_def_id) in sig.type_params.iter().enumerate() {
-                    if subst.contains_key(&param_def_id) {
-                        continue;
-                    }
-                    let type_arg = if i < impl_param_count && i < receiver_type_args.len() {
-                        // This is an impl type param at position i, map to receiver's type arg
-                        receiver_type_args[i]
-                    } else {
-                        // This is a method-specific type param, create fresh type var
-                        self.fresh_type_var()
-                    };
-                    subst.insert(param_def_id, type_arg);
-                }
-
-                // Substitute in params and return type
-                let params: Vec<_> = sig
-                    .params
-                    .iter()
-                    .map(|p| (p.name.clone(), self.substitute_type_params(p.ty, &subst)))
-                    .collect();
-                let ret = self.substitute_type_params(sig.ret, &subst);
-
-                // Check arguments
-                if let Some(arg_list) = method.arg_list() {
-                    let args: Vec<_> = arg_list.args().collect();
-                    // params contains only regular params (self is handled separately)
-                    let expected_args = &params;
-
-                    if args.len() != expected_args.len() {
-                        let span = text_range_to_span(method.syntax().text_range());
-                        self.diagnostics.push(
-                            Diagnostic::error(format!(
-                                "expected {} argument{}, found {}",
-                                expected_args.len(),
-                                if expected_args.len() == 1 { "" } else { "s" },
-                                args.len()
-                            ))
-                            .with_label(span, "wrong number of arguments"),
-                        );
-                    } else {
-                        for (arg, (_, expected_ty)) in args.iter().zip(expected_args.iter()) {
-                            self.check_expr(arg, *expected_ty);
-                        }
-                    }
-                }
-                return ret;
             }
         }
 
-        // Method not found
-        let span = text_range_to_span(method.syntax().text_range());
+        let span = text_range_to_span(call.syntax().text_range());
         self.diagnostics.push(
             Diagnostic::error(format!("method `{}` not found", method_name))
                 .with_label(span, "unknown method"),
@@ -2371,77 +2338,16 @@ impl<'a> InferEngine<'a> {
         self.types.error()
     }
 
-    fn synth_call(&mut self, call: &CallExpr) -> TypeId {
-        let callee = match call.callee() {
-            Some(e) => e,
-            None => return self.types.error(),
-        };
-
-        let callee_ty = self.synth_expr(&callee);
+    /// Handle call with an arbitrary expression as callee (e.g., `(get_fn())(args)`)
+    fn synth_call_arbitrary(&mut self, call: &CallExpr, callee: &Expr) -> TypeId {
+        let callee_ty = self.synth_expr(callee);
         let resolved = self.resolve_type(callee_ty);
         let callee_type = self.types.get(resolved).clone();
 
-        // Check if callee is a function
+        // Check if callee is a function pointer
         let (param_types, ret_ty) = match callee_type {
             Type::FnPtr { params, ret } => (params, ret),
             _ => {
-                // Check if it's a path to a function
-                if let Expr::Path(path_expr) = &callee
-                    && let Some(path) = path_expr.path()
-                {
-                    let segments: Vec<_> = path.segments().collect();
-
-                    // Handle single-segment path (simple function call like `foo()`)
-                    if segments.len() == 1 {
-                        if let Some(name_ref) = segments[0].name()
-                            && let Some(token) = name_ref.token()
-                        {
-                            let span = text_range_to_span(token.text_range());
-                            if let Some(&def_id) = self.resolutions.get(&span)
-                                && let Some(sig) = self.fn_signatures.get(&def_id).cloned()
-                            {
-                                let (param_types, ret_ty) = self.instantiate_signature(&sig);
-                                return self.check_call_args(call, &param_types, ret_ty);
-                            }
-                        }
-                    }
-                    // Handle two-segment path (associated function like `S::new()`)
-                    else if segments.len() == 2 {
-                        // Get the type name from the first segment
-                        if let Some(type_name_ref) = segments[0].name()
-                            && let Some(type_token) = type_name_ref.token()
-                        {
-                            let type_span = text_range_to_span(type_token.text_range());
-                            if let Some(&struct_def_id) = self.resolutions.get(&type_span)
-                                && let Some(fn_name_ref) = segments[1].name()
-                                && let Some(fn_token) = fn_name_ref.token()
-                            {
-                                let fn_name = fn_token.text().to_string();
-                                // Look up the function in the struct's methods
-                                if let Some(methods) =
-                                    self.struct_methods.get(&struct_def_id).cloned()
-                                {
-                                    for method_def_id in methods {
-                                        let symbol = self.resolve_ctx.get_symbol(method_def_id);
-                                        let method_name = self.resolve_ctx.resolve(symbol.name);
-                                        if method_name == fn_name
-                                            && let Some(sig) =
-                                                self.fn_signatures.get(&method_def_id).cloned()
-                                        {
-                                            let (param_types, ret_ty) =
-                                                self.instantiate_signature(&sig);
-                                            return self.check_call_args(
-                                                call,
-                                                &param_types,
-                                                ret_ty,
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
                 let span = text_range_to_span(callee.syntax().text_range());
                 self.diagnostics.push(
                     Diagnostic::error("value is not a function").with_label(span, "not a function"),
@@ -2459,10 +2365,7 @@ impl<'a> InferEngine<'a> {
         param_types: &[TypeId],
         ret_ty: TypeId,
     ) -> TypeId {
-        let args: Vec<_> = call
-            .arg_list()
-            .map(|al| al.args().collect())
-            .unwrap_or_default();
+        let args: Vec<_> = call.args().collect();
 
         if args.len() != param_types.len() {
             let span = text_range_to_span(call.syntax().text_range());
@@ -2479,7 +2382,9 @@ impl<'a> InferEngine<'a> {
         }
 
         for (arg, expected_ty) in args.iter().zip(param_types.iter()) {
-            self.check_expr(arg, *expected_ty);
+            if let Some(value) = arg.value() {
+                self.check_expr(&value, *expected_ty);
+            }
         }
 
         ret_ty
@@ -3065,8 +2970,53 @@ impl<'a> InferEngine<'a> {
                     );
                 }
             }
-            Pat::Struct(_struct_pat) => {
-                // TODO: Check struct pattern fields
+            Pat::Struct(struct_pat) => {
+                // Check that expected type is a struct with matching fields
+                let resolved = self.resolve_type(expected_ty);
+                let ty_data = self.types.get(resolved).clone();
+                if let Type::Struct(struct_id, type_args) = ty_data {
+                    // Build substitution map from struct type params to type args
+                    let type_params = self
+                        .struct_type_params
+                        .get(&struct_id)
+                        .cloned()
+                        .unwrap_or_default();
+                    let mut subst: FxHashMap<_, _> = FxHashMap::default();
+                    for (param_def_id, type_arg) in type_params.iter().zip(type_args.iter()) {
+                        subst.insert(*param_def_id, *type_arg);
+                    }
+
+                    // Get struct fields
+                    if let Some(fields) = self.struct_fields.get(&struct_id).cloned() {
+                        // Check each pattern field against struct field types
+                        for pat_field in struct_pat.fields() {
+                            if let Some(name_ref) = pat_field.name()
+                                && let Some(token) = name_ref.token()
+                            {
+                                let field_name = token.text().to_string();
+                                // Find matching struct field
+                                if let Some((_, field_ty, _)) =
+                                    fields.iter().find(|(name, _, _)| name == &field_name)
+                                {
+                                    // Substitute type params with type args
+                                    let instantiated_ty =
+                                        self.substitute_type_params(*field_ty, &subst);
+                                    // Recursively check nested pattern
+                                    if let Some(nested_pat) = pat_field.pat() {
+                                        self.check_pattern_type(&nested_pat, instantiated_ty);
+                                    }
+                                }
+                                // Note: Missing fields are a resolver error, not type check error
+                            }
+                        }
+                    }
+                } else {
+                    let span = text_range_to_span(struct_pat.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error("struct pattern used with non-struct type")
+                            .with_label(span, "expected struct"),
+                    );
+                }
             }
             Pat::Ref(ref_pat) => {
                 // Check that expected type is a reference
@@ -3320,8 +3270,46 @@ impl<'a> InferEngine<'a> {
                     }
                 }
             }
-            Pat::Struct(_struct_pat) => {
-                // TODO: Handle struct patterns
+            Pat::Struct(struct_pat) => {
+                // Define bindings for struct pattern fields
+                let resolved = self.resolve_type(ty);
+                let ty_data = self.types.get(resolved).clone();
+                if let Type::Struct(struct_id, type_args) = ty_data {
+                    // Build substitution map from struct type params to type args
+                    let type_params = self
+                        .struct_type_params
+                        .get(&struct_id)
+                        .cloned()
+                        .unwrap_or_default();
+                    let mut subst: FxHashMap<_, _> = FxHashMap::default();
+                    for (param_def_id, type_arg) in type_params.iter().zip(type_args.iter()) {
+                        subst.insert(*param_def_id, *type_arg);
+                    }
+
+                    // Get struct fields
+                    if let Some(fields) = self.struct_fields.get(&struct_id).cloned() {
+                        // Define bindings for each pattern field
+                        for pat_field in struct_pat.fields() {
+                            if let Some(name_ref) = pat_field.name()
+                                && let Some(token) = name_ref.token()
+                            {
+                                let field_name = token.text().to_string();
+                                // Find matching struct field
+                                if let Some((_, field_ty, _)) =
+                                    fields.iter().find(|(name, _, _)| name == &field_name)
+                                {
+                                    // Substitute type params with type args
+                                    let instantiated_ty =
+                                        self.substitute_type_params(*field_ty, &subst);
+                                    // Recursively define bindings for nested pattern
+                                    if let Some(nested_pat) = pat_field.pat() {
+                                        self.define_pattern(&nested_pat, instantiated_ty);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Pat::Wildcard(_) => {
                 // Wildcard doesn't bind anything

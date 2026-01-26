@@ -54,19 +54,34 @@ pub(super) fn match_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::MATCH_KW)?;
-
-    // Scrutinee expression (no struct expressions allowed)
-    super::expr_no_struct(p)?;
-
-    // Match body
-    p.expect(SyntaxKind::L_BRACE)?;
-
-    while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
-        match_arm(p)?;
+    if let Err(e) = p.expect(SyntaxKind::MATCH_KW) {
+        m.abandon(p);
+        return Err(e);
     }
 
-    p.expect(SyntaxKind::R_BRACE)?;
+    // Scrutinee expression (no struct expressions allowed)
+    if let Err(e) = super::expr_no_struct(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Match body
+    if let Err(e) = p.expect(SyntaxKind::L_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
+        if let Err(e) = match_arm(p) {
+            m.abandon(p);
+            return Err(e);
+        }
+    }
+
+    if let Err(e) = p.expect(SyntaxKind::R_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     Ok(Some(m.complete(p, SyntaxKind::MatchExpr)))
 }
@@ -76,16 +91,26 @@ fn match_arm(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
     let m = p.start();
 
     // Pattern
-    crate::parser::pattern::pattern(p)?;
+    if let Err(e) = crate::parser::pattern::pattern(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Optional guard: `if condition`
-    if p.eat(SyntaxKind::IF_KW) {
-        expr(p)?;
+    if p.eat(SyntaxKind::IF_KW) && let Err(e) = expr(p) {
+        m.abandon(p);
+        return Err(e);
     }
 
     // Arrow and body expression
-    p.expect(SyntaxKind::FAT_ARROW)?;
-    expr(p)?;
+    if let Err(e) = p.expect(SyntaxKind::FAT_ARROW) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = expr(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Match arms are separated by commas
     p.eat(SyntaxKind::COMMA);
@@ -102,10 +127,10 @@ pub(super) fn literal_expr(
     Ok(Some(m.complete(p, SyntaxKind::LiteralExpr)))
 }
 
-/// Parse a path or apply expression.
+/// Parse a path or call expression.
 ///
-/// `ApplyExpr` is a unified syntax for both function calls and struct instantiation.
-/// The parser produces `ApplyExpr` for `Path(args...)` syntax, and semantic analysis
+/// `CallExpr` is a unified syntax for function calls, struct instantiation, and method calls.
+/// The parser produces `CallExpr` for `Path(args...)` syntax, and semantic analysis
 /// determines whether it's a function call or struct based on what the path resolves to.
 pub(super) fn path_or_struct_expr(
     p: &mut Parser<'_>,
@@ -113,16 +138,24 @@ pub(super) fn path_or_struct_expr(
     let m = p.start();
 
     // Use structured path parsing (no generics in expression position)
-    crate::parser::path::path_no_generics(p)?;
+    if let Err(e) = crate::parser::path::path_no_generics(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
-    // Check for apply expression: Path(args...)
+    // First complete as PathExpr (this wraps the Path in PathExpr)
+    let path_expr = m.complete(p, SyntaxKind::PathExpr);
+
+    // Check for call expression: PathExpr(args...)
     // This unified syntax handles both function calls and struct instantiation.
     // Semantic analysis will determine which it is based on the path's resolution.
     if p.at(SyntaxKind::L_PAREN) {
-        return apply_expr_rest(p, m);
+        // Wrap PathExpr in CallExpr
+        let m = path_expr.precede(p);
+        return call_expr_rest(p, m);
     }
 
-    Ok(Some(m.complete(p, SyntaxKind::PathExpr)))
+    Ok(Some(path_expr))
 }
 
 /// Parse a path expression only (no struct expression).
@@ -134,54 +167,75 @@ pub(super) fn path_expr_only(
     let m = p.start();
 
     // Use structured path parsing (no generics in expression position)
-    crate::parser::path::path_no_generics(p)?;
+    if let Err(e) = crate::parser::path::path_no_generics(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // NO struct check - just return PathExpr
     Ok(Some(m.complete(p, SyntaxKind::PathExpr)))
 }
 
-/// Parse the rest of an apply expression after the path.
-/// Syntax: Path(arg, name: value, ...)
+/// Parse the rest of a call expression after the callee.
+/// Syntax: callee(arg, name: value, ...)
 ///
 /// Arguments can be:
 /// - Named: `name: value`
 /// - Positional: just `value`
 ///
 /// Struct update syntax `..base` is also supported for struct instantiation.
-fn apply_expr_rest(
+pub(super) fn call_expr_rest(
     p: &mut Parser<'_>,
     m: Marker,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
-    p.expect(SyntaxKind::L_PAREN)?;
+    if let Err(e) = p.expect(SyntaxKind::L_PAREN) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     while !p.at(SyntaxKind::R_PAREN) && p.current().is_some() {
         // Check for struct update syntax: ..base
         if p.at(SyntaxKind::DOT_DOT) {
-            struct_update_base(p)?;
+            if let Err(e) = struct_update_base(p) {
+                m.abandon(p);
+                return Err(e);
+            }
             // Struct update base must be last
             break;
         }
 
-        apply_arg(p)?;
+        if let Err(e) = call_arg(p) {
+            m.abandon(p);
+            return Err(e);
+        }
         if !p.at(SyntaxKind::R_PAREN) && !p.eat(SyntaxKind::COMMA) {
             break;
         }
     }
 
-    p.expect(SyntaxKind::R_PAREN)?;
-    Ok(Some(m.complete(p, SyntaxKind::ApplyExpr)))
+    if let Err(e) = p.expect(SyntaxKind::R_PAREN) {
+        m.abandon(p);
+        return Err(e);
+    }
+    Ok(Some(m.complete(p, SyntaxKind::CallExpr)))
 }
 
 /// Parse struct update base: ..expr
 fn struct_update_base(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::DOT_DOT)?;
-    let _ = expr(p)?;
+    if let Err(e) = p.expect(SyntaxKind::DOT_DOT) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = expr(p) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(m.complete(p, SyntaxKind::StructUpdateBase))
 }
 
-/// Parse an apply argument: either `name: expr` (named) or just `expr` (positional).
-fn apply_arg(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
+/// Parse a call argument: either `name: expr` (named) or just `expr` (positional).
+fn call_arg(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::ParseError> {
     let m = p.start();
 
     // Check for named argument: IDENT :
@@ -191,9 +245,12 @@ fn apply_arg(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser::Parse
     }
 
     // Parse the value expression
-    let _ = expr(p)?;
+    if let Err(e) = expr(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
-    Ok(m.complete(p, SyntaxKind::ApplyArg))
+    Ok(m.complete(p, SyntaxKind::CallArg))
 }
 
 /// Parse a parenthesized or tuple expression.
@@ -201,7 +258,10 @@ pub(super) fn paren_or_tuple_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::L_PAREN)?;
+    if let Err(e) = p.expect(SyntaxKind::L_PAREN) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Empty tuple
     if p.at(SyntaxKind::R_PAREN) {
@@ -210,7 +270,10 @@ pub(super) fn paren_or_tuple_expr(
     }
 
     // Parse first expression
-    let _ = expr(p)?;
+    if let Err(e) = expr(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Check for tuple (comma) or just grouped expression
     if p.at(SyntaxKind::COMMA) {
@@ -219,13 +282,22 @@ pub(super) fn paren_or_tuple_expr(
             if p.at(SyntaxKind::R_PAREN) {
                 break; // trailing comma
             }
-            let _ = expr(p)?;
+            if let Err(e) = expr(p) {
+                m.abandon(p);
+                return Err(e);
+            }
         }
-        p.expect(SyntaxKind::R_PAREN)?;
+        if let Err(e) = p.expect(SyntaxKind::R_PAREN) {
+            m.abandon(p);
+            return Err(e);
+        }
         Ok(Some(m.complete(p, SyntaxKind::TupleExpr)))
     } else {
         // Grouped expression
-        p.expect(SyntaxKind::R_PAREN)?;
+        if let Err(e) = p.expect(SyntaxKind::R_PAREN) {
+            m.abandon(p);
+            return Err(e);
+        }
         Ok(Some(m.complete(p, SyntaxKind::ParenExpr)))
     }
 }
@@ -235,7 +307,10 @@ pub(super) fn array_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::L_BRACKET)?;
+    if let Err(e) = p.expect(SyntaxKind::L_BRACKET) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Empty array
     if p.at(SyntaxKind::R_BRACKET) {
@@ -244,13 +319,22 @@ pub(super) fn array_expr(
     }
 
     // Parse first expression
-    let _ = expr(p)?;
+    if let Err(e) = expr(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Check for repeat syntax [expr; count]
     if p.at(SyntaxKind::SEMI) {
         p.bump();
-        let _ = expr(p)?;
-        p.expect(SyntaxKind::R_BRACKET)?;
+        if let Err(e) = expr(p) {
+            m.abandon(p);
+            return Err(e);
+        }
+        if let Err(e) = p.expect(SyntaxKind::R_BRACKET) {
+            m.abandon(p);
+            return Err(e);
+        }
         return Ok(Some(m.complete(p, SyntaxKind::ArrayExpr)));
     }
 
@@ -259,10 +343,16 @@ pub(super) fn array_expr(
         if p.at(SyntaxKind::R_BRACKET) {
             break;
         }
-        let _ = expr(p)?;
+        if let Err(e) = expr(p) {
+            m.abandon(p);
+            return Err(e);
+        }
     }
 
-    p.expect(SyntaxKind::R_BRACKET)?;
+    if let Err(e) = p.expect(SyntaxKind::R_BRACKET) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(Some(m.complete(p, SyntaxKind::ArrayExpr)))
 }
 
