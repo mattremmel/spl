@@ -297,7 +297,7 @@ mod tests {
     use crate::mir::types::Local;
 
     // Dummy type ID for structural tests (not validation)
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn type_valid_int_assignment() {

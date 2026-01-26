@@ -442,7 +442,7 @@ mod tests {
         let mut interner = TypeInterner::new();
 
         use crate::sema::DefId;
-        let struct_ty = interner.mk_struct(DefId(0), vec![]);
+        let struct_ty = interner.mk_struct(DefId::new(0), vec![]);
         assert_eq!(mapper.map_type(struct_ty, &interner), None);
     }
 

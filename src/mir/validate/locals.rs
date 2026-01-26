@@ -148,7 +148,7 @@ mod tests {
     use crate::sema::types::TypeId;
 
     // Dummy type ID for structural tests (not validation)
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn local_valid_reference() {
@@ -350,7 +350,7 @@ mod tests {
             bb0,
             Terminator::new(
                 TerminatorKind::Call {
-                    func: Operand::Constant(Constant::FnDef(DefId(0))),
+                    func: Operand::Constant(Constant::FnDef(DefId::new(0))),
                     args: vec![Operand::copy_local(arg_local)],
                     destination: Place::from_local(result_local),
                     target: Some(bb1),
@@ -514,7 +514,7 @@ mod tests {
             bb0,
             Terminator::new(
                 TerminatorKind::Call {
-                    func: Operand::Constant(Constant::FnDef(DefId(0))),
+                    func: Operand::Constant(Constant::FnDef(DefId::new(0))),
                     args: vec![Operand::copy_local(Local(5))], // Invalid
                     destination: Place::from_local(Local::RETURN_PLACE),
                     target: Some(bb1),
@@ -540,7 +540,7 @@ mod tests {
             bb0,
             Terminator::new(
                 TerminatorKind::Call {
-                    func: Operand::Constant(Constant::FnDef(DefId(0))),
+                    func: Operand::Constant(Constant::FnDef(DefId::new(0))),
                     args: vec![],
                     destination: Place::from_local(Local(5)), // Invalid
                     target: Some(bb1),

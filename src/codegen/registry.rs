@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn registry_register_and_get() {
         let mut registry = FunctionRegistry::new();
-        let def_id = DefId(42);
+        let def_id = DefId::new(42);
         let func_id = FuncId::from_u32(1);
         let sig = test_signature();
 
@@ -107,8 +107,8 @@ mod tests {
     #[test]
     fn registry_get_nonexistent() {
         let registry = FunctionRegistry::new();
-        assert!(registry.get(DefId(999)).is_none());
-        assert!(!registry.contains(DefId(999)));
+        assert!(registry.get(DefId::new(999)).is_none());
+        assert!(!registry.contains(DefId::new(999)));
     }
 
     #[test]
@@ -116,14 +116,14 @@ mod tests {
         let mut registry = FunctionRegistry::new();
 
         for i in 0..5 {
-            let def_id = DefId(i);
+            let def_id = DefId::new(i);
             let func_id = FuncId::from_u32(i);
             registry.register(def_id, FunctionInfo::new(func_id, test_signature()));
         }
 
         assert_eq!(registry.len(), 5);
         for i in 0..5 {
-            assert!(registry.contains(DefId(i)));
+            assert!(registry.contains(DefId::new(i)));
         }
     }
 
@@ -131,11 +131,11 @@ mod tests {
     fn registry_iter() {
         let mut registry = FunctionRegistry::new();
         registry.register(
-            DefId(1),
+            DefId::new(1),
             FunctionInfo::new(FuncId::from_u32(1), test_signature()),
         );
         registry.register(
-            DefId(2),
+            DefId::new(2),
             FunctionInfo::new(FuncId::from_u32(2), test_signature()),
         );
 

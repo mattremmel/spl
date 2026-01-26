@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn hir_pat_kind_bind_immutable() {
         let kind = HirPatKind::Bind {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             mutable: false,
         };
         match kind {
@@ -73,7 +73,7 @@ mod tests {
     #[test]
     fn hir_pat_kind_bind_mutable() {
         let kind = HirPatKind::Bind {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             mutable: true,
         };
         match kind {
@@ -114,7 +114,7 @@ mod tests {
     #[test]
     fn hir_pat_kind_struct_without_rest() {
         let kind = HirPatKind::Struct {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             fields: vec![
                 (
                     "x".to_string(),
@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn hir_pat_kind_struct_with_rest() {
         let kind = HirPatKind::Struct {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             fields: vec![(
                 "x".to_string(),
                 PatId::from_raw(la_arena::RawIdx::from_u32(0)),
@@ -227,7 +227,7 @@ mod tests {
 
         let pat = HirPat {
             kind: HirPatKind::Bind {
-                def_id: DefId(0),
+                def_id: DefId::new(0),
                 mutable: false,
             },
             ty: i32_ty,
@@ -261,13 +261,13 @@ mod tests {
         // Ensure all pattern kinds are distinguishable
         let patterns = [
             HirPatKind::Bind {
-                def_id: DefId(0),
+                def_id: DefId::new(0),
                 mutable: false,
             },
             HirPatKind::Wildcard,
             HirPatKind::Tuple { elements: vec![] },
             HirPatKind::Struct {
-                def_id: DefId(0),
+                def_id: DefId::new(0),
                 fields: vec![],
                 rest: false,
             },

@@ -144,7 +144,7 @@ mod tests {
     use crate::sema::types::TypeId;
 
     // Dummy type ID for tests that don't use MirTestBuilder for constructing operands
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     // =========================================================================
     // Phase 5: ConstantFolding Pass Tests

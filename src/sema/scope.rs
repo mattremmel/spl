@@ -23,12 +23,12 @@
 //! the inner definition, not the outer one.
 //!
 //! ```text
-//! let x = 1;        // DefId(0) in outer scope
+//! let x = 1;        // DefId::new(0) in outer scope
 //! {
-//!     let x = 2;    // DefId(1) in inner scope, shadows DefId(0)
-//!     print(x);     // Resolves to DefId(1)
+//!     let x = 2;    // DefId::new(1) in inner scope, shadows DefId::new(0)
+//!     print(x);     // Resolves to DefId::new(1)
 //! }
-//! print(x);         // Resolves to DefId(0)
+//! print(x);         // Resolves to DefId::new(0)
 //! ```
 //!
 //! # Scope Kinds
@@ -47,7 +47,21 @@ use super::symbol::DefId;
 
 /// A unique identifier for each scope in the program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ScopeId(pub u32);
+pub struct ScopeId(u32);
+
+impl ScopeId {
+    /// Create a new `ScopeId` with the given index.
+    #[inline]
+    pub(crate) const fn new(index: u32) -> Self {
+        ScopeId(index)
+    }
+
+    /// Get the raw index value of this `ScopeId`.
+    #[inline]
+    pub fn index(self) -> u32 {
+        self.0
+    }
+}
 
 /// The kind of scope.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

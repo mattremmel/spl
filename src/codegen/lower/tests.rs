@@ -17,7 +17,7 @@ use crate::sema::symbol::DefId;
 use crate::sema::types::{Mutability, PrimitiveKind, TypeId, TypeInterner};
 
 /// Dummy type ID for tests that don't need a real type.
-const DUMMY_TY: TypeId = TypeId(0);
+const DUMMY_TY: TypeId = TypeId::new(0);
 
 use super::FunctionLowerer;
 
@@ -2985,7 +2985,7 @@ fn lower_fn_def_constant() {
         .block_mut(getter_entry)
         .push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
-            Rvalue::Use(Operand::Constant(Constant::FnDef(DefId(1)))),
+            Rvalue::Use(Operand::Constant(Constant::FnDef(DefId::new(1)))),
             0..0,
         ));
     getter_body
@@ -2993,13 +2993,13 @@ fn lower_fn_def_constant() {
         .set_terminator(Terminator::return_(0..0));
 
     let functions = [
-        FunctionDef::new(DefId(1), "target", &target_body),
-        FunctionDef::new(DefId(2), "get_fn_ptr", &getter_body),
+        FunctionDef::new(DefId::new(1), "target", &target_body),
+        FunctionDef::new(DefId::new(2), "get_fn_ptr", &getter_body),
     ];
     let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-    let target_ptr = module.get_function_ptr(DefId(1)).unwrap();
-    let getter_ptr = module.get_function_ptr(DefId(2)).unwrap();
+    let target_ptr = module.get_function_ptr(DefId::new(1)).unwrap();
+    let getter_ptr = module.get_function_ptr(DefId::new(2)).unwrap();
     let get_fn_ptr: fn() -> usize = unsafe { mem::transmute(getter_ptr) };
 
     assert_eq!(get_fn_ptr(), target_ptr as usize);
@@ -3061,7 +3061,7 @@ fn lower_call_no_args() {
         .block_mut(caller_entry)
         .set_terminator(Terminator::new(
             TerminatorKind::Call {
-                func: Operand::Constant(Constant::FnDef(DefId(1))), // callee
+                func: Operand::Constant(Constant::FnDef(DefId::new(1))), // callee
                 args: vec![],
                 destination: Place::from_local(Local::RETURN_PLACE),
                 target: Some(after_call),
@@ -3074,12 +3074,12 @@ fn lower_call_no_args() {
         .set_terminator(Terminator::return_(0..0));
 
     let functions = [
-        FunctionDef::new(DefId(1), "callee", &callee_body),
-        FunctionDef::new(DefId(2), "caller", &caller_body),
+        FunctionDef::new(DefId::new(1), "callee", &callee_body),
+        FunctionDef::new(DefId::new(2), "caller", &caller_body),
     ];
     let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-    let caller_ptr = module.get_function_ptr(DefId(2)).unwrap();
+    let caller_ptr = module.get_function_ptr(DefId::new(2)).unwrap();
     let caller: fn() -> i32 = unsafe { mem::transmute(caller_ptr) };
 
     assert_eq!(caller(), 42);
@@ -3118,7 +3118,7 @@ fn lower_call_with_args() {
         .block_mut(caller_entry)
         .set_terminator(Terminator::new(
             TerminatorKind::Call {
-                func: Operand::Constant(Constant::FnDef(DefId(1))), // add
+                func: Operand::Constant(Constant::FnDef(DefId::new(1))), // add
                 args: vec![
                     Operand::const_int(10, DUMMY_TY),
                     Operand::const_int(32, DUMMY_TY),
@@ -3134,12 +3134,12 @@ fn lower_call_with_args() {
         .set_terminator(Terminator::return_(0..0));
 
     let functions = [
-        FunctionDef::new(DefId(1), "add", &add_body),
-        FunctionDef::new(DefId(2), "caller", &caller_body),
+        FunctionDef::new(DefId::new(1), "add", &add_body),
+        FunctionDef::new(DefId::new(2), "caller", &caller_body),
     ];
     let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-    let caller_ptr = module.get_function_ptr(DefId(2)).unwrap();
+    let caller_ptr = module.get_function_ptr(DefId::new(2)).unwrap();
     let caller: fn() -> i32 = unsafe { mem::transmute(caller_ptr) };
 
     assert_eq!(caller(), 42);
@@ -3218,7 +3218,7 @@ fn lower_recursive_call() {
     // bb3: call factorial(n - 1)
     body.block_mut(call_block).set_terminator(Terminator::new(
         TerminatorKind::Call {
-            func: Operand::Constant(Constant::FnDef(DefId(1))), // factorial (self)
+            func: Operand::Constant(Constant::FnDef(DefId::new(1))), // factorial (self)
             args: vec![Operand::copy_local(Local(3))],          // n - 1
             destination: Place::from_local(Local(4)),           // result
             target: Some(after_call),
@@ -3244,10 +3244,10 @@ fn lower_recursive_call() {
     body.block_mut(after_call)
         .set_terminator(Terminator::return_(0..0));
 
-    let functions = [FunctionDef::new(DefId(1), "factorial", &body)];
+    let functions = [FunctionDef::new(DefId::new(1), "factorial", &body)];
     let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-    let factorial_ptr = module.get_function_ptr(DefId(1)).unwrap();
+    let factorial_ptr = module.get_function_ptr(DefId::new(1)).unwrap();
     let factorial: fn(i32) -> i32 = unsafe { mem::transmute(factorial_ptr) };
 
     assert_eq!(factorial(0), 1);
@@ -3334,7 +3334,7 @@ fn lower_mutual_recursion() {
         .block_mut(even_call)
         .set_terminator(Terminator::new(
             TerminatorKind::Call {
-                func: Operand::Constant(Constant::FnDef(DefId(2))), // is_odd
+                func: Operand::Constant(Constant::FnDef(DefId::new(2))), // is_odd
                 args: vec![Operand::copy_local(Local(3))],
                 destination: Place::from_local(Local::RETURN_PLACE),
                 target: Some(even_after),
@@ -3411,7 +3411,7 @@ fn lower_mutual_recursion() {
     // bb3: call is_even(n - 1)
     odd_body.block_mut(odd_call).set_terminator(Terminator::new(
         TerminatorKind::Call {
-            func: Operand::Constant(Constant::FnDef(DefId(1))), // is_even
+            func: Operand::Constant(Constant::FnDef(DefId::new(1))), // is_even
             args: vec![Operand::copy_local(Local(3))],
             destination: Place::from_local(Local::RETURN_PLACE),
             target: Some(odd_after),
@@ -3425,13 +3425,13 @@ fn lower_mutual_recursion() {
         .set_terminator(Terminator::return_(0..0));
 
     let functions = [
-        FunctionDef::new(DefId(1), "is_even", &even_body),
-        FunctionDef::new(DefId(2), "is_odd", &odd_body),
+        FunctionDef::new(DefId::new(1), "is_even", &even_body),
+        FunctionDef::new(DefId::new(2), "is_odd", &odd_body),
     ];
     let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-    let is_even_ptr = module.get_function_ptr(DefId(1)).unwrap();
-    let is_odd_ptr = module.get_function_ptr(DefId(2)).unwrap();
+    let is_even_ptr = module.get_function_ptr(DefId::new(1)).unwrap();
+    let is_odd_ptr = module.get_function_ptr(DefId::new(2)).unwrap();
 
     let is_even: fn(i32) -> i32 = unsafe { mem::transmute(is_even_ptr) };
     let is_odd: fn(i32) -> i32 = unsafe { mem::transmute(is_odd_ptr) };
@@ -3518,7 +3518,7 @@ fn lower_call_multiple_args() {
         .block_mut(caller_entry)
         .set_terminator(Terminator::new(
             TerminatorKind::Call {
-                func: Operand::Constant(Constant::FnDef(DefId(1))),
+                func: Operand::Constant(Constant::FnDef(DefId::new(1))),
                 args: vec![
                     Operand::const_int(1, DUMMY_TY),
                     Operand::const_int(2, DUMMY_TY),
@@ -3536,12 +3536,12 @@ fn lower_call_multiple_args() {
         .set_terminator(Terminator::return_(0..0));
 
     let functions = [
-        FunctionDef::new(DefId(1), "sum4", &sum_body),
-        FunctionDef::new(DefId(2), "caller", &caller_body),
+        FunctionDef::new(DefId::new(1), "sum4", &sum_body),
+        FunctionDef::new(DefId::new(2), "caller", &caller_body),
     ];
     let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-    let caller_ptr = module.get_function_ptr(DefId(2)).unwrap();
+    let caller_ptr = module.get_function_ptr(DefId::new(2)).unwrap();
     let caller: fn() -> i32 = unsafe { mem::transmute(caller_ptr) };
 
     assert_eq!(caller(), 10); // 1 + 2 + 3 + 4 = 10
@@ -3572,7 +3572,7 @@ fn lower_call_chain() {
 
     b_body.block_mut(b_entry).set_terminator(Terminator::new(
         TerminatorKind::Call {
-            func: Operand::Constant(Constant::FnDef(DefId(1))), // a
+            func: Operand::Constant(Constant::FnDef(DefId::new(1))), // a
             args: vec![],
             destination: Place::from_local(Local(1)),
             target: Some(b_after_call),
@@ -3603,7 +3603,7 @@ fn lower_call_chain() {
 
     c_body.block_mut(c_entry).set_terminator(Terminator::new(
         TerminatorKind::Call {
-            func: Operand::Constant(Constant::FnDef(DefId(2))), // b
+            func: Operand::Constant(Constant::FnDef(DefId::new(2))), // b
             args: vec![],
             destination: Place::from_local(Local(1)),
             target: Some(c_after_call),
@@ -3627,13 +3627,13 @@ fn lower_call_chain() {
         .set_terminator(Terminator::return_(0..0));
 
     let functions = [
-        FunctionDef::new(DefId(1), "a", &a_body),
-        FunctionDef::new(DefId(2), "b", &b_body),
-        FunctionDef::new(DefId(3), "c", &c_body),
+        FunctionDef::new(DefId::new(1), "a", &a_body),
+        FunctionDef::new(DefId::new(2), "b", &b_body),
+        FunctionDef::new(DefId::new(3), "c", &c_body),
     ];
     let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-    let c_ptr = module.get_function_ptr(DefId(3)).unwrap();
+    let c_ptr = module.get_function_ptr(DefId::new(3)).unwrap();
     let c: fn() -> i32 = unsafe { mem::transmute(c_ptr) };
 
     assert_eq!(c(), 111); // 1 + 10 + 100 = 111

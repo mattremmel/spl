@@ -24,14 +24,43 @@ use super::symbol::DefId;
 ///
 /// Types are interned so that type equality can be checked via ID comparison.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct TypeId(pub u32);
+pub struct TypeId(u32);
+
+impl TypeId {
+    /// Create a new `TypeId` with the given index.
+    #[inline]
+    pub(crate) const fn new(index: u32) -> Self {
+        TypeId(index)
+    }
+
+    /// Get the raw index value of this `TypeId`.
+    #[inline]
+    pub fn index(self) -> u32 {
+        self.0
+    }
+}
 
 /// A type inference variable.
 ///
 /// During type inference, unknown types are represented as variables that
 /// get unified with concrete types.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct TypeVar(pub u32);
+pub struct TypeVar(u32);
+
+impl TypeVar {
+    /// Create a new `TypeVar` with the given index.
+    #[inline]
+    #[allow(dead_code)] // Available for external modules if needed
+    pub(crate) const fn new(index: u32) -> Self {
+        TypeVar(index)
+    }
+
+    /// Get the raw index value of this `TypeVar`.
+    #[inline]
+    pub fn index(self) -> u32 {
+        self.0
+    }
+}
 
 /// Primitive (built-in) type kinds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -235,7 +264,7 @@ impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Primitive(p) => write!(f, "{p}"),
-            Type::Infer(var, _) => write!(f, "?{}", var.0),
+            Type::Infer(var, _) => write!(f, "?{}", var.index()),
             Type::Ref(Mutability::Shared, inner) => write!(f, "&{inner:?}"),
             Type::Ref(Mutability::Mutable, inner) => write!(f, "&mut {inner:?}"),
             Type::RawPtr(Mutability::Shared, inner) => write!(f, "*const {inner:?}"),
@@ -252,8 +281,8 @@ impl std::fmt::Display for Type {
                 }
                 write!(f, ")")
             }
-            Type::Struct(def_id, _) => write!(f, "struct#{}", def_id.0),
-            Type::Alias(def_id, _) => write!(f, "alias#{}", def_id.0),
+            Type::Struct(def_id, _) => write!(f, "struct#{}", def_id.index()),
+            Type::Alias(def_id, _) => write!(f, "alias#{}", def_id.index()),
             Type::FnPtr { params, ret } => {
                 write!(f, "fn(")?;
                 for (i, p) in params.iter().enumerate() {
@@ -264,10 +293,10 @@ impl std::fmt::Display for Type {
                 }
                 write!(f, ") -> {ret:?}")
             }
-            Type::Param(def_id) => write!(f, "T#{}", def_id.0),
+            Type::Param(def_id) => write!(f, "T#{}", def_id.index()),
             Type::SelfType => write!(f, "Self"),
             Type::StrRef => write!(f, "&str"),
-            Type::Module(def_id) => write!(f, "mod#{}", def_id.0),
+            Type::Module(def_id) => write!(f, "mod#{}", def_id.index()),
             Type::Error => write!(f, "<error>"),
         }
     }
@@ -314,17 +343,17 @@ impl TypeInterner {
             type_to_id: HashMap::new(),
             next_type_var: 0,
             // These will be filled in below
-            unit_id: TypeId(0),
-            bool_id: TypeId(0),
-            i32_id: TypeId(0),
-            i64_id: TypeId(0),
-            f32_id: TypeId(0),
-            f64_id: TypeId(0),
-            never_id: TypeId(0),
-            error_id: TypeId(0),
-            str_ref_id: TypeId(0),
-            char_id: TypeId(0),
-            str_id: TypeId(0),
+            unit_id: TypeId::new(0),
+            bool_id: TypeId::new(0),
+            i32_id: TypeId::new(0),
+            i64_id: TypeId::new(0),
+            f32_id: TypeId::new(0),
+            f64_id: TypeId::new(0),
+            never_id: TypeId::new(0),
+            error_id: TypeId::new(0),
+            str_ref_id: TypeId::new(0),
+            char_id: TypeId::new(0),
+            str_id: TypeId::new(0),
         };
 
         // Pre-intern common types for fast access
@@ -620,11 +649,11 @@ mod tests {
 
         // Check the underlying types
         match interner.get(var1) {
-            Type::Infer(TypeVar(0), InferKind::General) => {}
+            Type::Infer(v, InferKind::General) if v.index() == 0 => {}
             other => panic!("expected Infer(0, General), got {other:?}"),
         }
         match interner.get(var2) {
-            Type::Infer(TypeVar(1), InferKind::General) => {}
+            Type::Infer(v, InferKind::General) if v.index() == 1 => {}
             other => panic!("expected Infer(1, General), got {other:?}"),
         }
     }
@@ -741,11 +770,11 @@ mod tests {
     fn test_mk_struct() {
         let mut interner = TypeInterner::new();
 
-        let struct_ty = interner.mk_struct(DefId(5), vec![interner.i32()]);
+        let struct_ty = interner.mk_struct(DefId::new(5), vec![interner.i32()]);
 
         match interner.get(struct_ty) {
             Type::Struct(def_id, args) => {
-                assert_eq!(*def_id, DefId(5));
+                assert_eq!(*def_id, DefId::new(5));
                 assert_eq!(args.len(), 1);
                 assert_eq!(args[0], interner.i32());
             }
@@ -757,11 +786,11 @@ mod tests {
     fn test_mk_alias() {
         let mut interner = TypeInterner::new();
 
-        let alias_ty = interner.mk_alias(DefId(7), vec![interner.bool()]);
+        let alias_ty = interner.mk_alias(DefId::new(7), vec![interner.bool()]);
 
         match interner.get(alias_ty) {
             Type::Alias(def_id, args) => {
-                assert_eq!(*def_id, DefId(7));
+                assert_eq!(*def_id, DefId::new(7));
                 assert_eq!(args.len(), 1);
                 assert_eq!(args[0], interner.bool());
             }
@@ -790,11 +819,11 @@ mod tests {
     fn test_mk_param() {
         let mut interner = TypeInterner::new();
 
-        let param_ty = interner.mk_param(DefId(3));
+        let param_ty = interner.mk_param(DefId::new(3));
 
         match interner.get(param_ty) {
             Type::Param(def_id) => {
-                assert_eq!(*def_id, DefId(3));
+                assert_eq!(*def_id, DefId::new(3));
             }
             other => panic!("expected Param, got {other:?}"),
         }
@@ -1172,11 +1201,11 @@ mod tests {
     fn test_mk_struct_no_type_args() {
         let mut interner = TypeInterner::new();
 
-        let struct_ty = interner.mk_struct(DefId(10), vec![]);
+        let struct_ty = interner.mk_struct(DefId::new(10), vec![]);
 
         match interner.get(struct_ty) {
             Type::Struct(def_id, args) => {
-                assert_eq!(*def_id, DefId(10));
+                assert_eq!(*def_id, DefId::new(10));
                 assert!(args.is_empty());
             }
             other => panic!("expected Struct, got {other:?}"),
@@ -1187,11 +1216,11 @@ mod tests {
     fn test_mk_alias_no_type_args() {
         let mut interner = TypeInterner::new();
 
-        let alias_ty = interner.mk_alias(DefId(20), vec![]);
+        let alias_ty = interner.mk_alias(DefId::new(20), vec![]);
 
         match interner.get(alias_ty) {
             Type::Alias(def_id, args) => {
-                assert_eq!(*def_id, DefId(20));
+                assert_eq!(*def_id, DefId::new(20));
                 assert!(args.is_empty());
             }
             other => panic!("expected Alias, got {other:?}"),
@@ -1237,9 +1266,9 @@ mod tests {
     fn test_different_struct_same_def_different_args() {
         let mut interner = TypeInterner::new();
 
-        let s1 = interner.mk_struct(DefId(1), vec![interner.i32()]);
-        let s2 = interner.mk_struct(DefId(1), vec![interner.bool()]);
-        let s3 = interner.mk_struct(DefId(1), vec![interner.i32()]);
+        let s1 = interner.mk_struct(DefId::new(1), vec![interner.i32()]);
+        let s2 = interner.mk_struct(DefId::new(1), vec![interner.bool()]);
+        let s3 = interner.mk_struct(DefId::new(1), vec![interner.i32()]);
 
         // Same def, different args -> different types
         assert_ne!(s1, s2);
@@ -1251,8 +1280,8 @@ mod tests {
     fn test_different_struct_different_def_same_args() {
         let mut interner = TypeInterner::new();
 
-        let s1 = interner.mk_struct(DefId(1), vec![interner.i32()]);
-        let s2 = interner.mk_struct(DefId(2), vec![interner.i32()]);
+        let s1 = interner.mk_struct(DefId::new(1), vec![interner.i32()]);
+        let s2 = interner.mk_struct(DefId::new(2), vec![interner.i32()]);
 
         // Different def -> different types even with same args
         assert_ne!(s1, s2);
@@ -1367,13 +1396,13 @@ mod tests {
         let mut interner = TypeInterner::new();
 
         let struct_ty = interner.mk_struct(
-            DefId(1),
+            DefId::new(1),
             vec![interner.i32(), interner.bool(), interner.f64()],
         );
 
         match interner.get(struct_ty) {
             Type::Struct(def_id, args) => {
-                assert_eq!(*def_id, DefId(1));
+                assert_eq!(*def_id, DefId::new(1));
                 assert_eq!(args.len(), 3);
                 assert_eq!(args[0], interner.i32());
                 assert_eq!(args[1], interner.bool());
@@ -1387,9 +1416,9 @@ mod tests {
     fn test_param_different_def_ids() {
         let mut interner = TypeInterner::new();
 
-        let p1 = interner.mk_param(DefId(1));
-        let p2 = interner.mk_param(DefId(2));
-        let p3 = interner.mk_param(DefId(1));
+        let p1 = interner.mk_param(DefId::new(1));
+        let p2 = interner.mk_param(DefId::new(2));
+        let p3 = interner.mk_param(DefId::new(1));
 
         assert_ne!(p1, p2);
         assert_eq!(p1, p3);
@@ -1421,9 +1450,9 @@ mod tests {
         let mut interner = TypeInterner::new();
 
         // Even with same underlying TypeVar id, different InferKind = different type
-        let ty1 = interner.intern(Type::Infer(TypeVar(100), InferKind::General));
-        let ty2 = interner.intern(Type::Infer(TypeVar(100), InferKind::Int));
-        let ty3 = interner.intern(Type::Infer(TypeVar(100), InferKind::Float));
+        let ty1 = interner.intern(Type::Infer(TypeVar::new(100), InferKind::General));
+        let ty2 = interner.intern(Type::Infer(TypeVar::new(100), InferKind::Int));
+        let ty3 = interner.intern(Type::Infer(TypeVar::new(100), InferKind::Float));
 
         assert_ne!(ty1, ty2);
         assert_ne!(ty2, ty3);

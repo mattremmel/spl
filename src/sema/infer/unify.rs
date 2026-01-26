@@ -50,7 +50,7 @@ impl<'a> InferEngine<'a> {
 
     /// Check if a `TypeId` is valid (within bounds of the type interner).
     pub(super) fn is_valid_type_id(&self, id: TypeId) -> bool {
-        (id.0 as usize) < self.types.types_len()
+        (id.index() as usize) < self.types.types_len()
     }
 
     /// Extract the `TypeVar` from a type if it's a variable type.
@@ -173,7 +173,7 @@ impl<'a> InferEngine<'a> {
         debug_assert!(
             self.is_valid_type_id(type_id),
             "precondition: type_id {} must be valid (< {})",
-            type_id.0,
+            type_id.index(),
             self.types.types_len()
         );
 
@@ -227,12 +227,12 @@ impl<'a> InferEngine<'a> {
         debug_assert!(
             self.is_valid_type_id(a),
             "precondition: type a ({}) must be valid",
-            a.0
+            a.index()
         );
         debug_assert!(
             self.is_valid_type_id(b),
             "precondition: type b ({}) must be valid",
-            b.0
+            b.index()
         );
 
         let a = self.resolve_type(a);
@@ -820,7 +820,7 @@ mod tests {
         // An empty substitution has no chains to follow
         let resolve_result = create_test_resolve_result();
         let engine = create_test_engine(&resolve_result);
-        let var = TypeVar(999); // Any unbound variable
+        let var = TypeVar::new(999); // Any unbound variable
         assert!(!engine.has_cycle(var));
     }
 
@@ -1098,8 +1098,8 @@ mod tests {
         // Foo vs Bar (different struct DefIds) should fail with TypeMismatch
         let resolve_result = create_test_resolve_result();
         let mut engine = create_test_engine(&resolve_result);
-        let foo_id = DefId(1000); // Fake DefId for struct Foo
-        let bar_id = DefId(1001); // Fake DefId for struct Bar
+        let foo_id = DefId::new(1000); // Fake DefId for struct Foo
+        let bar_id = DefId::new(1001); // Fake DefId for struct Bar
         let foo_ty = engine.types.mk_struct(foo_id, vec![]);
         let bar_ty = engine.types.mk_struct(bar_id, vec![]);
 

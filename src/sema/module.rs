@@ -301,10 +301,10 @@ mod tests {
     #[test]
     fn module_exports_tracking() {
         let mut tree = ModuleTree::new();
-        tree.add_export(tree.root_id(), "Foo", DefId(1));
+        tree.add_export(tree.root_id(), "Foo", DefId::new(1));
 
         let foo_spur = tree.interner.get("Foo").unwrap();
-        assert_eq!(tree.root().exports().get(&foo_spur), Some(&DefId(1)));
+        assert_eq!(tree.root().exports().get(&foo_spur), Some(&DefId::new(1)));
     }
 
     #[test]
@@ -328,14 +328,14 @@ mod tests {
     #[test]
     fn module_items_tracking() {
         let mut tree = ModuleTree::new();
-        tree.add_item(tree.root_id(), "main", DefId(0));
-        tree.add_item(tree.root_id(), "helper", DefId(1));
+        tree.add_item(tree.root_id(), "main", DefId::new(0));
+        tree.add_item(tree.root_id(), "helper", DefId::new(1));
 
         let main_spur = tree.interner.get("main").unwrap();
         let helper_spur = tree.interner.get("helper").unwrap();
 
-        assert_eq!(tree.root().items().get(&main_spur), Some(&DefId(0)));
-        assert_eq!(tree.root().items().get(&helper_spur), Some(&DefId(1)));
+        assert_eq!(tree.root().items().get(&main_spur), Some(&DefId::new(0)));
+        assert_eq!(tree.root().items().get(&helper_spur), Some(&DefId::new(1)));
     }
 
     #[test]

@@ -188,7 +188,7 @@ mod tests {
     use super::*;
 
     // Dummy type IDs for structural tests (not validation)
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn operand_copy_from_place() {
@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     fn constant_fn_def() {
-        let def_id = DefId(42);
+        let def_id = DefId::new(42);
         let constant = Constant::FnDef(def_id);
 
         match constant {
@@ -430,7 +430,7 @@ mod tests {
     #[test]
     fn rvalue_cast() {
         let operand = Operand::const_int(42, DUMMY_TY);
-        let target_ty = TypeId(5);
+        let target_ty = TypeId::new(5);
         let rv = Rvalue::Cast(CastKind::IntToFloat, operand.clone(), target_ty);
 
         match rv {
@@ -488,7 +488,7 @@ mod tests {
 
     #[test]
     fn aggregate_kind_struct() {
-        let def_id = DefId(10);
+        let def_id = DefId::new(10);
         let kind = AggregateKind::Adt(def_id);
 
         match kind {
@@ -518,7 +518,7 @@ mod tests {
 
     #[test]
     fn rvalue_aggregate_struct() {
-        let def_id = DefId(5);
+        let def_id = DefId::new(5);
         let ops = vec![Operand::const_int(42, DUMMY_TY)];
         let rv = Rvalue::Aggregate(AggregateKind::Adt(def_id), ops);
 
@@ -533,7 +533,7 @@ mod tests {
 
     #[test]
     fn constant_zeroed() {
-        let ty = TypeId(3);
+        let ty = TypeId::new(3);
         let constant = Constant::Zeroed(ty);
 
         match constant {

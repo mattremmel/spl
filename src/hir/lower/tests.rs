@@ -1781,10 +1781,10 @@ fn resolved_function_has_valid_def_id() {
 
 #[test]
 fn def_id_zero_is_valid() {
-    // DefId(0) is the first definition, which should be valid (not INVALID)
+    // DefId::new(0) is the first definition, which should be valid (not INVALID)
     use crate::sema::symbol::DefId;
-    assert!(DefId(0).is_valid());
-    assert!(!DefId(0).is_invalid());
+    assert!(DefId::new(0).is_valid());
+    assert!(!DefId::new(0).is_invalid());
 }
 
 #[test]

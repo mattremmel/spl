@@ -61,14 +61,14 @@ impl MirPrinter {
     /// Format a constant value.
     pub fn print_constant(&self, constant: &Constant) -> String {
         match constant {
-            Constant::Int(v, ty) => format!("const {v}_ty{}", ty.0),
-            Constant::Float(v, ty) => format!("const {v}_ty{}", ty.0),
+            Constant::Int(v, ty) => format!("const {v}_ty{}", ty.index()),
+            Constant::Float(v, ty) => format!("const {v}_ty{}", ty.index()),
             Constant::Bool(v) => format!("const {v}"),
             Constant::Char(c) => format!("const '{c}'"),
             Constant::String(s) => format!("const \"{s}\""),
             Constant::Unit => "const ()".to_string(),
-            Constant::FnDef(def_id) => format!("const fn_{}", def_id.0),
-            Constant::Zeroed(ty_id) => format!("const zeroed(ty{})", ty_id.0),
+            Constant::FnDef(def_id) => format!("const fn_{}", def_id.index()),
+            Constant::Zeroed(ty_id) => format!("const zeroed(ty{})", ty_id.index()),
         }
     }
 
@@ -186,7 +186,7 @@ impl MirPrinter {
                 format!(
                     "{} as ty{} ({})",
                     self.print_operand(operand),
-                    ty.0,
+                    ty.index(),
                     self.print_cast_kind(*kind)
                 )
             }
@@ -206,7 +206,7 @@ impl MirPrinter {
         match kind {
             AggregateKind::Tuple => format!("({ops_str})"),
             AggregateKind::Array => format!("[{ops_str}]"),
-            AggregateKind::Adt(def_id) => format!("adt_{} {{ {ops_str} }}", def_id.0),
+            AggregateKind::Adt(def_id) => format!("adt_{} {{ {ops_str} }}", def_id.index()),
         }
     }
 
@@ -323,13 +323,13 @@ impl MirPrinter {
             .args()
             .map(|local| {
                 let decl = body.local_decl(local);
-                format!("{}: ty{}", self.print_local(local), decl.ty.0)
+                format!("{}: ty{}", self.print_local(local), decl.ty.index())
             })
             .collect();
         let args_str = args.join(", ");
 
         let ret_ty = body.return_ty();
-        self.line(&format!("fn {name}({args_str}) -> ty{} {{", ret_ty.0));
+        self.line(&format!("fn {name}({args_str}) -> ty{} {{", ret_ty.index()));
 
         self.indented(|p| {
             // Print locals (skip return place and args)
@@ -344,7 +344,7 @@ impl MirPrinter {
                 p.line(&format!(
                     "let {mut_str}{}: ty{};{name_str}",
                     p.print_local(local),
-                    decl.ty.0
+                    decl.ty.index()
                 ));
             }
 

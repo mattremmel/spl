@@ -75,7 +75,7 @@ mod tests {
     use crate::mir::operand::Operand;
     use crate::sema::types::TypeId;
 
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn statement_assign() {

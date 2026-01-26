@@ -194,7 +194,7 @@ impl<'a> InferEngine<'a> {
     pub(super) fn new(resolve_result: &'a ResolveResult) -> Self {
         let mut engine = Self {
             resolve_ctx: &resolve_result.ctx,
-            current_inference_scope: crate::sema::ScopeId(0), // Start at root scope
+            current_inference_scope: crate::sema::ScopeId::new(0), // Start at root scope
             types: TypeInterner::new(),
             resolutions: resolve_result.resolutions.clone(),
             expr_types: FxHashMap::default(),
@@ -264,7 +264,7 @@ impl<'a> InferEngine<'a> {
         // Use a high range for builtin DefIds to avoid conflicts
         // Start at u32::MAX / 2 and count up based on how many builtins we have
         let builtin_base = u32::MAX / 2;
-        let def_id = DefId(builtin_base + self.builtin_method_names.len() as u32);
+        let def_id = DefId::new(builtin_base + self.builtin_method_names.len() as u32);
 
         // Store the method name for later lookup during resolution
         self.builtin_method_names.insert(def_id, name.to_string());

@@ -200,7 +200,7 @@ mod tests {
     use crate::sema::symbol::DefId;
     use crate::sema::types::TypeId;
 
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn basic_block_id_is_copy_and_eq() {
@@ -327,7 +327,7 @@ mod tests {
 
     #[test]
     fn terminator_call() {
-        let func = Operand::Constant(Constant::FnDef(DefId(1)));
+        let func = Operand::Constant(Constant::FnDef(DefId::new(1)));
         let args = vec![Operand::const_int(42, DUMMY_TY)];
         let destination = Place::from_local(Local(2));
         let target = Some(BasicBlock(3));
@@ -360,7 +360,7 @@ mod tests {
 
     #[test]
     fn terminator_call_diverging() {
-        let func = Operand::Constant(Constant::FnDef(DefId(1)));
+        let func = Operand::Constant(Constant::FnDef(DefId::new(1)));
         let destination = Place::from_local(Local::RETURN_PLACE);
 
         let term = Terminator::new(
@@ -481,7 +481,7 @@ mod tests {
     fn terminator_successors_call() {
         let term = Terminator::new(
             TerminatorKind::Call {
-                func: Operand::Constant(Constant::FnDef(DefId(1))),
+                func: Operand::Constant(Constant::FnDef(DefId::new(1))),
                 args: vec![],
                 destination: Place::from_local(Local(0)),
                 target: Some(BasicBlock(3)),
@@ -496,7 +496,7 @@ mod tests {
     fn terminator_successors_call_diverging() {
         let term = Terminator::new(
             TerminatorKind::Call {
-                func: Operand::Constant(Constant::FnDef(DefId(1))),
+                func: Operand::Constant(Constant::FnDef(DefId::new(1))),
                 args: vec![],
                 destination: Place::from_local(Local(0)),
                 target: None,

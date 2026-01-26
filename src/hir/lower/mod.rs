@@ -15,7 +15,7 @@
 //! - [`HirExprKind::Missing`]: Placeholder for expressions that couldn't be lowered
 //! - Error type ([`TypeId`] for the error type): Used when type information is
 //!   unavailable or invalid
-//! - `DefId(0)`: Default definition ID when resolution data is missing
+//! - `DefId::new(0)`: Default definition ID when resolution data is missing
 //!
 //! ## No Diagnostics Emitted
 //!

@@ -41,7 +41,7 @@ fn lower_source(source: &str) -> Vec<Body> {
 
 #[test]
 fn test_mir_builder_new() {
-    let type_id = TypeId(1); // i32
+    let type_id = TypeId::new(1); // i32
     let builder = MirBuilder::new(type_id);
 
     // Should have exactly one local (return place)
@@ -55,22 +55,22 @@ fn test_mir_builder_new() {
 
 #[test]
 fn test_mir_builder_alloc_local() {
-    let mut builder = MirBuilder::new(TypeId(1));
+    let mut builder = MirBuilder::new(TypeId::new(1));
 
-    let local = builder.alloc_local(TypeId(2), true, Some("x".to_string()));
+    let local = builder.alloc_local(TypeId::new(2), true, Some("x".to_string()));
 
     assert_eq!(local, Local(1)); // After return place
     assert_eq!(builder.locals.len(), 2);
-    assert_eq!(builder.locals[1].ty, TypeId(2));
+    assert_eq!(builder.locals[1].ty, TypeId::new(2));
     assert!(builder.locals[1].mutable);
     assert_eq!(builder.locals[1].name, Some("x".to_string()));
 }
 
 #[test]
 fn test_mir_builder_alloc_temp() {
-    let mut builder = MirBuilder::new(TypeId(1));
+    let mut builder = MirBuilder::new(TypeId::new(1));
 
-    let temp = builder.alloc_temp(TypeId(3));
+    let temp = builder.alloc_temp(TypeId::new(3));
 
     assert_eq!(temp, Local(1));
     assert!(!builder.locals[1].mutable); // Temps are immutable
@@ -79,7 +79,7 @@ fn test_mir_builder_alloc_temp() {
 
 #[test]
 fn test_mir_builder_push_statement() {
-    let mut builder = MirBuilder::new(TypeId(1));
+    let mut builder = MirBuilder::new(TypeId::new(1));
     let span = Span::from(0..10);
 
     let stmt = Statement {
@@ -93,7 +93,7 @@ fn test_mir_builder_push_statement() {
 
 #[test]
 fn test_mir_builder_set_terminator() {
-    let mut builder = MirBuilder::new(TypeId(1));
+    let mut builder = MirBuilder::new(TypeId::new(1));
     let span = Span::from(0..10);
 
     builder.set_terminator(TerminatorKind::Return, span);
@@ -108,7 +108,7 @@ fn test_mir_builder_set_terminator() {
 
 #[test]
 fn test_mir_builder_finish() {
-    let mut builder = MirBuilder::new(TypeId(1));
+    let mut builder = MirBuilder::new(TypeId::new(1));
     builder.set_terminator(TerminatorKind::Return, Span::from(0..10));
 
     let body = builder.finish(0); // 0 args
@@ -121,7 +121,7 @@ fn test_mir_builder_finish() {
 
 // ========== Phase 2: Literal Conversion ==========
 
-const DUMMY_TY: TypeId = TypeId(0);
+const DUMMY_TY: TypeId = TypeId::new(0);
 
 #[test]
 fn test_lower_int_literal() {
@@ -254,7 +254,7 @@ fn create_literal_function(
     });
 
     HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: name.to_string(),
         type_params: vec![],
         params: vec![],
@@ -351,7 +351,7 @@ fn test_lower_function_returning_unit() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "noop".to_string(),
         type_params: vec![],
         params: vec![],
@@ -439,7 +439,7 @@ fn test_lower_function_with_unused_params() {
     // Create a parameter pattern
     let pat_id = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
-            def_id: DefId(1),
+            def_id: DefId::new(1),
             mutable: false,
         },
         ty: i32_ty,
@@ -460,7 +460,7 @@ fn test_lower_function_with_unused_params() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "ignore".to_string(),
         type_params: vec![],
         params: vec![param],
@@ -482,7 +482,7 @@ fn test_lower_function_with_unused_params() {
 
 #[test]
 fn test_mir_builder_alloc_block() {
-    let mut builder = MirBuilder::new(TypeId(1));
+    let mut builder = MirBuilder::new(TypeId::new(1));
 
     let bb1 = builder.alloc_block();
     let bb2 = builder.alloc_block();
@@ -494,7 +494,7 @@ fn test_mir_builder_alloc_block() {
 
 #[test]
 fn test_mir_builder_switch_to_block() {
-    let mut builder = MirBuilder::new(TypeId(1));
+    let mut builder = MirBuilder::new(TypeId::new(1));
     let bb1 = builder.alloc_block();
 
     // Add statement to entry block
@@ -631,7 +631,7 @@ fn test_lower_var_reference() {
     // fn identity(x: i32): i32 { x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let param_def_id = DefId(1);
+    let param_def_id = DefId::new(1);
 
     // Create parameter pattern
     let pat_id = hir_db.alloc_pat(crate::hir::HirPat {
@@ -657,7 +657,7 @@ fn test_lower_var_reference() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "identity".to_string(),
         type_params: vec![],
         params: vec![param],
@@ -692,7 +692,7 @@ fn test_lower_var_as_operand() {
     // Test that variables become operands directly without extra temps
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let param_def_id = DefId(1);
+    let param_def_id = DefId::new(1);
 
     // Create var expression
     let var_expr_id = hir_db.alloc_expr(crate::hir::HirExpr {
@@ -752,7 +752,7 @@ fn test_lower_binary_add_literals() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "add".to_string(),
         type_params: vec![],
         params: vec![],
@@ -813,7 +813,7 @@ fn test_lower_binary_sub() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "sub".to_string(),
         type_params: vec![],
         params: vec![],
@@ -858,7 +858,7 @@ fn test_lower_binary_mul() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "mul".to_string(),
         type_params: vec![],
         params: vec![],
@@ -904,7 +904,7 @@ fn test_lower_binary_comparison_lt() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "less_than".to_string(),
         type_params: vec![],
         params: vec![],
@@ -928,8 +928,8 @@ fn test_lower_binary_with_vars() {
     // fn add(a: i32, b: i32): i32 { a + b }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let a_def_id = DefId(1);
-    let b_def_id = DefId(2);
+    let a_def_id = DefId::new(1);
+    let b_def_id = DefId::new(2);
 
     // Create parameter patterns
     let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
@@ -982,7 +982,7 @@ fn test_lower_binary_with_vars() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "add".to_string(),
         type_params: vec![],
         params: vec![param_a, param_b],
@@ -1055,7 +1055,7 @@ fn test_lower_nested_binary() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "nested".to_string(),
         type_params: vec![],
         params: vec![],
@@ -1100,7 +1100,7 @@ fn test_lower_unary_neg() {
     // fn neg(x: i32): i32 { -x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
 
     let pat = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -1132,7 +1132,7 @@ fn test_lower_unary_neg() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "neg".to_string(),
         type_params: vec![],
         params: vec![param],
@@ -1160,7 +1160,7 @@ fn test_lower_unary_not() {
     // fn flip(b: bool): bool { !b }
     let mut hir_db = HirDatabase::new();
     let bool_ty = hir_db.types.bool();
-    let b_def_id = DefId(1);
+    let b_def_id = DefId::new(1);
 
     let pat = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -1192,7 +1192,7 @@ fn test_lower_unary_not() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "flip".to_string(),
         type_params: vec![],
         params: vec![param],
@@ -1216,7 +1216,7 @@ fn test_lower_nested_unary() {
     // fn double_neg(x: i32): i32 { --x } (which is -(-x))
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
 
     let pat = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -1256,7 +1256,7 @@ fn test_lower_nested_unary() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "double_neg".to_string(),
         type_params: vec![],
         params: vec![param],
@@ -1299,8 +1299,8 @@ fn test_lower_complex_expression() {
     // fn complex(a: i32, b: i32): i32 { -(a + b) * 2 }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let a_def_id = DefId(1);
-    let b_def_id = DefId(2);
+    let a_def_id = DefId::new(1);
+    let b_def_id = DefId::new(2);
 
     // Params
     let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
@@ -1375,7 +1375,7 @@ fn test_lower_complex_expression() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "complex".to_string(),
         type_params: vec![],
         params: vec![param_a, param_b],
@@ -1417,7 +1417,7 @@ fn lower_let_binding_simple() {
     // fn foo(): i32 { let x = 42; x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
 
     // Create pattern for `x`
     let pat_id = hir_db.alloc_pat(crate::hir::HirPat {
@@ -1464,7 +1464,7 @@ fn lower_let_binding_simple() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -1515,7 +1515,7 @@ fn lower_let_binding_mutable() {
     // fn foo(): i32 { let mut x = 10; x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
 
     // Create mutable pattern for `mut x`
     let pat_id = hir_db.alloc_pat(crate::hir::HirPat {
@@ -1558,7 +1558,7 @@ fn lower_let_binding_mutable() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -1621,7 +1621,7 @@ fn lower_let_wildcard() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -1671,8 +1671,8 @@ fn lower_block_multiple_stmts() {
     // fn foo(): i32 { let a = 1; let b = 2; a + b }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let a_def_id = DefId(1);
-    let b_def_id = DefId(2);
+    let a_def_id = DefId::new(1);
+    let b_def_id = DefId::new(2);
 
     // let a = 1
     let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
@@ -1751,7 +1751,7 @@ fn lower_block_multiple_stmts() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -1805,7 +1805,7 @@ fn lower_block_no_tail() {
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let unit_ty = hir_db.types.unit();
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
 
     let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -1839,7 +1839,7 @@ fn lower_block_no_tail() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -1874,8 +1874,8 @@ fn lower_nested_blocks() {
     // fn foo(): i32 { let a = 1; { let b = 2; a + b } }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let a_def_id = DefId(1);
-    let b_def_id = DefId(2);
+    let a_def_id = DefId::new(1);
+    let b_def_id = DefId::new(2);
 
     // let a = 1
     let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
@@ -1963,7 +1963,7 @@ fn lower_nested_blocks() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -2028,7 +2028,7 @@ fn lower_empty_block() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -2104,7 +2104,7 @@ fn lower_expr_stmt_with_semi() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -2145,7 +2145,7 @@ fn lower_storage_live_on_let() {
     // fn foo(): i32 { let x = 1; x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
 
     let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -2185,7 +2185,7 @@ fn lower_storage_live_on_let() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -2225,8 +2225,8 @@ fn lower_storage_dead_at_block_end() {
     // Inner block's `b` should have StorageDead
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let a_def_id = DefId(1);
-    let b_def_id = DefId(2);
+    let a_def_id = DefId::new(1);
+    let b_def_id = DefId::new(2);
 
     // let a = 1
     let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
@@ -2313,7 +2313,7 @@ fn lower_storage_dead_at_block_end() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -2346,8 +2346,8 @@ fn lower_shadowing() {
     // fn foo(): i32 { let x = 1; let x = 2; x }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let x1_def_id = DefId(1);
-    let x2_def_id = DefId(2);
+    let x1_def_id = DefId::new(1);
+    let x2_def_id = DefId::new(2);
 
     // First let x = 1
     let pat_x1 = hir_db.alloc_pat(crate::hir::HirPat {
@@ -2412,7 +2412,7 @@ fn lower_shadowing() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -2470,8 +2470,8 @@ fn lower_block_as_operand() {
     // fn foo(): i32 { { let x = 1; x } + { let y = 2; y } }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let x_def_id = DefId(1);
-    let y_def_id = DefId(2);
+    let x_def_id = DefId::new(1);
+    let y_def_id = DefId::new(2);
 
     // First block: { let x = 1; x }
     let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
@@ -2557,7 +2557,7 @@ fn lower_block_as_operand() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -2621,7 +2621,7 @@ fn lower_block_tail_only() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -2658,7 +2658,7 @@ fn lower_let_without_init() {
     // Let without initializer - should allocate local but not assign
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
 
     let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -2695,7 +2695,7 @@ fn lower_let_without_init() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -2739,7 +2739,7 @@ fn lower_storage_dead_excludes_result() {
     // The result (x) should NOT have StorageDead since it's the block result
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
 
     let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -2780,7 +2780,7 @@ fn lower_storage_dead_excludes_result() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -2812,8 +2812,8 @@ fn lower_let_uses_previous_binding() {
     // Tests that a binding can be used in subsequent statement's init
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let a_def_id = DefId(1);
-    let b_def_id = DefId(2);
+    let a_def_id = DefId::new(1);
+    let b_def_id = DefId::new(2);
 
     // let a = 1
     let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
@@ -2892,7 +2892,7 @@ fn lower_let_uses_previous_binding() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -2927,8 +2927,8 @@ fn lower_storage_dead_ordering() {
     // and it should come AFTER a is copied to result
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let a_def_id = DefId(1);
-    let b_def_id = DefId(2);
+    let a_def_id = DefId::new(1);
+    let b_def_id = DefId::new(2);
 
     // let a = 1
     let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
@@ -3002,7 +3002,7 @@ fn lower_storage_dead_ordering() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -3055,7 +3055,7 @@ fn lower_return_unit() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -3110,7 +3110,7 @@ fn lower_return_literal() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -3146,8 +3146,8 @@ fn lower_return_expression() {
     // fn foo(a: i32, b: i32): i32 { return a + b; }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let a_def_id = DefId(1);
-    let b_def_id = DefId(2);
+    let a_def_id = DefId::new(1);
+    let b_def_id = DefId::new(2);
 
     // Create parameter patterns
     let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
@@ -3216,7 +3216,7 @@ fn lower_return_expression() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_a, param_b],
@@ -3264,7 +3264,7 @@ fn lower_if_no_else_literal() {
     let unit_ty = hir_db.types.unit();
     let bool_ty = hir_db.types.bool();
     let i32_ty = hir_db.types.i32();
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
 
     // Condition: true
     let cond_expr = hir_db.alloc_expr(crate::hir::HirExpr {
@@ -3326,7 +3326,7 @@ fn lower_if_no_else_literal() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -3363,8 +3363,8 @@ fn lower_if_no_else_var() {
     let unit_ty = hir_db.types.unit();
     let bool_ty = hir_db.types.bool();
     let i32_ty = hir_db.types.i32();
-    let cond_def_id = DefId(1);
-    let x_def_id = DefId(2);
+    let cond_def_id = DefId::new(1);
+    let x_def_id = DefId::new(2);
 
     // Parameter: cond
     let pat_cond = hir_db.alloc_pat(crate::hir::HirPat {
@@ -3440,7 +3440,7 @@ fn lower_if_no_else_var() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_cond],
@@ -3474,7 +3474,7 @@ fn lower_if_else_literals() {
     let mut hir_db = HirDatabase::new();
     let bool_ty = hir_db.types.bool();
     let i32_ty = hir_db.types.i32();
-    let cond_def_id = DefId(1);
+    let cond_def_id = DefId::new(1);
 
     // Parameter: cond
     let pat_cond = hir_db.alloc_pat(crate::hir::HirPat {
@@ -3549,7 +3549,7 @@ fn lower_if_else_literals() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_cond],
@@ -3606,9 +3606,9 @@ fn lower_if_else_expressions() {
     let mut hir_db = HirDatabase::new();
     let bool_ty = hir_db.types.bool();
     let i32_ty = hir_db.types.i32();
-    let c_def_id = DefId(1);
-    let a_def_id = DefId(2);
-    let b_def_id = DefId(3);
+    let c_def_id = DefId::new(1);
+    let a_def_id = DefId::new(2);
+    let b_def_id = DefId::new(3);
 
     // Parameters
     let pat_c = hir_db.alloc_pat(crate::hir::HirPat {
@@ -3738,7 +3738,7 @@ fn lower_if_else_expressions() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_c, param_a, param_b],
@@ -3821,7 +3821,7 @@ fn lower_loop_with_break() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -3895,7 +3895,7 @@ fn lower_break_no_value() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -3964,7 +3964,7 @@ fn lower_continue_simple() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -4000,7 +4000,7 @@ fn lower_conditional_break() {
     let bool_ty = hir_db.types.bool();
     let i32_ty = hir_db.types.i32();
     let unit_ty = hir_db.types.unit();
-    let cond_def_id = DefId(1);
+    let cond_def_id = DefId::new(1);
 
     // Parameter: cond
     let pat_cond = hir_db.alloc_pat(crate::hir::HirPat {
@@ -4084,7 +4084,7 @@ fn lower_conditional_break() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_cond],
@@ -4210,7 +4210,7 @@ fn lower_nested_break_inner() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -4249,7 +4249,7 @@ fn lower_nested_loop_values() {
     // fn foo(): i32 { loop { let x = loop { break 10; }; break x + 1; } }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
 
     // Inner break 10
     let break_val = hir_db.alloc_expr(crate::hir::HirExpr {
@@ -4355,7 +4355,7 @@ fn lower_nested_loop_values() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -4446,7 +4446,7 @@ fn lower_return_in_loop() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -4487,7 +4487,7 @@ fn lower_if_else_breaks() {
     let mut hir_db = HirDatabase::new();
     let bool_ty = hir_db.types.bool();
     let i32_ty = hir_db.types.i32();
-    let c_def_id = DefId(1);
+    let c_def_id = DefId::new(1);
 
     // Parameter: c
     let pat_c = hir_db.alloc_pat(crate::hir::HirPat {
@@ -4593,7 +4593,7 @@ fn lower_if_else_breaks() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_c],
@@ -4650,7 +4650,7 @@ fn test_lower_call_no_args() {
     // fn foo(): i32 { bar() }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let bar_def_id = DefId(1);
+    let bar_def_id = DefId::new(1);
 
     // First create bar function
     let bar_body = hir_db.alloc_expr(crate::hir::HirExpr {
@@ -4694,7 +4694,7 @@ fn test_lower_call_no_args() {
     });
 
     let foo_func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -4737,9 +4737,9 @@ fn test_lower_call_with_args() {
     // fn foo(): i32 { add(1, 2) }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let add_def_id = DefId(1);
-    let a_def_id = DefId(2);
-    let b_def_id = DefId(3);
+    let add_def_id = DefId::new(1);
+    let a_def_id = DefId::new(2);
+    let b_def_id = DefId::new(3);
 
     // Create add function with params
     let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
@@ -4836,7 +4836,7 @@ fn test_lower_call_with_args() {
     });
 
     let foo_func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -4873,9 +4873,9 @@ fn test_lower_call_nested() {
     // fn foo(): i32 { baz(bar()) }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let bar_def_id = DefId(1);
-    let baz_def_id = DefId(2);
-    let x_def_id = DefId(3);
+    let bar_def_id = DefId::new(1);
+    let baz_def_id = DefId::new(2);
+    let x_def_id = DefId::new(3);
 
     // bar function
     let bar_body = hir_db.alloc_expr(crate::hir::HirExpr {
@@ -4962,7 +4962,7 @@ fn test_lower_call_nested() {
     });
 
     let foo_func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -4995,10 +4995,10 @@ fn test_lower_method_call() {
     // Since method resolution requires full type checking, we test the MIR structure
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let method_def_id = DefId(5);
+    let method_def_id = DefId::new(5);
 
     // Create a receiver expression (simplified as a variable)
-    let receiver_def_id = DefId(1);
+    let receiver_def_id = DefId::new(1);
     let receiver = hir_db.alloc_expr(crate::hir::HirExpr {
         kind: HirExprKind::Var(receiver_def_id),
         ty: i32_ty,
@@ -5044,7 +5044,7 @@ fn test_lower_method_call() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_recv],
@@ -5087,10 +5087,10 @@ fn test_lower_method_call_with_args() {
     // Test method call with additional arguments
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let method_def_id = DefId(5);
+    let method_def_id = DefId::new(5);
 
     // Create a receiver expression
-    let receiver_def_id = DefId(1);
+    let receiver_def_id = DefId::new(1);
     let receiver = hir_db.alloc_expr(crate::hir::HirExpr {
         kind: HirExprKind::Var(receiver_def_id),
         ty: i32_ty,
@@ -5148,7 +5148,7 @@ fn test_lower_method_call_with_args() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_recv],
@@ -5208,7 +5208,7 @@ fn test_lower_binary_div() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -5257,7 +5257,7 @@ fn test_lower_binary_rem() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -5285,8 +5285,8 @@ fn test_lower_binary_le() {
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let bool_ty = hir_db.types.bool();
-    let a_def_id = DefId(1);
-    let b_def_id = DefId(2);
+    let a_def_id = DefId::new(1);
+    let b_def_id = DefId::new(2);
 
     let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -5337,7 +5337,7 @@ fn test_lower_binary_le() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_a, param_b],
@@ -5387,7 +5387,7 @@ fn test_lower_binary_ge() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -5437,7 +5437,7 @@ fn test_lower_binary_gt() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -5487,7 +5487,7 @@ fn test_lower_binary_ne() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -5540,7 +5540,7 @@ fn test_lower_binary_and_placeholder() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -5619,7 +5619,7 @@ fn test_lower_binary_or_placeholder() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -5682,7 +5682,7 @@ fn test_lower_ref_placeholder() {
     let ref_ty = hir_db
         .types
         .mk_ref(crate::sema::types::Mutability::Shared, i32_ty);
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
 
     let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -5713,7 +5713,7 @@ fn test_lower_ref_placeholder() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_x],
@@ -5745,7 +5745,7 @@ fn test_lower_struct_placeholder() {
     // Struct { field: value } expressions are not yet implemented
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let struct_def_id = DefId(10);
+    let struct_def_id = DefId::new(10);
 
     let field_value = hir_db.alloc_expr(crate::hir::HirExpr {
         kind: HirExprKind::Literal(Literal::Int(42)),
@@ -5762,7 +5762,7 @@ fn test_lower_struct_placeholder() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -5823,7 +5823,7 @@ fn test_lower_array_placeholder() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -5886,7 +5886,7 @@ fn test_lower_tuple_placeholder() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -5938,7 +5938,7 @@ fn test_lower_array_repeat() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "test_repeat".to_string(),
         type_params: vec![],
         params: vec![],
@@ -5984,7 +5984,7 @@ fn test_lower_array_repeat_zero_count() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "test_empty".to_string(),
         type_params: vec![],
         params: vec![],
@@ -6016,7 +6016,7 @@ fn test_lower_array_repeat_complex_value() {
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let array_ty = hir_db.types.mk_array(i32_ty, 3);
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
 
     // Create parameter x
     let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
@@ -6065,7 +6065,7 @@ fn test_lower_array_repeat_complex_value() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "test_complex".to_string(),
         type_params: vec![],
         params: vec![param_x],
@@ -6110,14 +6110,14 @@ fn test_lower_field_placeholder() {
     let span = Span::from(0..10);
 
     // Create struct type
-    let struct_def_id = DefId(100);
+    let struct_def_id = DefId::new(100);
     let struct_ty = hir_db.types.intern(Type::Struct(struct_def_id, vec![]));
     let hir_struct = HirStruct {
         def_id: struct_def_id,
         name: "Point".to_string(),
         type_params: vec![],
         fields: vec![HirField {
-            def_id: DefId(101),
+            def_id: DefId::new(101),
             name: "x".to_string(),
             ty: i32_ty,
             span: span.clone(),
@@ -6126,7 +6126,7 @@ fn test_lower_field_placeholder() {
     };
     hir_db.items.push(HirItem::Struct(hir_struct));
 
-    let obj_def_id = DefId(1);
+    let obj_def_id = DefId::new(1);
 
     let pat_obj = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -6157,7 +6157,7 @@ fn test_lower_field_placeholder() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_obj],
@@ -6205,7 +6205,7 @@ fn test_lower_tuple_field_placeholder() {
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let tuple_ty = hir_db.types.mk_tuple(vec![i32_ty, i32_ty]);
-    let t_def_id = DefId(1);
+    let t_def_id = DefId::new(1);
 
     let pat_t = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -6233,7 +6233,7 @@ fn test_lower_tuple_field_placeholder() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_t],
@@ -6278,7 +6278,7 @@ fn test_lower_index_placeholder() {
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let array_ty = hir_db.types.mk_array(i32_ty, 5);
-    let arr_def_id = DefId(1);
+    let arr_def_id = DefId::new(1);
 
     let pat_arr = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -6311,7 +6311,7 @@ fn test_lower_index_placeholder() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_arr],
@@ -6372,7 +6372,7 @@ fn test_lower_cast_placeholder() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -6438,7 +6438,7 @@ fn test_lower_deeply_nested_blocks() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -6468,9 +6468,9 @@ fn test_lower_multiple_sequential_lets() {
     // fn foo(): i32 { let a = 1; let b = 2; let c = 3; a + b + c }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let a_def_id = DefId(1);
-    let b_def_id = DefId(2);
-    let c_def_id = DefId(3);
+    let a_def_id = DefId::new(1);
+    let b_def_id = DefId::new(2);
+    let c_def_id = DefId::new(3);
 
     // Create let a = 1
     let pat_a = hir_db.alloc_pat(crate::hir::HirPat {
@@ -6586,7 +6586,7 @@ fn test_lower_multiple_sequential_lets() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -6631,7 +6631,7 @@ fn test_lower_if_in_loop() {
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
     let bool_ty = hir_db.types.bool();
-    let cond_def_id = DefId(1);
+    let cond_def_id = DefId::new(1);
 
     let pat_cond = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -6732,7 +6732,7 @@ fn test_lower_if_in_loop() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_cond],
@@ -6778,8 +6778,8 @@ fn test_lower_call_with_binary_arg() {
     // fn foo(): i32 { bar(1 + 2) }
     let mut hir_db = HirDatabase::new();
     let i32_ty = hir_db.types.i32();
-    let bar_def_id = DefId(1);
-    let x_def_id = DefId(2);
+    let bar_def_id = DefId::new(1);
+    let x_def_id = DefId::new(2);
 
     // bar function
     let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
@@ -6855,7 +6855,7 @@ fn test_lower_call_with_binary_arg() {
     });
 
     let foo_func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -6895,7 +6895,7 @@ fn test_lower_return_in_if_branch() {
     let mut hir_db = HirDatabase::new();
     let bool_ty = hir_db.types.bool();
     let i32_ty = hir_db.types.i32();
-    let c_def_id = DefId(1);
+    let c_def_id = DefId::new(1);
 
     let pat_c = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
@@ -6970,7 +6970,7 @@ fn test_lower_return_in_if_branch() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_c],
@@ -7101,7 +7101,7 @@ fn test_lower_continue_in_nested_if() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![],
@@ -7148,7 +7148,7 @@ fn test_lower_field_access_first_field() {
     let span = Span::from(0..10);
 
     // Create struct def
-    let struct_def_id = DefId(100);
+    let struct_def_id = DefId::new(100);
     let struct_ty = hir_db.types.intern(Type::Struct(struct_def_id, vec![]));
     let hir_struct = HirStruct {
         def_id: struct_def_id,
@@ -7156,13 +7156,13 @@ fn test_lower_field_access_first_field() {
         type_params: vec![],
         fields: vec![
             HirField {
-                def_id: DefId(101),
+                def_id: DefId::new(101),
                 name: "x".to_string(),
                 ty: i32_ty,
                 span: span.clone(),
             },
             HirField {
-                def_id: DefId(102),
+                def_id: DefId::new(102),
                 name: "y".to_string(),
                 ty: i32_ty,
                 span: span.clone(),
@@ -7173,7 +7173,7 @@ fn test_lower_field_access_first_field() {
     hir_db.items.push(HirItem::Struct(hir_struct));
 
     // Create parameter p: Point
-    let p_def_id = DefId(1);
+    let p_def_id = DefId::new(1);
     let pat_p = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: p_def_id,
@@ -7204,7 +7204,7 @@ fn test_lower_field_access_first_field() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_p],
@@ -7246,7 +7246,7 @@ fn test_lower_field_access_second_field() {
     let span = Span::from(0..10);
 
     // Create struct def
-    let struct_def_id = DefId(100);
+    let struct_def_id = DefId::new(100);
     let struct_ty = hir_db.types.intern(Type::Struct(struct_def_id, vec![]));
     let hir_struct = HirStruct {
         def_id: struct_def_id,
@@ -7254,13 +7254,13 @@ fn test_lower_field_access_second_field() {
         type_params: vec![],
         fields: vec![
             HirField {
-                def_id: DefId(101),
+                def_id: DefId::new(101),
                 name: "x".to_string(),
                 ty: i32_ty,
                 span: span.clone(),
             },
             HirField {
-                def_id: DefId(102),
+                def_id: DefId::new(102),
                 name: "y".to_string(),
                 ty: i32_ty,
                 span: span.clone(),
@@ -7271,7 +7271,7 @@ fn test_lower_field_access_second_field() {
     hir_db.items.push(HirItem::Struct(hir_struct));
 
     // Create parameter p: Point
-    let p_def_id = DefId(1);
+    let p_def_id = DefId::new(1);
     let pat_p = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: p_def_id,
@@ -7302,7 +7302,7 @@ fn test_lower_field_access_second_field() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_p],
@@ -7345,14 +7345,14 @@ fn test_lower_nested_field_access() {
     let span = Span::from(0..10);
 
     // Create Inner struct
-    let inner_def_id = DefId(100);
+    let inner_def_id = DefId::new(100);
     let inner_ty = hir_db.types.intern(Type::Struct(inner_def_id, vec![]));
     let inner_struct = HirStruct {
         def_id: inner_def_id,
         name: "Inner".to_string(),
         type_params: vec![],
         fields: vec![HirField {
-            def_id: DefId(101),
+            def_id: DefId::new(101),
             name: "val".to_string(),
             ty: i32_ty,
             span: span.clone(),
@@ -7362,14 +7362,14 @@ fn test_lower_nested_field_access() {
     hir_db.items.push(HirItem::Struct(inner_struct));
 
     // Create Outer struct
-    let outer_def_id = DefId(200);
+    let outer_def_id = DefId::new(200);
     let outer_ty = hir_db.types.intern(Type::Struct(outer_def_id, vec![]));
     let outer_struct = HirStruct {
         def_id: outer_def_id,
         name: "Outer".to_string(),
         type_params: vec![],
         fields: vec![HirField {
-            def_id: DefId(201),
+            def_id: DefId::new(201),
             name: "inner".to_string(),
             ty: inner_ty,
             span: span.clone(),
@@ -7379,7 +7379,7 @@ fn test_lower_nested_field_access() {
     hir_db.items.push(HirItem::Struct(outer_struct));
 
     // Create parameter o: Outer
-    let o_def_id = DefId(1);
+    let o_def_id = DefId::new(1);
     let pat_o = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: o_def_id,
@@ -7419,7 +7419,7 @@ fn test_lower_nested_field_access() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_o],
@@ -7464,7 +7464,7 @@ fn test_lower_deref_basic() {
     let span = Span::from(0..10);
 
     // Create parameter r: &i32
-    let r_def_id = DefId(1);
+    let r_def_id = DefId::new(1);
     let pat_r = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: r_def_id,
@@ -7495,7 +7495,7 @@ fn test_lower_deref_basic() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_r],
@@ -7536,7 +7536,7 @@ fn test_lower_deref_as_lvalue() {
     let span = Span::from(0..10);
 
     // Create parameter r: &mut i32
-    let r_def_id = DefId(1);
+    let r_def_id = DefId::new(1);
     let pat_r = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: r_def_id,
@@ -7581,7 +7581,7 @@ fn test_lower_deref_as_lvalue() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_r],
@@ -7622,7 +7622,7 @@ fn test_lower_deref_then_field() {
     let span = Span::from(0..10);
 
     // Create Point struct
-    let struct_def_id = DefId(100);
+    let struct_def_id = DefId::new(100);
     let struct_ty = hir_db.types.intern(Type::Struct(struct_def_id, vec![]));
     let ref_struct_ty = hir_db.types.mk_ref(Mutability::Shared, struct_ty);
     let hir_struct = HirStruct {
@@ -7630,7 +7630,7 @@ fn test_lower_deref_then_field() {
         name: "Point".to_string(),
         type_params: vec![],
         fields: vec![HirField {
-            def_id: DefId(101),
+            def_id: DefId::new(101),
             name: "x".to_string(),
             ty: i32_ty,
             span: span.clone(),
@@ -7640,7 +7640,7 @@ fn test_lower_deref_then_field() {
     hir_db.items.push(HirItem::Struct(hir_struct));
 
     // Create parameter r: &Point
-    let r_def_id = DefId(1);
+    let r_def_id = DefId::new(1);
     let pat_r = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: r_def_id,
@@ -7679,7 +7679,7 @@ fn test_lower_deref_then_field() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_r],
@@ -7725,7 +7725,7 @@ fn test_lower_double_deref() {
     let span = Span::from(0..10);
 
     // Create parameter r: &&i32
-    let r_def_id = DefId(1);
+    let r_def_id = DefId::new(1);
     let pat_r = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: r_def_id,
@@ -7764,7 +7764,7 @@ fn test_lower_double_deref() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_r],
@@ -7809,7 +7809,7 @@ fn test_lower_cast_int_to_int() {
     let span = Span::from(0..10);
 
     // Create parameter x: i32
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
     let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: x_def_id,
@@ -7840,7 +7840,7 @@ fn test_lower_cast_int_to_int() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_x],
@@ -7877,7 +7877,7 @@ fn test_lower_cast_int_to_float() {
     let span = Span::from(0..10);
 
     // Create parameter x: i32
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
     let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: x_def_id,
@@ -7908,7 +7908,7 @@ fn test_lower_cast_int_to_float() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_x],
@@ -7945,7 +7945,7 @@ fn test_lower_cast_float_to_int() {
     let span = Span::from(0..10);
 
     // Create parameter x: f64
-    let x_def_id = DefId(1);
+    let x_def_id = DefId::new(1);
     let pat_x = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: x_def_id,
@@ -7976,7 +7976,7 @@ fn test_lower_cast_float_to_int() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_x],
@@ -8014,7 +8014,7 @@ fn test_lower_index_with_variable() {
     let span = Span::from(0..10);
 
     // Create parameter arr: [i32; 5]
-    let arr_def_id = DefId(1);
+    let arr_def_id = DefId::new(1);
     let pat_arr = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: arr_def_id,
@@ -8030,7 +8030,7 @@ fn test_lower_index_with_variable() {
     };
 
     // Create parameter i: usize
-    let i_def_id = DefId(2);
+    let i_def_id = DefId::new(2);
     let pat_i = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: i_def_id,
@@ -8066,7 +8066,7 @@ fn test_lower_index_with_variable() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_arr, param_i],
@@ -8107,7 +8107,7 @@ fn test_lower_nested_index() {
     let span = Span::from(0..10);
 
     // Create parameter arr: [[i32; 3]; 3]
-    let arr_def_id = DefId(1);
+    let arr_def_id = DefId::new(1);
     let pat_arr = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: arr_def_id,
@@ -8123,7 +8123,7 @@ fn test_lower_nested_index() {
     };
 
     // Create parameter i: usize
-    let i_def_id = DefId(2);
+    let i_def_id = DefId::new(2);
     let pat_i = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: i_def_id,
@@ -8139,7 +8139,7 @@ fn test_lower_nested_index() {
     };
 
     // Create parameter j: usize
-    let j_def_id = DefId(3);
+    let j_def_id = DefId::new(3);
     let pat_j = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: j_def_id,
@@ -8188,7 +8188,7 @@ fn test_lower_nested_index() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_arr, param_i, param_j],
@@ -8234,14 +8234,14 @@ fn test_lower_deref_index_field_chain() {
     let span = Span::from(0..10);
 
     // Create Item struct
-    let item_def_id = DefId(100);
+    let item_def_id = DefId::new(100);
     let item_ty = hir_db.types.intern(Type::Struct(item_def_id, vec![]));
     let item_struct = HirStruct {
         def_id: item_def_id,
         name: "Item".to_string(),
         type_params: vec![],
         fields: vec![HirField {
-            def_id: DefId(101),
+            def_id: DefId::new(101),
             name: "value".to_string(),
             ty: i32_ty,
             span: span.clone(),
@@ -8255,7 +8255,7 @@ fn test_lower_deref_index_field_chain() {
     let ref_arr_ty = hir_db.types.mk_ref(Mutability::Shared, arr_ty);
 
     // Create parameter arr: &[Item; 3]
-    let arr_def_id = DefId(1);
+    let arr_def_id = DefId::new(1);
     let pat_arr = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: arr_def_id,
@@ -8271,7 +8271,7 @@ fn test_lower_deref_index_field_chain() {
     };
 
     // Create parameter i: usize
-    let i_def_id = DefId(2);
+    let i_def_id = DefId::new(2);
     let pat_i = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: i_def_id,
@@ -8323,7 +8323,7 @@ fn test_lower_deref_index_field_chain() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_arr, param_i],
@@ -8376,14 +8376,14 @@ fn test_lower_field_then_index() {
     let arr_ty = hir_db.types.mk_array(i32_ty, 5);
 
     // Create Container struct
-    let container_def_id = DefId(100);
+    let container_def_id = DefId::new(100);
     let container_ty = hir_db.types.intern(Type::Struct(container_def_id, vec![]));
     let container_struct = HirStruct {
         def_id: container_def_id,
         name: "Container".to_string(),
         type_params: vec![],
         fields: vec![HirField {
-            def_id: DefId(101),
+            def_id: DefId::new(101),
             name: "items".to_string(),
             ty: arr_ty,
             span: span.clone(),
@@ -8393,7 +8393,7 @@ fn test_lower_field_then_index() {
     hir_db.items.push(HirItem::Struct(container_struct));
 
     // Create parameter c: Container
-    let c_def_id = DefId(1);
+    let c_def_id = DefId::new(1);
     let pat_c = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: c_def_id,
@@ -8409,7 +8409,7 @@ fn test_lower_field_then_index() {
     };
 
     // Create parameter i: usize
-    let i_def_id = DefId(2);
+    let i_def_id = DefId::new(2);
     let pat_i = hir_db.alloc_pat(crate::hir::HirPat {
         kind: crate::hir::HirPatKind::Bind {
             def_id: i_def_id,
@@ -8453,7 +8453,7 @@ fn test_lower_field_then_index() {
     });
 
     let func = HirFunction {
-        def_id: DefId(0),
+        def_id: DefId::new(0),
         name: "foo".to_string(),
         type_params: vec![],
         params: vec![param_c, param_i],
@@ -8698,7 +8698,7 @@ fn test_lower_missing_expr_produces_zeroed() {
     // Create a function with the missing expression as body
     let func = HirFunction {
         name: "test".to_string(),
-        def_id: DefId(1),
+        def_id: DefId::new(1),
         type_params: vec![],
         params: vec![],
         ret_type: i32_ty,
@@ -8754,7 +8754,7 @@ fn lower_function_def_id_is_unique() {
     let def_ids: Vec<_> = bodies
         .iter()
         .filter_map(|b| b.def_id)
-        .map(|d| d.0) // Extract inner u32 for comparison
+        .map(DefId::index) // Extract inner u32 for comparison
         .collect();
     assert_eq!(def_ids.len(), 3, "All functions should have def_ids");
 

@@ -115,7 +115,7 @@ mod tests {
     use crate::mir::types::{Local, Place};
     use crate::sema::types::TypeId;
 
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn codegen_context_creates() {
@@ -151,12 +151,12 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let result = codegen_jit(&[(DefId(1), "test_fn", &body)], &types);
+        let result = codegen_jit(&[(DefId::new(1), "test_fn", &body)], &types);
         assert!(result.is_ok());
         let module = result.unwrap();
         assert_eq!(module.len(), 1);
 
-        let ptr = module.get_function_ptr(DefId(1)).unwrap();
+        let ptr = module.get_function_ptr(DefId::new(1)).unwrap();
         let func: fn() -> i32 = unsafe { std::mem::transmute(ptr) };
         assert_eq!(func(), 42);
     }

@@ -334,7 +334,7 @@ mod tests {
             bb1,
             Terminator::new(
                 TerminatorKind::Call {
-                    func: Operand::Constant(Constant::FnDef(DefId(1))),
+                    func: Operand::Constant(Constant::FnDef(DefId::new(1))),
                     args: vec![],
                     destination: Place::from_local(Local::RETURN_PLACE),
                     target: Some(bb2),

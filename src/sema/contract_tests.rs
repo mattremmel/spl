@@ -923,7 +923,7 @@ mod tests {
         #[should_panic(expected = "TypeId")]
         fn invalid_type_id_panics_in_debug() {
             let interner = TypeInterner::new();
-            let invalid_id = TypeId(u32::MAX);
+            let invalid_id = TypeId::new(u32::MAX);
             let _ = interner.get(invalid_id);
         }
 
@@ -937,7 +937,7 @@ mod tests {
         #[should_panic(expected = "scope_id")]
         fn invalid_scope_id_panics_in_debug() {
             let ctx = SemanticContext::new();
-            let invalid_id = ScopeId(999);
+            let invalid_id = ScopeId::new(999);
             let _ = ctx.get_scope(invalid_id);
         }
 
@@ -950,7 +950,7 @@ mod tests {
         #[should_panic(expected = "def_id")]
         fn invalid_def_id_panics_in_debug() {
             let ctx = SemanticContext::new();
-            let invalid_id = DefId(999);
+            let invalid_id = DefId::new(999);
             let _ = ctx.get_symbol(invalid_id);
         }
     }

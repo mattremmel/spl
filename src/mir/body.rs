@@ -238,11 +238,11 @@ mod tests {
     use crate::mir::terminator::{Terminator, TerminatorKind};
     use crate::mir::types::Place;
 
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn local_decl_with_type() {
-        let ty = TypeId(5);
+        let ty = TypeId::new(5);
         let decl = LocalDecl::new(ty, false);
 
         assert_eq!(decl.ty, ty);
@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn local_decl_with_name() {
-        let ty = TypeId(5);
+        let ty = TypeId::new(5);
         let decl = LocalDecl::with_name(ty, true, "my_var");
 
         assert_eq!(decl.ty, ty);
@@ -312,7 +312,7 @@ mod tests {
 
     #[test]
     fn mir_body_has_return_place() {
-        let return_ty = TypeId(10);
+        let return_ty = TypeId::new(10);
         let body = Body::new(return_ty);
 
         assert_eq!(body.locals.len(), 1);
@@ -323,10 +323,10 @@ mod tests {
 
     #[test]
     fn mir_body_alloc_local() {
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
 
-        let local1 = body.alloc_local(LocalDecl::new(TypeId(1), false));
-        let local2 = body.alloc_local(LocalDecl::new(TypeId(2), true));
+        let local1 = body.alloc_local(LocalDecl::new(TypeId::new(1), false));
+        let local2 = body.alloc_local(LocalDecl::new(TypeId::new(2), true));
 
         assert_eq!(local1, Local(1));
         assert_eq!(local2, Local(2));
@@ -335,7 +335,7 @@ mod tests {
 
     #[test]
     fn mir_body_alloc_block() {
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
 
         let bb0 = body.alloc_block();
         let bb1 = body.alloc_block();
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn mir_body_block_access() {
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
         let bb = body.alloc_block();
 
         // Mutable access
@@ -361,19 +361,19 @@ mod tests {
 
     #[test]
     fn mir_body_local_decl_access() {
-        let mut body = Body::new(TypeId(0));
-        let local = body.alloc_local(LocalDecl::with_name(TypeId(5), true, "x"));
+        let mut body = Body::new(TypeId::new(0));
+        let local = body.alloc_local(LocalDecl::with_name(TypeId::new(5), true, "x"));
 
         let decl = body.local_decl(local);
-        assert_eq!(decl.ty, TypeId(5));
+        assert_eq!(decl.ty, TypeId::new(5));
         assert!(decl.mutable);
         assert_eq!(decl.name, Some("x".to_string()));
     }
 
     #[test]
     fn mir_body_with_args() {
-        let return_ty = TypeId(0);
-        let args = vec![(TypeId(1), false), (TypeId(2), true)];
+        let return_ty = TypeId::new(0);
+        let args = vec![(TypeId::new(1), false), (TypeId::new(2), true)];
         let body = Body::with_args(return_ty, &args);
 
         assert_eq!(body.arg_count, 2);
@@ -382,15 +382,15 @@ mod tests {
         let arg_locals: Vec<_> = body.args().collect();
         assert_eq!(arg_locals, vec![Local(1), Local(2)]);
 
-        assert_eq!(body.local_decl(Local(1)).ty, TypeId(1));
+        assert_eq!(body.local_decl(Local(1)).ty, TypeId::new(1));
         assert!(!body.local_decl(Local(1)).mutable);
-        assert_eq!(body.local_decl(Local(2)).ty, TypeId(2));
+        assert_eq!(body.local_decl(Local(2)).ty, TypeId::new(2));
         assert!(body.local_decl(Local(2)).mutable);
     }
 
     #[test]
     fn mir_body_user_locals() {
-        let body = Body::with_args(TypeId(0), &[(TypeId(1), false), (TypeId(2), false)]);
+        let body = Body::with_args(TypeId::new(0), &[(TypeId::new(1), false), (TypeId::new(2), false)]);
         let user_locals: Vec<_> = body.user_locals().collect();
 
         // No user locals yet (only return + args)
@@ -399,9 +399,9 @@ mod tests {
 
     #[test]
     fn mir_body_user_locals_after_alloc() {
-        let mut body = Body::with_args(TypeId(0), &[(TypeId(1), false)]);
-        body.alloc_local(LocalDecl::new(TypeId(10), false));
-        body.alloc_local(LocalDecl::new(TypeId(11), true));
+        let mut body = Body::with_args(TypeId::new(0), &[(TypeId::new(1), false)]);
+        body.alloc_local(LocalDecl::new(TypeId::new(10), false));
+        body.alloc_local(LocalDecl::new(TypeId::new(11), true));
 
         let user_locals: Vec<_> = body.user_locals().collect();
         assert_eq!(user_locals, vec![Local(2), Local(3)]);
@@ -409,7 +409,7 @@ mod tests {
 
     #[test]
     fn body_all_blocks_have_terminators_valid() {
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
         let bb = body.alloc_block();
         body.block_mut(bb).set_terminator(Terminator::return_(0..0));
 
@@ -418,7 +418,7 @@ mod tests {
 
     #[test]
     fn body_all_blocks_have_terminators_invalid() {
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
         body.alloc_block(); // No terminator
 
         let result = body.validate();
@@ -428,7 +428,7 @@ mod tests {
 
     #[test]
     fn body_successors_are_valid() {
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
         let bb0 = body.alloc_block();
         let bb1 = body.alloc_block();
 
@@ -442,7 +442,7 @@ mod tests {
 
     #[test]
     fn body_successors_invalid() {
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
         let bb0 = body.alloc_block();
 
         // Point to non-existent block
@@ -456,7 +456,7 @@ mod tests {
 
     #[test]
     fn body_validate_empty_is_valid() {
-        let body = Body::new(TypeId(0));
+        let body = Body::new(TypeId::new(0));
         // Empty body (no blocks) is valid
         assert!(body.validate().is_ok());
     }
@@ -464,7 +464,7 @@ mod tests {
     #[test]
     fn body_simple_function() {
         // Build: fn foo() -> i32 { 42 }
-        let return_ty = TypeId(1); // i32
+        let return_ty = TypeId::new(1); // i32
         let mut body = Body::new(return_ty);
 
         // Allocate entry block
@@ -494,8 +494,8 @@ mod tests {
         // fn foo(cond: bool) -> i32 {
         //     if cond { 1 } else { 2 }
         // }
-        let return_ty = TypeId(1);
-        let bool_ty = TypeId(2);
+        let return_ty = TypeId::new(1);
+        let bool_ty = TypeId::new(2);
         let mut body = Body::with_args(return_ty, &[(bool_ty, false)]);
 
         let entry = body.alloc_block();
@@ -548,7 +548,7 @@ mod tests {
         // bb1: switchInt(cond) -> [0: bb3, otherwise: bb2]
         // bb2: <body>; goto bb1  (back edge!)
         // bb3: return
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
 
         let entry = body.alloc_block();
         let loop_header = body.alloc_block();
@@ -584,7 +584,7 @@ mod tests {
     #[test]
     fn body_self_loop() {
         // A block that loops to itself: bb0: goto bb0
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
         let bb = body.alloc_block();
 
         body.block_mut(bb)
@@ -596,9 +596,9 @@ mod tests {
 
     #[test]
     fn body_multiple_statements_in_block() {
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
         let bb = body.alloc_block();
-        let temp = body.alloc_local(LocalDecl::new(TypeId(1), true));
+        let temp = body.alloc_local(LocalDecl::new(TypeId::new(1), true));
 
         // Add multiple statements
         body.block_mut(bb)
@@ -623,7 +623,7 @@ mod tests {
 
     #[test]
     fn body_entry_block_is_zero() {
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
 
         // Allocate several blocks
         let bb0 = body.alloc_block();
@@ -639,7 +639,7 @@ mod tests {
 
     #[test]
     fn body_return_place_is_mutable() {
-        let body = Body::new(TypeId(0));
+        let body = Body::new(TypeId::new(0));
 
         // Return place should be mutable (we assign to it)
         assert!(body.local_decl(Local::RETURN_PLACE).mutable);
@@ -657,7 +657,7 @@ mod tests {
     #[test]
     fn body_with_unreachable_block() {
         // A function with an unreachable block (valid but unusual)
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
 
         let entry = body.alloc_block();
         let unreachable = body.alloc_block();
@@ -673,10 +673,10 @@ mod tests {
 
     #[test]
     fn local_decl_equality() {
-        let decl1 = LocalDecl::new(TypeId(1), true);
-        let decl2 = LocalDecl::new(TypeId(1), true);
-        let decl3 = LocalDecl::new(TypeId(1), false);
-        let decl4 = LocalDecl::new(TypeId(2), true);
+        let decl1 = LocalDecl::new(TypeId::new(1), true);
+        let decl2 = LocalDecl::new(TypeId::new(1), true);
+        let decl3 = LocalDecl::new(TypeId::new(1), false);
+        let decl4 = LocalDecl::new(TypeId::new(2), true);
 
         assert_eq!(decl1, decl2);
         assert_ne!(decl1, decl3); // different mutability
@@ -686,7 +686,7 @@ mod tests {
     #[test]
     fn body_validate_multiple_errors() {
         // First error found is returned
-        let mut body = Body::new(TypeId(0));
+        let mut body = Body::new(TypeId::new(0));
 
         let _bb0 = body.alloc_block();
         let bb1 = body.alloc_block();
@@ -704,7 +704,7 @@ mod tests {
 
     #[test]
     fn body_with_args_zero_args() {
-        let body = Body::with_args(TypeId(0), &[]);
+        let body = Body::with_args(TypeId::new(0), &[]);
 
         assert_eq!(body.arg_count, 0);
         assert_eq!(body.num_locals(), 1); // just return place

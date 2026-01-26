@@ -93,7 +93,7 @@ mod tests {
 
         let param_pat = crate::hir::pat::HirPat {
             kind: crate::hir::pat::HirPatKind::Bind {
-                def_id: DefId(1),
+                def_id: DefId::new(1),
                 mutable: false,
             },
             ty: i32_ty,
@@ -102,7 +102,7 @@ mod tests {
         let pat_id = pats.alloc(param_pat);
 
         let func = HirFunction {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             name: "add".to_string(),
             type_params: vec![],
             params: vec![HirParam {
@@ -127,7 +127,7 @@ mod tests {
         let unit_ty = types.unit();
 
         let func = HirFunction {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             name: "extern_fn".to_string(),
             type_params: vec![],
             params: vec![],
@@ -145,9 +145,9 @@ mod tests {
         let i32_ty = types.i32();
 
         let func = HirFunction {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             name: "generic_fn".to_string(),
-            type_params: vec![DefId(1), DefId(2)],
+            type_params: vec![DefId::new(1), DefId::new(2)],
             params: vec![],
             ret_type: i32_ty,
             body: None,
@@ -168,18 +168,18 @@ mod tests {
         let f64_ty = types.f64();
 
         let s = HirStruct {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             name: "Point".to_string(),
             type_params: vec![],
             fields: vec![
                 HirField {
-                    def_id: DefId(1),
+                    def_id: DefId::new(1),
                     name: "x".to_string(),
                     ty: i32_ty,
                     span: 0..5,
                 },
                 HirField {
-                    def_id: DefId(2),
+                    def_id: DefId::new(2),
                     name: "y".to_string(),
                     ty: f64_ty,
                     span: 6..11,
@@ -197,7 +197,7 @@ mod tests {
     #[test]
     fn hir_struct_unit() {
         let s = HirStruct {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             name: "Unit".to_string(),
             type_params: vec![],
             fields: vec![],
@@ -213,11 +213,11 @@ mod tests {
         let i32_ty = types.i32();
 
         let s = HirStruct {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             name: "Container".to_string(),
-            type_params: vec![DefId(1)],
+            type_params: vec![DefId::new(1)],
             fields: vec![HirField {
-                def_id: DefId(2),
+                def_id: DefId::new(2),
                 name: "value".to_string(),
                 ty: i32_ty,
                 span: 0..5,
@@ -238,7 +238,7 @@ mod tests {
         let i32_ty = types.i32();
 
         let alias = HirTypeAlias {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             name: "MyInt".to_string(),
             type_params: vec![],
             ty: i32_ty,
@@ -255,9 +255,9 @@ mod tests {
         let i32_ty = types.i32();
 
         let alias = HirTypeAlias {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             name: "Result".to_string(),
-            type_params: vec![DefId(1), DefId(2)],
+            type_params: vec![DefId::new(1), DefId::new(2)],
             ty: i32_ty, // Placeholder
             span: 0..20,
         };
@@ -291,7 +291,7 @@ mod tests {
         let i32_ty = types.i32();
 
         let method = HirFunction {
-            def_id: DefId(1),
+            def_id: DefId::new(1),
             name: "get".to_string(),
             type_params: vec![],
             params: vec![],
@@ -324,7 +324,7 @@ mod tests {
         let unit_ty = types.unit();
 
         let func = HirFunction {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             name: "main".to_string(),
             type_params: vec![],
             params: vec![],
@@ -340,7 +340,7 @@ mod tests {
     #[test]
     fn hir_item_struct_variant() {
         let s = HirStruct {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             name: "S".to_string(),
             type_params: vec![],
             fields: vec![],
@@ -357,7 +357,7 @@ mod tests {
         let unit_ty = types.unit();
 
         let func = HirFunction {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             name: "test".to_string(),
             type_params: vec![],
             params: vec![],
@@ -405,7 +405,7 @@ mod tests {
         let bool_ty = types.bool();
 
         let field = HirField {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             name: "active".to_string(),
             ty: bool_ty,
             span: 0..10,

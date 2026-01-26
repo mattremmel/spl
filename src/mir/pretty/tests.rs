@@ -55,7 +55,7 @@ mod primitives {
 mod constants {
     use super::*;
 
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn const_int() {
@@ -124,7 +124,7 @@ mod constants {
     fn const_fn_def() {
         let printer = MirPrinter::new();
         assert_eq!(
-            printer.print_constant(&Constant::FnDef(DefId(5))),
+            printer.print_constant(&Constant::FnDef(DefId::new(5))),
             "const fn_5"
         );
     }
@@ -133,7 +133,7 @@ mod constants {
     fn const_zeroed() {
         let printer = MirPrinter::new();
         assert_eq!(
-            printer.print_constant(&Constant::Zeroed(TypeId(3))),
+            printer.print_constant(&Constant::Zeroed(TypeId::new(3))),
             "const zeroed(ty3)"
         );
     }
@@ -144,7 +144,7 @@ mod constants {
 mod operands {
     use super::*;
 
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn operand_copy() {
@@ -306,7 +306,7 @@ mod operators {
 mod rvalues {
     use super::*;
 
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn rvalue_use() {
@@ -367,7 +367,7 @@ mod rvalues {
         let rvalue = Rvalue::Cast(
             CastKind::IntToFloat,
             Operand::Copy(Place::from_local(Local(1))),
-            TypeId(5),
+            TypeId::new(5),
         );
         assert_eq!(printer.print_rvalue(&rvalue), "copy _1 as ty5 (IntToFloat)");
     }
@@ -423,7 +423,7 @@ mod rvalues {
     fn rvalue_aggregate_adt() {
         let printer = MirPrinter::new();
         let rvalue = Rvalue::Aggregate(
-            AggregateKind::Adt(DefId(10)),
+            AggregateKind::Adt(DefId::new(10)),
             vec![
                 Operand::Copy(Place::from_local(Local(1))),
                 Operand::Copy(Place::from_local(Local(2))),
@@ -438,7 +438,7 @@ mod rvalues {
 mod statements {
     use super::*;
 
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn stmt_assign() {
@@ -570,7 +570,7 @@ mod terminators {
         let printer = MirPrinter::new();
         let term = Terminator::new(
             TerminatorKind::Call {
-                func: Operand::Constant(Constant::FnDef(DefId(5))),
+                func: Operand::Constant(Constant::FnDef(DefId::new(5))),
                 args: vec![
                     Operand::Copy(Place::from_local(Local(1))),
                     Operand::Copy(Place::from_local(Local(2))),
@@ -591,7 +591,7 @@ mod terminators {
         let printer = MirPrinter::new();
         let term = Terminator::new(
             TerminatorKind::Call {
-                func: Operand::Constant(Constant::FnDef(DefId(5))),
+                func: Operand::Constant(Constant::FnDef(DefId::new(5))),
                 args: vec![Operand::Copy(Place::from_local(Local(1)))],
                 destination: Place::from_local(Local(0)),
                 target: None,
@@ -610,7 +610,7 @@ mod terminators {
 mod basic_blocks {
     use super::*;
 
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn block_empty() {
@@ -658,11 +658,11 @@ mod basic_blocks {
 mod function_bodies {
     use super::*;
 
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn body_simple() {
-        let mut body = Body::new(TypeId(1)); // return type
+        let mut body = Body::new(TypeId::new(1)); // return type
         let bb = body.alloc_block();
         body.block_mut(bb).push_statement(Statement::assign(
             Place::from_local(Local(0)),
@@ -686,7 +686,7 @@ mod function_bodies {
 
     #[test]
     fn body_with_args() {
-        let mut body = Body::with_args(TypeId(1), &[(TypeId(2), false), (TypeId(3), true)]);
+        let mut body = Body::with_args(TypeId::new(1), &[(TypeId::new(2), false), (TypeId::new(3), true)]);
         let bb = body.alloc_block();
         body.block_mut(bb).push_statement(Statement::assign(
             Place::from_local(Local(0)),
@@ -714,8 +714,8 @@ mod function_bodies {
 
     #[test]
     fn body_multi_block() {
-        let mut body = Body::with_args(TypeId(1), &[(TypeId(2), false)]);
-        let temp = body.alloc_local(LocalDecl::new(TypeId(1), true));
+        let mut body = Body::with_args(TypeId::new(1), &[(TypeId::new(2), false)]);
+        let temp = body.alloc_local(LocalDecl::new(TypeId::new(1), true));
 
         let bb0 = body.alloc_block();
         let bb1 = body.alloc_block();
@@ -762,8 +762,8 @@ mod function_bodies {
 
     #[test]
     fn body_with_named_local() {
-        let mut body = Body::new(TypeId(1));
-        let _x = body.alloc_local(LocalDecl::with_name(TypeId(2), true, "x"));
+        let mut body = Body::new(TypeId::new(1));
+        let _x = body.alloc_local(LocalDecl::with_name(TypeId::new(2), true, "x"));
 
         let bb = body.alloc_block();
         body.block_mut(bb).set_terminator(Terminator::return_(0..0));
@@ -785,7 +785,7 @@ mod function_bodies {
     #[test]
     fn body_with_control_flow() {
         // if cond { 1 } else { 2 }
-        let mut body = Body::with_args(TypeId(1), &[(TypeId(2), false)]); // bool arg
+        let mut body = Body::with_args(TypeId::new(1), &[(TypeId::new(2), false)]); // bool arg
 
         let entry = body.alloc_block();
         let then_bb = body.alloc_block();
@@ -850,12 +850,12 @@ mod function_bodies {
 mod integration {
     use super::*;
 
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn integration_simple_return() {
         // fn simple() -> i32 { 42 }
-        let mut body = Body::new(TypeId(1));
+        let mut body = Body::new(TypeId::new(1));
         let bb = body.alloc_block();
 
         body.block_mut(bb).push_statement(Statement::assign(
@@ -881,7 +881,7 @@ mod integration {
     #[test]
     fn integration_arithmetic() {
         // fn add(a: i32, b: i32) -> i32 { a + b }
-        let mut body = Body::with_args(TypeId(1), &[(TypeId(1), false), (TypeId(1), false)]);
+        let mut body = Body::with_args(TypeId::new(1), &[(TypeId::new(1), false), (TypeId::new(1), false)]);
         let bb = body.alloc_block();
 
         body.block_mut(bb).push_statement(Statement::assign(
@@ -911,13 +911,13 @@ mod integration {
     #[test]
     fn integration_function_call() {
         // fn caller() -> i32 { callee(1, 2) }
-        let mut body = Body::new(TypeId(1));
+        let mut body = Body::new(TypeId::new(1));
         let bb = body.alloc_block();
         let ret_bb = body.alloc_block();
 
         body.block_mut(bb).set_terminator(Terminator::new(
             TerminatorKind::Call {
-                func: Operand::Constant(Constant::FnDef(DefId(10))),
+                func: Operand::Constant(Constant::FnDef(DefId::new(10))),
                 args: vec![
                     Operand::Constant(Constant::Int(1, DUMMY_TY)),
                     Operand::Constant(Constant::Int(2, DUMMY_TY)),
@@ -947,8 +947,8 @@ mod integration {
 
     #[test]
     fn integration_storage_markers() {
-        let mut body = Body::new(TypeId(0));
-        let temp = body.alloc_local(LocalDecl::new(TypeId(1), true));
+        let mut body = Body::new(TypeId::new(0));
+        let temp = body.alloc_local(LocalDecl::new(TypeId::new(1), true));
         let bb = body.alloc_block();
 
         body.block_mut(bb)
@@ -981,8 +981,8 @@ mod integration {
 
     #[test]
     fn integration_ref_and_deref() {
-        let mut body = Body::with_args(TypeId(1), &[(TypeId(2), false)]);
-        let ref_local = body.alloc_local(LocalDecl::new(TypeId(3), false)); // &i32
+        let mut body = Body::with_args(TypeId::new(1), &[(TypeId::new(2), false)]);
+        let ref_local = body.alloc_local(LocalDecl::new(TypeId::new(3), false)); // &i32
 
         let bb = body.alloc_block();
 
@@ -1058,7 +1058,7 @@ mod coverage {
 
     #[test]
     fn empty_body_no_blocks() {
-        let body = Body::new(TypeId(1));
+        let body = Body::new(TypeId::new(1));
         let output = pretty_print(&body, Some("empty"));
         check(
             &output,
@@ -1071,7 +1071,7 @@ mod coverage {
 
     #[test]
     fn body_default_name() {
-        let mut body = Body::new(TypeId(1));
+        let mut body = Body::new(TypeId::new(1));
         let bb = body.alloc_block();
         body.block_mut(bb).set_terminator(Terminator::return_(0..0));
 

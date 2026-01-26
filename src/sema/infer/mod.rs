@@ -118,9 +118,9 @@ impl InferResult {
         match ty {
             Type::Primitive(prim) => prim.as_str().to_string(),
             Type::Infer(var, kind) => match kind {
-                InferKind::General => format!("?{}", var.0),
-                InferKind::Int => format!("?int{}", var.0),
-                InferKind::Float => format!("?float{}", var.0),
+                InferKind::General => format!("?{}", var.index()),
+                InferKind::Int => format!("?int{}", var.index()),
+                InferKind::Float => format!("?float{}", var.index()),
             },
             Type::Ref(mutability, inner) => {
                 let inner_str = self.type_to_string(*inner, ctx);

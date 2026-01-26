@@ -443,7 +443,7 @@ mod tests {
     use crate::sema::types::TypeId;
     use object::{Object, ObjectSymbol};
 
-    const DUMMY_TY: TypeId = TypeId(0);
+    const DUMMY_TY: TypeId = TypeId::new(0);
 
     #[test]
     fn compile_single_function() {
@@ -461,12 +461,12 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "returns_42", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "returns_42", &body)];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         assert_eq!(module.len(), 1);
 
-        let ptr = module.get_function_ptr(DefId(1)).unwrap();
+        let ptr = module.get_function_ptr(DefId::new(1)).unwrap();
         let func: fn() -> i32 = unsafe { std::mem::transmute(ptr) };
         assert_eq!(func(), 42);
     }
@@ -501,15 +501,15 @@ mod tests {
             .set_terminator(Terminator::return_(0..0));
 
         let functions = [
-            FunctionDef::new(DefId(1), "returns_1", &body1),
-            FunctionDef::new(DefId(2), "returns_2", &body2),
+            FunctionDef::new(DefId::new(1), "returns_1", &body1),
+            FunctionDef::new(DefId::new(2), "returns_2", &body2),
         ];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         assert_eq!(module.len(), 2);
 
-        let ptr1 = module.get_function_ptr(DefId(1)).unwrap();
-        let ptr2 = module.get_function_ptr(DefId(2)).unwrap();
+        let ptr1 = module.get_function_ptr(DefId::new(1)).unwrap();
+        let ptr2 = module.get_function_ptr(DefId::new(2)).unwrap();
 
         let func1: fn() -> i32 = unsafe { std::mem::transmute(ptr1) };
         let func2: fn() -> i32 = unsafe { std::mem::transmute(ptr2) };
@@ -547,7 +547,7 @@ mod tests {
             .block_mut(caller_entry)
             .set_terminator(Terminator::new(
                 TerminatorKind::Call {
-                    func: Operand::Constant(Constant::FnDef(DefId(1))), // callee
+                    func: Operand::Constant(Constant::FnDef(DefId::new(1))), // callee
                     args: vec![],
                     destination: Place::from_local(Local::RETURN_PLACE),
                     target: Some(after_call),
@@ -560,12 +560,12 @@ mod tests {
             .set_terminator(Terminator::return_(0..0));
 
         let functions = [
-            FunctionDef::new(DefId(1), "callee", &callee_body),
-            FunctionDef::new(DefId(2), "caller", &caller_body),
+            FunctionDef::new(DefId::new(1), "callee", &callee_body),
+            FunctionDef::new(DefId::new(2), "caller", &caller_body),
         ];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-        let caller_ptr = module.get_function_ptr(DefId(2)).unwrap();
+        let caller_ptr = module.get_function_ptr(DefId::new(2)).unwrap();
         let caller: fn() -> i32 = unsafe { std::mem::transmute(caller_ptr) };
 
         assert_eq!(caller(), 42);
@@ -605,7 +605,7 @@ mod tests {
             .block_mut(caller_entry)
             .set_terminator(Terminator::new(
                 TerminatorKind::Call {
-                    func: Operand::Constant(Constant::FnDef(DefId(1))), // add
+                    func: Operand::Constant(Constant::FnDef(DefId::new(1))), // add
                     args: vec![
                         Operand::const_int(10, DUMMY_TY),
                         Operand::const_int(32, DUMMY_TY),
@@ -621,12 +621,12 @@ mod tests {
             .set_terminator(Terminator::return_(0..0));
 
         let functions = [
-            FunctionDef::new(DefId(1), "add", &add_body),
-            FunctionDef::new(DefId(2), "caller", &caller_body),
+            FunctionDef::new(DefId::new(1), "add", &add_body),
+            FunctionDef::new(DefId::new(2), "caller", &caller_body),
         ];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-        let caller_ptr = module.get_function_ptr(DefId(2)).unwrap();
+        let caller_ptr = module.get_function_ptr(DefId::new(2)).unwrap();
         let caller: fn() -> i32 = unsafe { std::mem::transmute(caller_ptr) };
 
         assert_eq!(caller(), 42);
@@ -647,11 +647,11 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "test", &body)];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         // This should not panic
-        let _ = module.get_function_ptr_or_panic(DefId(1));
+        let _ = module.get_function_ptr_or_panic(DefId::new(1));
     }
 
     #[test]
@@ -665,11 +665,11 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "test", &body)];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         // This should panic
-        let _ = module.get_function_ptr_or_panic(DefId(999));
+        let _ = module.get_function_ptr_or_panic(DefId::new(999));
     }
 
     #[test]
@@ -698,10 +698,10 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "returns_42", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "returns_42", &body)];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-        let result = module.run(DefId(1));
+        let result = module.run(DefId::new(1));
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42);
     }
@@ -721,10 +721,10 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "test", &body)];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-        let result = module.run(DefId(999));
+        let result = module.run(DefId::new(999));
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -748,11 +748,11 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "main", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "main", &body)];
         let mut module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         // Set the main function
-        module.set_main(DefId(1));
+        module.set_main(DefId::new(1));
 
         let result = module.run_main();
         assert!(result.is_ok());
@@ -769,7 +769,7 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "test", &body)];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         // Don't set main
@@ -789,8 +789,8 @@ mod tests {
 
         assert!(module.main_def_id().is_none());
 
-        module.set_main(DefId(42));
-        assert_eq!(module.main_def_id(), Some(DefId(42)));
+        module.set_main(DefId::new(42));
+        assert_eq!(module.main_def_id(), Some(DefId::new(42)));
     }
 
     #[test]
@@ -808,13 +808,13 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "test", &body)];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         // Call multiple times
-        assert_eq!(module.run(DefId(1)).unwrap(), 42);
-        assert_eq!(module.run(DefId(1)).unwrap(), 42);
-        assert_eq!(module.run(DefId(1)).unwrap(), 42);
+        assert_eq!(module.run(DefId::new(1)).unwrap(), 42);
+        assert_eq!(module.run(DefId::new(1)).unwrap(), 42);
+        assert_eq!(module.run(DefId::new(1)).unwrap(), 42);
     }
 
     #[test]
@@ -859,20 +859,20 @@ mod tests {
             .set_terminator(Terminator::return_(0..0));
 
         let functions = [
-            FunctionDef::new(DefId(1), "returns_1", &body1),
-            FunctionDef::new(DefId(2), "returns_2", &body2),
-            FunctionDef::new(DefId(3), "returns_3", &body3),
+            FunctionDef::new(DefId::new(1), "returns_1", &body1),
+            FunctionDef::new(DefId::new(2), "returns_2", &body2),
+            FunctionDef::new(DefId::new(3), "returns_3", &body3),
         ];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-        assert_eq!(module.run(DefId(1)).unwrap(), 1);
-        assert_eq!(module.run(DefId(2)).unwrap(), 2);
-        assert_eq!(module.run(DefId(3)).unwrap(), 3);
+        assert_eq!(module.run(DefId::new(1)).unwrap(), 1);
+        assert_eq!(module.run(DefId::new(2)).unwrap(), 2);
+        assert_eq!(module.run(DefId::new(3)).unwrap(), 3);
 
         // Run in different order
-        assert_eq!(module.run(DefId(3)).unwrap(), 3);
-        assert_eq!(module.run(DefId(1)).unwrap(), 1);
-        assert_eq!(module.run(DefId(2)).unwrap(), 2);
+        assert_eq!(module.run(DefId::new(3)).unwrap(), 3);
+        assert_eq!(module.run(DefId::new(1)).unwrap(), 1);
+        assert_eq!(module.run(DefId::new(2)).unwrap(), 2);
     }
 
     #[test]
@@ -903,21 +903,21 @@ mod tests {
             .set_terminator(Terminator::return_(0..0));
 
         let functions = [
-            FunctionDef::new(DefId(1), "fn1", &body1),
-            FunctionDef::new(DefId(2), "fn2", &body2),
+            FunctionDef::new(DefId::new(1), "fn1", &body1),
+            FunctionDef::new(DefId::new(2), "fn2", &body2),
         ];
         let mut module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         // Set main to first function
-        module.set_main(DefId(1));
+        module.set_main(DefId::new(1));
         assert_eq!(module.run_main().unwrap(), 100);
 
         // Change main to second function
-        module.set_main(DefId(2));
+        module.set_main(DefId::new(2));
         assert_eq!(module.run_main().unwrap(), 200);
 
         // Change back
-        module.set_main(DefId(1));
+        module.set_main(DefId::new(1));
         assert_eq!(module.run_main().unwrap(), 100);
     }
 
@@ -937,10 +937,10 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "returns_zero", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "returns_zero", &body)];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-        assert_eq!(module.run(DefId(1)).unwrap(), 0);
+        assert_eq!(module.run(DefId::new(1)).unwrap(), 0);
     }
 
     #[test]
@@ -958,10 +958,10 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "returns_negative", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "returns_negative", &body)];
         let module = ModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
-        assert_eq!(module.run(DefId(1)).unwrap(), -42);
+        assert_eq!(module.run(DefId::new(1)).unwrap(), -42);
     }
 
     // =========================================================================
@@ -984,12 +984,12 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "returns_42", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "returns_42", &body)];
         let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         assert_eq!(obj.len(), 1);
         assert!(!obj.is_empty());
-        assert_eq!(obj.get_function_name(DefId(1)), Some("returns_42"));
+        assert_eq!(obj.get_function_name(DefId::new(1)), Some("returns_42"));
 
         // Verify the object file is valid
         let parsed = object::File::parse(obj.bytes()).expect("failed to parse object file");
@@ -1020,7 +1020,7 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "add_one", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "add_one", &body)];
         let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         // Just verify it compiles and produces valid object
@@ -1073,7 +1073,7 @@ mod tests {
         body.block_mut(exit_block)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "conditional", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "conditional", &body)];
         let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         let parsed = object::File::parse(obj.bytes());
@@ -1110,14 +1110,14 @@ mod tests {
             .set_terminator(Terminator::return_(0..0));
 
         let functions = [
-            FunctionDef::new(DefId(1), "returns_1", &body1),
-            FunctionDef::new(DefId(2), "returns_2", &body2),
+            FunctionDef::new(DefId::new(1), "returns_1", &body1),
+            FunctionDef::new(DefId::new(2), "returns_2", &body2),
         ];
         let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         assert_eq!(obj.len(), 2);
-        assert_eq!(obj.get_function_name(DefId(1)), Some("returns_1"));
-        assert_eq!(obj.get_function_name(DefId(2)), Some("returns_2"));
+        assert_eq!(obj.get_function_name(DefId::new(1)), Some("returns_1"));
+        assert_eq!(obj.get_function_name(DefId::new(2)), Some("returns_2"));
 
         // Verify both symbols exist in the object file
         let parsed = object::File::parse(obj.bytes()).expect("failed to parse");
@@ -1154,7 +1154,7 @@ mod tests {
             .block_mut(caller_entry)
             .set_terminator(Terminator::new(
                 TerminatorKind::Call {
-                    func: Operand::Constant(Constant::FnDef(DefId(1))), // callee
+                    func: Operand::Constant(Constant::FnDef(DefId::new(1))), // callee
                     args: vec![],
                     destination: Place::from_local(Local::RETURN_PLACE),
                     target: Some(after_call),
@@ -1167,8 +1167,8 @@ mod tests {
             .set_terminator(Terminator::return_(0..0));
 
         let functions = [
-            FunctionDef::new(DefId(1), "callee", &callee_body),
-            FunctionDef::new(DefId(2), "caller", &caller_body),
+            FunctionDef::new(DefId::new(1), "callee", &callee_body),
+            FunctionDef::new(DefId::new(2), "caller", &caller_body),
         ];
         let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
@@ -1202,7 +1202,7 @@ mod tests {
         let functions: Vec<_> = bodies
             .iter()
             .enumerate()
-            .map(|(i, b)| FunctionDef::new(DefId(i as u32 + 1), format!("fn_{i}"), b))
+            .map(|(i, b)| FunctionDef::new(DefId::new(i as u32 + 1), format!("fn_{i}"), b))
             .collect();
 
         let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
@@ -1226,15 +1226,15 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "test", &body)];
         let mut obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         // Test accessors
         assert!(!obj.bytes().is_empty());
         assert!(obj.main_def_id().is_none());
 
-        obj.set_main(DefId(1));
-        assert_eq!(obj.main_def_id(), Some(DefId(1)));
+        obj.set_main(DefId::new(1));
+        assert_eq!(obj.main_def_id(), Some(DefId::new(1)));
     }
 
     #[test]
@@ -1247,7 +1247,7 @@ mod tests {
         body.block_mut(entry)
             .set_terminator(Terminator::return_(0..0));
 
-        let functions = [FunctionDef::new(DefId(1), "test", &body)];
+        let functions = [FunctionDef::new(DefId::new(1), "test", &body)];
         let obj = AotModuleCompiler::compile(&functions, &types).expect("compilation failed");
 
         let bytes = obj.into_bytes();

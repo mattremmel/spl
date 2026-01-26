@@ -454,7 +454,7 @@ mod tests {
     #[test]
     fn hir_expr_kind_struct() {
         let kind = HirExprKind::Struct {
-            def_id: DefId(0),
+            def_id: DefId::new(0),
             fields: vec![
                 (
                     "x".to_string(),

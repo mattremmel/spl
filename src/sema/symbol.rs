@@ -37,12 +37,24 @@ use super::scope::ScopeId;
 
 /// A unique identifier for each definition in the program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct DefId(pub u32);
+pub struct DefId(u32);
 
 impl DefId {
     /// Sentinel value for unresolved/invalid definitions.
     /// Uses `u32::MAX` to avoid collision with real `DefIds` (assigned from 0).
     pub const INVALID: DefId = DefId(u32::MAX);
+
+    /// Create a new `DefId` with the given index.
+    #[inline]
+    pub(crate) const fn new(index: u32) -> Self {
+        DefId(index)
+    }
+
+    /// Get the raw index value of this `DefId`.
+    #[inline]
+    pub fn index(self) -> u32 {
+        self.0
+    }
 
     /// Check if this `DefId` is the invalid sentinel.
     #[inline]
@@ -155,8 +167,8 @@ mod tests {
 
     #[test]
     fn def_id_zero_is_valid() {
-        assert!(!DefId(0).is_invalid());
-        assert!(DefId(0).is_valid());
+        assert!(!DefId::new(0).is_invalid());
+        assert!(DefId::new(0).is_valid());
     }
 
     #[test]

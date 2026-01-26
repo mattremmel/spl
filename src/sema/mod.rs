@@ -136,14 +136,14 @@ impl SemanticContext {
     /// Create a new semantic context with a root module scope.
     pub fn new() -> Self {
         let mut scopes = Vec::new();
-        let root_scope = Scope::new(ScopeId(0), ScopeKind::Module, None);
+        let root_scope = Scope::new(ScopeId::new(0), ScopeKind::Module, None);
         scopes.push(root_scope);
 
         Self {
             interner: Rodeo::default(),
             symbols: Vec::new(),
             scopes,
-            current_scope: ScopeId(0),
+            current_scope: ScopeId::new(0),
             types: TypeInterner::new(),
             module_tree: None,
             current_module: ModuleId(0),
@@ -153,14 +153,14 @@ impl SemanticContext {
     /// Create a new semantic context with a module tree for multi-file compilation.
     pub fn with_module_tree(module_tree: ModuleTree, current_module: ModuleId) -> Self {
         let mut scopes = Vec::new();
-        let root_scope = Scope::new(ScopeId(0), ScopeKind::Module, None);
+        let root_scope = Scope::new(ScopeId::new(0), ScopeKind::Module, None);
         scopes.push(root_scope);
 
         Self {
             interner: Rodeo::default(),
             symbols: Vec::new(),
             scopes,
-            current_scope: ScopeId(0),
+            current_scope: ScopeId::new(0),
             types: TypeInterner::new(),
             module_tree: Some(module_tree),
             current_module,
@@ -189,7 +189,7 @@ impl SemanticContext {
 
     /// Enter a new scope of the given kind, returning its ID.
     pub fn enter_scope(&mut self, kind: ScopeKind) -> ScopeId {
-        let id = ScopeId(self.scopes.len() as u32);
+        let id = ScopeId::new(self.scopes.len() as u32);
         let scope = Scope::new(id, kind, Some(self.current_scope));
         self.scopes.push(scope);
         self.current_scope = id;
@@ -206,7 +206,7 @@ impl SemanticContext {
             "precondition: cannot exit root scope"
         );
 
-        let current = &self.scopes[self.current_scope.0 as usize];
+        let current = &self.scopes[self.current_scope.index() as usize];
         self.current_scope = current.parent.expect("cannot exit root scope");
     }
 
@@ -217,7 +217,7 @@ impl SemanticContext {
         debug_assert!(
             self.is_valid_scope_id(scope_id),
             "precondition: scope_id {} must be valid (< {})",
-            scope_id.0,
+            scope_id.index(),
             self.scopes.len()
         );
         self.current_scope = scope_id;
@@ -233,10 +233,10 @@ impl SemanticContext {
         debug_assert!(
             self.is_valid_scope_id(scope_id),
             "precondition: scope_id {} must be valid (< {})",
-            scope_id.0,
+            scope_id.index(),
             self.scopes.len()
         );
-        &self.scopes[scope_id.0 as usize]
+        &self.scopes[scope_id.index() as usize]
     }
 
     // ===== Symbol Definition & Lookup =====
@@ -254,11 +254,11 @@ impl SemanticContext {
         span: Span,
         is_mutable: bool,
     ) -> Result<DefId, DefId> {
-        let def_id = DefId(self.symbols.len() as u32);
+        let def_id = DefId::new(self.symbols.len() as u32);
         let scope_id = self.current_scope;
 
         // Try to define in current scope
-        let scope = &mut self.scopes[scope_id.0 as usize];
+        let scope = &mut self.scopes[scope_id.index() as usize];
         scope.define(name, def_id)?;
 
         // Success - create the symbol
@@ -286,11 +286,11 @@ impl SemanticContext {
         debug_assert!(
             self.is_valid_def_id(target_def_id),
             "precondition: target_def_id {} must be valid (< {})",
-            target_def_id.0,
+            target_def_id.index(),
             self.symbols.len()
         );
 
-        let scope = &mut self.scopes[self.current_scope.0 as usize];
+        let scope = &mut self.scopes[self.current_scope.index() as usize];
         scope.define(name, target_def_id)
     }
 
@@ -304,9 +304,9 @@ impl SemanticContext {
             debug_assert!(
                 self.is_valid_scope_id(id),
                 "invariant: scope chain contains invalid scope_id {}",
-                id.0
+                id.index()
             );
-            let scope = &self.scopes[id.0 as usize];
+            let scope = &self.scopes[id.index() as usize];
             if let Some(def_id) = scope.lookup(name) {
                 return Some(def_id);
             }
@@ -321,10 +321,10 @@ impl SemanticContext {
         debug_assert!(
             self.is_valid_scope_id(scope_id),
             "precondition: scope_id {} must be valid (< {})",
-            scope_id.0,
+            scope_id.index(),
             self.scopes.len()
         );
-        self.scopes[scope_id.0 as usize].lookup(name)
+        self.scopes[scope_id.index() as usize].lookup(name)
     }
 
     /// Get a symbol by its `DefId`.
@@ -332,10 +332,10 @@ impl SemanticContext {
         debug_assert!(
             self.is_valid_def_id(def_id),
             "precondition: def_id {} must be valid (< {})",
-            def_id.0,
+            def_id.index(),
             self.symbols.len()
         );
-        &self.symbols[def_id.0 as usize]
+        &self.symbols[def_id.index() as usize]
     }
 
     /// Iterate over all symbols in the symbol table.
@@ -348,7 +348,7 @@ impl SemanticContext {
     /// Returns true if currently at the root scope (scope 0).
     /// Used for contract assertions to prevent exiting the root scope.
     pub fn is_at_root_scope(&self) -> bool {
-        self.current_scope.0 == 0
+        self.current_scope.index() == 0
     }
 
     /// Returns the current scope depth (number of scopes from root).
@@ -357,11 +357,11 @@ impl SemanticContext {
         let mut depth = 0;
         let mut scope_id = Some(self.current_scope);
         while let Some(id) = scope_id {
-            if id.0 == 0 {
+            if id.index() == 0 {
                 break;
             }
             depth += 1;
-            scope_id = self.scopes[id.0 as usize].parent;
+            scope_id = self.scopes[id.index() as usize].parent;
         }
         depth
     }
@@ -371,13 +371,13 @@ impl SemanticContext {
     /// Returns true if the given `ScopeId` is valid (within bounds).
     /// Used in debug assertions; trivial enough to always compile.
     fn is_valid_scope_id(&self, scope_id: ScopeId) -> bool {
-        (scope_id.0 as usize) < self.scopes.len()
+        (scope_id.index() as usize) < self.scopes.len()
     }
 
     /// Returns true if the given `DefId` is valid (within bounds).
     /// Used in debug assertions; trivial enough to always compile.
     fn is_valid_def_id(&self, def_id: DefId) -> bool {
-        (def_id.0 as usize) < self.symbols.len()
+        (def_id.index() as usize) < self.symbols.len()
     }
 }
 
@@ -778,9 +778,9 @@ mod tests {
             .define(name3, SymbolKind::Local, Visibility::Private, 13..18, false)
             .unwrap();
 
-        assert_eq!(def1.0, 0);
-        assert_eq!(def2.0, 1);
-        assert_eq!(def3.0, 2);
+        assert_eq!(def1.index(), 0);
+        assert_eq!(def2.index(), 1);
+        assert_eq!(def3.index(), 2);
     }
 
     #[test]
@@ -851,8 +851,8 @@ mod tests {
     #[test]
     fn test_default_impl_for_semantic_context() {
         let ctx = SemanticContext::default();
-        assert_eq!(ctx.current_scope_id(), ScopeId(0));
-        assert_eq!(ctx.get_scope(ScopeId(0)).kind, ScopeKind::Module);
+        assert_eq!(ctx.current_scope_id(), ScopeId::new(0));
+        assert_eq!(ctx.get_scope(ScopeId::new(0)).kind, ScopeKind::Module);
     }
 
     #[test]
