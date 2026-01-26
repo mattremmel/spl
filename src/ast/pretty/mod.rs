@@ -923,12 +923,10 @@ impl AstPrinter {
         self.line("RangePat");
         self.indented(|p| {
             if let Some(start) = range.start() {
-                p.line("Start");
-                p.indented(|p| p.print_pattern(&start));
+                p.line(&format!("Start {}", start.text()));
             }
             if let Some(end) = range.end() {
-                p.line("End");
-                p.indented(|p| p.print_pattern(&end));
+                p.line(&format!("End {}", end.text()));
             }
         });
     }

@@ -539,3 +539,429 @@ impl MatchArm {
         children::<Expr>(&self.0).find(|expr| expr.syntax().text_range().start() >= arrow_pos)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::SourceFile;
+    use crate::parser::parse;
+    use rowan::ast::AstNode;
+
+    /// Helper to parse source and find first expression of a specific kind.
+    fn parse_expr<E: AstNode<Language = crate::syntax::Lang>>(source: &str) -> E {
+        let parsed = parse(source);
+        assert!(parsed.errors().is_empty(), "parse errors: {:?}", parsed.errors());
+        let root = parsed.syntax();
+        root.descendants()
+            .find_map(E::cast)
+            .expect("expected expression not found")
+    }
+
+    /// Helper to parse and get first expression in function body.
+    #[allow(dead_code)]
+    fn parse_first_expr(source: &str) -> Expr {
+        let parsed = parse(source);
+        assert!(parsed.errors().is_empty(), "parse errors: {:?}", parsed.errors());
+        let source_file = SourceFile::cast(parsed.syntax()).expect("expected SourceFile");
+        source_file
+            .items()
+            .filter_map(|item| match item {
+                crate::ast::Item::Function(f) => f.body(),
+                _ => None,
+            })
+            .next()
+            .and_then(|block| block.tail_expr())
+            .expect("expected expression in function body")
+    }
+
+    // =========================================================================
+    // LiteralExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn literal_expr_int() {
+        let lit: LiteralExpr = parse_expr("fn main() { 42 }");
+        let tok = lit.token().expect("expected token");
+        assert_eq!(tok.text(), "42");
+    }
+
+    #[test]
+    fn literal_expr_float() {
+        let lit: LiteralExpr = parse_expr("fn main() { 3.14 }");
+        let tok = lit.token().expect("expected token");
+        assert_eq!(tok.text(), "3.14");
+    }
+
+    #[test]
+    fn literal_expr_bool() {
+        let lit: LiteralExpr = parse_expr("fn main() { true }");
+        let tok = lit.token().expect("expected token");
+        assert_eq!(tok.text(), "true");
+    }
+
+    #[test]
+    fn literal_expr_string() {
+        let lit: LiteralExpr = parse_expr("fn main() { \"hello\" }");
+        let tok = lit.token().expect("expected token");
+        assert_eq!(tok.text(), "\"hello\"");
+    }
+
+    // =========================================================================
+    // TupleExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn tuple_expr_empty() {
+        let tuple: TupleExpr = parse_expr("fn main() { () }");
+        assert_eq!(tuple.exprs().count(), 0);
+    }
+
+    #[test]
+    fn tuple_expr_multiple() {
+        let tuple: TupleExpr = parse_expr("fn main() { (1, 2, 3) }");
+        let exprs: Vec<_> = tuple.exprs().collect();
+        assert_eq!(exprs.len(), 3);
+    }
+
+    // =========================================================================
+    // ArrayExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn array_expr_literal() {
+        let arr: ArrayExpr = parse_expr("fn main() { [1, 2, 3] }");
+        assert!(!arr.is_repeat());
+        assert_eq!(arr.exprs().count(), 3);
+    }
+
+    #[test]
+    fn array_expr_repeat() {
+        let arr: ArrayExpr = parse_expr("fn main() { [0; 10] }");
+        assert!(arr.is_repeat());
+        // In repeat syntax, we have element and count as children
+        assert_eq!(arr.exprs().count(), 2);
+    }
+
+    // =========================================================================
+    // BinExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn bin_expr_add() {
+        let bin: BinExpr = parse_expr("fn main() { 1 + 2 }");
+        assert!(bin.lhs().is_some());
+        assert!(bin.rhs().is_some());
+        let op = bin.op_token().expect("expected operator");
+        assert_eq!(op.kind(), SyntaxKind::PLUS);
+    }
+
+    #[test]
+    fn bin_expr_comparison() {
+        let bin: BinExpr = parse_expr("fn main() { x == y }");
+        let op = bin.op_token().expect("expected operator");
+        assert_eq!(op.kind(), SyntaxKind::EQ_EQ);
+    }
+
+    #[test]
+    fn bin_expr_logical() {
+        let bin: BinExpr = parse_expr("fn main() { a && b }");
+        let op = bin.op_token().expect("expected operator");
+        assert_eq!(op.kind(), SyntaxKind::AND_AND);
+    }
+
+    #[test]
+    fn bin_expr_assignment() {
+        let bin: BinExpr = parse_expr("fn main() { x = 5 }");
+        let op = bin.op_token().expect("expected operator");
+        assert_eq!(op.kind(), SyntaxKind::EQ);
+    }
+
+    #[test]
+    fn bin_expr_compound_assignment() {
+        let bin: BinExpr = parse_expr("fn main() { x += 1 }");
+        let op = bin.op_token().expect("expected operator");
+        assert_eq!(op.kind(), SyntaxKind::PLUS_EQ);
+    }
+
+    // =========================================================================
+    // PrefixExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn prefix_expr_negation() {
+        let prefix: PrefixExpr = parse_expr("fn main() { -x }");
+        let op = prefix.op_token().expect("expected operator");
+        assert_eq!(op.kind(), SyntaxKind::MINUS);
+        assert!(prefix.expr().is_some());
+    }
+
+    #[test]
+    fn prefix_expr_not() {
+        let prefix: PrefixExpr = parse_expr("fn main() { !flag }");
+        let op = prefix.op_token().expect("expected operator");
+        assert_eq!(op.kind(), SyntaxKind::BANG);
+    }
+
+    #[test]
+    fn prefix_expr_deref() {
+        let prefix: PrefixExpr = parse_expr("fn main() { *ptr }");
+        let op = prefix.op_token().expect("expected operator");
+        assert_eq!(op.kind(), SyntaxKind::STAR);
+    }
+
+    // =========================================================================
+    // RefExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn ref_expr_immutable() {
+        let ref_expr: RefExpr = parse_expr("fn main() { &x }");
+        assert!(ref_expr.amp().is_some());
+        assert!(ref_expr.mut_kw().is_none());
+        assert!(ref_expr.expr().is_some());
+    }
+
+    #[test]
+    fn ref_expr_mutable() {
+        let ref_expr: RefExpr = parse_expr("fn main() { &mut x }");
+        assert!(ref_expr.amp().is_some());
+        assert!(ref_expr.mut_kw().is_some());
+    }
+
+    // =========================================================================
+    // IfExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn if_expr_no_else() {
+        let if_expr: IfExpr = parse_expr("fn main() { if true { 1 } }");
+        assert!(if_expr.condition().is_some());
+        assert!(if_expr.then_branch().is_some());
+        assert!(if_expr.else_branch().is_none());
+        assert!(if_expr.else_block().is_none());
+    }
+
+    #[test]
+    fn if_expr_with_else() {
+        let if_expr: IfExpr = parse_expr("fn main() { if true { 1 } else { 2 } }");
+        assert!(if_expr.condition().is_some());
+        assert!(if_expr.then_branch().is_some());
+        assert!(if_expr.else_block().is_some());
+    }
+
+    // =========================================================================
+    // ApplyExpr Tests (function calls and struct instantiation)
+    // =========================================================================
+
+    #[test]
+    fn apply_expr_no_args() {
+        // In SPL, foo() is an ApplyExpr, not CallExpr
+        let apply: ApplyExpr = parse_expr("fn main() { foo() }");
+        assert!(apply.path().is_some());
+        assert_eq!(apply.args().count(), 0);
+    }
+
+    #[test]
+    fn apply_expr_with_args() {
+        let apply: ApplyExpr = parse_expr("fn main() { foo(1, 2) }");
+        assert!(apply.path().is_some());
+        assert_eq!(apply.args().count(), 2);
+    }
+
+    // =========================================================================
+    // FieldExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn field_expr_on_call_result() {
+        // In SPL, point.x is a Path, not a FieldExpr
+        // FieldExpr is for accessing fields on expression results
+        let field: FieldExpr = parse_expr("fn foo(): Point { Point(x: 1, y: 2) } fn main() { foo().x }");
+        assert!(field.expr().is_some());
+        assert!(field.name().is_some() || field.name_token().is_some());
+    }
+
+    #[test]
+    fn field_expr_tuple_index() {
+        // Tuple field access on an expression result
+        let field: FieldExpr = parse_expr("fn foo(): (i32, i32) { (1, 2) } fn main() { foo().0 }");
+        assert!(field.expr().is_some());
+        assert!(field.tuple_index_token().is_some());
+    }
+
+    // =========================================================================
+    // IndexExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn index_expr() {
+        let index: IndexExpr = parse_expr("fn main() { arr[0] }");
+        assert!(index.base().is_some());
+        assert!(index.index().is_some());
+    }
+
+    // =========================================================================
+    // RangeExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn range_expr_full() {
+        let range: RangeExpr = parse_expr("fn main() { 1..10 }");
+        assert!(range.op_token().is_some());
+        assert!(range.start().is_some());
+        assert!(range.end().is_some());
+    }
+
+    #[test]
+    fn range_expr_no_start() {
+        let range: RangeExpr = parse_expr("fn main() { ..10 }");
+        assert!(range.op_token().is_some());
+        assert!(range.start().is_none());
+        assert!(range.end().is_some());
+    }
+
+    #[test]
+    fn range_expr_no_end() {
+        let range: RangeExpr = parse_expr("fn main() { 1.. }");
+        assert!(range.op_token().is_some());
+        assert!(range.start().is_some());
+        assert!(range.end().is_none());
+    }
+
+    #[test]
+    fn range_expr_unbounded() {
+        let range: RangeExpr = parse_expr("fn main() { .. }");
+        assert!(range.op_token().is_some());
+        assert!(range.start().is_none());
+        assert!(range.end().is_none());
+    }
+
+    // =========================================================================
+    // CastExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn cast_expr() {
+        let cast: CastExpr = parse_expr("fn main() { x as i64 }");
+        assert!(cast.expr().is_some());
+        assert!(cast.ty().is_some());
+    }
+
+    // =========================================================================
+    // Loop/Control Flow Tests
+    // =========================================================================
+
+    #[test]
+    fn loop_expr() {
+        let loop_expr: LoopExpr = parse_expr("fn main() { loop { break } }");
+        assert!(loop_expr.body().is_some());
+    }
+
+    #[test]
+    fn while_expr() {
+        let while_expr: WhileExpr = parse_expr("fn main() { while true { x } }");
+        assert!(while_expr.condition().is_some());
+        assert!(while_expr.body().is_some());
+    }
+
+    #[test]
+    fn break_expr_no_value() {
+        let brk: BreakExpr = parse_expr("fn main() { loop { break } }");
+        assert!(brk.expr().is_none());
+    }
+
+    #[test]
+    fn break_expr_with_value() {
+        let brk: BreakExpr = parse_expr("fn main() { loop { break 42 } }");
+        assert!(brk.expr().is_some());
+    }
+
+    #[test]
+    fn return_expr_no_value() {
+        let ret: ReturnExpr = parse_expr("fn main() { return }");
+        assert!(ret.expr().is_none());
+    }
+
+    #[test]
+    fn return_expr_with_value() {
+        let ret: ReturnExpr = parse_expr("fn main() { return 42 }");
+        assert!(ret.expr().is_some());
+    }
+
+    // =========================================================================
+    // Path Tests
+    // =========================================================================
+
+    #[test]
+    fn path_single_segment() {
+        let path: Path = parse_expr("fn main() { foo }");
+        assert_eq!(path.segments().count(), 1);
+    }
+
+    #[test]
+    fn path_multiple_segments() {
+        // SPL uses `.` for module paths, not `::`
+        let path: Path = parse_expr("fn main() { std.io.Result }");
+        assert_eq!(path.segments().count(), 3);
+    }
+
+    // =========================================================================
+    // MatchExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn match_expr_basic() {
+        let match_expr: MatchExpr = parse_expr("fn main() { match x { 1 => true, _ => false } }");
+        assert!(match_expr.match_token().is_some());
+        assert!(match_expr.scrutinee().is_some());
+        assert_eq!(match_expr.arms().count(), 2);
+    }
+
+    #[test]
+    fn match_arm_pattern_and_body() {
+        let match_expr: MatchExpr = parse_expr("fn main() { match x { 1 => true } }");
+        let arm = match_expr.arms().next().expect("expected arm");
+        assert!(arm.pattern().is_some());
+        assert!(arm.body().is_some());
+        assert!(arm.guard().is_none());
+    }
+
+    // =========================================================================
+    // IsExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn is_expr_positive() {
+        let is_expr: IsExpr = parse_expr("fn main() { x is Some(y) }");
+        assert!(is_expr.lhs().is_some());
+        assert!(is_expr.is_token().is_some());
+        assert!(!is_expr.is_negated());
+        assert!(is_expr.pattern().is_some());
+    }
+
+    #[test]
+    fn is_expr_negated() {
+        let is_expr: IsExpr = parse_expr("fn main() { x is not None }");
+        assert!(is_expr.is_negated());
+    }
+
+    // =========================================================================
+    // MethodCallExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn method_call_chained() {
+        // In SPL, MethodCallExpr is for method calls on expression results
+        // obj.method() is an ApplyExpr (path call), but get_obj().method() chains into MethodCallExpr
+        let method: MethodCallExpr = parse_expr("fn get(): Point { Point(x: 1, y: 2) } fn main() { get().method() }");
+        assert!(method.receiver().is_some());
+        assert!(method.name().is_some() || method.name_token().is_some());
+    }
+
+    #[test]
+    fn method_call_with_args_chained() {
+        let method: MethodCallExpr = parse_expr("fn get(): Point { Point(x: 1, y: 2) } fn main() { get().method(1, 2) }");
+        let arg_list = method.arg_list().expect("expected arg list");
+        assert_eq!(arg_list.args().count(), 2);
+    }
+}

@@ -1416,14 +1416,9 @@ impl<'ctx> Resolver<'ctx> {
             }
             Pat::Wildcard(_) => {}
             Pat::Literal(_) => {}
-            Pat::Range(range_pat) => {
-                // Patterns in ranges don't inherit outer mutability
-                if let Some(start) = range_pat.start() {
-                    self.define_pattern(&start, false);
-                }
-                if let Some(end) = range_pat.end() {
-                    self.define_pattern(&end, false);
-                }
+            Pat::Range(_range_pat) => {
+                // Range patterns contain literal tokens, not binding patterns
+                // No bindings to define
             }
             Pat::Tuple(tuple_pat) => {
                 // For `let mut (a, b) = ...`, all bindings are mutable

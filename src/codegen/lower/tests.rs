@@ -4361,3 +4361,514 @@ fn assert_with_bool_from_comparison() {
     assert_eq!(func(0, 0), 1);
     assert_eq!(func(-10, -10), 1);
 }
+
+// =============================================================================
+// Additional Binary Operations - Signed Integer Edge Cases
+// =============================================================================
+
+#[test]
+fn lower_binop_sub_negative_result() {
+    // fn(a: i32, b: i32) -> i32 { a - b } where a < b
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+
+    let mut body = Body::with_args(i32_ty, &[(i32_ty, false), (i32_ty, false)]);
+    let entry = body.alloc_block();
+
+    // _0 = _1 - _2
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Sub,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "binop_sub_negative");
+    let func: fn(i32, i32) -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(5, 10), -5);
+    assert_eq!(func(-5, 5), -10);
+    assert_eq!(func(-5, -10), 5);
+}
+
+#[test]
+fn lower_binop_mul_negative() {
+    // fn(a: i32, b: i32) -> i32 { a * b } with negative operands
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+
+    let mut body = Body::with_args(i32_ty, &[(i32_ty, false), (i32_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Mul,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "binop_mul_negative");
+    let func: fn(i32, i32) -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(-3, 4), -12);
+    assert_eq!(func(-3, -4), 12);
+    assert_eq!(func(3, -4), -12);
+}
+
+#[test]
+fn lower_binop_div_negative() {
+    // fn(a: i32, b: i32) -> i32 { a / b } with negative operands
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+
+    let mut body = Body::with_args(i32_ty, &[(i32_ty, false), (i32_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Div,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "binop_div_negative");
+    let func: fn(i32, i32) -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(-12, 4), -3);
+    assert_eq!(func(-12, -4), 3);
+    assert_eq!(func(12, -4), -3);
+}
+
+#[test]
+fn lower_binop_rem_negative() {
+    // fn(a: i32, b: i32) -> i32 { a % b } with negative operands
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+
+    let mut body = Body::with_args(i32_ty, &[(i32_ty, false), (i32_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Rem,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "binop_rem_negative");
+    let func: fn(i32, i32) -> i32 = unsafe { mem::transmute(ptr) };
+
+    // Rust/C semantics: sign of remainder matches sign of dividend
+    assert_eq!(func(-10, 3), -1);
+    assert_eq!(func(10, -3), 1);
+    assert_eq!(func(-10, -3), -1);
+}
+
+// =============================================================================
+// Additional i64 Binary Operations
+// =============================================================================
+
+#[test]
+fn lower_binop_add_i64() {
+    let mut runner = JitTestRunner::new();
+    let i64_ty = runner.types_mut().i64();
+
+    let mut body = Body::with_args(i64_ty, &[(i64_ty, false), (i64_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Add,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "binop_add_i64");
+    let func: fn(i64, i64) -> i64 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(100_000_000_000, 200_000_000_000), 300_000_000_000);
+    assert_eq!(func(-1, 1), 0);
+}
+
+#[test]
+fn lower_binop_lt_i64() {
+    let mut runner = JitTestRunner::new();
+    let i64_ty = runner.types_mut().i64();
+    let bool_ty = runner.types_mut().bool();
+
+    let mut body = Body::with_args(bool_ty, &[(i64_ty, false), (i64_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Lt,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "binop_lt_i64");
+    let func: fn(i64, i64) -> i8 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(100_000_000_000, 200_000_000_000), 1);
+    assert_eq!(func(200_000_000_000, 100_000_000_000), 0);
+    assert_eq!(func(-1, 0), 1);
+}
+
+// =============================================================================
+// Additional Cast Operations
+// =============================================================================
+
+#[test]
+fn lower_cast_i64_to_i32() {
+    let mut runner = JitTestRunner::new();
+    let i64_ty = runner.types_mut().i64();
+    let i32_ty = runner.types_mut().i32();
+
+    let mut body = Body::with_args(i32_ty, &[(i64_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Cast(
+            CastKind::IntToInt,
+            Operand::Copy(Place::from_local(Local(1))),
+            i32_ty,
+        ),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "cast_i64_to_i32");
+    let func: fn(i64) -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(42), 42);
+    assert_eq!(func(-1), -1);
+    // Truncation
+    assert_eq!(func(0x1_0000_0001), 1);
+}
+
+#[test]
+fn lower_cast_i32_to_i64() {
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+    let i64_ty = runner.types_mut().i64();
+
+    let mut body = Body::with_args(i64_ty, &[(i32_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Cast(
+            CastKind::IntToInt,
+            Operand::Copy(Place::from_local(Local(1))),
+            i64_ty,
+        ),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "cast_i32_to_i64");
+    let func: fn(i32) -> i64 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(42), 42);
+    // Sign extension
+    assert_eq!(func(-1), -1);
+    assert_eq!(func(i32::MIN), i32::MIN as i64);
+}
+
+#[test]
+fn lower_cast_i64_to_f64() {
+    let mut runner = JitTestRunner::new();
+    let i64_ty = runner.types_mut().i64();
+    let f64_ty = runner.types_mut().f64();
+
+    let mut body = Body::with_args(f64_ty, &[(i64_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Cast(
+            CastKind::IntToFloat,
+            Operand::Copy(Place::from_local(Local(1))),
+            f64_ty,
+        ),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "cast_i64_to_f64");
+    let func: fn(i64) -> f64 = unsafe { mem::transmute(ptr) };
+
+    assert!((func(100_000_000_000) - 100_000_000_000.0).abs() < 0.1);
+    assert!((func(-42) - (-42.0)).abs() < f64::EPSILON);
+}
+
+#[test]
+fn lower_cast_f64_to_i64() {
+    let mut runner = JitTestRunner::new();
+    let f64_ty = runner.types_mut().f64();
+    let i64_ty = runner.types_mut().i64();
+
+    let mut body = Body::with_args(i64_ty, &[(f64_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Cast(
+            CastKind::FloatToInt,
+            Operand::Copy(Place::from_local(Local(1))),
+            i64_ty,
+        ),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "cast_f64_to_i64");
+    let func: fn(f64) -> i64 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(42.9), 42);
+    assert_eq!(func(-42.9), -42);
+    assert_eq!(func(100_000_000_000.5), 100_000_000_000);
+}
+
+// =============================================================================
+// Additional Float Operations
+// =============================================================================
+
+#[test]
+fn lower_float_neg_zero() {
+    let mut runner = JitTestRunner::new();
+    let f64_ty = runner.types_mut().f64();
+
+    let mut body = Body::with_args(f64_ty, &[(f64_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::UnaryOp(UnOp::Neg, Operand::Copy(Place::from_local(Local(1)))),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "float_neg_zero");
+    let func: fn(f64) -> f64 = unsafe { mem::transmute(ptr) };
+
+    // Negating positive zero gives negative zero
+    let result = func(0.0);
+    assert!(result.is_sign_negative() || result == 0.0);
+
+    // Normal negation
+    assert!((func(1.5) - (-1.5)).abs() < f64::EPSILON);
+    assert!((func(-2.5) - 2.5).abs() < f64::EPSILON);
+}
+
+#[test]
+fn lower_float_comparison_edge_cases() {
+    let mut runner = JitTestRunner::new();
+    let f64_ty = runner.types_mut().f64();
+    let bool_ty = runner.types_mut().bool();
+
+    let mut body = Body::with_args(bool_ty, &[(f64_ty, false), (f64_ty, false)]);
+    let entry = body.alloc_block();
+
+    body.block_mut(entry).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::BinaryOp(
+            BinOp::Eq,
+            Operand::Copy(Place::from_local(Local(1))),
+            Operand::Copy(Place::from_local(Local(2))),
+        ),
+        0..0,
+    ));
+
+    body.block_mut(entry)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "float_eq_edge");
+    let func: fn(f64, f64) -> i8 = unsafe { mem::transmute(ptr) };
+
+    // Equal floats
+    assert_eq!(func(1.0, 1.0), 1);
+
+    // NaN comparisons (NaN != NaN)
+    assert_eq!(func(f64::NAN, f64::NAN), 0);
+    assert_eq!(func(f64::NAN, 1.0), 0);
+
+    // Infinity comparisons
+    assert_eq!(func(f64::INFINITY, f64::INFINITY), 1);
+    assert_eq!(func(f64::NEG_INFINITY, f64::NEG_INFINITY), 1);
+    assert_eq!(func(f64::INFINITY, f64::NEG_INFINITY), 0);
+}
+
+// =============================================================================
+// SwitchInt with Multiple Targets
+// =============================================================================
+
+#[test]
+fn lower_switch_int_three_targets() {
+    // fn(x: i32) -> i32 { match x { 0 => 100, 1 => 200, _ => 300 } }
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+
+    let mut body = Body::with_args(i32_ty, &[(i32_ty, false)]);
+    let entry = body.alloc_block();
+    let case_0 = body.alloc_block();
+    let case_1 = body.alloc_block();
+    let case_default = body.alloc_block();
+
+    // entry: switch _1 { 0 => case_0, 1 => case_1, _ => case_default }
+    body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::SwitchInt {
+            discr: Operand::Copy(Place::from_local(Local(1))),
+            targets: SwitchTargets::new(vec![(0, case_0), (1, case_1)], case_default),
+        },
+        0..0,
+    ));
+
+    // case_0: _0 = 100; return
+    body.block_mut(case_0).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Use(Operand::Constant(Constant::Int(100, DUMMY_TY))),
+        0..0,
+    ));
+    body.block_mut(case_0)
+        .set_terminator(Terminator::return_(0..0));
+
+    // case_1: _0 = 200; return
+    body.block_mut(case_1).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Use(Operand::Constant(Constant::Int(200, DUMMY_TY))),
+        0..0,
+    ));
+    body.block_mut(case_1)
+        .set_terminator(Terminator::return_(0..0));
+
+    // case_default: _0 = 300; return
+    body.block_mut(case_default)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::Int(300, DUMMY_TY))),
+            0..0,
+        ));
+    body.block_mut(case_default)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "switch_three_targets");
+    let func: fn(i32) -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(0), 100);
+    assert_eq!(func(1), 200);
+    assert_eq!(func(2), 300);
+    assert_eq!(func(-1), 300);
+    assert_eq!(func(100), 300);
+}
+
+#[test]
+fn lower_switch_int_negative_values() {
+    // fn(x: i32) -> i32 { match x { -1 => 10, -2 => 20, _ => 30 } }
+    let mut runner = JitTestRunner::new();
+    let i32_ty = runner.types_mut().i32();
+
+    let mut body = Body::with_args(i32_ty, &[(i32_ty, false)]);
+    let entry = body.alloc_block();
+    let case_neg1 = body.alloc_block();
+    let case_neg2 = body.alloc_block();
+    let case_default = body.alloc_block();
+
+    // Use u128 representation of negative i32 values
+    let neg1_u128 = (-1i32) as u32 as u128;
+    let neg2_u128 = (-2i32) as u32 as u128;
+
+    body.block_mut(entry).set_terminator(Terminator::new(
+        TerminatorKind::SwitchInt {
+            discr: Operand::Copy(Place::from_local(Local(1))),
+            targets: SwitchTargets::new(
+                vec![(neg1_u128, case_neg1), (neg2_u128, case_neg2)],
+                case_default,
+            ),
+        },
+        0..0,
+    ));
+
+    // case_neg1: _0 = 10; return
+    body.block_mut(case_neg1).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Use(Operand::Constant(Constant::Int(10, DUMMY_TY))),
+        0..0,
+    ));
+    body.block_mut(case_neg1)
+        .set_terminator(Terminator::return_(0..0));
+
+    // case_neg2: _0 = 20; return
+    body.block_mut(case_neg2).push_statement(Statement::assign(
+        Place::from_local(Local::RETURN_PLACE),
+        Rvalue::Use(Operand::Constant(Constant::Int(20, DUMMY_TY))),
+        0..0,
+    ));
+    body.block_mut(case_neg2)
+        .set_terminator(Terminator::return_(0..0));
+
+    // case_default: _0 = 30; return
+    body.block_mut(case_default)
+        .push_statement(Statement::assign(
+            Place::from_local(Local::RETURN_PLACE),
+            Rvalue::Use(Operand::Constant(Constant::Int(30, DUMMY_TY))),
+            0..0,
+        ));
+    body.block_mut(case_default)
+        .set_terminator(Terminator::return_(0..0));
+
+    let ptr = runner.compile(&body, "switch_negative_values");
+    let func: fn(i32) -> i32 = unsafe { mem::transmute(ptr) };
+
+    assert_eq!(func(-1), 10);
+    assert_eq!(func(-2), 20);
+    assert_eq!(func(0), 30);
+    assert_eq!(func(1), 30);
+}

@@ -4209,3 +4209,440 @@ fn visibility_pub_method_other_module_ok() {
         "i32",
     );
 }
+
+// =============================================================================
+// Complex Nested Expressions
+// =============================================================================
+
+#[test]
+fn complex_nested_binary_ops() {
+    // Complex nested arithmetic with different operator precedence
+    check("fn main() { let x = 1 + 2 * 3 - 4 / 2; }", "i32");
+}
+
+#[test]
+fn complex_nested_comparisons() {
+    // Chained comparisons (logical)
+    check("fn main() { let x = 1 < 2 && 3 > 2 || 4 == 4; }", "bool");
+}
+
+#[test]
+fn complex_nested_call_and_binary() {
+    // SPL requires labeled arguments for named params
+    check(
+        r#"
+        fn add(a: i32, b: i32): i32 { a + b }
+        fn main() { let x = add(a: 1, b: 2) + add(a: 3, b: 4) * 2; }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn complex_nested_field_access_and_call() {
+    check(
+        r#"
+        struct Point(x: i32, y: i32)
+        fn get_x(p: Point): i32 { p.x }
+        fn main() {
+            let p = Point(x: 10, y: 20);
+            let result = get_x(p: p) + p.y;
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn complex_nested_if_in_binary() {
+    check(
+        "fn main() { let x = 1 + if true { 2 } else { 3 } + 4; }",
+        "i32",
+    );
+}
+
+#[test]
+fn complex_deeply_nested_parens() {
+    check("fn main() { let x = (((1 + 2) * 3) - 4) / 2; }", "i32");
+}
+
+#[test]
+fn complex_nested_cast_in_binary() {
+    check("fn main() { let x = (1 as i64) + (2 as i64); }", "i64");
+}
+
+#[test]
+fn complex_nested_ref_and_deref() {
+    check(
+        r#"
+        fn main() {
+            let x = 42;
+            let r = &x;
+            let y = *r + 1;
+        }
+        "#,
+        "i32",
+    );
+}
+
+// =============================================================================
+// Method Call Chains
+// =============================================================================
+
+#[test]
+fn method_call_simple() {
+    check(
+        r#"
+        struct Counter(value: i32)
+        impl Counter {
+            fn get(&self): i32 { self.value }
+        }
+        fn main() {
+            let c = Counter(value: 42);
+            let x = c.get();
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+#[ignore = "method chaining on mutable self returns causes parser issues"]
+fn method_chain_two_calls() {
+    check(
+        r#"
+        struct Builder(value: i32)
+        impl Builder {
+            fn add(&mut self, n: i32): &mut Builder {
+                self.value = self.value + n;
+                self
+            }
+            fn build(&self): i32 { self.value }
+        }
+        fn main() {
+            let mut b = Builder(value: 0);
+            let x = b.add(n: 5).build();
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+#[ignore = "method chaining on mutable self returns causes parser issues"]
+fn method_chain_three_calls() {
+    check(
+        r#"
+        struct Builder(value: i32)
+        impl Builder {
+            fn add(&mut self, n: i32): &mut Builder {
+                self.value = self.value + n;
+                self
+            }
+            fn mul(&mut self, n: i32): &mut Builder {
+                self.value = self.value * n;
+                self
+            }
+            fn build(&self): i32 { self.value }
+        }
+        fn main() {
+            let mut b = Builder(value: 1);
+            let x = b.add(n: 2).mul(n: 3).build();
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+#[ignore = "field access chained with method call causes parser issues"]
+fn method_chain_with_field_access() {
+    check(
+        r#"
+        struct Container(inner: Inner)
+        struct Inner(value: i32)
+        impl Inner {
+            fn get(&self): i32 { self.value }
+        }
+        fn main() {
+            let c = Container(inner: Inner(value: 42));
+            let x = c.inner.get();
+        }
+        "#,
+        "i32",
+    );
+}
+
+// =============================================================================
+// Edge Cases in Casting
+// =============================================================================
+
+#[test]
+fn cast_chain() {
+    // Cast from one type to another and then to a third
+    check("fn main() { let x = 42 as i8 as i64; }", "i64");
+}
+
+#[test]
+fn cast_in_function_call() {
+    check(
+        r#"
+        fn take_i64(n: i64): i64 { n }
+        fn main() { let x = take_i64(n: 42 as i64); }
+        "#,
+        "i64",
+    );
+}
+
+#[test]
+fn cast_float_to_different_sizes() {
+    check("fn main() { let x = 3.14f64 as f32; }", "f32");
+}
+
+#[test]
+fn cast_in_comparison() {
+    check("fn main() { let x = (1 as i64) == (2 as i64); }", "bool");
+}
+
+#[test]
+fn cast_in_array_index() {
+    check(
+        r#"
+        fn main() {
+            let arr = [1, 2, 3];
+            let idx: i64 = 1;
+            let x = arr[idx as i32];
+        }
+        "#,
+        "i32",
+    );
+}
+
+// =============================================================================
+// Generic Functions with Multiple Type Parameters
+// =============================================================================
+
+#[test]
+fn generic_two_type_params() {
+    // SPL uses `where T, U` syntax for generics
+    check(
+        r#"
+        fn pair(_ a: T, _ b: U): T where T, U { a }
+        fn main() { let x = pair(1, true); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn generic_nested_instantiation() {
+    check(
+        r#"
+        fn identity(_ x: T): T where T { x }
+        fn main() { let x = identity(identity(42)); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn generic_with_struct_constraint() {
+    check(
+        r#"
+        struct Wrapper(value: T) where T
+        fn unwrap(_ w: Wrapper(T)): T where T { w.value }
+        fn main() {
+            let w = Wrapper(value: 42);
+            let x = unwrap(w);
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn generic_function_returning_tuple() {
+    check(
+        r#"
+        fn make_pair(_ a: T, _ b: T): (T, T) where T { (a, b) }
+        fn main() { let x = make_pair(1, 2); }
+        "#,
+        "(i32, i32)",
+    );
+}
+
+// =============================================================================
+// Complex Type Alias Scenarios
+// =============================================================================
+
+#[test]
+fn type_alias_in_function_param() {
+    check(
+        r#"
+        type MyInt = i32;
+        fn take_int(n: MyInt): MyInt { n }
+        fn main() { let x = take_int(n: 42); }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn type_alias_in_struct_field() {
+    check(
+        r#"
+        type MyInt = i32;
+        struct S(value: MyInt)
+        fn main() {
+            let s = S(value: 42);
+            let x = s.value;
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+#[ignore = "generic type alias instantiation syntax Pair(i32) causes parser issues"]
+fn type_alias_generic() {
+    // SPL uses `where T` syntax for generic type aliases
+    check(
+        r#"
+        type Pair = (T, T) where T
+        fn make_pair(): Pair(i32) { (1, 2) }
+        fn main() { let x = make_pair(); }
+        "#,
+        "(i32, i32)",
+    );
+}
+
+// =============================================================================
+// Edge Cases in Type Inference
+// =============================================================================
+
+#[test]
+fn infer_array_from_literal_elements() {
+    check("fn main() { let x = [1, 2, 3]; }", "[i32; 3]");
+}
+
+#[test]
+fn infer_tuple_heterogeneous() {
+    check("fn main() { let x = (1, true, 3.14); }", "(i32, bool, f64)");
+}
+
+#[test]
+fn infer_empty_tuple() {
+    check("fn main() { let x = (); }", "()");
+}
+
+#[test]
+fn infer_unit_return_implicit() {
+    check(
+        r#"
+        fn no_return() { let _ = 1; }
+        fn main() { let x = no_return(); }
+        "#,
+        "()",
+    );
+}
+
+#[test]
+fn infer_block_with_semicolon() {
+    check("fn main() { let x = { 42; }; }", "()");
+}
+
+#[test]
+fn infer_block_without_semicolon() {
+    check("fn main() { let x = { 42 }; }", "i32");
+}
+
+#[test]
+fn infer_nested_blocks() {
+    check("fn main() { let x = { { { 42 } } }; }", "i32");
+}
+
+#[test]
+fn infer_if_both_branches_same_type() {
+    check("fn main() { let x = if true { 1 } else { 2 }; }", "i32");
+}
+
+#[test]
+fn infer_match_all_arms_same_type() {
+    check(
+        r#"
+        fn main() {
+            let n = 1;
+            let x = match n {
+                0 => 10,
+                1 => 20,
+                _ => 30,
+            };
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn infer_loop_break_value() {
+    check(
+        r#"
+        fn main() {
+            let x = loop {
+                break 42;
+            };
+        }
+        "#,
+        "i32",
+    );
+}
+
+// =============================================================================
+// Complex Struct Patterns
+// =============================================================================
+
+#[test]
+#[ignore = "nested struct patterns not yet fully supported in type inference"]
+fn struct_pattern_nested() {
+    // SPL uses parentheses syntax for struct patterns
+    // Note: check() tests the first binding, so we need a helper function
+    check(
+        r#"
+        struct Inner(value: i32)
+        struct Outer(inner: Inner)
+        fn make(): Outer { Outer(inner: Inner(value: 42)) }
+        fn main() {
+            let Outer(inner: Inner(value: x)) = make();
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+#[ignore = "struct patterns with rest (..) not yet fully supported in type inference"]
+fn struct_pattern_with_rest() {
+    check(
+        r#"
+        struct Point(x: i32, y: i32, z: i32)
+        fn make(): Point { Point(x: 1, y: 2, z: 3) }
+        fn main() {
+            let Point(x: x, ..) = make();
+        }
+        "#,
+        "i32",
+    );
+}
+
+#[test]
+fn tuple_pattern_in_let() {
+    check(
+        r#"
+        fn main() {
+            let pair = (1, true);
+            let (a, b) = pair;
+        }
+        "#,
+        "bool",
+    );
+}
