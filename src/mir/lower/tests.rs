@@ -8789,3 +8789,106 @@ fn lower_function_metadata_for_function_with_params() {
     assert_eq!(body.name.as_deref(), Some("add"));
     assert_eq!(body.arg_count, 2);
 }
+
+// ========== Match Expression Lowering ==========
+
+#[test]
+fn test_match_generates_switch() {
+    let bodies = lower_source("fn test(x: i32): i32 { match x { 0 => 10, _ => 20, } }");
+    let body = &bodies[0];
+    let has_switch = body.basic_blocks.iter().any(|bb| {
+        matches!(
+            bb.terminator.as_ref().map(|t| &t.kind),
+            Some(TerminatorKind::SwitchInt { .. })
+        )
+    });
+    assert!(has_switch, "Match should produce SwitchInt terminator");
+}
+
+#[test]
+fn test_match_both_arms_lowered() {
+    let bodies = lower_source("fn test(x: i32): i32 { match x { 0 => 10, 1 => 20, _ => 30, } }");
+    let body = &bodies[0];
+
+    // Check that all three constants appear in the MIR
+    let find_const = |val: i128| {
+        body.basic_blocks.iter().any(|bb| {
+            bb.statements.iter().any(|stmt| match &stmt.kind {
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(v, _)))) => {
+                    *v == val
+                }
+                _ => false,
+            })
+        })
+    };
+
+    assert!(find_const(10), "Arm returning 10 should be lowered");
+    assert!(find_const(20), "Arm returning 20 should be lowered");
+    assert!(find_const(30), "Arm returning 30 should be lowered");
+}
+
+#[test]
+fn test_match_wildcard_is_otherwise() {
+    let bodies = lower_source("fn test(x: i32): i32 { match x { 0 => 10, _ => 99, } }");
+    let body = &bodies[0];
+
+    // Find the SwitchInt terminator
+    let switch = body.basic_blocks.iter().find_map(|bb| match bb.terminator.as_ref()?.kind {
+        TerminatorKind::SwitchInt { ref targets, .. } => Some(targets.clone()),
+        _ => None,
+    });
+    let switch = switch.expect("Should have SwitchInt terminator");
+
+    // Should have explicit target for 0
+    assert!(switch.target_for(0).is_some(), "Should have explicit target for 0");
+    // Otherwise target should be different from the 0 target
+    assert_ne!(
+        switch.target_for(0).unwrap(),
+        switch.otherwise(),
+        "Wildcard should be otherwise target, not same as literal target"
+    );
+}
+
+#[test]
+fn test_match_arms_converge() {
+    let bodies =
+        lower_source("fn test(x: i32): i32 { let r = match x { 0 => 1, _ => 2, }; r + 10 }");
+    let body = &bodies[0];
+
+    // Check that there's a BinOp::Add, which means code after match executes
+    let has_add = body.basic_blocks.iter().any(|bb| {
+        bb.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, _, _))
+            )
+        })
+    });
+    assert!(has_add, "Code after match should execute (r + 10)");
+}
+
+#[test]
+fn test_match_diverging_arm() {
+    let bodies = lower_source("fn test(x: i32): i32 { match x { 0 => return 42, _ => 10, } }");
+    let body = &bodies[0];
+
+    // The arm with return should have a Return terminator, not Goto
+    // Find a block with Return terminator that has the constant 42
+    let has_return_42 = body.basic_blocks.iter().any(|bb| {
+        let has_42 = bb.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Int(42, _))))
+            )
+        });
+        let is_return = matches!(
+            bb.terminator.as_ref().map(|t| &t.kind),
+            Some(TerminatorKind::Return)
+        );
+        has_42 && is_return
+    });
+    assert!(
+        has_return_42,
+        "Diverging arm (return 42) should have Return terminator"
+    );
+}

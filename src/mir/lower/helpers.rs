@@ -66,6 +66,19 @@ pub fn hir_unop_to_mir(op: HirUnaryOp) -> Option<UnOp> {
     }
 }
 
+/// Convert a literal pattern to a discriminant value for `SwitchInt`.
+///
+/// Returns `None` for literals that can't be used as switch discriminants.
+pub fn literal_to_switch_value(lit: &Literal) -> Option<u128> {
+    match lit {
+        Literal::Int(v) => Some(*v as u128),
+        Literal::Bool(v) => Some(u128::from(*v)),
+        Literal::Char(v) => Some(*v as u128),
+        // Float and String can't be switch discriminants
+        Literal::Float(_) | Literal::String(_) => None,
+    }
+}
+
 /// Determine the cast kind for a cast between two types.
 pub fn determine_cast_kind(hir: &HirDatabase, from: TypeId, to: TypeId) -> CastKind {
     let from_ty = hir.types.get(from);

@@ -2,7 +2,8 @@
 
 use super::builder::MirBuilder;
 use super::helpers::{
-    determine_cast_kind, hir_binop_to_mir, hir_unop_to_mir, literal_to_operand, lower_literal,
+    determine_cast_kind, hir_binop_to_mir, hir_unop_to_mir, literal_to_operand,
+    literal_to_switch_value, lower_literal,
 };
 use crate::hir::{
     BinOp as HirBinOp, ExprId, HirDatabase, HirExprKind, HirFunction, HirItem, HirPatKind,
@@ -467,24 +468,91 @@ impl<'hir> MirLoweringContext<'hir> {
                 Ok(place)
             }
             HirExprKind::Match { scrutinee, arms } => {
-                // For now, match expressions produce the first arm's result
-                // TODO: Implement proper pattern matching with branching
-                let _scrutinee_val = self.lower_expr_as_operand(builder, *scrutinee)?;
+                // Allocate result place for the match expression
+                let result_place = Place::from_local(builder.alloc_temp(ty));
 
-                if let Some((_pat, _guard, body)) = arms.first() {
-                    // Just lower the first arm's body for now
-                    self.lower_expr_to_place(builder, *body)
-                } else {
-                    // No arms - return zeroed value
-                    let temp = builder.alloc_temp(ty);
-                    let place = Place::from_local(temp);
+                // Lower scrutinee to an operand
+                let scrutinee_val = self.lower_expr_as_operand(builder, *scrutinee)?;
+
+                // Handle empty match (produce zeroed value)
+                if arms.is_empty() {
                     builder.push_statement(Statement::assign(
-                        place.clone(),
+                        result_place.clone(),
                         Rvalue::Use(Operand::Constant(Constant::Zeroed(ty))),
                         span,
                     ));
-                    Ok(place)
+                    return Ok(result_place);
                 }
+
+                // Create join block where all arms converge
+                let join_bb = builder.alloc_block();
+
+                // Classify patterns and allocate blocks for each arm
+                let mut targets: Vec<(u128, BasicBlock)> = Vec::new();
+                let mut otherwise_bb: Option<BasicBlock> = None;
+                let mut arm_data: Vec<(BasicBlock, ExprId)> = Vec::new();
+
+                for (pat_id, _guard, body) in arms {
+                    let pat = self.hir.pat(*pat_id);
+                    let arm_bb = builder.alloc_block();
+                    arm_data.push((arm_bb, *body));
+
+                    match &pat.kind {
+                        HirPatKind::Literal(lit) => {
+                            if let Some(val) = literal_to_switch_value(lit) {
+                                targets.push((val, arm_bb));
+                            } else {
+                                // Non-switchable literal (float/string) - treat as otherwise
+                                otherwise_bb = Some(arm_bb);
+                            }
+                        }
+                        HirPatKind::Wildcard | HirPatKind::Bind { .. } => {
+                            // Wildcard and binding patterns are catch-alls
+                            otherwise_bb = Some(arm_bb);
+                        }
+                        // TODO: Handle struct, tuple, ref patterns in future
+                        _ => {
+                            otherwise_bb = Some(arm_bb);
+                        }
+                    }
+                }
+
+                // If no otherwise target, create an unreachable block
+                let otherwise = otherwise_bb.unwrap_or_else(|| {
+                    let unreachable_bb = builder.alloc_block();
+                    builder.switch_to_block(unreachable_bb);
+                    builder.set_terminator(TerminatorKind::Unreachable, span.clone());
+                    unreachable_bb
+                });
+
+                // Set SwitchInt terminator on the current block
+                builder.set_terminator(
+                    TerminatorKind::SwitchInt {
+                        discr: scrutinee_val,
+                        targets: SwitchTargets::new(targets, otherwise),
+                    },
+                    span.clone(),
+                );
+
+                // Lower each arm's body
+                for (arm_bb, body_expr) in arm_data {
+                    builder.switch_to_block(arm_bb);
+                    let body_val = self.lower_expr_as_operand(builder, body_expr)?;
+
+                    // Only add fallthrough if the arm didn't diverge (return/break/etc)
+                    if !builder.is_current_block_terminated() {
+                        builder.push_statement(Statement::assign(
+                            result_place.clone(),
+                            Rvalue::Use(body_val),
+                            span.clone(),
+                        ));
+                        builder.set_terminator(TerminatorKind::Goto(join_bb), span.clone());
+                    }
+                }
+
+                // Continue in join block
+                builder.switch_to_block(join_bb);
+                Ok(result_place)
             }
             HirExprKind::Missing => {
                 // Missing expressions (from error recovery) produce a zeroed value
