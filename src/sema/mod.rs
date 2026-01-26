@@ -254,7 +254,14 @@ impl SemanticContext {
         span: Span,
         is_mutable: bool,
     ) -> Result<DefId, DefId> {
-        let def_id = DefId::new(self.symbols.len() as u32);
+        let symbol_count = self.symbols.len() as u32;
+        debug_assert!(
+            symbol_count < DefId::MAX_USER_SYMBOLS,
+            "User symbol count ({symbol_count}) exceeds maximum ({}). \
+             This would cause DefId collision with builtin symbols.",
+            DefId::MAX_USER_SYMBOLS
+        );
+        let def_id = DefId::new(symbol_count);
         let scope_id = self.current_scope;
 
         // Try to define in current scope

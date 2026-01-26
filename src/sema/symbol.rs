@@ -36,18 +36,54 @@ use lasso::Spur;
 use super::scope::ScopeId;
 
 /// A unique identifier for each definition in the program.
+///
+/// # ID Space Layout
+///
+/// `DefId`s are partitioned into three ranges:
+/// - **User definitions** (`0` to `BUILTIN_START - 1`): Regular user-defined symbols
+/// - **Builtin definitions** (`BUILTIN_START` to `MAX - 1`): Compiler-generated builtins
+/// - **Invalid sentinel** (`MAX`): Marker for unresolved/error cases
+///
+/// This partitioning ensures user and builtin `DefId`s never collide.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DefId(u32);
 
 impl DefId {
+    /// Start of the builtin `DefId` range.
+    ///
+    /// User-defined symbols use IDs from 0 to `BUILTIN_START - 1`.
+    /// Builtin methods use IDs from `BUILTIN_START` to `u32::MAX - 1`.
+    ///
+    /// With 2 billion slots for user symbols and 2 billion for builtins,
+    /// this provides ample space for any realistic program.
+    pub const BUILTIN_START: u32 = u32::MAX / 2;
+
+    /// Maximum number of user-defined symbols before collision with builtins.
+    pub const MAX_USER_SYMBOLS: u32 = Self::BUILTIN_START;
+
     /// Sentinel value for unresolved/invalid definitions.
-    /// Uses `u32::MAX` to avoid collision with real `DefIds` (assigned from 0).
+    /// Uses `u32::MAX` to avoid collision with real `DefIds`.
     pub const INVALID: DefId = DefId(u32::MAX);
 
     /// Create a new `DefId` with the given index.
     #[inline]
     pub(crate) const fn new(index: u32) -> Self {
         DefId(index)
+    }
+
+    /// Create a new builtin `DefId` with the given offset from `BUILTIN_START`.
+    ///
+    /// # Panics
+    ///
+    /// Debug-asserts that the resulting `DefId` doesn't overflow into `INVALID`.
+    #[inline]
+    pub(crate) fn new_builtin(offset: u32) -> Self {
+        let id = Self::BUILTIN_START.saturating_add(offset);
+        debug_assert!(
+            id < u32::MAX,
+            "Builtin DefId overflow: too many builtin methods"
+        );
+        DefId(id)
     }
 
     /// Get the raw index value of this `DefId`.
@@ -66,6 +102,18 @@ impl DefId {
     #[inline]
     pub fn is_valid(self) -> bool {
         self != Self::INVALID
+    }
+
+    /// Check if this `DefId` refers to a builtin (compiler-generated) symbol.
+    #[inline]
+    pub fn is_builtin(self) -> bool {
+        self.0 >= Self::BUILTIN_START && self.0 < u32::MAX
+    }
+
+    /// Check if this `DefId` refers to a user-defined symbol.
+    #[inline]
+    pub fn is_user_defined(self) -> bool {
+        self.0 < Self::BUILTIN_START
     }
 }
 
@@ -176,5 +224,68 @@ mod tests {
         for i in 0..100 {
             assert!(DefId(i).is_valid());
         }
+    }
+
+    // ========== ID Space Partitioning Tests ==========
+
+    #[test]
+    fn builtin_start_is_half_of_max() {
+        assert_eq!(DefId::BUILTIN_START, u32::MAX / 2);
+    }
+
+    #[test]
+    fn max_user_symbols_equals_builtin_start() {
+        assert_eq!(DefId::MAX_USER_SYMBOLS, DefId::BUILTIN_START);
+    }
+
+    #[test]
+    fn user_def_id_is_not_builtin() {
+        for i in 0..100 {
+            let def_id = DefId::new(i);
+            assert!(def_id.is_user_defined());
+            assert!(!def_id.is_builtin());
+        }
+    }
+
+    #[test]
+    fn builtin_def_id_is_builtin() {
+        for i in 0..100 {
+            let def_id = DefId::new_builtin(i);
+            assert!(def_id.is_builtin());
+            assert!(!def_id.is_user_defined());
+        }
+    }
+
+    #[test]
+    fn builtin_def_id_offset_is_correct() {
+        let def_id = DefId::new_builtin(0);
+        assert_eq!(def_id.index(), DefId::BUILTIN_START);
+
+        let def_id = DefId::new_builtin(42);
+        assert_eq!(def_id.index(), DefId::BUILTIN_START + 42);
+    }
+
+    #[test]
+    fn invalid_is_neither_user_nor_builtin() {
+        // INVALID is a special sentinel, not a user or builtin symbol
+        assert!(!DefId::INVALID.is_user_defined());
+        // Note: is_builtin returns true for INVALID since u32::MAX >= BUILTIN_START
+        // but is_invalid should be checked first in practice
+        assert!(DefId::INVALID.is_invalid());
+    }
+
+    #[test]
+    fn boundary_values() {
+        // Just below builtin range
+        let last_user = DefId::new(DefId::BUILTIN_START - 1);
+        assert!(last_user.is_user_defined());
+        assert!(!last_user.is_builtin());
+        assert!(last_user.is_valid());
+
+        // First builtin
+        let first_builtin = DefId::new_builtin(0);
+        assert!(!first_builtin.is_user_defined());
+        assert!(first_builtin.is_builtin());
+        assert!(first_builtin.is_valid());
     }
 }

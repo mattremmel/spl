@@ -261,10 +261,8 @@ impl<'a> InferEngine<'a> {
     ) -> DefId {
         use super::SelfParamKind;
 
-        // Use a high range for builtin DefIds to avoid conflicts
-        // Start at u32::MAX / 2 and count up based on how many builtins we have
-        let builtin_base = u32::MAX / 2;
-        let def_id = DefId::new(builtin_base + self.builtin_method_names.len() as u32);
+        // Use the builtin DefId range (starting at DefId::BUILTIN_START)
+        let def_id = DefId::new_builtin(self.builtin_method_names.len() as u32);
 
         // Store the method name for later lookup during resolution
         self.builtin_method_names.insert(def_id, name.to_string());
