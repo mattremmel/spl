@@ -1449,7 +1449,13 @@ impl<'a> InferEngine<'a> {
 
             // Find the field in the struct
             if let Some(&expected_type) = field_map.get(&field_name) {
-                seen_fields.insert(field_name.clone());
+                if !seen_fields.insert(field_name.clone()) {
+                    let span = text_range_to_span(arg.syntax().text_range());
+                    self.diagnostics.push(
+                        Diagnostic::error(format!("duplicate field `{field_name}`"))
+                            .with_label(span, "duplicate field"),
+                    );
+                }
 
                 // Synthesize and check the value expression
                 if let Some(value_expr) = arg.value() {

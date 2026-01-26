@@ -3640,49 +3640,66 @@ fn lower_call_chain() {
 }
 
 #[test]
-#[ignore = "references not yet supported"]
 fn lower_rvalue_ref() {
+    // fn(ptr: &(i32,)) -> &(i32,) { &(*ptr) }
+    // Use pointer argument + deref pattern (like working lower_rvalue_discriminant test)
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
+    let tuple_ty = runner.types_mut().mk_tuple(vec![i32_ty]);
+    let ptr_ty = runner.types_mut().mk_ref(Mutability::Shared, tuple_ty);
 
-    let mut body = Body::new(i32_ty);
-    let _local = body.alloc_local(LocalDecl::new(i32_ty, true));
+    let mut body = Body::with_args(ptr_ty, &[(ptr_ty, false)]);
     let entry = body.alloc_block();
 
-    // _0 = &_1
+    // _0 = &(*_1) - take reference of dereferenced pointer
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Ref(BorrowKind::Shared, Place::from_local(Local(1)), DUMMY_TY),
+        Rvalue::Ref(BorrowKind::Shared, Place::deref(Local(1)), DUMMY_TY),
         0..0,
     ));
 
     body.block_mut(entry)
         .set_terminator(Terminator::return_(0..0));
 
-    let _ptr = runner.compile(&body, "rvalue_ref");
+    let ptr = runner.compile(&body, "rvalue_ref");
+
+    // Test: pass a pointer to a tuple, get back a pointer to the same tuple
+    let tuple: (i32,) = (42,);
+    let func: fn(*const (i32,)) -> *const (i32,) = unsafe { mem::transmute(ptr) };
+    let result = func(&raw const tuple);
+    assert_eq!(result, &raw const tuple);
 }
 
 #[test]
-#[ignore = "address_of not yet supported"]
 fn lower_rvalue_address_of() {
+    // fn(ptr: &(i32,)) -> *const (i32,) { &raw const (*ptr) }
+    // Use pointer argument + deref pattern (like working lower_rvalue_discriminant test)
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
+    let tuple_ty = runner.types_mut().mk_tuple(vec![i32_ty]);
+    let ref_ty = runner.types_mut().mk_ref(Mutability::Shared, tuple_ty);
+    let raw_ptr_ty = runner.types_mut().mk_raw_ptr(Mutability::Shared, tuple_ty);
 
-    let mut body = Body::new(i32_ty);
-    let _local = body.alloc_local(LocalDecl::new(i32_ty, true));
+    let mut body = Body::with_args(raw_ptr_ty, &[(ref_ty, false)]);
     let entry = body.alloc_block();
 
-    // _0 = &raw const _1
+    // _0 = &raw const (*_1) - take raw pointer of dereferenced reference
     body.block_mut(entry).push_statement(Statement::assign(
         Place::from_local(Local::RETURN_PLACE),
-        Rvalue::AddressOf(Mutability::Shared, Place::from_local(Local(1)), DUMMY_TY),
+        Rvalue::AddressOf(Mutability::Shared, Place::deref(Local(1)), DUMMY_TY),
         0..0,
     ));
 
     body.block_mut(entry)
         .set_terminator(Terminator::return_(0..0));
 
-    let _ptr = runner.compile(&body, "rvalue_address_of");
+    let ptr = runner.compile(&body, "rvalue_address_of");
+
+    // Test: pass a reference to a tuple, get back a raw pointer to the same tuple
+    let tuple: (i32,) = (42,);
+    let func: fn(*const (i32,)) -> *const (i32,) = unsafe { mem::transmute(ptr) };
+    let result = func(&raw const tuple);
+    assert_eq!(result, &raw const tuple);
 }
 
 #[test]
@@ -3713,17 +3730,21 @@ fn lower_rvalue_len() {
 }
 
 #[test]
-#[ignore = "aggregates not yet supported"]
 fn lower_rvalue_aggregate_tuple() {
+    // fn(out: *mut (i32, i32)) { *out = (1, 2) }
+    // Use output pointer pattern to avoid compound return ABI issues
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
+    let unit_ty = runner.types_mut().unit();
+    let tuple_ty = runner.types_mut().mk_tuple(vec![i32_ty, i32_ty]);
+    let ptr_ty = runner.types_mut().mk_ref(Mutability::Mutable, tuple_ty);
 
-    let mut body = Body::new(i32_ty);
+    let mut body = Body::with_args(unit_ty, &[(ptr_ty, false)]);
     let entry = body.alloc_block();
 
-    // _0 = (1, 2) - tuple aggregate
+    // *_1 = (1, 2) - tuple aggregate written to dereferenced pointer
     body.block_mut(entry).push_statement(Statement::assign(
-        Place::from_local(Local::RETURN_PLACE),
+        Place::deref(Local(1)),
         Rvalue::Aggregate(
             AggregateKind::Tuple,
             vec![
@@ -3737,21 +3758,31 @@ fn lower_rvalue_aggregate_tuple() {
     body.block_mut(entry)
         .set_terminator(Terminator::return_(0..0));
 
-    let _ptr = runner.compile(&body, "rvalue_aggregate_tuple");
+    let ptr = runner.compile(&body, "rvalue_aggregate_tuple");
+
+    // Test: verify the tuple is correctly constructed
+    let mut result: (i32, i32) = (0, 0);
+    let func: fn(*mut (i32, i32)) = unsafe { mem::transmute(ptr) };
+    func(&raw mut result);
+    assert_eq!(result, (1, 2));
 }
 
 #[test]
-#[ignore = "aggregates not yet supported"]
 fn lower_rvalue_aggregate_array() {
+    // fn(out: *mut [i32; 3]) { *out = [1, 2, 3] }
+    // Use output pointer pattern to avoid compound return ABI issues
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
+    let unit_ty = runner.types_mut().unit();
+    let array_ty = runner.types_mut().mk_array(i32_ty, 3);
+    let ptr_ty = runner.types_mut().mk_ref(Mutability::Mutable, array_ty);
 
-    let mut body = Body::new(i32_ty);
+    let mut body = Body::with_args(unit_ty, &[(ptr_ty, false)]);
     let entry = body.alloc_block();
 
-    // _0 = [1, 2, 3] - array aggregate
+    // *_1 = [1, 2, 3] - array aggregate written to dereferenced pointer
     body.block_mut(entry).push_statement(Statement::assign(
-        Place::from_local(Local::RETURN_PLACE),
+        Place::deref(Local(1)),
         Rvalue::Aggregate(
             AggregateKind::Array,
             vec![
@@ -3766,7 +3797,13 @@ fn lower_rvalue_aggregate_array() {
     body.block_mut(entry)
         .set_terminator(Terminator::return_(0..0));
 
-    let _ptr = runner.compile(&body, "rvalue_aggregate_array");
+    let ptr = runner.compile(&body, "rvalue_aggregate_array");
+
+    // Test: verify the array is correctly constructed
+    let mut result: [i32; 3] = [0; 3];
+    let func: fn(*mut [i32; 3]) = unsafe { mem::transmute(ptr) };
+    func(&raw mut result);
+    assert_eq!(result, [1, 2, 3]);
 }
 
 #[test]
@@ -3813,25 +3850,36 @@ fn lower_rvalue_discriminant() {
 }
 
 #[test]
-#[ignore = "repeat not yet supported"]
 fn lower_rvalue_repeat() {
+    // fn(out: *mut [i32; 10]) { *out = [42; 10] }
+    // Use output pointer pattern to avoid compound return ABI issues
+    // Use 42 instead of 0 to verify actual writes (not just uninitialized zeros)
     let mut runner = JitTestRunner::new();
     let i32_ty = runner.types_mut().i32();
+    let unit_ty = runner.types_mut().unit();
+    let array_ty = runner.types_mut().mk_array(i32_ty, 10);
+    let ptr_ty = runner.types_mut().mk_ref(Mutability::Mutable, array_ty);
 
-    let mut body = Body::new(i32_ty);
+    let mut body = Body::with_args(unit_ty, &[(ptr_ty, false)]);
     let entry = body.alloc_block();
 
-    // _0 = [0; 10] - repeat expression
+    // *_1 = [42; 10] - repeat expression written to dereferenced pointer
     body.block_mut(entry).push_statement(Statement::assign(
-        Place::from_local(Local::RETURN_PLACE),
-        Rvalue::Repeat(Operand::Constant(Constant::Int(0, DUMMY_TY)), 10),
+        Place::deref(Local(1)),
+        Rvalue::Repeat(Operand::Constant(Constant::Int(42, DUMMY_TY)), 10),
         0..0,
     ));
 
     body.block_mut(entry)
         .set_terminator(Terminator::return_(0..0));
 
-    let _ptr = runner.compile(&body, "rvalue_repeat");
+    let ptr = runner.compile(&body, "rvalue_repeat");
+
+    // Test: verify the repeat array is correctly constructed
+    let mut result: [i32; 10] = [0; 10];
+    let func: fn(*mut [i32; 10]) = unsafe { mem::transmute(ptr) };
+    func(&raw mut result);
+    assert_eq!(result, [42; 10]);
 }
 
 #[test]

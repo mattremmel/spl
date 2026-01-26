@@ -209,7 +209,6 @@ fn struct_unknown_field() {
 }
 
 #[test]
-#[ignore = "duplicate field detection not yet implemented"]
 fn struct_duplicate_field() {
     check_contains(
         "struct Point(x: i32, y: i32) fn main() { let p = Point(x: 1, x: 2, y: 3); }",

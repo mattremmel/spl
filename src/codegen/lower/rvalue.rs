@@ -371,6 +371,121 @@ impl<'a> FunctionLowerer<'a> {
         Ok(None)
     }
 
+    /// Lower an rvalue that produces a compound type to a destination address.
+    ///
+    /// This handles aggregate and repeat rvalues when the destination is
+    /// specified by an address rather than a local's stack slot.
+    pub(super) fn lower_rvalue_to_addr(
+        &mut self,
+        rvalue: &Rvalue,
+        dest_addr: Value,
+        dest_ty: TypeId,
+    ) -> Result<(), CodegenError> {
+        match rvalue {
+            Rvalue::Aggregate(kind, operands) => {
+                self.lower_aggregate_to_addr(dest_addr, dest_ty, kind, operands)
+            }
+            Rvalue::Repeat(operand, count) => {
+                self.lower_repeat_to_addr(dest_addr, dest_ty, operand, *count)
+            }
+            _ => Err(CodegenError::Internal(format!(
+                "lower_rvalue_to_addr: unsupported rvalue {:?}",
+                std::mem::discriminant(rvalue)
+            ))),
+        }
+    }
+
+    /// Lower an aggregate construction to a destination address.
+    fn lower_aggregate_to_addr(
+        &mut self,
+        dest_addr: Value,
+        dest_ty: TypeId,
+        kind: &AggregateKind,
+        operands: &[Operand],
+    ) -> Result<(), CodegenError> {
+        match kind {
+            AggregateKind::Tuple | AggregateKind::Adt(_) => {
+                // Store each field at its offset
+                for (i, operand) in operands.iter().enumerate() {
+                    let field_offset = self.layout.field_offset(dest_ty, i);
+                    let field_ty = self.layout.field_type(dest_ty, i);
+
+                    if let Some(field_ty) = field_ty
+                        && let Some(clif_ty) = self.type_mapper.map_type(field_ty, self.types)
+                        && let Some(val) = self.lower_operand_as(operand, clif_ty)?
+                    {
+                        let field_addr = if field_offset == 0 {
+                            dest_addr
+                        } else {
+                            self.builder.ins().iadd_imm(dest_addr, field_offset as i64)
+                        };
+                        let flags = MemFlags::trusted();
+                        self.builder.ins().store(flags, val, field_addr, 0);
+                    }
+                    // If field is ZST, skip it
+                }
+            }
+
+            AggregateKind::Array => {
+                // Store each element at its stride offset
+                let stride = self.layout.element_stride(dest_ty);
+                let elem_ty = self.layout.element_type(dest_ty);
+
+                if let Some(elem_ty) = elem_ty
+                    && let Some(clif_ty) = self.type_mapper.map_type(elem_ty, self.types)
+                {
+                    for (i, operand) in operands.iter().enumerate() {
+                        if let Some(val) = self.lower_operand_as(operand, clif_ty)? {
+                            let offset = (i as u32) * stride;
+                            let elem_addr = if offset == 0 {
+                                dest_addr
+                            } else {
+                                self.builder.ins().iadd_imm(dest_addr, offset as i64)
+                            };
+                            let flags = MemFlags::trusted();
+                            self.builder.ins().store(flags, val, elem_addr, 0);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Lower a repeat expression to a destination address.
+    fn lower_repeat_to_addr(
+        &mut self,
+        dest_addr: Value,
+        dest_ty: TypeId,
+        operand: &Operand,
+        count: u64,
+    ) -> Result<(), CodegenError> {
+        if count == 0 {
+            return Ok(());
+        }
+
+        let stride = self.layout.element_stride(dest_ty);
+        let elem_ty = self.layout.element_type(dest_ty);
+
+        if let Some(elem_ty) = elem_ty
+            && let Some(clif_ty) = self.type_mapper.map_type(elem_ty, self.types)
+            && let Some(val) = self.lower_operand_as(operand, clif_ty)?
+        {
+            // Store the value at each position
+            for i in 0..count {
+                let offset = (i as u32) * stride;
+                let elem_addr = if offset == 0 {
+                    dest_addr
+                } else {
+                    self.builder.ins().iadd_imm(dest_addr, offset as i64)
+                };
+                let flags = MemFlags::trusted();
+                self.builder.ins().store(flags, val, elem_addr, 0);
+            }
+        }
+        Ok(())
+    }
+
     /// Compute a binary operation result.
     fn compute_binary_op(
         &mut self,

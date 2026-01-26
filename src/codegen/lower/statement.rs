@@ -60,12 +60,8 @@ impl<'a> FunctionLowerer<'a> {
                     } else if self.type_mapper.is_zst(result_ty, self.types) {
                         // ZST destination - no store needed
                     } else {
-                        // Compound type destination - need to handle aggregates
-                        // For now, error out - aggregates should be handled by lower_rvalue
-                        return Err(CodegenError::Internal(
-                            "compound type assignment through projection not yet fully supported"
-                                .to_string(),
-                        ));
+                        // Compound type destination - handle aggregates and repeats
+                        self.lower_rvalue_to_addr(rvalue, addr, result_ty)?;
                     }
                 }
 
