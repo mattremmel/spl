@@ -56,7 +56,7 @@ use crate::ast::{
     ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, ExternFn, FieldExpr,
     ForExpr, FunctionDef, IfExpr, IndexExpr, IsExpr, Item, LetStmt, LiteralExpr, LoopExpr,
     MatchExpr, ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt,
-    TupleExpr, WhileExpr,
+    TupleExpr, WhileExpr, YieldExpr,
 };
 use crate::hir::{
     BinOp, ExprId, HirDatabase, HirExpr, HirExprKind, HirField, HirFunction, HirImpl, HirItem,
@@ -792,9 +792,9 @@ impl<'a> LoweringContext<'a> {
             Expr::Ref(ref_expr) => self.lower_ref_expr(ref_expr, span, ty),
             Expr::Field(field) => self.lower_field_expr(field, span, ty),
             Expr::Index(index) => self.lower_index_expr(index, span, ty),
-            // TODO: Slice, Range, and Yield are not yet implemented as standalone expressions.
-            // Yield lowering requires block context tracking.
-            Expr::Slice(_) | Expr::Range(_) | Expr::Yield(_) => self.lower_missing(span),
+            // TODO: Slice and Range are not yet implemented as standalone expressions.
+            Expr::Slice(_) | Expr::Range(_) => self.lower_missing(span),
+            Expr::Yield(yield_expr) => self.lower_yield_expr(yield_expr, span),
             Expr::For(for_expr) => self.lower_for_expr(for_expr, span),
             Expr::If(if_expr) => self.lower_if_expr(if_expr, span, ty),
             Expr::While(while_expr) => self.lower_while_expr(while_expr, span),
@@ -1923,6 +1923,18 @@ impl<'a> LoweringContext<'a> {
 
         let expr = HirExpr {
             kind: HirExprKind::Return { value },
+            ty,
+            span,
+        };
+        self.db.alloc_expr(expr)
+    }
+
+    fn lower_yield_expr(&mut self, yield_expr: &YieldExpr, span: Span) -> ExprId {
+        let value = yield_expr.expr().map(|e| self.lower_expr(&e));
+        let ty = self.never_type();
+
+        let expr = HirExpr {
+            kind: HirExprKind::Yield { value },
             ty,
             span,
         };

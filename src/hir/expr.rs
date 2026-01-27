@@ -141,6 +141,9 @@ pub enum HirExprKind {
     /// Return with optional value.
     Return { value: Option<ExprId> },
 
+    /// Yield with optional value (exits block expression).
+    Yield { value: Option<ExprId> },
+
     /// Block expression containing statements and optional tail expression.
     Block {
         stmts: Vec<StmtId>,

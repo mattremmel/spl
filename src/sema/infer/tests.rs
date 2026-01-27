@@ -5502,3 +5502,112 @@ fn generic_inferred_from_usage() {
         "Box",
     );
 }
+
+// =============================================================================
+// Yield Expressions
+// =============================================================================
+
+// --- Basic Yield (4 tests) ---
+
+#[test]
+fn yield_simple() {
+    check("fn main() { let x = { yield 42; }; }", "i32");
+}
+
+#[test]
+fn yield_infers_from_context() {
+    check("fn main() { let x: i64 = { yield 42; }; }", "i64");
+}
+
+#[test]
+fn yield_no_value() {
+    check("fn main() { let x = { yield; }; }", "()");
+}
+
+#[test]
+fn yield_expression_type_is_never() {
+    check("fn main() { { let x = yield 42; }; }", "!");
+}
+
+// --- Yield with Tail Expression (3 tests) ---
+
+#[test]
+fn yield_before_tail() {
+    check("fn main() { let x = { if true { yield 1; } 2 }; }", "i32");
+}
+
+#[test]
+fn yield_multiple_paths() {
+    check(
+        "fn main() { let x = { if true { yield 1; } else { yield 2; } }; }",
+        "i32",
+    );
+}
+
+#[test]
+fn yield_with_tail_unifies() {
+    check(
+        "fn main() { let x: i64 = { if true { yield 1; } 2 }; }",
+        "i64",
+    );
+}
+
+// --- Validation Errors (4 tests) ---
+
+#[test]
+fn error_yield_outside_block() {
+    check_err(
+        "fn main() { yield 42; }",
+        &["yield outside of block expression"],
+    );
+}
+
+#[test]
+fn error_yield_in_function_body() {
+    check_err(
+        "fn f() { let x = 1; yield x; }",
+        &["yield outside of block expression"],
+    );
+}
+
+#[test]
+fn error_yield_type_mismatch() {
+    check_err(
+        r#"fn main() { let x: i32 = { yield "hello"; }; }"#,
+        &["type mismatch"],
+    );
+}
+
+#[test]
+fn error_yield_mismatch_with_tail() {
+    check_err(
+        r#"fn main() { let x = { if true { yield "hello"; } 42 }; }"#,
+        &["type mismatch"],
+    );
+}
+
+// --- Nested Block Interactions (3 tests) ---
+
+#[test]
+fn yield_in_nested_block() {
+    check(
+        "fn main() { let outer = { let inner = { yield 42; }; inner + 1 }; }",
+        "i32",
+    );
+}
+
+#[test]
+fn yield_does_not_exit_loop() {
+    check(
+        "fn main() { let x = loop { let y = { yield 1; }; break y; }; }",
+        "i32",
+    );
+}
+
+#[test]
+fn yield_and_break_different_scopes() {
+    check(
+        "fn main() { let x = loop { let y = { yield 10; }; break y + 1; }; }",
+        "i32",
+    );
+}

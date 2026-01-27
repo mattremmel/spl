@@ -2621,22 +2621,75 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_yield(&mut self, yield_expr: &YieldExpr) -> TypeId {
-        // Synthesize the value expression for side effects and type checking
-        if let Some(value) = yield_expr.expr() {
-            self.synth_expr(&value);
+        let span = text_range_to_span(yield_expr.syntax().text_range());
+
+        let Some(yield_ty) = self.ctx.block_yield_type else {
+            self.diagnostics.push(
+                Diagnostic::error("yield outside of block expression")
+                    .with_label(span, "`yield` can only be used inside a block expression"),
+            );
+            return self.types.never();
+        };
+
+        self.ctx.block_has_yield = true;
+
+        let value_ty = if let Some(value) = yield_expr.expr() {
+            self.synth_expr(&value)
+        } else {
+            self.types.unit()
+        };
+
+        if self.unify(yield_ty, value_ty).is_err() {
+            let value_span = yield_expr
+                .expr()
+                .map(|e| text_range_to_span(e.syntax().text_range()))
+                .unwrap_or(span);
+            let expected = self.type_to_string(self.resolve_type(yield_ty));
+            let found = self.type_to_string(self.resolve_type(value_ty));
+            self.diagnostics.push(
+                Diagnostic::error(format!(
+                    "type mismatch in yield: expected `{expected}`, found `{found}`"
+                ))
+                .with_label(value_span, format!("expected `{expected}`")),
+            );
         }
 
-        // TODO: Full yield semantics require block context tracking.
-        // For now, yield acts like a diverging expression since it
-        // transfers control to the block's value position.
-        // This will be refined in a follow-up when we add proper
-        // block expression vs function body context tracking.
         self.types.never()
     }
 
     fn synth_block_expr(&mut self, block_expr: &BlockExpr) -> TypeId {
         match block_expr.block() {
-            Some(block) => self.synth_block(&block),
+            Some(block) => {
+                // Set up yield context for block expressions
+                let yield_ty = self.fresh_type_var();
+                let old_yield_ty = self.ctx.block_yield_type.replace(yield_ty);
+                let old_has_yield = self.ctx.block_has_yield;
+                self.ctx.block_has_yield = false;
+
+                let block_ty = self.synth_block(&block);
+
+                let has_yield = self.ctx.block_has_yield;
+                self.ctx.block_yield_type = old_yield_ty;
+                self.ctx.block_has_yield = old_has_yield;
+
+                // If block has yield, unify yield type with block type
+                if has_yield {
+                    if self.unify(yield_ty, block_ty).is_err() {
+                        let span = text_range_to_span(block_expr.syntax().text_range());
+                        let yield_str = self.type_to_string(self.resolve_type(yield_ty));
+                        let block_str = self.type_to_string(self.resolve_type(block_ty));
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "type mismatch: yield type `{yield_str}` does not match block tail type `{block_str}`"
+                            ))
+                            .with_label(span, "yield and tail expression types must match"),
+                        );
+                    }
+                    yield_ty
+                } else {
+                    block_ty
+                }
+            }
             None => self.types.unit(),
         }
     }

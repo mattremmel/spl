@@ -565,6 +565,20 @@ impl<'hir> MirLoweringContext<'hir> {
                 builder.switch_to_block(join_bb);
                 Ok(result_place)
             }
+            HirExprKind::Yield { value: _ } => {
+                // TODO: Yield requires block context tracking in MIR.
+                // For now, yield is lowered as a placeholder since its semantics
+                // are handled at the type checking level and the MIR lowering
+                // for block expressions will need special handling.
+                let temp = builder.alloc_temp(ty);
+                let place = Place::from_local(temp);
+                builder.push_statement(Statement::assign(
+                    place.clone(),
+                    Rvalue::Use(Operand::Constant(Constant::Zeroed(ty))),
+                    span,
+                ));
+                Ok(place)
+            }
             HirExprKind::Missing => {
                 // Missing expressions (from error recovery) produce a zeroed value
                 let temp = builder.alloc_temp(ty);

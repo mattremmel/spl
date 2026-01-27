@@ -114,6 +114,13 @@ pub(super) struct ContextStack {
     /// The kind of innermost loop (loop/while/for).
     /// Used to validate break/continue: only `loop` allows `break value`.
     pub(super) loop_kind: Option<LoopKind>,
+
+    /// Expected yield type for the innermost block expression.
+    /// None when in function body (not a block expression).
+    pub(super) block_yield_type: Option<TypeId>,
+
+    /// Whether the innermost block expression has a yield statement.
+    pub(super) block_has_yield: bool,
 }
 
 /// Definition collection from first pass - enables forward references.
