@@ -5,6 +5,7 @@ use crate::syntax::SyntaxKind;
 
 use super::control_flow::{
     block_expr, break_expr, continue_expr, for_expr, if_expr, loop_expr, return_expr, while_expr,
+    yield_expr,
 };
 use super::expr;
 
@@ -43,6 +44,7 @@ pub(super) fn primary_expr(
         BREAK_KW => break_expr(p),
         CONTINUE_KW => continue_expr(p),
         RETURN_KW => return_expr(p),
+        YIELD_KW => yield_expr(p),
         // Match expression
         MATCH_KW => match_expr(p),
         _ => Ok(None),

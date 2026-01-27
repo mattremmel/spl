@@ -178,6 +178,11 @@ fn keyword_match() {
 }
 
 #[test]
+fn keyword_yield() {
+    check_single("yield", Token::Yield);
+}
+
+#[test]
 fn keyword_use() {
     check_single("use", Token::Use);
 }

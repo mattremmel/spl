@@ -792,8 +792,9 @@ impl<'a> LoweringContext<'a> {
             Expr::Ref(ref_expr) => self.lower_ref_expr(ref_expr, span, ty),
             Expr::Field(field) => self.lower_field_expr(field, span, ty),
             Expr::Index(index) => self.lower_index_expr(index, span, ty),
-            // TODO: Slice and Range are not yet implemented as standalone expressions
-            Expr::Slice(_) | Expr::Range(_) => self.lower_missing(span),
+            // TODO: Slice, Range, and Yield are not yet implemented as standalone expressions.
+            // Yield lowering requires block context tracking.
+            Expr::Slice(_) | Expr::Range(_) | Expr::Yield(_) => self.lower_missing(span),
             Expr::For(for_expr) => self.lower_for_expr(for_expr, span),
             Expr::If(if_expr) => self.lower_if_expr(if_expr, span, ty),
             Expr::While(while_expr) => self.lower_while_expr(while_expr, span),

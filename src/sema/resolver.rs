@@ -1177,6 +1177,11 @@ impl<'ctx> Resolver<'ctx> {
                     self.resolve_expr(&value);
                 }
             }
+            Expr::Yield(yield_expr) => {
+                if let Some(value) = yield_expr.expr() {
+                    self.resolve_expr(&value);
+                }
+            }
             Expr::Block(block_expr) => {
                 if let Some(block) = block_expr.block() {
                     self.resolve_block(&block);

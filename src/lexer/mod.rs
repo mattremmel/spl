@@ -82,6 +82,8 @@ pub enum Token {
     Not,
     #[token("match")]
     Match,
+    #[token("yield")]
+    Yield,
     #[token("extern")]
     Extern,
     #[token("use")]

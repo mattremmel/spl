@@ -3,7 +3,7 @@
 use crate::ast::{
     ArrayExpr, BinExpr, BlockExpr, BreakExpr, CallExpr, CastExpr, ContinueExpr, Expr, FieldExpr,
     ForExpr, IfExpr, IndexExpr, IsExpr, LoopExpr, MatchExpr, ParenExpr, Pat, PathExpr, PrefixExpr,
-    RangeExpr, RefExpr, ReturnExpr, SliceExpr, TupleExpr, WhileExpr,
+    RangeExpr, RefExpr, ReturnExpr, SliceExpr, TupleExpr, WhileExpr, YieldExpr,
 };
 use crate::ast::{Block, LetStmt, LiteralExpr, Stmt};
 use crate::diagnostic::Diagnostic;
@@ -307,6 +307,8 @@ impl<'a> InferEngine<'a> {
             Expr::Break(break_expr) => self.synth_break(break_expr),
             Expr::Continue(continue_expr) => self.synth_continue(continue_expr),
             Expr::Return(return_expr) => self.synth_return(return_expr),
+            // TODO: yield expression type inference requires block context tracking
+            Expr::Yield(yield_expr) => self.synth_yield(yield_expr),
             Expr::Block(block_expr) => self.synth_block_expr(block_expr),
             Expr::Cast(cast) => self.synth_cast(cast),
             Expr::Range(range) => self.synth_range(range),
@@ -2615,6 +2617,20 @@ impl<'a> InferEngine<'a> {
         }
 
         // Return is a diverging expression
+        self.types.never()
+    }
+
+    fn synth_yield(&mut self, yield_expr: &YieldExpr) -> TypeId {
+        // Synthesize the value expression for side effects and type checking
+        if let Some(value) = yield_expr.expr() {
+            self.synth_expr(&value);
+        }
+
+        // TODO: Full yield semantics require block context tracking.
+        // For now, yield acts like a diverging expression since it
+        // transfers control to the block's value position.
+        // This will be refined in a follow-up when we add proper
+        // block expression vs function body context tracking.
         self.types.never()
     }
 

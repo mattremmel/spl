@@ -338,6 +338,7 @@ impl AstPrinter {
             Expr::Break(b) => self.print_break_expr(b),
             Expr::Continue(_) => self.line("ContinueExpr"),
             Expr::Return(r) => self.print_return_expr(r),
+            Expr::Yield(y) => self.print_yield_expr(y),
             Expr::Block(b) => self.print_block_expr(b),
             Expr::Cast(c) => self.print_cast_expr(c),
             Expr::Range(r) => self.print_range_expr(r),
@@ -693,6 +694,13 @@ impl AstPrinter {
     fn print_return_expr(&mut self, return_expr: &ReturnExpr) {
         self.line("ReturnExpr");
         if let Some(expr) = return_expr.expr() {
+            self.indented(|p| p.print_expr(&expr));
+        }
+    }
+
+    fn print_yield_expr(&mut self, yield_expr: &YieldExpr) {
+        self.line("YieldExpr");
+        if let Some(expr) = yield_expr.expr() {
             self.indented(|p| p.print_expr(&expr));
         }
     }

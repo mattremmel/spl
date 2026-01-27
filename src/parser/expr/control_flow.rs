@@ -186,6 +186,30 @@ pub(super) fn return_expr(
     Ok(Some(m.complete(p, SyntaxKind::ReturnExpr)))
 }
 
+/// Parse a yield expression: `yield expr`
+pub(super) fn yield_expr(
+    p: &mut Parser<'_>,
+) -> Result<Option<CompletedMarker>, crate::parser::ParseError> {
+    let m = p.start();
+    if let Err(e) = p.expect(SyntaxKind::YIELD_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // yield requires a value expression (unlike return which is optional)
+    if p.current().is_some()
+        && !p.at(SyntaxKind::SEMI)
+        && !p.at(SyntaxKind::R_BRACE)
+        && !p.at(SyntaxKind::R_PAREN)
+        && let Err(e) = expr(p)
+    {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    Ok(Some(m.complete(p, SyntaxKind::YieldExpr)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::super::tests::check_expr;
@@ -834,6 +858,51 @@ mod tests {
                         R_BRACE@30..31 "}"
                     WHITESPACE@31..32 " "
                     R_BRACE@32..33 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn yield_expr_with_value() {
+        check_expr(
+            "yield x + 1",
+            &expect![[r#"
+                YieldExpr@0..11
+                  YIELD_KW@0..5 "yield"
+                  BinExpr@5..11
+                    PathExpr@5..7
+                      Path@5..7
+                        PathSegment@5..7
+                          NameRef@5..7
+                            WHITESPACE@5..6 " "
+                            IDENT@6..7 "x"
+                    WHITESPACE@7..8 " "
+                    PLUS@8..9 "+"
+                    LiteralExpr@9..11
+                      WHITESPACE@9..10 " "
+                      INT_LITERAL@10..11 "1"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn yield_in_block() {
+        check_expr(
+            "{ yield 42; }",
+            &expect![[r#"
+                BlockExpr@0..13
+                  Block@0..13
+                    L_BRACE@0..1 "{"
+                    ExprStmt@1..11
+                      YieldExpr@1..10
+                        WHITESPACE@1..2 " "
+                        YIELD_KW@2..7 "yield"
+                        LiteralExpr@7..10
+                          WHITESPACE@7..8 " "
+                          INT_LITERAL@8..10 "42"
+                      SEMI@10..11 ";"
+                    WHITESPACE@11..12 " "
+                    R_BRACE@12..13 "}"
             "#]],
         );
     }

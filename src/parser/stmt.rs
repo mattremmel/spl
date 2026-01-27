@@ -13,7 +13,10 @@ use super::pattern;
 fn requires_semicolon(kind: SyntaxKind) -> bool {
     matches!(
         kind,
-        SyntaxKind::ReturnExpr | SyntaxKind::BreakExpr | SyntaxKind::ContinueExpr
+        SyntaxKind::ReturnExpr
+            | SyntaxKind::BreakExpr
+            | SyntaxKind::ContinueExpr
+            | SyntaxKind::YieldExpr
     )
 }
 
@@ -23,6 +26,7 @@ fn expr_kind_name(kind: SyntaxKind) -> &'static str {
         SyntaxKind::ReturnExpr => "return",
         SyntaxKind::BreakExpr => "break",
         SyntaxKind::ContinueExpr => "continue",
+        SyntaxKind::YieldExpr => "yield",
         _ => "expression",
     }
 }
@@ -49,6 +53,7 @@ fn can_start_stmt_or_expr(p: &mut Parser<'_>) -> bool {
                 | SyntaxKind::RETURN_KW
                 | SyntaxKind::BREAK_KW
                 | SyntaxKind::CONTINUE_KW
+                | SyntaxKind::YIELD_KW
                 | SyntaxKind::L_PAREN
                 | SyntaxKind::L_BRACKET
                 | SyntaxKind::L_BRACE
@@ -1485,5 +1490,18 @@ mod tests {
 
         let parse = crate::parser::parse("fn main(): i32 { x + 1 }");
         assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+    }
+
+    #[test]
+    fn yield_without_semicolon_error() {
+        // yield without semicolon at end of block should produce an error
+        let parse = crate::parser::parse("fn main() { { yield 42 } }");
+        assert!(!parse.ok());
+        assert!(
+            parse
+                .errors()
+                .iter()
+                .any(|e| e.message.contains("expected ';' after yield"))
+        );
     }
 }

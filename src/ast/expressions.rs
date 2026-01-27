@@ -24,6 +24,7 @@ ast_node!(LoopExpr);
 ast_node!(BreakExpr);
 ast_node!(ContinueExpr);
 ast_node!(ReturnExpr);
+ast_node!(YieldExpr);
 ast_node!(BlockExpr);
 ast_node!(CastExpr);
 ast_node!(RangeExpr);
@@ -55,6 +56,7 @@ ast_enum!(
         Break(BreakExpr),
         Continue(ContinueExpr),
         Return(ReturnExpr),
+        Yield(YieldExpr),
         Block(BlockExpr),
         Cast(CastExpr),
         Range(RangeExpr),
@@ -344,6 +346,16 @@ impl ContinueExpr {
 }
 
 impl ReturnExpr {
+    pub fn expr(&self) -> Option<Expr> {
+        child(&self.0)
+    }
+}
+
+impl YieldExpr {
+    pub fn yield_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::YIELD_KW)
+    }
+
     pub fn expr(&self) -> Option<Expr> {
         child(&self.0)
     }
@@ -818,6 +830,18 @@ mod tests {
     fn return_expr_with_value() {
         let ret: ReturnExpr = parse_expr("fn main() { return 42; }");
         assert!(ret.expr().is_some());
+    }
+
+    #[test]
+    fn yield_expr_with_value() {
+        let expr: YieldExpr = parse_expr("fn main() { yield 42; }");
+        assert!(expr.expr().is_some());
+    }
+
+    #[test]
+    fn yield_keyword_token() {
+        let expr: YieldExpr = parse_expr("fn main() { yield 42; }");
+        assert!(expr.yield_kw().is_some());
     }
 
     // =========================================================================
