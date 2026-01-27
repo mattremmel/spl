@@ -347,12 +347,15 @@ impl<'a> InferEngine<'a> {
             }
 
             // References and raw pointers: mutability must match or coerce, inner types must unify.
-            // Coercion: &mut T -> &T or *mut T -> *T is allowed (mutable can become shared),
-            // but &T -> &mut T or *T -> *mut T is forbidden (can't gain mutability).
+            // With unify(expected, actual) semantics:
+            // - Coercion allows actual (&mut T) to satisfy expected (&T)
+            // - But actual (&T) cannot satisfy expected (&mut T)
             (Type::Ref(m1, inner1), Type::Ref(m2, inner2))
             | (Type::RawPtr(m1, inner1), Type::RawPtr(m2, inner2)) => {
+                // m1 = expected mutability, m2 = actual mutability
+                // Allow if same, or if actual is mutable and expected is shared
                 let mutability_ok =
-                    m1 == m2 || (*m1 == Mutability::Mutable && *m2 == Mutability::Shared);
+                    m1 == m2 || (*m2 == Mutability::Mutable && *m1 == Mutability::Shared);
                 if !mutability_ok {
                     return Err(UnifyError::MutabilityMismatch {
                         expected: *m1,
@@ -988,15 +991,16 @@ mod tests {
 
     #[test]
     fn unify_err_mutability_shared_to_mut() {
-        // &i32 vs &mut i32 should fail (can't coerce shared to mutable)
+        // unify(expected=&mut i32, actual=&i32) should fail
+        // Can't use a shared reference where mutable is expected
         let resolve_result = create_test_resolve_result();
         let mut engine = create_test_engine(&resolve_result);
         let i32_ty = engine.types.i32();
         let shared_ref = engine.types.mk_ref(Mutability::Shared, i32_ty);
         let mut_ref = engine.types.mk_ref(Mutability::Mutable, i32_ty);
 
-        // Trying to unify &i32 (expected) with &mut i32 (actual) should fail
-        let result = engine.unify(shared_ref, mut_ref);
+        // unify(expected=&mut, actual=&) should fail - can't gain mutability
+        let result = engine.unify(mut_ref, shared_ref);
         assert!(matches!(result, Err(UnifyError::MutabilityMismatch { .. })));
     }
 
@@ -1136,14 +1140,16 @@ mod tests {
 
     #[test]
     fn unify_ok_mut_to_shared() {
-        // &mut i32 vs &i32 should succeed (mutable coerces to shared)
+        // unify(expected=&i32, actual=&mut i32) should succeed
+        // Mutable reference can satisfy shared reference expectation
         let resolve_result = create_test_resolve_result();
         let mut engine = create_test_engine(&resolve_result);
         let i32_ty = engine.types.i32();
         let mut_ref = engine.types.mk_ref(Mutability::Mutable, i32_ty);
         let shared_ref = engine.types.mk_ref(Mutability::Shared, i32_ty);
 
-        let result = engine.unify(mut_ref, shared_ref);
+        // unify(expected=&, actual=&mut) should succeed - &mut can coerce to &
+        let result = engine.unify(shared_ref, mut_ref);
         assert!(result.is_ok());
     }
 

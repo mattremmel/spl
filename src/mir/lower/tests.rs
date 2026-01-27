@@ -8909,9 +8909,12 @@ fn is_expr_literal_generates_comparison() {
 
     // Find a BinaryOp::Eq statement (the comparison)
     let has_eq_comparison = body.basic_blocks.iter().any(|bb| {
-        bb.statements
-            .iter()
-            .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Eq, _, _))))
+        bb.statements.iter().any(|stmt| {
+            matches!(
+                &stmt.kind,
+                StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Eq, _, _))
+            )
+        })
     });
     assert!(
         has_eq_comparison,
@@ -8950,10 +8953,7 @@ fn is_not_wildcard_generates_constant_false() {
             )
         })
     });
-    assert!(
-        has_const_false,
-        "is not _ should generate constant false"
-    );
+    assert!(has_const_false, "is not _ should generate constant false");
 }
 
 #[test]
@@ -8972,8 +8972,5 @@ fn is_not_literal_generates_ne_comparison() {
             )
         })
     });
-    assert!(
-        has_ne_or_negation,
-        "is not should generate Ne or negation"
-    );
+    assert!(has_ne_or_negation, "is not should generate Ne or negation");
 }

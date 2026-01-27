@@ -14,9 +14,10 @@ use crate::syntax::SyntaxKind;
 use rowan::ast::AstNode;
 use rustc_hash::FxHashMap;
 
+use super::UnifyError;
 use super::engine::{InferEngine, LoopKind};
 use super::helpers::{
-    is_numeric_type, parse_int_literal_value, parse_int_suffix, text_range_to_span,
+    find_similar, is_numeric_type, parse_int_literal_value, parse_int_suffix, text_range_to_span,
 };
 
 impl<'a> InferEngine<'a> {
@@ -706,11 +707,16 @@ impl<'a> InferEngine<'a> {
         // Check/unify all elements
         for expr in &exprs[1..] {
             let elem_type = self.synth_expr(expr);
-            if self.unify(first_type, elem_type).is_err() {
+            if let Err(_err) = self.unify(first_type, elem_type) {
                 let span = text_range_to_span(expr.syntax().text_range());
+                // For array elements, show expected/actual in user-friendly way
+                let first_str = self.type_to_string(first_type);
+                let elem_str = self.type_to_string(elem_type);
                 self.diagnostics.push(
-                    Diagnostic::error("type mismatch: array elements must have the same type")
-                        .with_label(span, "has different type"),
+                    Diagnostic::error(format!(
+                        "type mismatch in array elements: expected `{first_str}`, found `{elem_str}`"
+                    ))
+                    .with_label(span, "element has incompatible type"),
                 );
             }
         }
@@ -799,28 +805,42 @@ impl<'a> InferEngine<'a> {
             .cloned()
             .unwrap_or_default();
 
-        for method_def_id in method_def_ids {
-            let symbol = self.resolve_ctx.get_symbol(method_def_id);
+        // Collect available method names for error messages
+        let available_methods: Vec<&str> = method_def_ids
+            .iter()
+            .map(|&def_id| {
+                let symbol = self.resolve_ctx.get_symbol(def_id);
+                self.resolve_ctx.resolve(symbol.name)
+            })
+            .collect();
+
+        for method_def_id in &method_def_ids {
+            let symbol = self.resolve_ctx.get_symbol(*method_def_id);
             let fn_name = self.resolve_ctx.resolve(symbol.name);
             if fn_name == method_name
-                && let Some(sig) = self.defs.fn_signatures.get(&method_def_id).cloned()
+                && let Some(sig) = self.defs.fn_signatures.get(method_def_id).cloned()
             {
                 // Store the resolution for the method
                 let method_span = text_range_to_span(method_token.text_range());
                 self.results
                     .method_resolutions
-                    .insert(method_span, method_def_id);
+                    .insert(method_span, *method_def_id);
 
                 return self.synth_call_as_function(call, &sig);
             }
         }
 
-        // Method not found
+        // Method not found - provide helpful diagnostic
         let method_span = text_range_to_span(method_token.text_range());
-        self.diagnostics.push(
-            Diagnostic::error(format!("method `{method_name}` not found"))
-                .with_label(method_span, "unknown method"),
+        let struct_symbol = self.resolve_ctx.get_symbol(struct_def_id);
+        let type_name = self.resolve_ctx.resolve(struct_symbol.name);
+        let diag = self.method_not_found_diagnostic(
+            &method_name,
+            type_name,
+            &available_methods,
+            method_span,
         );
+        self.diagnostics.push(diag);
         self.types.error()
     }
 
@@ -1149,12 +1169,20 @@ impl<'a> InferEngine<'a> {
                     return sig.ret;
                 }
             }
-            // Method not found on primitive type
+            // Method not found on str - collect available methods for suggestions
+            let available_methods: Vec<&str> = method_def_ids
+                .iter()
+                .filter_map(|def_id| {
+                    self.methods
+                        .builtin_method_names
+                        .get(def_id)
+                        .map(String::as_str)
+                })
+                .collect();
             let span = text_range_to_span(call.syntax().text_range());
-            self.diagnostics.push(
-                Diagnostic::error(format!("method `{method_name}` not found on type `str`"))
-                    .with_label(span, "unknown method"),
-            );
+            let diag =
+                self.method_not_found_diagnostic(&method_name, "str", &available_methods, span);
+            self.diagnostics.push(diag);
             return self.types.error();
         }
 
@@ -1179,11 +1207,20 @@ impl<'a> InferEngine<'a> {
             .cloned()
             .unwrap_or_default();
 
-        for method_def_id in method_def_ids {
-            let symbol = self.resolve_ctx.get_symbol(method_def_id);
+        // Collect available method names for error messages
+        let available_methods: Vec<&str> = method_def_ids
+            .iter()
+            .map(|&def_id| {
+                let symbol = self.resolve_ctx.get_symbol(def_id);
+                self.resolve_ctx.resolve(symbol.name)
+            })
+            .collect();
+
+        for method_def_id in &method_def_ids {
+            let symbol = self.resolve_ctx.get_symbol(*method_def_id);
             let fn_name = self.resolve_ctx.resolve(symbol.name);
             if fn_name == method_name
-                && let Some(sig) = self.defs.fn_signatures.get(&method_def_id).cloned()
+                && let Some(sig) = self.defs.fn_signatures.get(method_def_id).cloned()
             {
                 // Check method visibility
                 if symbol.visibility == Visibility::Private {
@@ -1206,7 +1243,7 @@ impl<'a> InferEngine<'a> {
                 let method_span = text_range_to_span(method_token.text_range());
                 self.results
                     .method_resolutions
-                    .insert(method_span, method_def_id);
+                    .insert(method_span, *method_def_id);
 
                 // Call the method with adjusted argument handling for self parameter
                 return self.synth_method_call_with_receiver(
@@ -1218,12 +1255,17 @@ impl<'a> InferEngine<'a> {
             }
         }
 
-        // Method not found
+        // Method not found - provide helpful diagnostic
         let method_span = text_range_to_span(method_token.text_range());
-        self.diagnostics.push(
-            Diagnostic::error(format!("method `{method_name}` not found"))
-                .with_label(method_span, "unknown method"),
+        let struct_symbol = self.resolve_ctx.get_symbol(struct_def_id);
+        let type_name = self.resolve_ctx.resolve(struct_symbol.name);
+        let diag = self.method_not_found_diagnostic(
+            &method_name,
+            type_name,
+            &available_methods,
+            method_span,
         );
+        self.diagnostics.push(diag);
         self.types.error()
     }
 
@@ -1520,19 +1562,20 @@ impl<'a> InferEngine<'a> {
                 };
                 if !is_lhs_numeric {
                     let span = text_range_to_span(lhs.syntax().text_range());
+                    let lhs_str = self.type_to_string(lhs_ty);
                     self.diagnostics.push(
-                        Diagnostic::error("cannot apply binary operator to non-numeric type")
-                            .with_label(span, "not a numeric type"),
+                        Diagnostic::error(format!(
+                            "cannot apply binary operator to `{lhs_str}` (non-numeric type)"
+                        ))
+                        .with_label(span, format!("type `{lhs_str}` is not numeric")),
                     );
                     return self.types.error();
                 }
 
-                if self.unify(lhs_ty, rhs_ty).is_err() {
+                if let Err(err) = self.unify(lhs_ty, rhs_ty) {
                     let span = text_range_to_span(rhs.syntax().text_range());
-                    self.diagnostics.push(
-                        Diagnostic::error("type mismatch in binary operation")
-                            .with_label(span, "mismatched operand types"),
-                    );
+                    let diag = self.unify_error_diagnostic(&err, "arithmetic operands", span);
+                    self.diagnostics.push(diag);
                     return self.types.error();
                 }
 
@@ -2052,14 +2095,25 @@ impl<'a> InferEngine<'a> {
                     return sig.ret;
                 }
             }
-            // Method not found on primitive type
+            // Method not found on primitive type - collect available methods for suggestions
+            let available_methods: Vec<&str> = method_def_ids
+                .iter()
+                .filter_map(|def_id| {
+                    self.methods
+                        .builtin_method_names
+                        .get(def_id)
+                        .map(String::as_str)
+                })
+                .collect();
+            let type_name = self.type_to_string(resolved);
             let span = text_range_to_span(call.syntax().text_range());
-            self.diagnostics.push(
-                Diagnostic::error(format!(
-                    "method `{method_name}` not found on primitive type"
-                ))
-                .with_label(span, "unknown method"),
+            let diag = self.method_not_found_diagnostic(
+                &method_name,
+                &type_name,
+                &available_methods,
+                span,
             );
+            self.diagnostics.push(diag);
             return self.types.error();
         }
 
@@ -2162,17 +2216,26 @@ impl<'a> InferEngine<'a> {
                 .cloned()
                 .unwrap_or_default();
 
-            for method_def_id in method_def_ids {
-                let symbol = self.resolve_ctx.get_symbol(method_def_id);
+            // Collect available method names for error messages
+            let available_methods: Vec<&str> = method_def_ids
+                .iter()
+                .map(|&method_def_id| {
+                    let symbol = self.resolve_ctx.get_symbol(method_def_id);
+                    self.resolve_ctx.resolve(symbol.name)
+                })
+                .collect();
+
+            for method_def_id in &method_def_ids {
+                let symbol = self.resolve_ctx.get_symbol(*method_def_id);
                 let fn_name = self.resolve_ctx.resolve(symbol.name);
                 if fn_name == method_name
-                    && let Some(sig) = self.defs.fn_signatures.get(&method_def_id).cloned()
+                    && let Some(sig) = self.defs.fn_signatures.get(method_def_id).cloned()
                 {
                     // Store resolution
                     let method_span = text_range_to_span(call.syntax().text_range());
                     self.results
                         .method_resolutions
-                        .insert(method_span, method_def_id);
+                        .insert(method_span, *method_def_id);
 
                     return self.synth_method_call_with_receiver(
                         call,
@@ -2182,13 +2245,22 @@ impl<'a> InferEngine<'a> {
                     );
                 }
             }
+
+            // Method not found on struct - provide helpful diagnostic
+            let struct_symbol = self.resolve_ctx.get_symbol(def_id);
+            let type_name = self.resolve_ctx.resolve(struct_symbol.name);
+            let span = text_range_to_span(call.syntax().text_range());
+            let diag =
+                self.method_not_found_diagnostic(method_name, type_name, &available_methods, span);
+            self.diagnostics.push(diag);
+            return self.types.error();
         }
 
+        // No struct type found - show generic error
+        let type_name = self.type_to_string(receiver_ty);
         let span = text_range_to_span(call.syntax().text_range());
-        self.diagnostics.push(
-            Diagnostic::error(format!("method `{method_name}` not found"))
-                .with_label(span, "unknown method"),
-        );
+        let diag = self.method_not_found_diagnostic(method_name, &type_name, &[], span);
+        self.diagnostics.push(diag);
         self.types.error()
     }
 
@@ -2350,12 +2422,10 @@ impl<'a> InferEngine<'a> {
         };
 
         // Unify branches
-        if self.unify(then_ty, else_ty).is_err() {
+        if let Err(err) = self.unify(then_ty, else_ty) {
             let span = text_range_to_span(if_expr.syntax().text_range());
-            self.diagnostics.push(
-                Diagnostic::error("type mismatch between if branches")
-                    .with_label(span, "branches have different types"),
-            );
+            let diag = self.unify_error_diagnostic(&err, "if/else branches", span);
+            self.diagnostics.push(diag);
         }
 
         then_ty
@@ -2620,9 +2690,10 @@ impl<'a> InferEngine<'a> {
             Type::Primitive(prim) => prim.as_str().to_string(),
             Type::Infer(var, kind) => match kind {
                 InferKind::General => format!("?{}", var.index()),
-                // Show default types for constrained inference variables in error messages
-                InferKind::Int => "i32".to_string(),
-                InferKind::Float => "f64".to_string(),
+                // Show inference variable kind for constrained inference variables
+                // This is more helpful for error messages than showing the default
+                InferKind::Int => "{integer}".to_string(),
+                InferKind::Float => "{float}".to_string(),
             },
             Type::Ref(mutability, inner) => {
                 let inner_str = self.type_to_string(*inner);
@@ -2674,6 +2745,93 @@ impl<'a> InferEngine<'a> {
         }
     }
 
+    /// Convert a `UnifyError` to a rich diagnostic message with expected/actual types.
+    fn unify_error_diagnostic(
+        &self,
+        err: &UnifyError,
+        context: &str,
+        span: crate::lexer::Span,
+    ) -> Diagnostic {
+        match err {
+            UnifyError::TypeMismatch { expected, actual } => {
+                let exp = self.type_to_string(*expected);
+                let act = self.type_to_string(*actual);
+                Diagnostic::error(format!(
+                    "type mismatch in {context}: expected `{exp}`, found `{act}`"
+                ))
+                .with_label(span, format!("expected `{exp}`, found `{act}`"))
+            }
+            UnifyError::MutabilityMismatch { expected, .. } => {
+                let exp = if *expected == Mutability::Mutable {
+                    "mutable reference"
+                } else {
+                    "shared reference"
+                };
+                Diagnostic::error(format!("mutability mismatch in {context}: expected {exp}"))
+                    .with_label(span, format!("expected {exp}"))
+            }
+            UnifyError::ArityMismatch { expected, actual } => Diagnostic::error(format!(
+                "type mismatch in {context}: expected {expected} elements, found {actual}"
+            ))
+            .with_label(
+                span,
+                format!("expected {expected} elements, found {actual}"),
+            ),
+            UnifyError::ArrayLengthMismatch { expected, actual } => Diagnostic::error(format!(
+                "array length mismatch: expected {expected} elements, found {actual}"
+            ))
+            .with_label(
+                span,
+                format!("expected {expected} elements, found {actual}"),
+            ),
+            UnifyError::ConstraintViolation { kind, actual } => {
+                let kind_str = match kind {
+                    InferKind::Int => "{integer}",
+                    InferKind::Float => "{float}",
+                    InferKind::General => "type",
+                };
+                let act = self.type_to_string(*actual);
+                Diagnostic::error(format!(
+                    "type mismatch in {context}: expected `{kind_str}`, found `{act}`"
+                ))
+                .with_label(span, format!("expected `{kind_str}`, found `{act}`"))
+            }
+            UnifyError::InfiniteType { .. } => {
+                Diagnostic::error("infinite type").with_label(span, "recursive type here")
+            }
+        }
+    }
+
+    /// Generate a diagnostic for method not found with suggestions.
+    fn method_not_found_diagnostic(
+        &self,
+        method_name: &str,
+        type_name: &str,
+        available_methods: &[&str],
+        span: crate::lexer::Span,
+    ) -> Diagnostic {
+        use std::fmt::Write;
+
+        // Build the main message with suggestions
+        let mut message = format!("method `{method_name}` not found on type `{type_name}`");
+
+        // Suggest similar method name if one exists
+        if let Some(similar) = find_similar(method_name, available_methods, 2) {
+            let _ = write!(message, "; did you mean `{similar}`?");
+        }
+
+        // List available methods if there are any (in the message for test visibility)
+        if !available_methods.is_empty() && available_methods.len() <= 10 {
+            let _ = write!(
+                message,
+                " (available methods: {})",
+                available_methods.join(", ")
+            );
+        }
+
+        Diagnostic::error(message).with_label(span, "method not found")
+    }
+
     fn synth_range(&mut self, range: &RangeExpr) -> TypeId {
         let start_ty = range.start().map(|e| self.synth_expr(&e));
         let end_ty = range.end().map(|e| self.synth_expr(&e));
@@ -2684,8 +2842,10 @@ impl<'a> InferEngine<'a> {
                 if self.unify(s, e).is_err() {
                     let span = text_range_to_span(range.syntax().text_range());
                     self.diagnostics.push(
-                        Diagnostic::error("type mismatch: range start and end must have the same type")
-                            .with_label(span, "mismatched types in range"),
+                        Diagnostic::error(
+                            "type mismatch: range start and end must have the same type",
+                        )
+                        .with_label(span, "mismatched types in range"),
                     );
                 }
                 s
@@ -3020,10 +3180,12 @@ impl<'a> InferEngine<'a> {
     /// Check an expression against an expected type.
     pub(super) fn check_expr(&mut self, expr: &Expr, expected: TypeId) {
         let actual = self.synth_expr(expr);
-        if self.unify(actual, expected).is_err() {
+        // unify(expected, actual): checks if actual can satisfy expected
+        // Coercion allows &mut T to satisfy &T, but not vice versa
+        if let Err(err) = self.unify(expected, actual) {
             let span = text_range_to_span(expr.syntax().text_range());
-            self.diagnostics
-                .push(Diagnostic::error("type mismatch").with_label(span, "mismatched types"));
+            let diag = self.unify_error_diagnostic(&err, "expression", span);
+            self.diagnostics.push(diag);
         } else {
             // After successful unification, validate integer literal ranges
             self.validate_literal_range(expr, expected);

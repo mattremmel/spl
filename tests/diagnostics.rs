@@ -54,7 +54,7 @@ fn break_type_mismatch_shows_types() {
     // Multiple breaks with conflicting types should show expected/actual
     check_contains(
         "fn main() { let x = loop { if true { break 42; } break true; }; }",
-        "expected `i32`, found `bool`",
+        "expected `{integer}`, found `bool`",
     );
 }
 
@@ -365,10 +365,7 @@ fn integer_range_iteration_is_valid() {
 fn postfix_missing_rparen_in_call() {
     // Missing closing paren in function call
     let diagnostics = compile_err("fn main() { foo( }");
-    assert!(
-        !diagnostics.is_empty(),
-        "Expected error for missing rparen"
-    );
+    assert!(!diagnostics.is_empty(), "Expected error for missing rparen");
 }
 
 #[test]
@@ -395,20 +392,14 @@ fn postfix_nested_call_missing_paren() {
 fn postfix_method_chain_error() {
     // Error in method chain doesn't prevent further parsing
     let diagnostics = compile_err("fn main() { x.foo(.bar() }");
-    assert!(
-        !diagnostics.is_empty(),
-        "Expected error in method chain"
-    );
+    assert!(!diagnostics.is_empty(), "Expected error in method chain");
 }
 
 #[test]
 fn postfix_index_chain_error() {
     // Error in index chain
     let diagnostics = compile_err("fn main() { arr[0][1 }");
-    assert!(
-        !diagnostics.is_empty(),
-        "Expected error in index chain"
-    );
+    assert!(!diagnostics.is_empty(), "Expected error in index chain");
 }
 
 #[test]
@@ -437,4 +428,118 @@ fn postfix_recovery_continues_parsing() {
     let diagnostics = compile_err("fn main() { foo(; let x = 1; }");
     // Should get error about unclosed call, but also process rest
     assert!(!diagnostics.is_empty());
+}
+
+// =============================================================================
+// Nested Type Error Context Tests (spl-0h81)
+// =============================================================================
+
+#[test]
+fn tuple_element_mismatch_shows_types() {
+    // Tuple element type mismatch shows the expected and actual types
+    // Note: showing which element index failed would be a future enhancement
+    check_contains(
+        "fn main() { let x: (i32, bool) = (1, 2); }",
+        "type mismatch",
+    );
+}
+
+#[test]
+fn array_element_mismatch_shows_expected_actual() {
+    check_contains(
+        "fn main() { let a = [1, true, 3]; }",
+        "expected `{integer}`, found `bool`",
+    );
+}
+
+#[test]
+fn reference_mismatch_shows_inner_types() {
+    check_contains(
+        "fn main() { let x: &i32 = &true; }",
+        "expected `i32`, found `bool`",
+    );
+}
+
+#[test]
+fn array_length_mismatch_shows_lengths() {
+    check_contains(
+        "fn main() { let a: [i32; 3] = [1, 2, 3, 4, 5]; }",
+        "expected 3",
+    );
+}
+
+#[test]
+fn mutability_mismatch_shows_expected() {
+    check_contains(
+        r#"
+        fn takes_mut(_ r: &mut i32) {}
+        fn main() { let x = 1; takes_mut(&x); }
+        "#,
+        "mutable",
+    );
+}
+
+#[test]
+fn binary_op_mismatch_shows_operand_types() {
+    check_contains("fn main() { let x = true + 1; }", "bool");
+}
+
+#[test]
+fn if_branch_mismatch_shows_types() {
+    check_contains(
+        "fn main() { let x = if true { 1 } else { false }; }",
+        "expected `{integer}`, found `bool`",
+    );
+}
+
+// =============================================================================
+// Method Resolution Candidate Reporting Tests (spl-yanm)
+// =============================================================================
+
+#[test]
+fn method_not_found_suggests_similar_name() {
+    check_contains(
+        r#"
+        struct Point(x: i32, y: i32)
+        impl Point {
+            fn distance(): i32 { 0 }
+        }
+        fn main() { let p = Point(x: 1, y: 2); p.distanc(); }
+        "#,
+        "distance",
+    );
+}
+
+#[test]
+fn method_not_found_lists_available() {
+    check_contains(
+        r#"
+        struct Counter(value: i32)
+        impl Counter {
+            fn increment() {}
+            fn decrement() {}
+        }
+        fn main() { let c = Counter(value: 0); c.foo(); }
+        "#,
+        "available",
+    );
+}
+
+#[test]
+fn method_wrong_arg_count_shows_expected() {
+    check_contains(
+        r#"
+        struct Counter(value: i32)
+        impl Counter {
+            fn add(_ n: i32) {}
+        }
+        fn main() { let c = Counter(value: 0); c.add(1, 2); }
+        "#,
+        "expected 1",
+    );
+}
+
+#[test]
+fn str_method_typo_suggests_len() {
+    check_contains(r#"fn main() { let s = "hello"; s.length(); }"#, "len");
 }

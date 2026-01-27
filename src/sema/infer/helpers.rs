@@ -89,3 +89,47 @@ pub fn parse_int_literal_value(text: &str) -> Option<i128> {
         num_text.replace('_', "").parse().ok()
     }
 }
+
+/// Compute the Levenshtein (edit) distance between two strings.
+/// This measures the minimum number of single-character edits (insertions,
+/// deletions, or substitutions) required to transform one string into another.
+pub fn levenshtein(a: &str, b: &str) -> usize {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let mut dp: Vec<usize> = (0..=b.len()).collect();
+    for (i, &ca) in a.iter().enumerate() {
+        let mut prev = i;
+        dp[0] = i + 1;
+        for (j, &cb) in b.iter().enumerate() {
+            let curr = dp[j + 1];
+            dp[j + 1] = if ca == cb {
+                prev
+            } else {
+                1 + prev.min(curr).min(dp[j])
+            };
+            prev = curr;
+        }
+    }
+    dp[b.len()]
+}
+
+/// Find the most similar string from a list of candidates.
+/// Returns the best match if it's within `max_distance` edits, otherwise None.
+pub fn find_similar<'a>(
+    target: &str,
+    candidates: &[&'a str],
+    max_distance: usize,
+) -> Option<&'a str> {
+    candidates
+        .iter()
+        .filter(|&&name| name != target)
+        .filter_map(|&name| {
+            let dist = levenshtein(target, name);
+            if dist <= max_distance {
+                Some((name, dist))
+            } else {
+                None
+            }
+        })
+        .min_by_key(|(_, dist)| *dist)
+        .map(|(name, _)| name)
+}

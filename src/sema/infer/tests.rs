@@ -2833,7 +2833,7 @@ fn error_ref_coercion_shared_to_mut() {
     // &T cannot coerce to &mut T (cannot gain mutability)
     check_err(
         "fn f(_ x: &mut i32) {} fn main() { let a = 42; f(&a); }",
-        &["type mismatch"],
+        &["mutability mismatch"],
     );
 }
 
@@ -5336,10 +5336,7 @@ fn mut_borrow_reborrow_allowed() {
 #[test]
 fn mut_borrow_fn_param_immutable() {
     // Function parameter is immutable by default - cannot borrow mutably
-    check_err(
-        "fn foo(_ x: i32) { let y = &mut x; }",
-        &["cannot borrow"],
-    );
+    check_err("fn foo(_ x: i32) { let y = &mut x; }", &["cannot borrow"]);
 }
 
 #[test]
@@ -5406,7 +5403,10 @@ fn builtin_bool_type() {
 #[test]
 fn builtin_all_integer_types() {
     // All integer types are accessible
-    check("fn main() { let a: i8 = 1; let b: i16 = 2; let c: i32 = 3; let d: i64 = 4; let e: i128 = 5; let f: u8 = 6; let g: u16 = 7; let h: u32 = 8; let i: u64 = 9; let j: u128 = 10; }", "u128");
+    check(
+        "fn main() { let a: i8 = 1; let b: i16 = 2; let c: i32 = 3; let d: i64 = 4; let e: i128 = 5; let f: u8 = 6; let g: u16 = 7; let h: u32 = 8; let i: u64 = 9; let j: u128 = 10; }",
+        "u128",
+    );
 }
 
 // =============================================================================
