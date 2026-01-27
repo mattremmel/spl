@@ -569,7 +569,6 @@ fn logical_not() {
 }
 
 #[test]
-#[ignore = "block expressions in short-circuit not yet working"]
 fn logical_short_circuit_and() {
     // The second expression should not be evaluated if first is false
     check_returns(
@@ -588,7 +587,6 @@ fn logical_short_circuit_and() {
 }
 
 #[test]
-#[ignore = "block expressions in short-circuit not yet working"]
 fn logical_short_circuit_or() {
     // The second expression should not be evaluated if first is true
     check_returns(
@@ -1000,32 +998,32 @@ fn slice_pattern_with_rest() {
 // =============================================================================
 
 #[test]
-#[ignore = "negative cast from i64 to i32 returns incorrect value"]
 fn cast_negative_value() {
-    // Cast a negative value
+    // Cast a negative value (use arithmetic to verify since exit codes are 0-255)
     check_returns(
         r#"
         fn main(): i32 {
             let x: i64 = -42;
-            return x as i32;
+            let y = x as i32;
+            return y + 100;
         }
         "#,
-        -42,
+        58, // -42 + 100 = 58
     );
 }
 
 #[test]
-#[ignore = "negative cast from i64 to i32 returns incorrect value"]
 fn cast_negation_expression() {
-    // -x as i32 should cast the negated value
+    // -x as i32 should cast the negated value (use arithmetic to verify since exit codes are 0-255)
     check_returns(
         r#"
         fn main(): i32 {
             let x: i64 = 42;
-            return -x as i32;
+            let y = -x as i32;
+            return y + 100;
         }
         "#,
-        -42,
+        58, // -42 + 100 = 58
     );
 }
 

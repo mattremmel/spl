@@ -814,10 +814,13 @@ impl<'a> InferEngine<'a> {
             let body_ty = self.synth_block(&body);
 
             // Check for implicit return with statements (disallowed)
+            // Skip this check if body_ty is ! (never) - means all paths have explicit returns
             let has_statements = body.statements().next().is_some();
             let has_tail = body.tail_expr().is_some();
+            let resolved_body = self.resolve_type(body_ty);
+            let body_diverges = self.is_never_type(resolved_body);
 
-            if has_statements && has_tail {
+            if has_statements && has_tail && !body_diverges {
                 let resolved_ret = self.resolve_type(sig.ret);
                 let ret_is_non_unit = !self.is_unit_type(resolved_ret);
 
@@ -877,6 +880,11 @@ impl<'a> InferEngine<'a> {
             Type::Tuple(elems) => elems.is_empty(),
             _ => false,
         }
+    }
+
+    /// Check if a type is the never type (all code paths diverge)
+    fn is_never_type(&self, type_id: TypeId) -> bool {
+        matches!(self.types.get(type_id), Type::Primitive(PrimitiveKind::Never))
     }
 }
 
