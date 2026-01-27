@@ -884,7 +884,10 @@ impl<'a> InferEngine<'a> {
 
     /// Check if a type is the never type (all code paths diverge)
     fn is_never_type(&self, type_id: TypeId) -> bool {
-        matches!(self.types.get(type_id), Type::Primitive(PrimitiveKind::Never))
+        matches!(
+            self.types.get(type_id),
+            Type::Primitive(PrimitiveKind::Never)
+        )
     }
 }
 

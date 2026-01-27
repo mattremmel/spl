@@ -8,6 +8,25 @@ use crate::syntax::SyntaxKind;
 use super::expr;
 use super::pattern;
 
+/// Check if expression kind requires a semicolon (statement-like expressions).
+/// These expressions act like statements and should not be used as implicit tail expressions.
+fn requires_semicolon(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::ReturnExpr | SyntaxKind::BreakExpr | SyntaxKind::ContinueExpr
+    )
+}
+
+/// Get a human-readable name for an expression kind (for error messages).
+fn expr_kind_name(kind: SyntaxKind) -> &'static str {
+    match kind {
+        SyntaxKind::ReturnExpr => "return",
+        SyntaxKind::BreakExpr => "break",
+        SyntaxKind::ContinueExpr => "continue",
+        _ => "expression",
+    }
+}
+
 /// Check if the current token can start a statement or expression.
 /// Used to distinguish between missing semicolons and block-ending expressions.
 /// Block-ending expressions (if, while, for, loop, blocks) don't need semicolons
@@ -187,13 +206,21 @@ pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::parser
                 // Try to parse an expression
                 let expr_m = p.start();
                 match expr::expr(p) {
-                    Ok(Some(_)) => {
+                    Ok(Some(expr_completed)) => {
                         // Successfully parsed an expression
                         if p.eat(SyntaxKind::SEMI) {
                             // Expression statement with semicolon
                             expr_m.complete(p, SyntaxKind::ExprStmt);
                         } else if p.at(SyntaxKind::R_BRACE) {
-                            // Tail expression (no semicolon, at end of block)
+                            // At end of block - statement-like expressions require semicolons
+                            if requires_semicolon(expr_completed.kind()) {
+                                let err = p.error_at_current(format!(
+                                    "expected ';' after {} expression",
+                                    expr_kind_name(expr_completed.kind())
+                                ));
+                                p.error(err);
+                            }
+                            // Regular expressions are valid tail expressions
                             expr_m.abandon(p);
                         } else if can_start_stmt_or_expr(p) {
                             // No semicolon but another expression follows
@@ -1404,5 +1431,59 @@ mod tests {
                     R_BRACE@40..41 "}"
             "#]],
         );
+    }
+
+    // === Semicolon required for return/break/continue ===
+
+    #[test]
+    fn return_without_semicolon_error() {
+        // return without semicolon at end of block should produce an error
+        let parse = crate::parser::parse("fn main() { return }");
+        assert!(!parse.ok());
+        assert!(
+            parse
+                .errors()
+                .iter()
+                .any(|e| e.message.contains("expected ';' after return"))
+        );
+    }
+
+    #[test]
+    fn break_without_semicolon_error() {
+        // break without semicolon at end of block should produce an error
+        let parse = crate::parser::parse("fn main() { loop { break } }");
+        assert!(!parse.ok());
+        assert!(
+            parse
+                .errors()
+                .iter()
+                .any(|e| e.message.contains("expected ';' after break"))
+        );
+    }
+
+    #[test]
+    fn continue_without_semicolon_error() {
+        // continue without semicolon at end of block should produce an error
+        let parse = crate::parser::parse("fn main() { loop { continue } }");
+        assert!(!parse.ok());
+        assert!(
+            parse
+                .errors()
+                .iter()
+                .any(|e| e.message.contains("expected ';' after continue"))
+        );
+    }
+
+    #[test]
+    fn regular_tail_expr_still_valid() {
+        // Regular expressions should still be valid as tail expressions
+        let parse = crate::parser::parse("fn main(): i32 { 42 }");
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+
+        let parse = crate::parser::parse("fn main(): i32 { foo() }");
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
+
+        let parse = crate::parser::parse("fn main(): i32 { x + 1 }");
+        assert!(parse.ok(), "Parse errors: {:?}", parse.errors());
     }
 }

@@ -1306,7 +1306,7 @@ fn never_coerces_to_any() {
 #[test]
 fn never_in_if() {
     check(
-        "fn main() { let x = if true { 1 } else { return }; }",
+        "fn main() { let x = if true { 1 } else { return; }; }",
         "i32",
     );
 }
@@ -2857,7 +2857,7 @@ fn never_in_if_then_propagates_else_type() {
     // when the then-branch diverges, but the else type is still available
     // for type-annotated contexts.
     check(
-        "fn main() { let x: i32 = if true { return } else { 42 }; }",
+        "fn main() { let x: i32 = if true { return; } else { 42 }; }",
         "i32",
     );
 }
@@ -2866,7 +2866,7 @@ fn never_in_if_then_propagates_else_type() {
 fn never_in_if_else_propagates_then_type() {
     // When else-branch has never type, result type comes from then
     check(
-        "fn main() { let x = if true { 42 } else { return }; }",
+        "fn main() { let x = if true { 42 } else { return; }; }",
         "i32",
     );
 }
@@ -2876,7 +2876,7 @@ fn both_branches_never() {
     // When both branches have never type, result is never
     // Note: The binding `x` will have type `!` (never)
     check(
-        "fn main() { let x: i32 = if true { return } else { return }; }",
+        "fn main() { let x: i32 = if true { return; } else { return; }; }",
         "i32",
     );
 }
@@ -3032,9 +3032,9 @@ fn implicit_return_single_call() {
 
 #[test]
 fn explicit_return_as_tail_expr() {
-    // Return expression as tail (no semicolon) - allowed
+    // Return expression with semicolon - allowed
     check(
-        "fn f(_ x: i32): i32 { let y = x + 1; return y } fn main() { let z = f(5); }",
+        "fn f(_ x: i32): i32 { let y = x + 1; return y; } fn main() { let z = f(5); }",
         "i32",
     );
 }

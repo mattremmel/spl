@@ -548,7 +548,10 @@ impl Marker {
             forward_parent: None,
         };
         p.events.push(Event::Finish);
-        CompletedMarker { pos: self.pos }
+        CompletedMarker {
+            pos: self.pos,
+            kind,
+        }
     }
 
     /// Abandon this marker without creating a node.
@@ -579,9 +582,15 @@ impl Drop for Marker {
 #[derive(Clone, Copy)]
 pub(crate) struct CompletedMarker {
     pos: usize,
+    kind: SyntaxKind,
 }
 
 impl CompletedMarker {
+    /// Returns the syntax kind of this completed node.
+    pub fn kind(&self) -> SyntaxKind {
+        self.kind
+    }
+
     /// Create a new node that wraps this completed node.
     /// Used for left-associative operators.
     pub fn precede(self, p: &mut Parser<'_>) -> Marker {

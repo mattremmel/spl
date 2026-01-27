@@ -785,7 +785,7 @@ mod tests {
 
     #[test]
     fn loop_expr() {
-        let loop_expr: LoopExpr = parse_expr("fn main() { loop { break } }");
+        let loop_expr: LoopExpr = parse_expr("fn main() { loop { break; } }");
         assert!(loop_expr.body().is_some());
     }
 
@@ -798,25 +798,25 @@ mod tests {
 
     #[test]
     fn break_expr_no_value() {
-        let brk: BreakExpr = parse_expr("fn main() { loop { break } }");
+        let brk: BreakExpr = parse_expr("fn main() { loop { break; } }");
         assert!(brk.expr().is_none());
     }
 
     #[test]
     fn break_expr_with_value() {
-        let brk: BreakExpr = parse_expr("fn main() { loop { break 42 } }");
+        let brk: BreakExpr = parse_expr("fn main() { loop { break 42; } }");
         assert!(brk.expr().is_some());
     }
 
     #[test]
     fn return_expr_no_value() {
-        let ret: ReturnExpr = parse_expr("fn main() { return }");
+        let ret: ReturnExpr = parse_expr("fn main() { return; }");
         assert!(ret.expr().is_none());
     }
 
     #[test]
     fn return_expr_with_value() {
-        let ret: ReturnExpr = parse_expr("fn main() { return 42 }");
+        let ret: ReturnExpr = parse_expr("fn main() { return 42; }");
         assert!(ret.expr().is_some());
     }
 

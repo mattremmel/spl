@@ -506,21 +506,23 @@ mod tests {
     #[test]
     fn loop_with_break_value() {
         check_expr(
-            "loop { break 42 }",
+            "loop { break 42; }",
             &expect![[r#"
-                LoopExpr@0..17
+                LoopExpr@0..18
                   LOOP_KW@0..4 "loop"
-                  Block@4..17
+                  Block@4..18
                     WHITESPACE@4..5 " "
                     L_BRACE@5..6 "{"
-                    BreakExpr@6..15
-                      WHITESPACE@6..7 " "
-                      BREAK_KW@7..12 "break"
-                      LiteralExpr@12..15
-                        WHITESPACE@12..13 " "
-                        INT_LITERAL@13..15 "42"
-                    WHITESPACE@15..16 " "
-                    R_BRACE@16..17 "}"
+                    ExprStmt@6..16
+                      BreakExpr@6..15
+                        WHITESPACE@6..7 " "
+                        BREAK_KW@7..12 "break"
+                        LiteralExpr@12..15
+                          WHITESPACE@12..13 " "
+                          INT_LITERAL@13..15 "42"
+                      SEMI@15..16 ";"
+                    WHITESPACE@16..17 " "
+                    R_BRACE@17..18 "}"
             "#]],
         );
     }
@@ -658,14 +660,14 @@ mod tests {
     fn break_in_nested_context() {
         // break in nested if inside loop
         check_expr(
-            "loop { if cond { break 42 } }",
+            "loop { if cond { break 42; } }",
             &expect![[r#"
-                LoopExpr@0..29
+                LoopExpr@0..30
                   LOOP_KW@0..4 "loop"
-                  Block@4..29
+                  Block@4..30
                     WHITESPACE@4..5 " "
                     L_BRACE@5..6 "{"
-                    IfExpr@6..27
+                    IfExpr@6..28
                       WHITESPACE@6..7 " "
                       IF_KW@7..9 "if"
                       PathExpr@9..14
@@ -674,19 +676,21 @@ mod tests {
                             NameRef@9..14
                               WHITESPACE@9..10 " "
                               IDENT@10..14 "cond"
-                      Block@14..27
+                      Block@14..28
                         WHITESPACE@14..15 " "
                         L_BRACE@15..16 "{"
-                        BreakExpr@16..25
-                          WHITESPACE@16..17 " "
-                          BREAK_KW@17..22 "break"
-                          LiteralExpr@22..25
-                            WHITESPACE@22..23 " "
-                            INT_LITERAL@23..25 "42"
-                        WHITESPACE@25..26 " "
-                        R_BRACE@26..27 "}"
-                    WHITESPACE@27..28 " "
-                    R_BRACE@28..29 "}"
+                        ExprStmt@16..26
+                          BreakExpr@16..25
+                            WHITESPACE@16..17 " "
+                            BREAK_KW@17..22 "break"
+                            LiteralExpr@22..25
+                              WHITESPACE@22..23 " "
+                              INT_LITERAL@23..25 "42"
+                          SEMI@25..26 ";"
+                        WHITESPACE@26..27 " "
+                        R_BRACE@27..28 "}"
+                    WHITESPACE@28..29 " "
+                    R_BRACE@29..30 "}"
             "#]],
         );
     }
@@ -695,9 +699,9 @@ mod tests {
     fn continue_in_nested_context() {
         // continue in nested if inside for loop
         check_expr(
-            "for i in items { if skip { continue } }",
+            "for i in items { if skip { continue; } }",
             &expect![[r#"
-                ForExpr@0..39
+                ForExpr@0..40
                   FOR_KW@0..3 "for"
                   IdentPat@3..5
                     Name@3..5
@@ -711,10 +715,10 @@ mod tests {
                         NameRef@8..14
                           WHITESPACE@8..9 " "
                           IDENT@9..14 "items"
-                  Block@14..39
+                  Block@14..40
                     WHITESPACE@14..15 " "
                     L_BRACE@15..16 "{"
-                    IfExpr@16..37
+                    IfExpr@16..38
                       WHITESPACE@16..17 " "
                       IF_KW@17..19 "if"
                       PathExpr@19..24
@@ -723,16 +727,18 @@ mod tests {
                             NameRef@19..24
                               WHITESPACE@19..20 " "
                               IDENT@20..24 "skip"
-                      Block@24..37
+                      Block@24..38
                         WHITESPACE@24..25 " "
                         L_BRACE@25..26 "{"
-                        ContinueExpr@26..35
-                          WHITESPACE@26..27 " "
-                          CONTINUE_KW@27..35 "continue"
-                        WHITESPACE@35..36 " "
-                        R_BRACE@36..37 "}"
-                    WHITESPACE@37..38 " "
-                    R_BRACE@38..39 "}"
+                        ExprStmt@26..36
+                          ContinueExpr@26..35
+                            WHITESPACE@26..27 " "
+                            CONTINUE_KW@27..35 "continue"
+                          SEMI@35..36 ";"
+                        WHITESPACE@36..37 " "
+                        R_BRACE@37..38 "}"
+                    WHITESPACE@38..39 " "
+                    R_BRACE@39..40 "}"
             "#]],
         );
     }
@@ -741,14 +747,14 @@ mod tests {
     fn if_in_loop_with_break_value() {
         // if inside loop where branches have break values
         check_expr(
-            "loop { if done { break result } else { continue } }",
+            "loop { if done { break result; } else { continue; } }",
             &expect![[r#"
-                LoopExpr@0..51
+                LoopExpr@0..53
                   LOOP_KW@0..4 "loop"
-                  Block@4..51
+                  Block@4..53
                     WHITESPACE@4..5 " "
                     L_BRACE@5..6 "{"
-                    IfExpr@6..49
+                    IfExpr@6..51
                       WHITESPACE@6..7 " "
                       IF_KW@7..9 "if"
                       PathExpr@9..14
@@ -757,32 +763,36 @@ mod tests {
                             NameRef@9..14
                               WHITESPACE@9..10 " "
                               IDENT@10..14 "done"
-                      Block@14..31
+                      Block@14..32
                         WHITESPACE@14..15 " "
                         L_BRACE@15..16 "{"
-                        BreakExpr@16..29
-                          WHITESPACE@16..17 " "
-                          BREAK_KW@17..22 "break"
-                          PathExpr@22..29
-                            Path@22..29
-                              PathSegment@22..29
-                                NameRef@22..29
-                                  WHITESPACE@22..23 " "
-                                  IDENT@23..29 "result"
-                        WHITESPACE@29..30 " "
-                        R_BRACE@30..31 "}"
-                      WHITESPACE@31..32 " "
-                      ELSE_KW@32..36 "else"
-                      Block@36..49
-                        WHITESPACE@36..37 " "
-                        L_BRACE@37..38 "{"
-                        ContinueExpr@38..47
-                          WHITESPACE@38..39 " "
-                          CONTINUE_KW@39..47 "continue"
-                        WHITESPACE@47..48 " "
-                        R_BRACE@48..49 "}"
-                    WHITESPACE@49..50 " "
-                    R_BRACE@50..51 "}"
+                        ExprStmt@16..30
+                          BreakExpr@16..29
+                            WHITESPACE@16..17 " "
+                            BREAK_KW@17..22 "break"
+                            PathExpr@22..29
+                              Path@22..29
+                                PathSegment@22..29
+                                  NameRef@22..29
+                                    WHITESPACE@22..23 " "
+                                    IDENT@23..29 "result"
+                          SEMI@29..30 ";"
+                        WHITESPACE@30..31 " "
+                        R_BRACE@31..32 "}"
+                      WHITESPACE@32..33 " "
+                      ELSE_KW@33..37 "else"
+                      Block@37..51
+                        WHITESPACE@37..38 " "
+                        L_BRACE@38..39 "{"
+                        ExprStmt@39..49
+                          ContinueExpr@39..48
+                            WHITESPACE@39..40 " "
+                            CONTINUE_KW@40..48 "continue"
+                          SEMI@48..49 ";"
+                        WHITESPACE@49..50 " "
+                        R_BRACE@50..51 "}"
+                    WHITESPACE@51..52 " "
+                    R_BRACE@52..53 "}"
             "#]],
         );
     }
@@ -790,9 +800,9 @@ mod tests {
     #[test]
     fn while_with_break() {
         check_expr(
-            "while cond { if done { break } }",
+            "while cond { if done { break; } }",
             &expect![[r#"
-                WhileExpr@0..32
+                WhileExpr@0..33
                   WHILE_KW@0..5 "while"
                   PathExpr@5..10
                     Path@5..10
@@ -800,10 +810,10 @@ mod tests {
                         NameRef@5..10
                           WHITESPACE@5..6 " "
                           IDENT@6..10 "cond"
-                  Block@10..32
+                  Block@10..33
                     WHITESPACE@10..11 " "
                     L_BRACE@11..12 "{"
-                    IfExpr@12..30
+                    IfExpr@12..31
                       WHITESPACE@12..13 " "
                       IF_KW@13..15 "if"
                       PathExpr@15..20
@@ -812,16 +822,18 @@ mod tests {
                             NameRef@15..20
                               WHITESPACE@15..16 " "
                               IDENT@16..20 "done"
-                      Block@20..30
+                      Block@20..31
                         WHITESPACE@20..21 " "
                         L_BRACE@21..22 "{"
-                        BreakExpr@22..28
-                          WHITESPACE@22..23 " "
-                          BREAK_KW@23..28 "break"
-                        WHITESPACE@28..29 " "
-                        R_BRACE@29..30 "}"
-                    WHITESPACE@30..31 " "
-                    R_BRACE@31..32 "}"
+                        ExprStmt@22..29
+                          BreakExpr@22..28
+                            WHITESPACE@22..23 " "
+                            BREAK_KW@23..28 "break"
+                          SEMI@28..29 ";"
+                        WHITESPACE@29..30 " "
+                        R_BRACE@30..31 "}"
+                    WHITESPACE@31..32 " "
+                    R_BRACE@32..33 "}"
             "#]],
         );
     }
@@ -829,9 +841,9 @@ mod tests {
     #[test]
     fn return_in_if() {
         check_expr(
-            "if cond { return x }",
+            "if cond { return x; }",
             &expect![[r#"
-                IfExpr@0..20
+                IfExpr@0..21
                   IF_KW@0..2 "if"
                   PathExpr@2..7
                     Path@2..7
@@ -839,20 +851,22 @@ mod tests {
                         NameRef@2..7
                           WHITESPACE@2..3 " "
                           IDENT@3..7 "cond"
-                  Block@7..20
+                  Block@7..21
                     WHITESPACE@7..8 " "
                     L_BRACE@8..9 "{"
-                    ReturnExpr@9..18
-                      WHITESPACE@9..10 " "
-                      RETURN_KW@10..16 "return"
-                      PathExpr@16..18
-                        Path@16..18
-                          PathSegment@16..18
-                            NameRef@16..18
-                              WHITESPACE@16..17 " "
-                              IDENT@17..18 "x"
-                    WHITESPACE@18..19 " "
-                    R_BRACE@19..20 "}"
+                    ExprStmt@9..19
+                      ReturnExpr@9..18
+                        WHITESPACE@9..10 " "
+                        RETURN_KW@10..16 "return"
+                        PathExpr@16..18
+                          Path@16..18
+                            PathSegment@16..18
+                              NameRef@16..18
+                                WHITESPACE@16..17 " "
+                                IDENT@17..18 "x"
+                      SEMI@18..19 ";"
+                    WHITESPACE@19..20 " "
+                    R_BRACE@20..21 "}"
             "#]],
         );
     }
