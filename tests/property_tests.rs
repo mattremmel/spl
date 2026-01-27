@@ -12,37 +12,25 @@ use spl::testing::{compile_ok, parse_ok};
 // Generators for SPL Source Code
 // =============================================================================
 
+/// Reserved words that cannot be used as identifiers.
+/// Includes keywords and built-in type names.
+const RESERVED_WORDS: &[&str] = &[
+    // Keywords
+    "fn", "let", "mut", "if", "else", "while", "for", "in", "loop", "break", "continue", "return",
+    "true", "false", "struct", "impl", "type", "match", "pub", "use", "mod", "as", "is", "where",
+    "self", "Self", "super", "crate", "const", "static", "ref", "move", "yield",
+    // Built-in types
+    "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32",
+    "f64", "bool", "char", "str", "String", "never",
+];
+
 /// Generate a valid SPL identifier.
 fn valid_ident() -> impl Strategy<Value = String> {
     // Start with a letter, followed by letters/digits/underscores
     prop::string::string_regex("[a-z][a-z0-9_]{0,10}")
         .unwrap()
-        .prop_filter("not a keyword", |s| {
-            !matches!(
-                s.as_str(),
-                "fn" | "let"
-                    | "mut"
-                    | "if"
-                    | "else"
-                    | "while"
-                    | "for"
-                    | "in"
-                    | "loop"
-                    | "break"
-                    | "continue"
-                    | "return"
-                    | "true"
-                    | "false"
-                    | "struct"
-                    | "impl"
-                    | "type"
-                    | "match"
-                    | "pub"
-                    | "use"
-                    | "mod"
-                    | "as"
-                    | "is"
-            )
+        .prop_filter("not a reserved word", |s| {
+            !RESERVED_WORDS.contains(&s.as_str())
         })
 }
 
