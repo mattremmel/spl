@@ -12,7 +12,8 @@ SPL uses a clean, consistent syntax with several key principles:
 4. **Return type with `:`**: Functions use `:` for return type: `fn foo(): i32`.
 5. **Where clauses for generics**: `fn id(x: T): T where T`.
 6. **Pattern matching with `is`**: `if value is Some(x)` instead of `if let`.
-7. **Explicit return**: `return` keyword required for returning values.
+7. **Explicit return/yield**: `return` for functions, `yield` for block values. Both require semicolons.
+8. **Uniform semicolons**: Semicolons are statement terminators with no semantic significance.
 
 ## EBNF Notation
 
@@ -74,12 +75,12 @@ TypeBound = TypePath [ GenericArgs ] ;
 ```spl
 // Simple function with return type
 fn add(a: i32, b: i32): i32 {
-    return a + b
+    return a + b;
 }
 
 // Generic function with where clause
 fn identity(x: T): T where T {
-    return x
+    return x;
 }
 
 // Named parameters (external label differs from internal name)
@@ -90,12 +91,12 @@ fn greet(to person: String) {
 // Omit label with underscore
 fn add(_ a: i32, _ b: i32): i32 {
     // Called as: add(1, 2) instead of add(a = 1, b = 2)
-    return a + b
+    return a + b;
 }
 
 // Generic with bounds
 fn clone_it(x: &T): T where T: Clone {
-    return x.clone()
+    return x.clone();
 }
 ```
 
@@ -144,21 +145,21 @@ ImplItem = [ "pub" ] FunctionDef ;
 // Simple impl
 impl Point {
     pub fn new(x: f64, y: f64): Point {
-        return Point(x = x, y = y)
+        return Point(x = x, y = y);
     }
 }
 
 // Generic impl with where clause
 impl Box(T) where T {
     pub fn unwrap(self): T {
-        return self.value
+        return self.value;
     }
 }
 
 // Impl with bounds
 impl Container(T) where T: Clone {
     pub fn clone_all(&self): Vec(T) {
-        return self.items.clone()
+        return self.items.clone();
     }
 }
 ```
@@ -222,11 +223,11 @@ ModuleDecl = "module" IDENTIFIER ( ";" | "{" { Item } "}" ) ;
 // Inline module for namespacing
 module internal {
     fn helper(): i32 {
-        42
+        return 42;
     }
 
     pub fn public_helper(): i32 {
-        helper()
+        return helper();
     }
 }
 
@@ -301,7 +302,7 @@ TypeArg = Type                       (* positional type argument *)
 ## 3. Statements
 
 ```ebnf
-Block = "{" { Statement } [ Expression ] "}" ;
+Block = "{" { Statement } "}" ;
 
 Statement = LetStatement
           | ExpressionStatement ;
@@ -312,7 +313,21 @@ ExpressionStatement = Expression ";"
                     | BlockExpression [ ";" ] ;
 ```
 
-Block expressions (`if`, `while`, `for`, `loop`, and bare blocks) may omit the trailing semicolon when used as statements. The optional trailing expression in a `Block` becomes the block's value.
+Block expressions (`if`, `while`, `for`, `loop`, and bare blocks) may omit the trailing semicolon when used as statements.
+
+**Block Values:**
+
+Blocks do not have implicit tail expressions. To give a block a value, use `yield`:
+
+```spl
+let result = {
+    let a = compute();
+    let b = transform(a);
+    yield a + b;
+};
+```
+
+Without `yield`, a block's type is `()` (unit).
 
 ---
 
@@ -404,7 +419,8 @@ PrimaryExpr = LiteralExpr
             | LoopExpr
             | BreakExpr
             | ContinueExpr
-            | ReturnExpr ;
+            | ReturnExpr
+            | YieldExpr ;
 
 LiteralExpr = INTEGER | FLOAT | STRING | CHAR | "true" | "false" ;
 
@@ -452,7 +468,7 @@ let b = Box(T = i32)(value = 42)
 // Self in impl blocks
 impl Point {
     fn origin(): Self {
-        return Self(x = 0, y = 0)
+        return Self(x = 0, y = 0);
     }
 }
 ```
@@ -494,8 +510,11 @@ BreakExpr = "break" [ Expression ] ;
 
 ContinueExpr = "continue" ;
 
-(* Explicit return required for returning values *)
+(* Explicit return required for returning values from functions *)
 ReturnExpr = "return" [ Expression ] ;
+
+(* Yield provides a value for block expressions *)
+YieldExpr = "yield" Expression ;
 ```
 
 **Pattern Matching in Control Flow:**
@@ -524,21 +543,37 @@ while queue.pop() is Some(item) {
 }
 ```
 
-**Explicit Return:**
+**Explicit Return and Yield:**
 
-Functions must use `return` to return values. The last expression in a block does NOT implicitly return.
+Functions must use `return` to return values. Block expressions must use `yield` to provide a value. Both require a trailing semicolon. Semicolons are purely syntactic terminators with no semantic significance.
 
 ```spl
-// Correct: explicit return
+// Function return (semicolon required)
 fn double(x: i32): i32 {
-    return x * 2
+    return x * 2;
 }
+
+// Block value with yield (semicolon required)
+let result = {
+    let temp = compute();
+    yield temp * 2;
+};
 
 // Error: missing return statement
 fn bad(x: i32): i32 {
-    x * 2  // This does NOT return!
+    x * 2;  // This does NOT return!
 }
+
+// Error: missing yield
+let bad = {
+    let x = 1;
+    x + 1;  // Block has type (), not i32
+};
 ```
+
+**Why explicit return/yield?**
+
+This design eliminates the subtle semantics where the presence or absence of a semicolon changes program behavior. In SPL, semicolons are always required as statement terminators, and the keywords `return`/`yield` explicitly indicate intent.
 
 ---
 
@@ -768,13 +803,13 @@ pub struct Point(
 impl Point(T) where T {
     // Return type with colon
     pub fn new(x: T, y: T): Point(T) {
-        return Point(x = x, y = y)
+        return Point(x = x, y = y);
     }
 
     pub fn swap(&mut self) {
-        let temp = self.x
-        self.x = self.y
-        self.y = temp
+        let temp = self.x;
+        self.x = self.y;
+        self.y = temp;
     }
 }
 
@@ -783,26 +818,26 @@ type Pair(T) = (T, T)
 
 // Named parameters with labels
 fn distance(from p1: &Point(f64), to p2: &Point(f64)): f64 {
-    let dx = p1.x - p2.x
-    let dy = p1.y - p2.y
-    return (dx * dx + dy * dy).sqrt()
+    let dx = p1.x - p2.x;
+    let dy = p1.y - p2.y;
+    return (dx * dx + dy * dy).sqrt();
 }
 
 fn main() {
     // Struct instantiation with parentheses
-    let mut origin = Point.new(0.0, 0.0)
-    let target = Point(x = 3.0, y = 4.0)
+    let mut origin = Point.new(0.0, 0.0);
+    let target = Point(x = 3.0, y = 4.0);
 
     // Named arguments at call site
-    let dist = distance(from = &origin, to = &target)
+    let dist = distance(from = &origin, to = &target);
 
     // Control flow
     if dist > 5.0 {
-        return
+        return;
     }
 
     // Pattern matching with is
-    let maybe: Option(i32) = Some(42)
+    let maybe: Option(i32) = Some(42);
     if maybe is Some(x) {
         // x is bound
     }
@@ -815,48 +850,55 @@ fn main() {
     let doubled = match maybe {
         Some(n) => n * 2,
         None => 0,
-    }
+    };
 
     // Loops
     for i in 0..10 {
         if i % 2 == 0 {
-            continue
+            continue;
         }
         // Process odd numbers
     }
 
-    let mut count = 0
+    let mut count = 0;
     while count < 3 {
-        count += 1
+        count += 1;
     }
 
     loop {
         if count >= 10 {
-            break
+            break;
         }
-        count += 1
+        count += 1;
     }
 
     // Expressions and operators
-    let value = 10 + 5 * 2              // 20 (multiplicative binds tighter)
-    let cast = 65 as f64                // Type cast (safe only)
-    let reference = &mut origin         // Mutable reference
-    let indexed = [1, 2, 3][0]          // Array indexing
-    let range = 0..100                  // Range
+    let value = 10 + 5 * 2;             // 20 (multiplicative binds tighter)
+    let cast = 65 as f64;               // Type cast (safe only)
+    let reference = &mut origin;        // Mutable reference
+    let indexed = [1, 2, 3][0];         // Array indexing
+    let range = 0..100;                 // Range
 
     // Slicing
-    let arr = [1, 2, 3, 4, 5]
-    let slice1 = arr[1:3]               // [2, 3]
-    let slice2 = arr[:3]                // [1, 2, 3]
-    let slice3 = arr[2:]                // [3, 4, 5]
-    let slice4 = arr[2:$]               // [3, 4, 5] (explicit end)
-    let copy = arr[:]                   // full copy
+    let arr = [1, 2, 3, 4, 5];
+    let slice1 = arr[1:3];              // [2, 3]
+    let slice2 = arr[:3];               // [1, 2, 3]
+    let slice3 = arr[2:];               // [3, 4, 5]
+    let slice4 = arr[2:$];              // [3, 4, 5] (explicit end)
+    let copy = arr[:];                  // full copy
 
     // Patterns
-    let (a, b) = (1, 2)                 // Tuple destructuring
-    let Point(x, y) = target            // Struct destructuring
-    let [first, ..rest] = [1, 2, 3, 4]  // Slice pattern with rest
-    let [head, .., tail] = [1, 2, 3]    // First and last
+    let (a, b) = (1, 2);                // Tuple destructuring
+    let Point(x, y) = target;           // Struct destructuring
+    let [first, ..rest] = [1, 2, 3, 4]; // Slice pattern with rest
+    let [head, .., tail] = [1, 2, 3];   // First and last
+
+    // Block with yield
+    let computed = {
+        let a = 10;
+        let b = 20;
+        yield a + b;
+    };
 }
 
 // Function pointer types (colon for return)
@@ -866,17 +908,17 @@ type Action = fn()
 
 // Omit labels with underscore
 fn apply(_ f: fn(i32): i32, _ x: i32): i32 {
-    return f(x)
+    return f(x);
 }
 
 // Self type in impl blocks
 impl Point(T) where T {
     fn origin(): Self {
-        return Self(x = 0, y = 0)
+        return Self(x = 0, y = 0);
     }
 
     fn clone(&self): Self {
-        return Self(x = self.x, y = self.y)
+        return Self(x = self.x, y = self.y);
     }
 }
 ```
@@ -906,5 +948,7 @@ impl Point(T) where T {
 | Turbofish           | `::<T>`                   | Not needed (use parentheses) |
 | Struct literal      | `Point { x: 1 }`          | `Point(x = 1)`               |
 | Pattern matching    | `if let Some(x) = v {}`   | `if v is Some(x) {}`         |
-| Implicit return     | Last expression           | Explicit `return` required   |
+| Function return     | `expr` (implicit tail)    | `return expr;` (explicit)    |
+| Block value         | `expr` (implicit tail)    | `yield expr;` (explicit)     |
+| Semicolons          | Semantic (tail vs stmt)   | Syntactic (always required)  |
 | Named parameters    | Not built-in              | `fn foo(to name: T)`         |
