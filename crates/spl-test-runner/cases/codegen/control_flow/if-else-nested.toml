@@ -1,0 +1,15 @@
+mode = "run-pass"
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+fn main(): i32 {
+    if true {
+        if false { 0 } else { 42 }
+    } else {
+        0
+    }
+}
+"""

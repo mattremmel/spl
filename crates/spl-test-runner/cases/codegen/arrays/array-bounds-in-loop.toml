@@ -1,0 +1,16 @@
+mode = "run-pass"
+
+[expect.run]
+return = 15
+
+[source]
+inline = """
+fn main(): i32 {
+    let arr = [1, 2, 3, 4, 5];
+    let mut sum = 0;
+    for i in 0..5 {
+        sum = sum + arr[i];
+    }
+    return sum;
+}
+"""

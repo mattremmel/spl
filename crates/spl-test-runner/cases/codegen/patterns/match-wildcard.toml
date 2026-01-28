@@ -1,0 +1,16 @@
+mode = "run-pass"
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+fn main(): i32 {
+    let x = 999;
+    return match x {
+        0 => 0,
+        1 => 1,
+        _ => 42,
+    };
+}
+"""

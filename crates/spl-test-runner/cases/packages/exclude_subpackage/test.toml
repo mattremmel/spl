@@ -1,0 +1,5 @@
+mode = "load-pass"
+
+[expect.package]
+items = 1
+modules = 1

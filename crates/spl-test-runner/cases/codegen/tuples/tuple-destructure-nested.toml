@@ -1,0 +1,14 @@
+mode = "run-pass"
+ignore = true  # nested tuple destructuring returns incorrect value
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+fn main(): i32 {
+    let nested = ((10, 20), (12, 0));
+    let ((a, b), (c, d)) = nested;
+    return a + b + c;
+}
+"""

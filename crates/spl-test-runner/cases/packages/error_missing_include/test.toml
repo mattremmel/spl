@@ -1,0 +1,4 @@
+mode = "load-fail"
+
+[expect.compile]
+error = "filenotfound"

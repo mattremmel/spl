@@ -369,9 +369,8 @@ mod tests {
     use super::*;
 
     fn test_packages_path(name: &str) -> PathBuf {
-        // Navigate from crate dir to workspace root's tests/packages
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../tests/packages")
+            .join("../spl-test-runner/cases/packages")
             .join(name)
     }
 

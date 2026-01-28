@@ -1,0 +1,16 @@
+mode = "run-pass"
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+fn main(): i32 {
+    let mut x = 0;
+    while true {
+        x = x + 1;
+        if x == 42 { break; }
+    }
+    return x;
+}
+"""

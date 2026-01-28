@@ -1,0 +1,15 @@
+mode = "run-pass"
+ignore = true  # function pointer calls not yet implemented
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+struct Adder(add_fn: fn(i32, i32) -> i32)
+fn add(_ a: i32, _ b: i32): i32 { a + b }
+fn main(): i32 {
+    let adder = Adder(add_fn: add);
+    return (adder.add_fn)(40, 2);
+}
+"""

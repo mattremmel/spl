@@ -1,4 +1,0 @@
-//@ run-pass
-//@ expect-return: 42
-
-fn main(): i32 { 42 }

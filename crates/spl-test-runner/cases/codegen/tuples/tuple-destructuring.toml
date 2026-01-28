@@ -1,0 +1,13 @@
+mode = "run-pass"
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+fn main(): i32 {
+    let pair = (40, 2);
+    let (a, b) = pair;
+    return a + b;
+}
+"""

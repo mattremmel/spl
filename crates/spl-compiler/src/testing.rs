@@ -589,7 +589,7 @@ pub fn format_mir(body: &Body) -> String {
 
 use crate::package::{Package, PackageError};
 
-/// Load a package from `tests/packages/` at the workspace root, panicking on error.
+/// Load a package from `spl-test-runner/cases/packages/`, panicking on error.
 ///
 /// # Panics
 ///
@@ -605,14 +605,13 @@ use crate::package::{Package, PackageError};
 /// ```
 pub fn package_ok(name: &str) -> Package {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    // Navigate from crate dir to workspace root
     let path = std::path::Path::new(&manifest_dir)
-        .join("../../tests/packages")
+        .join("../spl-test-runner/cases/packages")
         .join(name);
     Package::load(&path).unwrap_or_else(|e| panic!("failed to load package '{name}': {e:?}"))
 }
 
-/// Load a package from `tests/packages/` at the workspace root and expect it to fail.
+/// Load a package from `spl-test-runner/cases/packages/` and expect it to fail.
 ///
 /// # Panics
 ///
@@ -628,9 +627,8 @@ pub fn package_ok(name: &str) -> Package {
 /// ```
 pub fn package_err(name: &str) -> PackageError {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    // Navigate from crate dir to workspace root
     let path = std::path::Path::new(&manifest_dir)
-        .join("../../tests/packages")
+        .join("../spl-test-runner/cases/packages")
         .join(name);
     match Package::load(&path) {
         Ok(_) => panic!("expected package '{name}' to fail, but it succeeded"),
@@ -792,254 +790,6 @@ pub fn assert_error_count(diags: &[Diagnostic], expected: usize) {
         "expected {expected} errors, found {actual}\nDiagnostics:\n{}",
         format_diagnostics(diags)
     );
-}
-
-// ============================================================================
-// Test Directives for .spl Test Files
-// ============================================================================
-
-/// Directives parsed from `//@ directive` comments in test files.
-///
-/// These control how the test harness runs and validates tests.
-///
-/// # Example
-///
-/// ```text
-/// //@ run-pass
-/// //@ expect-return: 42
-///
-/// fn main(): i32 { 42 }
-/// ```
-#[derive(Debug, Default)]
-pub struct TestDirectives {
-    /// Test should compile and run successfully (default).
-    pub run_pass: bool,
-    /// Test should fail to compile.
-    pub compile_fail: bool,
-    /// Expected return value from `main()`.
-    pub expect_return: Option<i32>,
-    /// Expected substring in stdout.
-    pub expect_stdout: Option<String>,
-    /// Expected error message patterns (for compile-fail tests).
-    pub expect_errors: Vec<String>,
-    /// Skip this test.
-    pub ignore: bool,
-}
-
-/// Parse test directives from source code comments.
-///
-/// Recognizes directives in the format `//@ directive` or `//@ directive: value`.
-///
-/// # Supported Directives
-///
-/// - `run-pass` - Expect successful compilation and execution (default)
-/// - `compile-fail` - Expect compilation to fail
-/// - `expect-return: N` - Assert `main()` returns N
-/// - `expect-stdout: text` - Assert stdout contains text
-/// - `expect-error: pattern` - Assert error message contains pattern
-/// - `ignore` - Skip this test
-///
-/// # Example
-///
-/// ```
-/// use spl_compiler::testing::parse_directives;
-///
-/// let source = r#"
-/// //@ run-pass
-/// //@ expect-return: 42
-/// fn main(): i32 { 42 }
-/// "#;
-///
-/// let directives = parse_directives(source);
-/// assert!(directives.run_pass);
-/// assert_eq!(directives.expect_return, Some(42));
-/// ```
-pub fn parse_directives(source: &str) -> TestDirectives {
-    let mut directives = TestDirectives::default();
-    let mut has_mode_directive = false;
-
-    for line in source.lines() {
-        let line = line.trim();
-        if let Some(rest) = line.strip_prefix("//@") {
-            let directive = rest.trim();
-
-            if directive == "run-pass" {
-                directives.run_pass = true;
-                has_mode_directive = true;
-            } else if directive == "compile-fail" {
-                directives.compile_fail = true;
-                has_mode_directive = true;
-            } else if directive == "ignore" {
-                directives.ignore = true;
-            } else if let Some(value) = directive.strip_prefix("expect-return:") {
-                if let Ok(n) = value.trim().parse() {
-                    directives.expect_return = Some(n);
-                }
-            } else if let Some(value) = directive.strip_prefix("expect-stdout:") {
-                directives.expect_stdout = Some(value.trim().to_string());
-            } else if let Some(value) = directive.strip_prefix("expect-error:") {
-                directives.expect_errors.push(value.trim().to_string());
-            }
-        }
-    }
-
-    // Default to run-pass if no mode directive specified
-    if !has_mode_directive {
-        directives.run_pass = true;
-    }
-
-    directives
-}
-
-/// Result of executing an SPL program.
-#[derive(Debug)]
-pub struct ExecuteResult {
-    /// The return value from `main()`.
-    pub return_value: i32,
-    /// Standard output from the program.
-    pub stdout: String,
-}
-
-/// Run an SPL test given its path (for error messages) and source contents.
-///
-/// Parses directives from the source, compiles and optionally executes,
-/// then validates the results against the directives.
-///
-/// # Arguments
-///
-/// * `path` - Path to the test file (for error messages)
-/// * `source` - The SPL source code
-///
-/// # Returns
-///
-/// * `Ok(())` if the test passes
-/// * `Err(message)` if the test fails
-///
-/// # Example
-///
-/// ```ignore
-/// use spl_compiler::testing::run_spl_test;
-/// use std::path::Path;
-///
-/// let source = r#"
-/// //@ run-pass
-/// //@ expect-return: 42
-/// fn main(): i32 { 42 }
-/// "#;
-///
-/// run_spl_test(Path::new("test.spl"), source).unwrap();
-/// ```
-pub fn run_spl_test(path: &std::path::Path, source: &str) -> Result<(), String> {
-    let directives = parse_directives(source);
-
-    // Handle ignored tests
-    if directives.ignore {
-        return Ok(());
-    }
-
-    // Compile the source
-    let compile_result = crate::compile(source);
-
-    if directives.compile_fail {
-        // For compile-fail tests, we expect errors
-        if compile_result.is_ok() {
-            return Err(format!(
-                "{}: expected compilation to fail, but it succeeded",
-                path.display()
-            ));
-        }
-
-        // Check expected error patterns
-        for pattern in &directives.expect_errors {
-            let found = compile_result
-                .diagnostics
-                .iter()
-                .any(|d| d.message.contains(pattern));
-            if !found {
-                return Err(format!(
-                    "{}: expected error containing '{}', but got:\n{}",
-                    path.display(),
-                    pattern,
-                    format_diagnostics(&compile_result.diagnostics)
-                ));
-            }
-        }
-
-        return Ok(());
-    }
-
-    // For run-pass tests, compilation must succeed
-    if compile_result.is_err() {
-        return Err(format!(
-            "{}: compilation failed:\n{}",
-            path.display(),
-            format_diagnostics(&compile_result.diagnostics)
-        ));
-    }
-
-    // If we need to check return value or stdout, execute the program
-    if directives.expect_return.is_some() || directives.expect_stdout.is_some() {
-        let result = execute_captured(source)
-            .map_err(|e| format!("{}: execution failed: {}", path.display(), e))?;
-
-        // Check return value
-        if let Some(expected) = directives.expect_return
-            && result.return_value != expected
-        {
-            return Err(format!(
-                "{}: expected return value {}, got {}",
-                path.display(),
-                expected,
-                result.return_value
-            ));
-        }
-
-        // Check stdout
-        if let Some(expected) = &directives.expect_stdout
-            && !result.stdout.contains(expected)
-        {
-            return Err(format!(
-                "{}: expected stdout to contain '{}', got:\n{}",
-                path.display(),
-                expected,
-                result.stdout
-            ));
-        }
-    }
-
-    Ok(())
-}
-
-/// Execute SPL source code and capture its output.
-///
-/// Compiles to an executable, runs it as a subprocess, and captures stdout/return value.
-fn execute_captured(source: &str) -> Result<ExecuteResult, crate::AotError> {
-    use std::process::Command;
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    // Create a unique temp file for the executable
-    let temp_dir = std::env::temp_dir();
-    let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
-    let exe_name = format!("spl_test_{}_{}", std::process::id(), counter);
-    let exe_path = temp_dir.join(exe_name);
-
-    // Compile and link
-    crate::compile_and_link(source, &exe_path)?;
-
-    // Execute and capture output
-    let output = Command::new(&exe_path)
-        .output()
-        .map_err(crate::AotError::Io)?;
-
-    // Clean up
-    let _ = std::fs::remove_file(&exe_path);
-
-    Ok(ExecuteResult {
-        return_value: output.status.code().unwrap_or(-1),
-        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-    })
 }
 
 #[cfg(test)]
@@ -1384,119 +1134,5 @@ mod tests {
     #[should_panic(expected = "failed to load fixture")]
     fn load_fixture_panics_on_missing_file() {
         load_fixture("nonexistent_file.spl");
-    }
-
-    // === Test Directives ===
-
-    #[test]
-    fn parse_directives_run_pass() {
-        let source = "//@ run-pass\nfn main() {}";
-        let directives = parse_directives(source);
-        assert!(directives.run_pass);
-        assert!(!directives.compile_fail);
-    }
-
-    #[test]
-    fn parse_directives_compile_fail() {
-        let source = "//@ compile-fail\nfn main() {}";
-        let directives = parse_directives(source);
-        assert!(directives.compile_fail);
-        assert!(!directives.run_pass);
-    }
-
-    #[test]
-    fn parse_directives_expect_return() {
-        let source = "//@ expect-return: 42\nfn main(): i32 { 42 }";
-        let directives = parse_directives(source);
-        assert_eq!(directives.expect_return, Some(42));
-    }
-
-    #[test]
-    fn parse_directives_expect_stdout() {
-        let source = "//@ expect-stdout: hello\nfn main() {}";
-        let directives = parse_directives(source);
-        assert_eq!(directives.expect_stdout, Some("hello".to_string()));
-    }
-
-    #[test]
-    fn parse_directives_expect_errors() {
-        let source =
-            "//@ compile-fail\n//@ expect-error: undefined\n//@ expect-error: type\nfn main() {}";
-        let directives = parse_directives(source);
-        assert_eq!(directives.expect_errors.len(), 2);
-        assert!(directives.expect_errors.contains(&"undefined".to_string()));
-        assert!(directives.expect_errors.contains(&"type".to_string()));
-    }
-
-    #[test]
-    fn parse_directives_ignore() {
-        let source = "//@ ignore\nfn main() {}";
-        let directives = parse_directives(source);
-        assert!(directives.ignore);
-    }
-
-    #[test]
-    fn parse_directives_defaults_to_run_pass() {
-        let source = "fn main() {}";
-        let directives = parse_directives(source);
-        assert!(directives.run_pass);
-    }
-
-    #[test]
-    fn parse_directives_multiple() {
-        let source = "//@ run-pass\n//@ expect-return: 0\nfn main(): i32 { 0 }";
-        let directives = parse_directives(source);
-        assert!(directives.run_pass);
-        assert_eq!(directives.expect_return, Some(0));
-    }
-
-    #[test]
-    fn run_spl_test_run_pass_succeeds() {
-        use std::path::Path;
-        let source = "//@ run-pass\nfn main() {}";
-        let result = run_spl_test(Path::new("test.spl"), source);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn run_spl_test_compile_fail_succeeds() {
-        use std::path::Path;
-        let source = "//@ compile-fail\n//@ expect-error: cannot find\nfn main() { undefined; }";
-        let result = run_spl_test(Path::new("test.spl"), source);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn run_spl_test_compile_fail_no_error() {
-        use std::path::Path;
-        let source = "//@ compile-fail\nfn main() {}";
-        let result = run_spl_test(Path::new("test.spl"), source);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("expected compilation to fail"));
-    }
-
-    #[test]
-    fn run_spl_test_expect_return() {
-        use std::path::Path;
-        let source = "//@ run-pass\n//@ expect-return: 42\nfn main(): i32 { 42 }";
-        let result = run_spl_test(Path::new("test.spl"), source);
-        assert!(result.is_ok(), "error: {result:?}");
-    }
-
-    #[test]
-    fn run_spl_test_expect_return_wrong() {
-        use std::path::Path;
-        let source = "//@ run-pass\n//@ expect-return: 42\nfn main(): i32 { 0 }";
-        let result = run_spl_test(Path::new("test.spl"), source);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("expected return value 42"));
-    }
-
-    #[test]
-    fn run_spl_test_ignored() {
-        use std::path::Path;
-        let source = "//@ ignore\nfn main() { undefined; }";
-        let result = run_spl_test(Path::new("test.spl"), source);
-        assert!(result.is_ok()); // Ignored tests always pass
     }
 }

@@ -31,17 +31,6 @@ include_dir.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-datatest-stable.workspace = true
 pretty_assertions.workspace = true
 expect-test.workspace = true
-toml.workspace = true
-serde.workspace = true
 proptest.workspace = true
-
-[[test]]
-name = "stdlib_tests"
-harness = false
-
-[[test]]
-name = "package_tests"
-harness = false

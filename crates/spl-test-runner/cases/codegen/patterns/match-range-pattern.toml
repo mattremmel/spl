@@ -1,0 +1,17 @@
+mode = "run-pass"
+ignore = true  # range patterns in match not yet working correctly
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+fn main(): i32 {
+    let x = 5;
+    return match x {
+        0..3 => 10,
+        3..6 => 42,
+        _ => 100,
+    };
+}
+"""

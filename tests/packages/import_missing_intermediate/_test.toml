@@ -1,2 +1,0 @@
-mode = "compile-fail"
-expect_compile_error = "not found"

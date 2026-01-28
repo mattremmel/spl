@@ -1,3 +1,0 @@
-mode = "load-pass"
-expect_items = 1
-expect_modules = 0

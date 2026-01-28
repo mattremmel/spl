@@ -1,2 +1,0 @@
-mode = "load-fail"
-expect_error = "filenotfound"

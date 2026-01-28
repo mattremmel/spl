@@ -1,0 +1,4 @@
+mode = "compile-fail"
+
+[expect.compile]
+error = "not found"

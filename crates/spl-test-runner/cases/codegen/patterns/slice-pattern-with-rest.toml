@@ -1,0 +1,14 @@
+mode = "run-pass"
+ignore = true  # slice pattern destructuring not yet implemented
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+fn main(): i32 {
+    let arr = [10, 20, 30, 42, 50];
+    let [_, _, _, x, _] = arr;
+    return x;
+}
+"""

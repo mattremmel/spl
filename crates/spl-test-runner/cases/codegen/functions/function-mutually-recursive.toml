@@ -1,0 +1,11 @@
+mode = "run-pass"
+
+[expect.run]
+return = 1
+
+[source]
+inline = """
+fn is_even(_ n: i32): i32 { if n == 0 { 1 } else { is_odd(n - 1) } }
+fn is_odd(_ n: i32): i32 { if n == 0 { 0 } else { is_even(n - 1) } }
+fn main(): i32 { is_even(42) }
+"""

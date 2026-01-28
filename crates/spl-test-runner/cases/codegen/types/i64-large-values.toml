@@ -1,0 +1,12 @@
+mode = "run-pass"
+
+[expect.run]
+return = 1
+
+[source]
+inline = """
+fn main(): i32 {
+    let big: i64 = 9000000000;
+    return if big > 8000000000 { 1 } else { 0 };
+}
+"""

@@ -1066,7 +1066,6 @@ name = "spl-compiler"
 version = "0.1.0"
 dependencies = [
  "ariadne",
- "datatest-stable",
  "expect-test",
  "include_dir",
  "la-arena",
@@ -1076,7 +1075,6 @@ dependencies = [
  "proptest",
  "rowan",
  "rustc-hash 2.1.1",
- "serde",
  "spl-ast",
  "spl-codegen",
  "spl-diagnostic",
@@ -1088,7 +1086,6 @@ dependencies = [
  "spl-sema",
  "spl-syntax",
  "thiserror",
- "toml",
 ]
 
 [[package]]
@@ -1173,6 +1170,17 @@ version = "0.1.0"
 dependencies = [
  "rowan",
  "spl-lexer",
+]
+
+[[package]]
+name = "spl-test-runner"
+version = "0.1.0"
+dependencies = [
+ "datatest-stable",
+ "serde",
+ "spl-compiler",
+ "thiserror",
+ "toml",
 ]
 
 [[package]]

@@ -1,0 +1,13 @@
+mode = "run-pass"
+
+[expect.run]
+return = 55
+
+[source]
+inline = """
+fn fib(_ n: i32): i32 {
+    if n <= 1 { n }
+    else { fib(n - 1) + fib(n - 2) }
+}
+fn main(): i32 { fib(10) }
+"""

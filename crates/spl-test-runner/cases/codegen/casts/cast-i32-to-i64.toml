@@ -1,0 +1,13 @@
+mode = "run-pass"
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+fn takes_i64(_ x: i64): i32 { if x > 0 { 42 } else { 0 } }
+fn main(): i32 {
+    let x: i32 = 100;
+    return takes_i64(x as i64);
+}
+"""

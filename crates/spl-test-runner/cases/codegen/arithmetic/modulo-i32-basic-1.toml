@@ -1,0 +1,7 @@
+mode = "run-pass"
+
+[expect.run]
+return = 2
+
+[source]
+inline = "fn main(): i32 { 47 % 5 }"

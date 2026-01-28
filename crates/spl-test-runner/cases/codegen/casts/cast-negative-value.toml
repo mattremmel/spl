@@ -1,0 +1,13 @@
+mode = "run-pass"
+
+[expect.run]
+return = 58
+
+[source]
+inline = """
+fn main(): i32 {
+    let x: i64 = -42;
+    let y = x as i32;
+    return y + 100;
+}
+"""

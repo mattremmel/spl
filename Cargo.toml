@@ -63,6 +63,8 @@ spl-hir = { path = "crates/spl-hir" }
 spl-mir = { path = "crates/spl-mir" }
 spl-codegen = { path = "crates/spl-codegen" }
 spl-package = { path = "crates/spl-package" }
+spl-test-runner = { path = "crates/spl-test-runner" }
+spl-compiler = { path = "crates/spl-compiler" }
 
 # Core dependencies
 ariadne = "0.5"

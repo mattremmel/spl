@@ -1,0 +1,7 @@
+mode = "run-pass"
+
+[expect.run]
+return = 1
+
+[source]
+inline = "fn main(): i32 { if 2 >= 1 { 1 } else { 0 } }"

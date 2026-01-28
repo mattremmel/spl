@@ -1,0 +1,13 @@
+mode = "run-pass"
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+fn get_index(): i32 { 3 }
+fn main(): i32 {
+    let arr = [10, 20, 30, 42, 50];
+    return arr[get_index()];
+}
+"""

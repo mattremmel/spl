@@ -1,0 +1,10 @@
+mode = "run-pass"
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+fn divide(_ a: i32, _ b: i32): i32 { a / b }
+fn main(): i32 { divide(84, 2) }
+"""

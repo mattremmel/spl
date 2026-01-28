@@ -1,0 +1,13 @@
+mode = "run-pass"
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+struct Point(x: i32, y: i32)
+fn main(): i32 {
+    let p = Point(x: 10, y: 32);
+    return p.x + p.y;
+}
+"""

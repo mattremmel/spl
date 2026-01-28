@@ -762,7 +762,7 @@ mod compile_tests {
     fn test_packages_path(name: &str) -> std::path::PathBuf {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
         std::path::Path::new(&manifest_dir)
-            .join("../../tests/packages")
+            .join("../spl-test-runner/cases/packages")
             .join(name)
     }
 

@@ -1,0 +1,15 @@
+mode = "run-pass"
+ignore = true  # function pointer calls not yet implemented
+
+[expect.run]
+return = 42
+
+[source]
+inline = """
+fn side_effect() {}
+fn call_it(_ f: fn()) { f(); }
+fn main(): i32 {
+    call_it(side_effect);
+    return 42;
+}
+"""
