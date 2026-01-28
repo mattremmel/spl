@@ -31,11 +31,13 @@ enum Event {
 }
 ```
 
-Parsing produces events; a separate sink converts events to green tree:
+Parsing produces events; a separate sink converts events to rowan green tree (see [ADR-008](008-rowan-based-cst.md)):
 
 ```
 Source → Tokens → Parser → Events → Sink → GreenNode
 ```
+
+Parse errors are lightweight during parsing, then enriched to full diagnostics with suggestions (see [ADR-001](001-phase-specific-error-handling.md)).
 
 ### Error Recovery
 
@@ -84,10 +86,11 @@ On error:
 - Statements start with keywords (`let`, `if`)
 - Clear synchronization points
 
-**Bounded**: Maximum tokens skipped
-- `MAX_RECOVERY_TOKENS = 500`
+**Bounded**: Maximum tokens skipped (configurable)
+- Default: `max_recovery_tokens = 500`
 - Prevents infinite loops on malformed input
 - Ensures termination
+- Configurable for different use cases (IDE vs batch compilation)
 
 ### Why Not Tree Rewriting?
 
@@ -113,9 +116,34 @@ Building tree then fixing errors is:
 ## Implementation
 
 - **Events**: `spl-parser/src/event.rs`
-- **Sink**: `spl-parser/src/sink.rs`
+- **Sink**: `spl-parser/src/sink.rs` (builds rowan green tree, see [ADR-008](008-rowan-based-cst.md))
 - **Source**: `spl-parser/src/source.rs`
-- **Recovery**: `spl-parser/src/lib.rs` (recovery methods)
+- **Recovery**: `spl-parser/src/recovery.rs`
+- **Pratt parser**: `spl-parser/src/expr.rs` (expression parsing with precedence)
+- **Config**: `spl-parser/src/config.rs` (recovery limits, etc.)
+
+### Parser Configuration
+
+```rust
+pub struct ParserConfig {
+    /// Maximum tokens to skip during error recovery.
+    /// Default: 500. Set lower for stricter parsing, higher for more lenient.
+    pub max_recovery_tokens: usize,
+
+    /// Whether to attempt recovery at all.
+    /// Disable for "fail fast" batch compilation.
+    pub enable_recovery: bool,
+}
+
+impl Default for ParserConfig {
+    fn default() -> Self {
+        Self {
+            max_recovery_tokens: 500,
+            enable_recovery: true,
+        }
+    }
+}
+```
 
 ### Marker Pattern
 
@@ -181,8 +209,117 @@ Start(FunctionDef)
 Finish
 ```
 
+### Pratt Parsing for Expressions
+
+Expressions use Pratt parsing (precedence climbing) for correct associativity and precedence:
+
+```rust
+fn expr(&mut self) -> CompletedMarker {
+    self.expr_bp(0)  // Start with minimum binding power
+}
+
+fn expr_bp(&mut self, min_bp: u8) -> CompletedMarker {
+    let mut lhs = self.expr_atom();  // Parse prefix/atom
+
+    loop {
+        let op = match self.current() {
+            Some(op) if is_binary_op(op) => op,
+            _ => break,
+        };
+
+        let (l_bp, r_bp) = infix_binding_power(op);
+
+        // Stop if operator binds less tightly than our threshold
+        if l_bp < min_bp {
+            break;
+        }
+
+        let m = lhs.precede(self);  // Wrap LHS
+        self.bump();                 // Consume operator
+        self.expr_bp(r_bp);         // Parse RHS with right binding power
+        lhs = m.complete(self, SyntaxKind::BinExpr);
+    }
+
+    lhs
+}
+
+/// Returns (left_binding_power, right_binding_power)
+/// Left < Right for left-associative, Left > Right for right-associative
+fn infix_binding_power(op: SyntaxKind) -> (u8, u8) {
+    match op {
+        // Assignment: right-associative (a = b = c parses as a = (b = c))
+        EQ => (2, 1),
+
+        // Logical or
+        PIPE_PIPE => (3, 4),
+
+        // Logical and
+        AMP_AMP => (5, 6),
+
+        // Comparison: non-associative (a < b < c is error)
+        EQ_EQ | BANG_EQ | LT | GT | LT_EQ | GT_EQ => (7, 7),
+
+        // Bitwise or
+        PIPE => (9, 10),
+
+        // Bitwise xor
+        CARET => (11, 12),
+
+        // Bitwise and
+        AMP => (13, 14),
+
+        // Shift
+        LT_LT | GT_GT => (15, 16),
+
+        // Additive: left-associative (a + b + c parses as (a + b) + c)
+        PLUS | MINUS => (17, 18),
+
+        // Multiplicative
+        STAR | SLASH | PERCENT => (19, 20),
+
+        _ => panic!("not a binary operator: {:?}", op),
+    }
+}
+```
+
+**Key concepts:**
+
+| Concept | Explanation |
+|---------|-------------|
+| Binding power | Higher = binds tighter (`*` > `+`) |
+| Left-associative | Left BP < Right BP (e.g., `17, 18` for `+`) |
+| Right-associative | Left BP > Right BP (e.g., `2, 1` for `=`) |
+| Non-associative | Left BP == Right BP (forces parentheses) |
+| `precede()` | Wraps already-parsed LHS into new node |
+
+**Prefix operators** (unary `-`, `!`, `&`, `*`) have their own binding powers:
+
+```rust
+fn prefix_binding_power(op: SyntaxKind) -> u8 {
+    match op {
+        MINUS | BANG => 21,      // Unary - and !
+        AMP | STAR => 23,        // Reference and dereference
+        _ => panic!("not a prefix operator"),
+    }
+}
+```
+
+**Postfix operators** (function calls, indexing, field access) bind tightest:
+
+```rust
+fn postfix_binding_power(op: SyntaxKind) -> Option<u8> {
+    match op {
+        L_PAREN => Some(25),     // Function call
+        L_BRACKET => Some(25),  // Indexing
+        DOT => Some(25),        // Field access
+        _ => None,
+    }
+}
+```
+
 ## References
 
 - [rust-analyzer parser](https://github.com/rust-lang/rust-analyzer/tree/master/crates/parser)
 - [Simple but Powerful Pratt Parsing](https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html)
 - [Resilient LL Parsing](https://matklad.github.io/2023/05/21/resilient-ll-parsing-tutorial.html)
+- [Pratt Parsers: Expression Parsing Made Easy](https://journal.stuffwithstuff.com/2011/03/19/pratt-parsers-expression-parsing-made-easy/)

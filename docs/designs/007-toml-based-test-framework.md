@@ -110,27 +110,49 @@ stdout = "hello"       # Expected stdout
 - **Process execution**: `spl-test-runner/src/executor.rs`
 - **Test cases**: `crates/spl-test-runner/cases/`
 
-### Test Directory Structure
+### Test Directory Structure (Feature-Based)
+
+Tests are organized by language feature, not by test mode. Each feature directory contains all related tests (success and failure cases together):
 
 ```
 cases/
-├── run-pass/
-│   ├── arithmetic.toml
-│   ├── control-flow.toml
-│   └── ...
-├── compile-fail/
-│   ├── undefined-variable.toml
-│   └── ...
+├── arithmetic/
+│   ├── basic.toml           # mode = "run-pass"
+│   ├── overflow.toml        # mode = "run-fail"
+│   └── type-mismatch.toml   # mode = "compile-fail"
+├── functions/
+│   ├── basic.toml           # mode = "run-pass"
+│   ├── recursion.toml       # mode = "run-pass"
+│   ├── missing-return.toml  # mode = "compile-fail"
+│   └── arity-mismatch.toml  # mode = "compile-fail"
+├── control-flow/
+│   ├── if-else.toml
+│   ├── while-loop.toml
+│   └── unreachable.toml
+├── types/
+│   ├── inference.toml
+│   ├── structs.toml
+│   └── generics.toml
 └── packages/
     ├── simple/
     │   ├── test.toml
     │   └── main.spl
-    └── ...
+    └── multi-file/
+        ├── test.toml
+        ├── main.spl
+        └── lib.spl
 ```
+
+### Why Feature-Based Organization?
+
+- **Discoverability**: All tests for a feature are in one place
+- **Coverage visibility**: Easy to see if a feature has both positive and negative tests
+- **Parallel development**: Contributors can own feature directories
+- **Natural grouping**: Matches how features are documented and discussed
 
 ### Example Test Files
 
-**run-pass/fibonacci.toml**
+**functions/recursion.toml**
 ```toml
 mode = "run-pass"
 
@@ -146,7 +168,7 @@ fn main(): i32 { fib(10) }
 """
 ```
 
-**compile-fail/type-mismatch.toml**
+**types/type-mismatch.toml**
 ```toml
 mode = "compile-fail"
 
@@ -155,6 +177,22 @@ error = "type mismatch"
 
 [source]
 inline = "fn main() { let x: i32 = true; }"
+```
+
+**arithmetic/overflow.toml**
+```toml
+mode = "run-fail"
+
+[expect.run]
+# Program should panic/abort on overflow in debug mode
+
+[source]
+inline = """
+fn main(): i32 {
+    let x: i32 = 2147483647;
+    x + 1  // overflow
+}
+"""
 ```
 
 ## References

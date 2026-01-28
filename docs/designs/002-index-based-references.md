@@ -15,12 +15,23 @@ Using pointers or references directly creates ownership and lifetime challenges.
 
 ## Decision
 
-Use lightweight index-based handles (`DefId`, `TypeId`, `ScopeId`) that are simple `u32` wrappers:
+Use lightweight index-based handles (`DefId`, `TypeId`, `ScopeId`):
 
 ```rust
-pub struct DefId(u32);
+pub struct DefId {
+    crate_id: CrateId,      // Which crate (for cross-crate support)
+    local_id: LocalDefId,   // Index within crate
+}
+
+pub struct LocalDefId {
+    index: u32,
+    #[cfg(debug_assertions)]
+    generation: u32,        // Catches use-after-free in debug builds
+}
+
 pub struct TypeId(u32);
 pub struct ScopeId(u32);
+pub struct CrateId(u32);
 ```
 
 These handles are:
@@ -28,6 +39,8 @@ These handles are:
 - Used as keys in maps (`DefId` → type info, `DefId` → symbol info)
 - Stored in HIR/MIR nodes instead of names or pointers
 - `Copy` for ergonomic use
+- Debug-friendly (print with names, not just numbers)
+- Cross-crate ready (CrateId + LocalDefId structure)
 
 ### ID Space Partitioning
 
@@ -63,6 +76,21 @@ This ensures user and builtin IDs never collide without runtime checks.
 - Can use same lookup tables for both
 - Invalid sentinel simplifies error handling
 
+### Why CrateId + LocalDefId?
+- **Future-proof**: Separate compilation requires knowing which crate a def came from
+- **Cheap to add now**: Just a u32 field, defaults to `CrateId(0)` for single-crate
+- **Expensive to retrofit**: Changing DefId layout later breaks all serialization and caches
+
+### Why Generation Counters?
+- **Catch stale IDs**: If you hold a DefId after its arena is cleared, debug builds panic
+- **Zero release cost**: `#[cfg(debug_assertions)]` removes the field entirely
+- **Real bugs**: Compiler refactors often accidentally hold stale references
+
+### Why Debug-Friendly Formatting?
+- `DefId(42)` is useless for debugging
+- `DefId(crate0::42 "process_request")` tells you exactly what you're looking at
+- Requires context (name table), but worth the ergonomic improvement
+
 ## Consequences
 
 ### Positive
@@ -70,11 +98,16 @@ This ensures user and builtin IDs never collide without runtime checks.
 - Stable: IDs don't change, safe to cache
 - Simple: no lifetimes, no ownership issues
 - Flexible: works as map keys, array indices, etc.
+- Debug-friendly: meaningful output when debugging
+- Future-proof: cross-crate ready from day one
+- Safe: generation counters catch stale ID bugs in debug builds
 
 ### Negative
 - Indirection: must look up in tables to get actual data
 - No type-level distinction between different ID spaces (user vs builtin)
 - Invalid IDs can propagate if not checked
+- Debug formatting requires name table access (thread-local or passed explicitly)
+- Slightly larger struct in debug builds (generation counter)
 
 ## Implementation
 
@@ -93,6 +126,54 @@ let type_id = infer_result.binding_types.get(&def_id);
 
 // HIR stores DefId, not names
 HirExprKind::Var { def_id }
+```
+
+### Debug Formatting
+
+```rust
+impl DefId {
+    /// Debug format with name lookup
+    pub fn debug_with<'a>(&self, names: &'a NameTable) -> impl fmt::Debug + 'a {
+        DefIdDebug { id: *self, names }
+    }
+}
+
+// Usage in debug output:
+// DefId(crate0::42 "process_request")
+
+// Thread-local context for convenient Debug impl
+impl fmt::Debug for DefId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(names) = NameTable::try_get_thread_local() {
+            write!(f, "DefId({}::{})", self.crate_id.0, self.local_id.index)?;
+            if let Some(name) = names.get(*self) {
+                write!(f, " {:?}", name)?;
+            }
+            Ok(())
+        } else {
+            write!(f, "DefId({}::{})", self.crate_id.0, self.local_id.index)
+        }
+    }
+}
+```
+
+### Generation Counter Validation
+
+```rust
+impl LocalDefId {
+    #[cfg(debug_assertions)]
+    pub fn validate(&self, arena: &DefArena) {
+        assert_eq!(
+            self.generation, arena.generation(),
+            "stale DefId: arena has been reset since this ID was created"
+        );
+    }
+
+    #[cfg(not(debug_assertions))]
+    pub fn validate(&self, _arena: &DefArena) {
+        // No-op in release builds
+    }
+}
 ```
 
 ## References

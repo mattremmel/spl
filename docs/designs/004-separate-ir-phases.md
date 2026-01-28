@@ -18,8 +18,15 @@ A single IR throughout is simpler but limits what each phase can assume. Too man
 Use three intermediate representations:
 
 ```
-Source → CST/AST → HIR → MIR → Cranelift IR → Native
+Source → CST/AST → HIR → MIR → [Backend] → Native
+                              ↓
+                         Cranelift (default)
+                         LLVM (future)
+                         Interpreter (future)
+                         WASM (future)
 ```
+
+**MIR is the stable backend interface.** All backends lower from the same MIR representation, ensuring the frontend and backend are decoupled.
 
 ### CST/AST (Concrete Syntax Tree)
 - Produced by parser
@@ -61,9 +68,15 @@ Source → CST/AST → HIR → MIR → Cranelift IR → Native
 - Move/Copy semantics must be explicit for ownership analysis
 
 ### Why Not More IRs?
-- Three IRs (plus Cranelift IR) is sufficient
+- Three IRs (plus backend IR) is sufficient
 - Each IR has clear responsibilities
 - More IRs would add complexity without benefit
+
+### Why Backend-Agnostic MIR?
+- **Portability**: Same MIR works with any backend
+- **Testing**: Can test MIR generation without codegen
+- **Future flexibility**: Add LLVM for optimized builds, interpreter for debugging
+- **Separation of concerns**: Frontend team doesn't need backend knowledge
 
 ## Consequences
 
@@ -73,11 +86,13 @@ Source → CST/AST → HIR → MIR → Cranelift IR → Native
 - IDE features work on CST/AST level
 - Borrow checking works on MIR level
 - Easier to test phases independently
+- Backend-agnostic MIR enables multiple codegen targets
 
 ### Negative
 - Multiple lowering passes to maintain
 - Information must be preserved across lowerings
 - More code than a single-IR design
+- Must resist leaking backend concepts into MIR
 
 ## Implementation
 
@@ -105,9 +120,31 @@ let ast = ast::SourceFile::cast(parse);      // → AST view
 let resolve = sema::resolve(&ast);           // → Resolution
 let infer = sema::infer(&ast, &resolve);     // → Types
 let hir = hir::lower(&ast, &infer);          // → HIR
-let mir = mir::lower(&hir)?;                 // → MIR
-let native = codegen::compile(&mir)?;        // → Native
+let mir = mir::lower(&hir)?;                 // → MIR (backend-agnostic)
+let native = backend.compile(&mir)?;         // → Native (backend-specific)
 ```
+
+### Backend Trait
+
+```rust
+pub trait Backend {
+    type Output;
+    type Error;
+
+    fn compile(&self, mir: &MirProgram) -> Result<Self::Output, Self::Error>;
+}
+
+// Implementations
+pub struct CraneliftBackend { /* JIT or AOT mode */ }
+pub struct LlvmBackend { /* future */ }
+pub struct InterpreterBackend { /* future */ }
+```
+
+MIR must not contain:
+- Backend-specific type representations
+- Calling convention details (abstracted via ABI enum)
+- Register or stack slot references
+- Backend-specific intrinsics
 
 ## References
 
