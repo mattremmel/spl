@@ -193,13 +193,33 @@ cargo +nightly fmt             # Format
 
 ## Further Reading
 
-Detailed documentation in `docs/`:
+### Language Specification
 
-- [syntax-grammar.md](docs/syntax-grammar.md) - Language grammar specification
-- [lexical-grammar.md](docs/lexical-grammar.md) - Token definitions
-- [type-system.md](docs/type-system.md) - Type system design
-- [memory-model.md](docs/memory-model.md) - Ownership and borrowing
-- [module-system.md](docs/module-system.md) - Package/module organization
+Detailed language specification in `docs/spec/`:
+
+- [syntax-grammar.md](docs/spec/syntax-grammar.md) - Language grammar specification
+- [lexical-grammar.md](docs/spec/lexical-grammar.md) - Token definitions
+- [type-system.md](docs/spec/type-system.md) - Type system design
+- [memory-model.md](docs/spec/memory-model.md) - Ownership and borrowing
+- [module-system.md](docs/spec/module-system.md) - Package/module organization
+
+### Architecture Decision Records
+
+Key design decisions in `docs/designs/`:
+
+- [ADR-001: Phase-Specific Error Handling](docs/designs/001-phase-specific-error-handling.md)
+- [ADR-002: Index-Based References](docs/designs/002-index-based-references.md)
+- [ADR-003: Arena Allocation](docs/designs/003-arena-allocation.md)
+- [ADR-004: Separate IR Phases](docs/designs/004-separate-ir-phases.md)
+- [ADR-005: Cranelift Backend](docs/designs/005-cranelift-backend.md)
+- [ADR-006: Linker Abstraction](docs/designs/006-linker-abstraction.md)
+- [ADR-007: TOML-Based Test Framework](docs/designs/007-toml-based-test-framework.md)
+- [ADR-008: Rowan-Based CST](docs/designs/008-rowan-based-cst.md)
+- [ADR-009: Event-Based Parser Recovery](docs/designs/009-event-based-parser-recovery.md)
+- [ADR-010: Type Interning](docs/designs/010-type-interning.md)
+
+### Strategy Documents
+
 - [compilation-unit-strategy.md](docs/compilation-unit-strategy.md) - Compilation strategy
 - [rust-design-lessons.md](docs/rust-design-lessons.md) - Design rationale
 - [cranelift-performance-strategy.md](docs/cranelift-performance-strategy.md) - Codegen performance
