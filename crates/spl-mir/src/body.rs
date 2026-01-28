@@ -3,12 +3,11 @@
 //! This module defines the Body type which represents a complete MIR function,
 //! including its basic blocks, local variables, and control flow graph.
 
-use crate::sema::symbol::DefId;
-use crate::sema::types::TypeId;
+use spl_sema::{DefId, TypeId};
 
-use super::statement::Statement;
-use super::terminator::{BasicBlock, Terminator};
-use super::types::Local;
+use crate::statement::Statement;
+use crate::terminator::{BasicBlock, Terminator};
+use crate::types::Local;
 
 /// A local variable declaration.
 #[derive(Clone, Debug, PartialEq)]
@@ -233,10 +232,10 @@ impl Body {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mir::operand::{Operand, Rvalue};
-    use crate::mir::statement::Statement;
-    use crate::mir::terminator::{Terminator, TerminatorKind};
-    use crate::mir::types::Place;
+    use crate::operand::{Operand, Rvalue};
+    use crate::statement::Statement;
+    use crate::terminator::{Terminator, TerminatorKind};
+    use crate::types::Place;
 
     const DUMMY_TY: TypeId = TypeId::new(0);
 
@@ -511,7 +510,7 @@ mod tests {
         body.block_mut(entry).set_terminator(Terminator::new(
             TerminatorKind::SwitchInt {
                 discr: cond,
-                targets: crate::mir::terminator::SwitchTargets::new_bool(then_block, else_block),
+                targets: crate::terminator::SwitchTargets::new_bool(then_block, else_block),
             },
             0..0,
         ));
@@ -566,7 +565,7 @@ mod tests {
         body.block_mut(loop_header).set_terminator(Terminator::new(
             TerminatorKind::SwitchInt {
                 discr: Operand::const_bool(true),
-                targets: crate::mir::terminator::SwitchTargets::new_bool(loop_body, exit),
+                targets: crate::terminator::SwitchTargets::new_bool(loop_body, exit),
             },
             0..0,
         ));

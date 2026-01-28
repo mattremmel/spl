@@ -102,6 +102,36 @@ impl<'ctx> Resolver<'ctx> {
         self.current_file_path = Some(path.into());
     }
 
+    /// Access the semantic context.
+    pub fn ctx(&mut self) -> &mut SemanticContext {
+        self.ctx
+    }
+
+    /// Get the collected resolutions.
+    pub fn resolutions(&self) -> &FxHashMap<Span, DefId> {
+        &self.resolutions
+    }
+
+    /// Take ownership of the collected resolutions.
+    pub fn take_resolutions(self) -> FxHashMap<Span, DefId> {
+        self.resolutions
+    }
+
+    /// Get the collected diagnostics.
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+
+    /// Take ownership of the collected diagnostics.
+    pub fn take_diagnostics(&mut self) -> Vec<Diagnostic> {
+        std::mem::take(&mut self.diagnostics)
+    }
+
+    /// Get the module scopes map.
+    pub fn module_scopes(&self) -> &FxHashMap<DefId, crate::ScopeId> {
+        &self.module_scopes
+    }
+
     /// Emit a diagnostic, attaching the current file path if set.
     fn emit_diagnostic(&mut self, mut diagnostic: Diagnostic) {
         if let Some(path) = &self.current_file_path {
@@ -243,13 +273,15 @@ impl<'ctx> Resolver<'ctx> {
 
     // ===== Pass 1: Definition Collection =====
 
-    fn collect_source_file(&mut self, source_file: &SourceFile) {
+    /// Collect all items from a source file (pass 1).
+    pub fn collect_source_file(&mut self, source_file: &SourceFile) {
         for item in source_file.items() {
             self.collect_item(&item);
         }
     }
 
-    fn collect_item(&mut self, item: &Item) {
+    /// Collect a single item definition (pass 1).
+    pub fn collect_item(&mut self, item: &Item) {
         match item {
             Item::Function(func) => self.collect_function(func),
             Item::Struct(struct_def) => self.collect_struct(struct_def),
@@ -341,7 +373,7 @@ impl<'ctx> Resolver<'ctx> {
     /// - `module.` resolves from the package root (root module)
     /// - `self.` resolves from the current module
     /// - `super.` resolves from the parent module (error at root)
-    fn resolve_imports(&mut self) {
+    pub fn resolve_imports(&mut self) {
         let imports = std::mem::take(&mut self.pending_imports);
 
         for import in imports {
@@ -766,7 +798,8 @@ impl<'ctx> Resolver<'ctx> {
 
     // ===== Pass 2: Resolution =====
 
-    fn resolve_source_file(&mut self, source_file: &SourceFile) {
+    /// Resolve all references in a source file (pass 2).
+    pub fn resolve_source_file(&mut self, source_file: &SourceFile) {
         for item in source_file.items() {
             self.resolve_item(&item);
         }
@@ -1502,7 +1535,7 @@ impl<'ctx> Resolver<'ctx> {
 }
 
 /// Helper to define built-in types and traits in a `SemanticContext`.
-fn define_builtins(ctx: &mut SemanticContext) {
+pub fn define_builtins(ctx: &mut SemanticContext) {
     // Pre-define built-in primitive types
     for builtin in &[
         "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",

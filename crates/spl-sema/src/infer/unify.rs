@@ -623,7 +623,8 @@ impl<'a> InferEngine<'a> {
     // Default Application
     // =========================================================================
 
-    pub(super) fn apply_defaults(&mut self) {
+    /// Apply default types to unconstrained type variables.
+    pub fn apply_defaults(&mut self) {
         // Collect all type variables that haven't been resolved
         let mut defaults: Vec<(TypeVar, TypeId)> = Vec::new();
 

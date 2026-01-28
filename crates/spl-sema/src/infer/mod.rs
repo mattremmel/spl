@@ -24,8 +24,7 @@ use crate::symbol::DefId;
 use crate::types::{InferKind, Mutability, Type, TypeId, TypeInterner};
 use rustc_hash::FxHashMap;
 
-use engine::InferEngine;
-
+pub use engine::InferEngine;
 pub use engine::IntrinsicKind;
 
 /// Error returned when unification fails.

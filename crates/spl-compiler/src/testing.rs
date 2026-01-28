@@ -178,6 +178,16 @@ pub fn format_diagnostics(diags: &[Diagnostic]) -> String {
         .join("\n")
 }
 
+/// Format `spl_diagnostic::Diagnostic` errors for display in test output.
+/// This is used for diagnostics from sema functions before conversion.
+pub fn format_sema_diagnostics(diags: &[spl_diagnostic::Diagnostic]) -> String {
+    diags
+        .iter()
+        .map(|d| format!("[{}] {}", d.severity.as_str(), d.message))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Format parse errors for display in test output.
 pub fn format_parse_errors(errors: &[ParseError]) -> String {
     errors
@@ -261,7 +271,7 @@ pub fn resolve_ok(source: &str) -> ResolveResult {
     assert!(
         result.diagnostics.is_empty(),
         "resolution failed:\n{}",
-        format_diagnostics(&result.diagnostics)
+        format_sema_diagnostics(&result.diagnostics)
     );
     result
 }
@@ -289,7 +299,8 @@ pub fn resolve_err(source: &str) -> Vec<Diagnostic> {
         !result.diagnostics.is_empty(),
         "expected resolution errors but resolution succeeded"
     );
-    result.diagnostics
+    // Convert spl_diagnostic::Diagnostic to crate::Diagnostic
+    result.diagnostics.into_iter().map(Diagnostic::from).collect()
 }
 
 /// Run type inference on source code and return the result, panicking on error.
@@ -314,13 +325,13 @@ pub fn infer_ok(source: &str) -> InferResult {
     assert!(
         resolve_result.diagnostics.is_empty(),
         "resolution failed:\n{}",
-        format_diagnostics(&resolve_result.diagnostics)
+        format_sema_diagnostics(&resolve_result.diagnostics)
     );
     let infer_result = crate::sema::infer(&ast, &resolve_result);
     assert!(
         infer_result.diagnostics.is_empty(),
         "type inference failed:\n{}",
-        format_diagnostics(&infer_result.diagnostics)
+        format_sema_diagnostics(&infer_result.diagnostics)
     );
     infer_result
 }
@@ -350,7 +361,8 @@ pub fn infer_err(source: &str) -> Vec<Diagnostic> {
         !infer_result.diagnostics.is_empty(),
         "expected type inference errors but inference succeeded"
     );
-    infer_result.diagnostics
+    // Convert spl_diagnostic::Diagnostic to crate::Diagnostic
+    infer_result.diagnostics.into_iter().map(Diagnostic::from).collect()
 }
 
 // ============================================================================

@@ -1,0 +1,14 @@
+[package]
+name = "spl-mir"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rustc-hash = "2"
+spl-diagnostic = { path = "../spl-diagnostic" }
+spl-lexer = { path = "../spl-lexer" }
+spl-sema = { path = "../spl-sema" }
+thiserror = "2"
+
+[lints]
+workspace = true

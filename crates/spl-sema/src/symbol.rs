@@ -67,7 +67,7 @@ impl DefId {
 
     /// Create a new `DefId` with the given index.
     #[inline]
-    pub(crate) const fn new(index: u32) -> Self {
+    pub const fn new(index: u32) -> Self {
         DefId(index)
     }
 

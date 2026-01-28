@@ -35,13 +35,12 @@
 //! be lowered (due to parse/resolution/type errors). This allows the HIR
 //! to remain well-formed even when parts of the source have errors.
 
-use crate::lexer::Span;
-use crate::sema::symbol::DefId;
-use crate::sema::types::TypeId;
+use spl_lexer::Span;
+use spl_sema::{DefId, TypeId};
 use la_arena::Idx;
 
-use super::StmtId;
-use super::pat::PatId;
+use crate::StmtId;
+use crate::pat::PatId;
 
 /// A stable identifier for expressions in the HIR arena.
 pub type ExprId = Idx<HirExpr>;

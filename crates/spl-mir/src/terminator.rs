@@ -3,10 +3,10 @@
 //! Terminators end basic blocks and describe control flow transfers.
 //! Every basic block must end with exactly one terminator.
 
-use crate::lexer::Span;
+use spl_lexer::Span;
 
-use super::operand::Operand;
-use super::types::Place;
+use crate::operand::Operand;
+use crate::types::Place;
 
 /// A basic block identifier.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -195,10 +195,9 @@ impl Terminator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mir::operand::Constant;
-    use crate::mir::types::Local;
-    use crate::sema::symbol::DefId;
-    use crate::sema::types::TypeId;
+    use crate::operand::Constant;
+    use crate::types::Local;
+    use spl_sema::{DefId, TypeId};
 
     const DUMMY_TY: TypeId = TypeId::new(0);
 

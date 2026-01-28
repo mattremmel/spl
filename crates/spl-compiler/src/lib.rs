@@ -200,12 +200,24 @@ pub fn compile(source: &str) -> CompileResult {
 
     // Phase 3: Name resolution
     let mut resolve_result = sema::resolve(&source_file);
-    diagnostics.append(&mut resolve_result.diagnostics);
+    // Convert spl_diagnostic::Diagnostic to crate::Diagnostic
+    let mut resolve_diags: Vec<Diagnostic> = resolve_result
+        .diagnostics
+        .drain(..)
+        .map(Diagnostic::from)
+        .collect();
+    diagnostics.append(&mut resolve_diags);
     truncate_diagnostics_if_needed(&mut diagnostics);
 
     // Phase 4: Type inference
     let mut infer_result = sema::infer(&source_file, &resolve_result);
-    diagnostics.append(&mut infer_result.diagnostics);
+    // Convert spl_diagnostic::Diagnostic to crate::Diagnostic
+    let mut infer_diags: Vec<Diagnostic> = infer_result
+        .diagnostics
+        .drain(..)
+        .map(Diagnostic::from)
+        .collect();
+    diagnostics.append(&mut infer_diags);
     truncate_diagnostics_if_needed(&mut diagnostics);
 
     // Check for errors before lowering
@@ -225,7 +237,7 @@ pub fn compile(source: &str) -> CompileResult {
     let bodies = match mir::lower_hir_to_mir(&hir_db) {
         Ok(bodies) => bodies,
         Err(ice) => {
-            diagnostics.push(ice.to_diagnostic());
+            diagnostics.push(Diagnostic::from(ice.to_diagnostic()));
             return CompileResult {
                 bodies: None,
                 types: None,

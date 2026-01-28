@@ -3,10 +3,10 @@
 //! Statements are the non-terminating operations in a basic block.
 //! They execute sequentially and don't transfer control flow.
 
-use crate::lexer::Span;
+use spl_lexer::Span;
 
-use super::operand::Rvalue;
-use super::types::{Local, Place};
+use crate::operand::Rvalue;
+use crate::types::{Local, Place};
 
 /// A statement kind in MIR.
 #[derive(Clone, Debug, PartialEq)]
@@ -72,8 +72,8 @@ impl Statement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mir::operand::Operand;
-    use crate::sema::types::TypeId;
+    use crate::operand::Operand;
+    use spl_sema::TypeId;
 
     const DUMMY_TY: TypeId = TypeId::new(0);
 

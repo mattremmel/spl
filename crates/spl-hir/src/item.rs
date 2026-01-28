@@ -2,11 +2,10 @@
 //!
 //! This module defines the HIR item types for functions, structs, etc.
 
-use crate::lexer::Span;
-use crate::sema::symbol::DefId;
-use crate::sema::types::TypeId;
+use spl_lexer::Span;
+use spl_sema::{DefId, TypeId};
 
-use super::{ExprId, PatId};
+use crate::{ExprId, PatId};
 
 /// HIR items (top-level definitions).
 #[derive(Debug, Clone)]
@@ -78,7 +77,7 @@ pub struct HirImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sema::types::TypeInterner;
+    use spl_sema::TypeInterner;
     use la_arena::Arena;
 
     // =========================================================================
@@ -89,10 +88,10 @@ mod tests {
     fn hir_function_with_body() {
         let types = TypeInterner::new();
         let i32_ty = types.i32();
-        let mut pats: Arena<crate::hir::pat::HirPat> = Arena::new();
+        let mut pats: Arena<crate::pat::HirPat> = Arena::new();
 
-        let param_pat = crate::hir::pat::HirPat {
-            kind: crate::hir::pat::HirPatKind::Bind {
+        let param_pat = crate::pat::HirPat {
+            kind: crate::pat::HirPatKind::Bind {
                 def_id: DefId::new(1),
                 mutable: false,
             },
@@ -111,7 +110,7 @@ mod tests {
                 span: 0..5,
             }],
             ret_type: i32_ty,
-            body: Some(crate::hir::ExprId::from_raw(la_arena::RawIdx::from_u32(0))),
+            body: Some(crate::ExprId::from_raw(la_arena::RawIdx::from_u32(0))),
             span: 0..20,
         };
 
@@ -387,7 +386,7 @@ mod tests {
         let i32_ty = types.i32();
 
         let param = HirParam {
-            pat: crate::hir::PatId::from_raw(la_arena::RawIdx::from_u32(0)),
+            pat: crate::PatId::from_raw(la_arena::RawIdx::from_u32(0)),
             ty: i32_ty,
             span: 0..5,
         };

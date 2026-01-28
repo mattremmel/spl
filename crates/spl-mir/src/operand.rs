@@ -3,10 +3,9 @@
 //! Operands are the inputs to MIR operations. Rvalues produce values
 //! that can be assigned to places.
 
-use crate::sema::symbol::DefId;
-use crate::sema::types::{Mutability, TypeId};
+use spl_sema::{DefId, Mutability, TypeId};
 
-use super::types::{Local, Place};
+use crate::types::{Local, Place};
 
 /// Borrow kind for references.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -466,7 +465,7 @@ mod tests {
 
     #[test]
     fn rvalue_address_of() {
-        use crate::sema::types::Mutability;
+        use spl_sema::Mutability;
 
         let place = Place::from_local(Local(1));
         let rv = Rvalue::AddressOf(Mutability::Mutable, place.clone(), DUMMY_TY);
@@ -613,7 +612,7 @@ mod tests {
 
     #[test]
     fn operand_copy_with_projection() {
-        use crate::mir::types::{FieldIdx, PlaceElem};
+        use crate::types::{FieldIdx, PlaceElem};
 
         let place = Place::from_local(Local(1)).project(PlaceElem::Field(FieldIdx(0)));
         let op = Operand::Copy(place.clone());
@@ -681,7 +680,7 @@ mod tests {
 
     #[test]
     fn rvalue_address_of_immutable() {
-        use crate::sema::types::Mutability;
+        use spl_sema::Mutability;
 
         let place = Place::from_local(Local(1));
         let rv = Rvalue::AddressOf(Mutability::Shared, place.clone(), DUMMY_TY);
@@ -697,7 +696,7 @@ mod tests {
 
     #[test]
     fn rvalue_helper_address_of_shared() {
-        use crate::sema::types::Mutability;
+        use spl_sema::Mutability;
 
         let place = Place::from_local(Local(3));
         let rv = Rvalue::address_of_shared(place.clone(), DUMMY_TY);
@@ -710,7 +709,7 @@ mod tests {
 
     #[test]
     fn rvalue_helper_address_of_mut() {
-        use crate::sema::types::Mutability;
+        use spl_sema::Mutability;
 
         let place = Place::from_local(Local(3));
         let rv = Rvalue::address_of_mut(place.clone(), DUMMY_TY);

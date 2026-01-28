@@ -245,7 +245,13 @@ impl<'src> CompileSession<'src> {
         };
 
         let mut result = crate::sema::resolve(source_file);
-        self.diagnostics.append(&mut result.diagnostics);
+        // Convert spl_diagnostic::Diagnostic to crate::Diagnostic
+        let mut resolve_diags: Vec<crate::Diagnostic> = result
+            .diagnostics
+            .drain(..)
+            .map(crate::Diagnostic::from)
+            .collect();
+        self.diagnostics.append(&mut resolve_diags);
         truncate_diagnostics_if_needed(&mut self.diagnostics);
         self.resolve = Some(result);
     }
@@ -265,7 +271,13 @@ impl<'src> CompileSession<'src> {
         };
 
         let mut result = crate::sema::infer(source_file, resolve_result);
-        self.diagnostics.append(&mut result.diagnostics);
+        // Convert spl_diagnostic::Diagnostic to crate::Diagnostic
+        let mut infer_diags: Vec<crate::Diagnostic> = result
+            .diagnostics
+            .drain(..)
+            .map(crate::Diagnostic::from)
+            .collect();
+        self.diagnostics.append(&mut infer_diags);
         truncate_diagnostics_if_needed(&mut self.diagnostics);
         self.infer = Some(result);
     }
@@ -307,7 +319,7 @@ impl<'src> CompileSession<'src> {
         match crate::mir::lower_hir_to_mir(hir_db) {
             Ok(bodies) => self.mir = Some(bodies),
             Err(ice) => {
-                self.diagnostics.push(ice.to_diagnostic());
+                self.diagnostics.push(crate::Diagnostic::from(ice.to_diagnostic()));
             }
         }
     }

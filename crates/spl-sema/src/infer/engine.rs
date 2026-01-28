@@ -184,7 +184,7 @@ pub(super) struct InferResults {
 /// Holds all state needed for type inference, including references to the
 /// semantic context (symbol table) and its own type interner, inference results,
 /// and contextual information about the current position in the AST.
-pub(super) struct InferEngine<'a> {
+pub struct InferEngine<'a> {
     // === Core Fields ===
     /// Borrowed reference to the semantic context for symbol/scope lookup.
     pub(super) resolve_ctx: &'a SemanticContext,
@@ -228,7 +228,8 @@ pub(super) struct InferEngine<'a> {
 }
 
 impl<'a> InferEngine<'a> {
-    pub(super) fn new(resolve_result: &'a ResolveResult) -> Self {
+    /// Create a new type inference engine from a resolve result.
+    pub fn new(resolve_result: &'a ResolveResult) -> Self {
         let mut engine = Self {
             resolve_ctx: &resolve_result.ctx,
             current_inference_scope: crate::ScopeId::new(0), // Start at root scope
@@ -320,7 +321,8 @@ impl<'a> InferEngine<'a> {
         def_id
     }
 
-    pub(super) fn into_result(self) -> InferResult {
+    /// Consume the engine and return the inference result.
+    pub fn into_result(self) -> InferResult {
         // Verify no INVALID DefIds made it into binding_types
         #[cfg(debug_assertions)]
         for def_id in self.results.binding_types.keys() {

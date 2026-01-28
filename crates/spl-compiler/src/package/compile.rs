@@ -57,7 +57,13 @@ pub fn compile_package(package: &Package) -> CompileResult {
 
     // Phase 1: Multi-file name resolution
     let mut resolve_result = sema::resolve_package(package);
-    diagnostics.append(&mut resolve_result.diagnostics);
+    // Convert spl_diagnostic::Diagnostic to crate::Diagnostic
+    let mut resolve_diags: Vec<Diagnostic> = resolve_result
+        .diagnostics
+        .drain(..)
+        .map(Diagnostic::from)
+        .collect();
+    diagnostics.append(&mut resolve_diags);
     truncate_diagnostics_if_needed(&mut diagnostics);
 
     // Check for errors before type inference
@@ -72,7 +78,13 @@ pub fn compile_package(package: &Package) -> CompileResult {
 
     // Phase 2: Type inference across all files
     let mut infer_result = sema::infer_package(package, &resolve_result);
-    diagnostics.append(&mut infer_result.diagnostics);
+    // Convert spl_diagnostic::Diagnostic to crate::Diagnostic
+    let mut infer_diags: Vec<Diagnostic> = infer_result
+        .diagnostics
+        .drain(..)
+        .map(Diagnostic::from)
+        .collect();
+    diagnostics.append(&mut infer_diags);
     truncate_diagnostics_if_needed(&mut diagnostics);
 
     // Check for errors before lowering
@@ -92,7 +104,7 @@ pub fn compile_package(package: &Package) -> CompileResult {
     let bodies = match mir::lower_hir_to_mir(&hir_db) {
         Ok(bodies) => bodies,
         Err(ice) => {
-            diagnostics.push(ice.to_diagnostic());
+            diagnostics.push(Diagnostic::from(ice.to_diagnostic()));
             attach_file_paths(&mut diagnostics, source_map);
             return CompileResult {
                 bodies: None,

@@ -59,6 +59,8 @@ spl-syntax = { path = "crates/spl-syntax" }
 spl-parser = { path = "crates/spl-parser" }
 spl-ast = { path = "crates/spl-ast" }
 spl-sema = { path = "crates/spl-sema" }
+spl-hir = { path = "crates/spl-hir" }
+spl-mir = { path = "crates/spl-mir" }
 
 # Core dependencies
 ariadne = "0.5"

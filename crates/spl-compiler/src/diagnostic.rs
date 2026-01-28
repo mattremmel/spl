@@ -99,6 +99,7 @@ impl Diagnostic {
     }
 
     /// Convert to the base `spl_diagnostic::Diagnostic` for rendering.
+    #[must_use]
     pub fn to_base(&self) -> spl_diagnostic::Diagnostic {
         let mut base = if self.severity == Severity::Error {
             spl_diagnostic::Diagnostic::error(&self.message)
@@ -127,6 +128,20 @@ impl Diagnostic {
         }
 
         base
+    }
+}
+
+impl From<spl_diagnostic::Diagnostic> for Diagnostic {
+    fn from(base: spl_diagnostic::Diagnostic) -> Self {
+        Self {
+            severity: base.severity,
+            message: base.message,
+            labels: base.labels,
+            notes: base.notes,
+            hints: base.hints,
+            file_id: None,
+            file_path: base.file_path,
+        }
     }
 }
 

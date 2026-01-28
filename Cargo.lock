@@ -1066,7 +1066,9 @@ dependencies = [
  "serde",
  "spl-ast",
  "spl-diagnostic",
+ "spl-hir",
  "spl-lexer",
+ "spl-mir",
  "spl-parser",
  "spl-sema",
  "spl-syntax",
@@ -1084,11 +1086,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "spl-hir"
+version = "0.1.0"
+dependencies = [
+ "la-arena",
+ "rustc-hash 2.1.1",
+ "spl-ast",
+ "spl-lexer",
+ "spl-sema",
+]
+
+[[package]]
 name = "spl-lexer"
 version = "0.1.0"
 dependencies = [
  "logos",
  "pretty_assertions",
+]
+
+[[package]]
+name = "spl-mir"
+version = "0.1.0"
+dependencies = [
+ "rustc-hash 2.1.1",
+ "spl-diagnostic",
+ "spl-lexer",
+ "spl-sema",
+ "thiserror",
 ]
 
 [[package]]

@@ -3,10 +3,9 @@
 //! This module provides structured error types for invariant violations
 //! during MIR lowering. These errors indicate compiler bugs, not user errors.
 
-use crate::diagnostic::Diagnostic;
-use crate::lexer::Span;
-use crate::sema::symbol::DefId;
-use crate::sema::types::TypeId;
+use spl_diagnostic::Diagnostic;
+use spl_lexer::Span;
+use spl_sema::{DefId, TypeId};
 use thiserror::Error;
 
 /// Internal Compiler Error - indicates a bug in the compiler, not user error.

@@ -16,7 +16,8 @@ impl<'a> InferEngine<'a> {
     // Top-Level Inference
     // =========================================================================
 
-    pub(super) fn infer_source_file(&mut self, source_file: &SourceFile) {
+    /// Infer types for a source file.
+    pub fn infer_source_file(&mut self, source_file: &SourceFile) {
         // First pass: collect function signatures and struct info
         for item in source_file.items() {
             match &item {
@@ -135,7 +136,7 @@ impl<'a> InferEngine<'a> {
     }
 
     /// Collect signatures from items inside an inline module.
-    pub(super) fn collect_module_signatures(&mut self, module_def: &spl_ast::ModuleDef) {
+    pub fn collect_module_signatures(&mut self, module_def: &spl_ast::ModuleDef) {
         for item in module_def.items() {
             match &item {
                 Item::Function(func) => self.collect_function_signature(func),
@@ -206,7 +207,7 @@ impl<'a> InferEngine<'a> {
     }
 
     /// Infer bodies for items inside an inline module.
-    pub(super) fn infer_module_bodies(&mut self, module_def: &spl_ast::ModuleDef) {
+    pub fn infer_module_bodies(&mut self, module_def: &spl_ast::ModuleDef) {
         for item in module_def.items() {
             match &item {
                 Item::Function(func) => self.infer_function(func),
@@ -226,7 +227,8 @@ impl<'a> InferEngine<'a> {
         }
     }
 
-    pub(super) fn collect_function_signature(&mut self, func: &FunctionDef) {
+    /// Collect the signature of a function for forward reference.
+    pub fn collect_function_signature(&mut self, func: &FunctionDef) {
         let Some(name) = func.name() else {
             return;
         };
@@ -459,7 +461,7 @@ impl<'a> InferEngine<'a> {
     }
 
     /// Collect type alias information (public for multi-file inference).
-    pub(super) fn collect_type_alias_info(&mut self, type_alias: &spl_ast::TypeAlias) {
+    pub fn collect_type_alias_info(&mut self, type_alias: &spl_ast::TypeAlias) {
         let Some(name) = type_alias.name() else {
             return;
         };
@@ -563,7 +565,7 @@ impl<'a> InferEngine<'a> {
     }
 
     /// Collect struct information (public for multi-file inference).
-    pub(super) fn collect_struct_info(&mut self, struct_def: &spl_ast::StructDef) {
+    pub fn collect_struct_info(&mut self, struct_def: &spl_ast::StructDef) {
         let Some(name) = struct_def.name() else {
             return;
         };
@@ -660,8 +662,7 @@ impl<'a> InferEngine<'a> {
     }
 
     /// Collect signatures for all methods in an impl block (public for multi-file inference).
-    #[allow(dead_code)]
-    pub(super) fn collect_impl_signatures(&mut self, impl_block: &spl_ast::ImplBlock) {
+    pub fn collect_impl_signatures(&mut self, impl_block: &spl_ast::ImplBlock) {
         // Get the struct this impl is for
         let struct_def_id = self.get_impl_struct_def_id(impl_block);
 
@@ -727,22 +728,19 @@ impl<'a> InferEngine<'a> {
     }
 
     /// Collect signatures for all extern functions (public for multi-file inference).
-    #[allow(dead_code)]
-    pub(super) fn collect_extern_signatures(&mut self, extern_block: &spl_ast::ExternBlock) {
+    pub fn collect_extern_signatures(&mut self, extern_block: &spl_ast::ExternBlock) {
         for extern_fn in extern_block.extern_fns() {
             self.collect_extern_fn_signature(&extern_fn);
         }
     }
 
     /// Infer a function body (public for multi-file inference).
-    #[allow(dead_code)]
-    pub(super) fn infer_function_body(&mut self, func: &FunctionDef) {
+    pub fn infer_function_body(&mut self, func: &FunctionDef) {
         self.infer_function(func);
     }
 
     /// Infer all method bodies in an impl block (public for multi-file inference).
-    #[allow(dead_code)]
-    pub(super) fn infer_impl_bodies(&mut self, impl_block: &spl_ast::ImplBlock) {
+    pub fn infer_impl_bodies(&mut self, impl_block: &spl_ast::ImplBlock) {
         for item in impl_block.items() {
             if let Item::Function(func) = item {
                 self.infer_function(&func);

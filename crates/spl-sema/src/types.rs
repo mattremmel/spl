@@ -30,7 +30,7 @@ pub struct TypeId(u32);
 impl TypeId {
     /// Create a new `TypeId` with the given index.
     #[inline]
-    pub(crate) const fn new(index: u32) -> Self {
+    pub const fn new(index: u32) -> Self {
         TypeId(index)
     }
 

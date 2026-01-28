@@ -1,0 +1,14 @@
+[package]
+name = "spl-hir"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+la-arena = "0.3"
+rustc-hash = "2"
+spl-ast = { path = "../spl-ast" }
+spl-lexer = { path = "../spl-lexer" }
+spl-sema = { path = "../spl-sema" }
+
+[lints]
+workspace = true

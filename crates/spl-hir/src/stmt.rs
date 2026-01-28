@@ -2,11 +2,11 @@
 //!
 //! This module defines the HIR statement types which are arena-allocated.
 
-use crate::lexer::Span;
-use crate::sema::types::TypeId;
+use spl_lexer::Span;
+use spl_sema::TypeId;
 use la_arena::Idx;
 
-use super::{ExprId, PatId};
+use crate::{ExprId, PatId};
 
 /// A stable identifier for statements in the HIR arena.
 pub type StmtId = Idx<HirStmt>;
@@ -40,7 +40,7 @@ pub enum HirStmtKind {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sema::types::TypeInterner;
+    use spl_sema::TypeInterner;
 
     // =========================================================================
     // HirStmtKind::Let Tests
