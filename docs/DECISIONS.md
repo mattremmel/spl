@@ -85,7 +85,23 @@ Traits support associated types.
 **Mandatory** - all functions must declare their return type, including `()` for unit.
 
 ### 2.8 Closures
-Deferred - will design later.
+Escaping vs non-escaping semantics with move-by-default. See [ADR-012](designs/012-closures.md).
+
+**Non-escaping closures** (passed to `map`, `filter`, etc.): borrow by default
+**Escaping closures** (stored, returned, spawned): move by default, `~` for clone
+
+```spl
+// Non-escaping: borrows threshold
+items.filter(|x| x > threshold);
+
+// Escaping: data moved, config cloned
+spawn(|data, ~config| process(data, config));
+
+// Clone all shorthand
+spawn(clone |a, b, c| { ... });
+```
+
+Single-expression closures allow implicit return: `|a, b| a + b`
 
 ### 2.9 Type Aliases
 Use where clause with optional constraints:
@@ -212,5 +228,6 @@ Look like regular function calls - no `!` required.
 | Type casting | `as` | Methods |
 | Panic | Unwind or abort | Abort only |
 | Iteration | Exterior (iterators) | Interior (generators) |
+| Closures | Borrow default, `move` all | Move default, `~` for clone |
 | Async runtime | External | Built-in |
 | Macros | `macro!()` | `macro()` |
