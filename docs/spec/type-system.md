@@ -542,8 +542,8 @@ let y: i32 = if true { 1 } else { panic("!") };  // ! coerces to i32
 
 ```spl
 let x: i32 = 42;
-let y: i64 = x;    // ERROR: no implicit conversion
-let y: i64 = x as i64;  // OK: explicit cast
+let y: i64 = x;           // ERROR: no implicit conversion
+let y: i64 = x.widen();   // OK: explicit widening conversion
 ```
 
 ### Explicit Conversions (Methods)
@@ -712,8 +712,8 @@ fn example_numerics() {
     let remainder = a % b;  // 2
 
     // Explicit conversions
-    let big: i64 = a as i64;
-    let small: i8 = a as i8;  // Truncation!
+    let big: i64 = a.widen();
+    let small: i8 = a.truncate();  // Explicit truncation
 
     // Float operations
     let x: f64 = 3.14159;
@@ -722,7 +722,7 @@ fn example_numerics() {
 
     // Int to float
     let n: i32 = 42;
-    let f: f64 = n as f64;  // 42.0
+    let f: f64 = n.widen();  // 42.0
 }
 ```
 
