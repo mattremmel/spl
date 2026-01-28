@@ -491,6 +491,7 @@ Option, Some, None      // Optional values
 Result, Ok, Err         // Error handling
 Vec                     // Dynamic array
 String                  // Owned string
+decimal                 // Exact decimal type
 
 // Functions
 print                   // Print without newline
@@ -499,7 +500,7 @@ println                 // Print with newline
 // Future additions
 // Clone, Copy, Drop    // Marker traits
 // Default              // Default values
-// Iterator             // Iteration trait
+// Try                   // Error propagation trait
 ```
 
 ### Using the Prelude

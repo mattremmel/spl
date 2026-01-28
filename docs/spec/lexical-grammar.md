@@ -10,7 +10,7 @@ The lexer transforms source text into a stream of tokens. Whitespace and comment
 
 ## Keywords
 
-SPL reserves 30 keywords that cannot be used as identifiers:
+SPL reserves 38 keywords that cannot be used as identifiers:
 
 | Keyword    | Description                          |
 |------------|--------------------------------------|
@@ -18,6 +18,8 @@ SPL reserves 30 keywords that cannot be used as identifiers:
 | `mut`      | Mutable binding modifier             |
 | `fn`       | Function declaration                 |
 | `struct`   | Struct type declaration              |
+| `enum`     | Enum type declaration                |
+| `trait`    | Trait declaration                    |
 | `type`     | Type alias declaration               |
 | `impl`     | Implementation block                 |
 | `if`       | Conditional branch                   |
@@ -29,7 +31,8 @@ SPL reserves 30 keywords that cannot be used as identifiers:
 | `break`    | Exit loop                            |
 | `continue` | Skip to next iteration               |
 | `return`   | Return from function                 |
-| `as`       | Type cast operator (safe only)       |
+| `yield`    | Block expression value               |
+| `as`       | Import renaming                      |
 | `true`     | Boolean literal true                 |
 | `false`    | Boolean literal false                |
 | `pub`      | Public visibility modifier           |
@@ -44,6 +47,11 @@ SPL reserves 30 keywords that cannot be used as identifiers:
 | `not`      | Negation in `is not` pattern         |
 | `match`    | Match expression                     |
 | `extern`   | External function declaration        |
+| `const`    | Compile-time constant                |
+| `static`   | Static variable                      |
+| `unsafe`   | Unsafe block/function                |
+| `async`    | Async function declaration           |
+| `await`    | Await async expression               |
 
 ---
 
@@ -97,25 +105,27 @@ SPL reserves 30 keywords that cannot be used as identifiers:
 | `&`      | Reference                         |
 | `..`     | Range                             |
 | `$`      | Package root (paths) / array end (slices) |
+| `?`      | Error propagation (Try operator)  |
 
-**Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses: `Vec(i32)` instead of `Vec<i32>`. Package-root paths use `$`: `$.utils.helper`.
+**Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses: `Vec(i32)` instead of `Vec<i32>`. Package-root paths use `$`: `$.utils.helper`. The `as` keyword is used only for import renaming, not type casting (use methods like `.widen()`, `.truncate()` for conversions).
 
 ### Operator Precedence (highest to lowest)
 
 | Precedence | Operators                    | Associativity |
 |------------|------------------------------|---------------|
-| 1          | `.` `()` `[]`                | Left          |
+| 1          | `.` `()` `[]` `?`            | Left          |
 | 2          | `!` `-` (unary) `&`          | Right         |
-| 3          | `as`                         | Left          |
-| 4          | `*` `/` `%`                  | Left          |
-| 5          | `+` `-`                      | Left          |
-| 6          | `..`                         | Left          |
-| 7          | `<` `>` `<=` `>=`            | Left          |
-| 8          | `==` `!=`                    | Left          |
-| 9          | `is` `is not`                | Left          |
-| 10         | `&&`                         | Left          |
-| 11         | `\|\|`                       | Left          |
-| 12         | `=` `+=` `-=` `*=` `/=` `%=` | Right         |
+| 3          | `*` `/` `%`                  | Left          |
+| 4          | `+` `-`                      | Left          |
+| 5          | `..`                         | Left          |
+| 6          | `<` `>` `<=` `>=`            | Left          |
+| 7          | `==` `!=`                    | Left          |
+| 8          | `is` `is not`                | Left          |
+| 9          | `&&`                         | Left          |
+| 10         | `\|\|`                       | Left          |
+| 11         | `=` `+=` `-=` `*=` `/=` `%=` | Right         |
+
+Note: `as` is not in the precedence table as it is not used for type casting. Type conversions use methods like `.widen()`, `.truncate()`, `.saturate()`.
 
 ---
 
@@ -150,8 +160,18 @@ Integers can be written in decimal, hexadecimal, binary, or octal:
 
 **Rules:**
 - Underscores (`_`) may appear between digits for readability
-- Underscores cannot appear at the start or end of a number
+- Underscores cannot appear at the start of a number
+- An underscore may appear before a type suffix (e.g., `42_i64`)
 - Leading zeros in decimal literals are allowed (e.g., `007`)
+
+**Type Suffixes:**
+Integer literals may have a type suffix: `i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, `u128`, `isize`, `usize`.
+
+```
+42i64       // i64
+255_u8      // u8 with underscore separator
+0xFF_u32    // u32 hex literal
+```
 
 **Regex:**
 ```
@@ -173,6 +193,7 @@ INTEGER = 0x[0-9a-fA-F][0-9a-fA-F_]*
 - Must have digits on both sides of the decimal point (`.5` and `5.` are invalid)
 - Exponent indicator is lowercase `e`
 - Underscores allowed between digits: `1_000.000_001`
+- Type suffixes: `f32`, `f64` (e.g., `3.14_f32`, `2.718f64`)
 
 **Regex:**
 ```
@@ -249,14 +270,16 @@ let x = 42; // inline comment
 
 ### Block Comments
 
-Begin with `/*` and end with `*/`. Block comments do **not** nest:
+Begin with `/*` and end with `*/`. Block comments **do nest** (like Rust):
 
 ```
 /* This is a
    block comment */
 
-/* Outer /* inner */ still closed here */
+/* Outer /* inner */ still in outer comment */
 ```
+
+Nesting allows commenting out code that contains comments.
 
 ---
 
@@ -332,7 +355,7 @@ fn main() {
     /* Update p1 position
        using compound assignment */
     p1.x += 1.5e1
-    p1.y += 0x0A as f64
+    p1.y += 0x0A.widen()
 
     // Loop with range
     for i in 0..10 {

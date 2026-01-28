@@ -20,18 +20,20 @@ SPL's type system provides:
 
 SPL provides signed and unsigned integers of various sizes. All integers use two's complement representation for signed types.
 
-| Type   | Size (bytes) | Range |
-|--------|--------------|-------|
-| `i8`   | 1 | -128 to 127 |
-| `i16`  | 2 | -32,768 to 32,767 |
-| `i32`  | 4 | -2,147,483,648 to 2,147,483,647 |
-| `i64`  | 8 | -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807 |
-| `i128` | 16 | -2^127 to 2^127 - 1 |
-| `u8`   | 1 | 0 to 255 |
-| `u16`  | 2 | 0 to 65,535 |
-| `u32`  | 4 | 0 to 4,294,967,295 |
-| `u64`  | 8 | 0 to 18,446,744,073,709,551,615 |
-| `u128` | 16 | 0 to 2^128 - 1 |
+| Type    | Size (bytes) | Range |
+|---------|--------------|-------|
+| `i8`    | 1 | -128 to 127 |
+| `i16`   | 2 | -32,768 to 32,767 |
+| `i32`   | 4 | -2,147,483,648 to 2,147,483,647 |
+| `i64`   | 8 | -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807 |
+| `i128`  | 16 | -2^127 to 2^127 - 1 |
+| `isize` | Platform | Pointer-sized signed integer |
+| `u8`    | 1 | 0 to 255 |
+| `u16`   | 2 | 0 to 65,535 |
+| `u32`   | 4 | 0 to 4,294,967,295 |
+| `u64`   | 8 | 0 to 18,446,744,073,709,551,615 |
+| `u128`  | 16 | 0 to 2^128 - 1 |
+| `usize` | Platform | Pointer-sized unsigned integer |
 
 **Default integer type**: Integer literals without a suffix default to `i32`.
 
@@ -56,6 +58,32 @@ SPL provides IEEE 754 floating-point types.
 let pi = 3.14159;      // pi: f64
 let e = 2.71828f32;    // e: f32
 let sci = 1.5e10;      // sci: f64
+```
+
+### Decimal Type
+
+The `decimal` type provides exact decimal arithmetic for financial and monetary calculations, avoiding the precision issues of binary floating-point.
+
+| Type      | Description |
+|-----------|-------------|
+| `decimal` | Exact decimal floating-point (IEEE 754 decimal128 or similar) |
+
+```spl
+let price: decimal = 0.10 + 0.20;  // Exactly 0.30
+let tax = price * 0.0825;          // Precise decimal arithmetic
+```
+
+### Arbitrary Precision Integer
+
+The `bigint` type provides arbitrary precision integers that never overflow.
+
+| Type     | Description |
+|----------|-------------|
+| `bigint` | Arbitrary precision integer (grows as needed) |
+
+```spl
+let huge: bigint = 999999999999999999999999999999;
+let result = huge * huge;  // No overflow
 ```
 
 ### Boolean Type
@@ -337,12 +365,12 @@ let flag = true;     // flag: bool
 let s = "hello";     // s: &str
 ```
 
-**Function return types**: If the return type annotation is omitted, it is inferred from the function body.
+**Function return types**: Return type annotations are mandatory. Functions must explicitly declare their return type.
 
 ```spl
-fn five() { 5 }          // Returns i32
-fn greet() { "hi" }      // Returns &str
-fn nothing() { }         // Returns ()
+fn five(): i32 { return 5; }
+fn greet(): &str { return "hi"; }
+fn nothing(): () { }              // Explicit unit return
 ```
 
 **Generic instantiation**: Type parameters are inferred from usage context.
@@ -422,21 +450,18 @@ Generics enable writing code that works with multiple types through type paramet
 
 ### Type Parameters
 
-Type parameters are declared in angle brackets after the item name.
+Type parameters are declared in `where` clauses.
 
 ```spl
-struct Point<T> {
-    x: T,
-    y: T,
+struct Point(x: T, y: T) where T
+
+fn identity(x: T): T where T {
+    return x;
 }
 
-fn identity<T>(x: T) -> T {
-    x
-}
-
-impl<T> Point<T> {
-    fn new(x: T, y: T) -> Point<T> {
-        Point { x, y }
+impl Point(T) where T {
+    fn new(x: T, y: T): Point(T) {
+        return Point(x = x, y = y);
     }
 }
 ```
@@ -447,13 +472,13 @@ Generic types become concrete through instantiation, either explicitly or throug
 
 ```spl
 // Explicit instantiation
-let p: Point<i32> = Point { x: 1, y: 2 };
+let p: Point(i32) = Point(x = 1, y = 2);
 
 // Inferred instantiation
-let q = Point { x: 1.0, y: 2.0 };  // Point<f64>
+let q = Point(x = 1.0, y = 2.0);  // Point(f64)
 
-// Turbofish syntax for function calls
-let id = identity::<i32>(42);
+// Explicit type application
+let id = identity(i32)(42);
 ```
 
 ### Monomorphization
@@ -461,12 +486,12 @@ let id = identity::<i32>(42);
 SPL uses monomorphization: each unique instantiation of a generic generates specialized code at compile time.
 
 ```spl
-Point<i32>   // Generates code for Point with i32 fields
-Point<f64>   // Generates separate code for Point with f64 fields
+Point(i32)   // Generates code for Point with i32 fields
+Point(f64)   // Generates separate code for Point with f64 fields
 ```
 
 This means:
-- `Point<i32>` and `Point<f64>` are completely distinct types
+- `Point(i32)` and `Point(f64)` are completely distinct types
 - No runtime overhead for generics
 - Code size increases with more instantiations
 
@@ -475,24 +500,24 @@ This means:
 Within an `impl` block, `Self` refers to the implementing type.
 
 ```spl
-impl<T> Point<T> {
-    fn origin() -> Self {
-        Self { x: 0, y: 0 }  // Self = Point<T>
+impl Point(T) where T {
+    fn origin(): Self {
+        return Self(x = 0, y = 0);  // Self = Point(T)
     }
 
-    fn clone(&self) -> Self {
-        Self { x: self.x, y: self.y }
+    fn clone(&self): Self {
+        return Self(x = self.x, y = self.y);
     }
 }
 ```
 
-`Self` is equivalent to the full type path with its type parameters (`Point<T>` in the example above).
+`Self` is equivalent to the full type path with its type parameters (`Point(T)` in the example above).
 
 ---
 
 ## 7. Type Coercions
 
-SPL distinguishes between implicit coercions (automatic) and explicit casts (using `as`).
+SPL distinguishes between implicit coercions (automatic) and explicit conversions (using methods).
 
 ### Implicit Coercions
 
@@ -521,32 +546,43 @@ let y: i64 = x;    // ERROR: no implicit conversion
 let y: i64 = x as i64;  // OK: explicit cast
 ```
 
-### Explicit Casts (`as`)
+### Explicit Conversions (Methods)
 
-The `as` operator performs explicit type conversions.
+SPL uses methods for explicit type conversions instead of a cast operator. This makes the intent clear and prevents accidental lossy conversions.
 
-**Numeric casts**:
+**Conversion Methods**:
 
-| Cast | Behavior |
-|------|----------|
-| Smaller → Larger int | Zero/sign extension |
-| Larger → Smaller int | Truncation |
-| Int → Float | Closest representable value |
-| Float → Int | Truncation toward zero |
-| Float → Float | Precision change |
+| Method | Behavior |
+|--------|----------|
+| `.widen()` | Safe widening (infers target type) |
+| `.truncate()` | Explicit lossy truncation |
+| `.saturate()` | Clamp to target type's range |
+| `.try_into()` | Fallible conversion returning `Option` |
+| `.reinterpret()` | Bit reinterpretation |
 
 ```spl
 let a: i32 = 1000;
-let b: i64 = a as i64;     // Sign extension: 1000
-let c: i8 = a as i8;       // Truncation: -24 (overflow)
-let d: f64 = a as f64;     // 1000.0
-let e: i32 = 3.7 as i32;   // 3 (truncation toward zero)
-let f: f32 = 1.5f64 as f32; // Precision loss possible
+let b: i64 = a.widen();           // Sign extension: 1000
+let c: i8 = a.truncate();         // Explicit truncation: -24
+let d: i8 = a.saturate();         // Clamped to 127
+let e: Option(i8) = a.try_into(); // None (out of range)
+let f: f64 = a.widen();           // 1000.0
+
+let g: f64 = 3.7;
+let h: i32 = g.truncate();        // 3 (truncation toward zero)
+let i: u32 = a.reinterpret();     // Bit reinterpretation
 ```
 
-**Other casts** (future features):
-- Pointer casts (in unsafe context)
-- Reference to raw pointer
+**Integer Overflow:**
+All integer operations trap on overflow by default. Use explicit methods for wrapping or saturating arithmetic:
+
+```spl
+let x: u8 = 255;
+// let y = x + 1;              // Panic: overflow!
+let y = x.wrapping_add(1);     // 0 (wraps)
+let z = x.saturating_add(1);   // 255 (saturates)
+let w = x.checked_add(1);      // None
+```
 
 ---
 
@@ -710,29 +746,26 @@ fn example_references() {
 ### Generic Types
 
 ```spl
-struct Pair<T, U> {
-    first: T,
-    second: U,
-}
+struct Pair(first: T, second: U) where T, U
 
-impl<T, U> Pair<T, U> {
-    fn new(first: T, second: U) -> Self {
-        Self { first, second }
+impl Pair(T, U) where T, U {
+    fn new(first: T, second: U): Self {
+        return Self(first = first, second = second);
     }
 
-    fn swap(self) -> Pair<U, T> {
-        Pair {
-            first: self.second,
-            second: self.first,
-        }
+    fn swap(self): Pair(U, T) {
+        return Pair(
+            first = self.second,
+            second = self.first,
+        );
     }
 }
 
 fn example_generics() {
-    let p1 = Pair::new(1, "hello");      // Pair<i32, &str>
-    let p2 = Pair::new(3.14, true);      // Pair<f64, bool>
-    let p3: Pair<i64, i64> = Pair::new(1, 2);  // Explicit types
-    let swapped = p1.swap();             // Pair<&str, i32>
+    let p1 = Pair.new(1, "hello");           // Pair(i32, &str)
+    let p2 = Pair.new(3.14, true);           // Pair(f64, bool)
+    let p3: Pair(i64, i64) = Pair.new(1, 2); // Explicit types
+    let swapped = p1.swap();                 // Pair(&str, i32)
 }
 ```
 
@@ -747,11 +780,8 @@ fn example_inference() {
     // Context propagates type
     let bytes: [u8; 4] = [1, 2, 3, 4];  // Literals are u8
 
-    // Function return inference
-    fn compute() { 1 + 2 }  // Returns i32
-
     // Generic inference from usage
-    let mut v = Vec::new();
-    v.push(42);         // Now v: Vec<i32>
+    let mut v = Vec.new();
+    v.push(42);         // Now v: Vec(i32)
 }
 ```

@@ -37,7 +37,7 @@ Trailing commas are allowed in all comma-separated lists (Rust-style).
 ```ebnf
 Program = { Item } ;
 
-Item = [ Visibility ] ( FunctionDef | StructDef | ImplBlock | TypeAlias | UseDecl | ModuleDecl ) ;
+Item = [ Visibility ] ( FunctionDef | StructDef | EnumDef | TraitDef | ImplBlock | TypeAlias | UseDecl | ModuleDecl ) ;
 
 Visibility = "pub" [ "(" VisibilityScope ")" ] ;
 
@@ -130,13 +130,125 @@ struct Point(pub x: f64, pub y: f64)
 struct Container(items: Vec(T)) where T: Clone
 ```
 
+### Enum Definitions
+
+```ebnf
+(* Enums use parentheses for variants, consistent with struct syntax *)
+EnumDef = "enum" IDENTIFIER "(" [ VariantList ] ")" [ WhereClause ] ;
+
+VariantList = Variant { "," Variant } [ "," ] ;
+
+(* Variants can be unit, tuple-style, or struct-style *)
+Variant = IDENTIFIER [ "(" VariantFields ")" ] ;
+
+(* Type-only = tuple variant, with : = named fields *)
+VariantFields = FieldList           (* named fields: x: i32, y: i32 *)
+              | TypeList ;          (* tuple fields: i32, String *)
+```
+
+**Examples:**
+
+```spl
+// Simple enum
+enum Color(Red, Green, Blue)
+
+// Enum with data
+enum Option(T)(
+    Some(T),
+    None,
+) where T
+
+// Enum with named fields in variants
+enum Message(
+    Quit,
+    Move(x: i32, y: i32),     // named fields
+    Write(String),             // tuple variant
+    ChangeColor(u8, u8, u8),   // tuple variant
+)
+
+// Result type
+enum Result(T, E)(
+    Ok(T),
+    Err(E),
+) where T, E
+```
+
+### Trait Definitions
+
+```ebnf
+(* Traits use braces for their body *)
+TraitDef = "trait" IDENTIFIER [ WhereClause ] "{" { TraitItem } "}" ;
+
+TraitItem = [ "pub" ] ( TraitMethod | AssociatedType ) ;
+
+TraitMethod = "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ WhereClause ] ( ";" | Block ) ;
+
+AssociatedType = "type" IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] ";" ;
+```
+
+**Examples:**
+
+```spl
+// Simple trait
+trait Clone {
+    fn clone(&self): Self;
+}
+
+// Trait with associated type
+trait Iterator {
+    type Item;
+    fn next(&mut self): Option(Self.Item);
+}
+
+// Trait with default implementation
+trait Default {
+    fn default(): Self;
+}
+
+// Trait with bounds
+trait Numeric: Add + Sub + Mul + Div {
+    fn zero(): Self;
+    fn one(): Self;
+}
+```
+
 ### Implementation Blocks
 
 ```ebnf
 (* Impl blocks use parentheses for generic args *)
-ImplBlock = "impl" TypePath [ GenericArgs ] [ WhereClause ] "{" { ImplItem } "}" ;
+(* Inherent impl: impl Type { ... } *)
+(* Trait impl: impl Trait for Type { ... } *)
+ImplBlock = "impl" [ TypePath "for" ] TypePath [ GenericArgs ] [ WhereClause ] "{" { ImplItem } "}" ;
 
 ImplItem = [ "pub" ] FunctionDef ;
+```
+
+**Examples:**
+
+```spl
+// Inherent implementation
+impl Point {
+    pub fn new(x: f64, y: f64): Point {
+        return Point(x = x, y = y);
+    }
+}
+
+// Trait implementation
+impl Clone for Point {
+    fn clone(&self): Self {
+        return Self(x = self.x, y = self.y);
+    }
+}
+
+// Generic trait implementation
+impl Clone for Option(T) where T: Clone {
+    fn clone(&self): Self {
+        return match self {
+            Some(v) => Some(v.clone()),
+            None => None,
+        };
+    }
+}
 ```
 
 **Examples:**
@@ -348,9 +460,10 @@ Expressions are defined using layered production rules that encode operator prec
 | 7          | `..`                         | Left          | RangeExpr          |
 | 8          | `+` `-`                      | Left          | AdditiveExpr       |
 | 9          | `*` `/` `%`                  | Left          | MultiplicativeExpr |
-| 10         | `as`                         | Left          | CastExpr           |
-| 11         | `!` `-` `&` (unary)          | Right         | UnaryExpr          |
-| 12 (highest)| `.` `()` `[]` `[:]`         | Left          | PostfixExpr        |
+| 10         | `!` `-` `&` (unary)          | Right         | UnaryExpr          |
+| 11 (highest)| `.` `()` `[]` `[:]` `?`     | Left          | PostfixExpr        |
+
+Note: Type conversions use methods (`.widen()`, `.truncate()`, `.try_into()`) rather than a cast operator.
 
 ### Expression Grammar
 
@@ -376,10 +489,7 @@ RangeExpr = AdditiveExpr [ ".." [ AdditiveExpr ] ] ;
 
 AdditiveExpr = MultiplicativeExpr { ( "+" | "-" ) MultiplicativeExpr } ;
 
-MultiplicativeExpr = CastExpr { ( "*" | "/" | "%" ) CastExpr } ;
-
-(* Cast only allows safe conversions *)
-CastExpr = UnaryExpr { "as" Type } ;
+MultiplicativeExpr = UnaryExpr { ( "*" | "/" | "%" ) UnaryExpr } ;
 
 UnaryExpr = ( "!" | "-" | "&" [ "mut" ] ) UnaryExpr
           | PostfixExpr ;
@@ -391,7 +501,8 @@ PostfixOp = "." IDENTIFIER [ GenericArgs ]                   (* field or associa
           | "." IDENTIFIER [ GenericArgs ] "(" [ ArgList ] ")" (* method call *)
           | "(" [ ArgList ] ")"                               (* function call *)
           | "[" Expression "]"                                (* index *)
-          | "[" SliceExpr "]" ;                               (* slice *)
+          | "[" SliceExpr "]"                                 (* slice *)
+          | "?" ;                                             (* error propagation *)
 
 SliceExpr = [ Expression ] ":" [ Expression | "$" ] ;
 
@@ -691,9 +802,8 @@ From lowest to highest precedence:
 | 7    | Range          | `..`                           | Left  | `0..10`                   |
 | 8    | Additive       | `+` `-`                        | Left  | `a + b - c`               |
 | 9    | Multiplicative | `*` `/` `%`                    | Left  | `a * b / c`               |
-| 10   | Cast           | `as`                           | Left  | `x as i32 as f64`         |
-| 11   | Unary          | `!` `-` `&` `&mut`             | Right | `!&mut x`                 |
-| 12   | Postfix        | `.` `()` `[]` `[:]`            | Left  | `a.b().c[0]`              |
+| 10   | Unary          | `!` `-` `&` `&mut`             | Right | `!&mut x`                 |
+| 11   | Postfix        | `.` `()` `[]` `[:]` `?`        | Left  | `a.b()?.c[0]`             |
 
 ---
 
@@ -874,7 +984,7 @@ fn main() {
 
     // Expressions and operators
     let value = 10 + 5 * 2;             // 20 (multiplicative binds tighter)
-    let cast = 65 as f64;               // Type cast (safe only)
+    let widened = 65.widen();           // Type conversion via method
     let reference = &mut origin;        // Mutable reference
     let indexed = [1, 2, 3][0];         // Array indexing
     let range = 0..100;                 // Range
@@ -929,7 +1039,7 @@ impl Point(T) where T {
 
 | Category    | Key Productions                                                     |
 |-------------|---------------------------------------------------------------------|
-| Program     | `Program`, `Item`, `FunctionDef`, `StructDef`, `WhereClause`        |
+| Program     | `Program`, `Item`, `FunctionDef`, `StructDef`, `EnumDef`, `TraitDef`|
 | Modules     | `UseDecl`, `UsePath`, `UseTree`, `ModuleDecl`                       |
 | Types       | `Type`, `ReferenceType`, `ArrayType`, `FnPointerType`, `GenericArgs`|
 | Statements  | `Block`, `Statement`, `LetStatement`                                |

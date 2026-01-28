@@ -9,16 +9,17 @@ SPL's memory model provides:
 - **Ownership**: Every value has a single owner
 - **Move semantics**: Values are moved by default on assignment
 - **Copy types**: Small, trivially-copyable types are copied implicitly
-- **Borrowing**: References provide temporary access without ownership transfer
+- **Second-class references**: References can only be function parameters, never stored or returned
 - **No garbage collector** (v1): Memory is managed through ownership and scoping
+- **Panic = abort**: No unwinding, panics terminate the program immediately
 
 ### Design Philosophy
 
 SPL's memory model is designed to be:
 
 1. **Safe by default**: Prevent use-after-free, double-free, and data races at compile time
-2. **Zero-cost abstractions**: No runtime overhead for ownership tracking
-3. **Extensible**: Core semantics support future memory management strategies
+2. **Simple**: Second-class references eliminate lifetime complexity
+3. **Zero-cost abstractions**: No runtime overhead for ownership tracking
 4. **Predictable**: Clear rules for when memory is allocated and freed
 
 ---
@@ -148,16 +149,38 @@ let s2 = s1.clone();  // Explicit deep copy
 
 ---
 
-## 3. Borrowing
+## 3. Second-Class References
 
-Borrowing allows temporary access to a value without taking ownership.
+SPL uses **second-class references**: references can only be function parameters, never stored in structs or returned from functions. This dramatically simplifies the borrow checker and eliminates the need for lifetime annotations.
+
+### The Second-Class Rule
+
+```spl
+// OK: Reference as function parameter
+fn process(data: &str) {
+    println(data);
+}
+
+// NOT ALLOWED: Cannot return a reference
+// fn get_ref(s: &str): &str { return s; }
+
+// NOT ALLOWED: Cannot store a reference in a struct
+// struct Parser { input: &str }
+```
+
+### Why Second-Class References?
+
+1. **No lifetime annotations**: Lifetimes are always local to a function
+2. **Simpler borrow checker**: No inference across function boundaries
+3. **Easier to learn**: References are just a calling convention
+4. **Interior iteration**: Use generators/coroutines instead of iterators holding references
 
 ### Reference Types
 
-| Reference | Alias | Mutate | Lifetime |
-|-----------|-------|--------|----------|
-| `&T` | Many allowed | No | Must not outlive referent |
-| `&mut T` | Exclusive | Yes | Must not outlive referent |
+| Reference | Alias | Mutate |
+|-----------|-------|--------|
+| `&T` | Many allowed | No |
+| `&mut T` | Exclusive | Yes |
 
 ### Creating References
 
@@ -251,32 +274,23 @@ let mr = &mut x;  // OK: no conflict with r
 *mr = 100;
 ```
 
-### Lifetime Inference (v1)
+### No Lifetime Annotations
 
-In v1, SPL infers lifetimes within function boundaries. Lifetime annotations are not required:
+Because references are second-class (parameter-only), SPL does not need lifetime annotations. The borrow checker only needs to verify that:
+
+1. References don't escape the function (can't return or store them)
+2. Borrowing rules are followed within the function body
 
 ```spl
-// Compiler infers that returned reference lives as long as input
-fn first(slice: &[i32]) -> &i32 {
-    &slice[0]
+// This is the only valid pattern for references:
+fn process(data: &[i32]) {
+    // Use data within function body
+    for item in data {
+        println(item);
+    }
 }
-
-// Compiler infers struct reference lifetime
-struct Parser {
-    input: &str,
-}
-
-fn new_parser(input: &str) -> Parser {
-    Parser { input }
-}
+// Reference 'data' is gone after function returns
 ```
-
-The compiler applies these inference rules:
-
-1. Each input reference gets a distinct inferred lifetime
-2. If there's exactly one input reference, output references share its lifetime
-3. If there's a `&self` or `&mut self`, output references share its lifetime
-4. Otherwise, if ambiguous, a compile error is raised
 
 ---
 
@@ -419,25 +433,27 @@ unsafe {
 
 SPL's memory model is designed to support multiple memory management strategies in future versions.
 
-### 8.1 Lifetime Annotations
+### 8.1 Interior Iteration with Generators
 
-Full Rust-style lifetime annotations for complex borrowing patterns:
+SPL will use generators/coroutines for iteration, avoiding the need for iterator objects that hold references:
 
 ```spl
-// Explicit lifetime parameter
-fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
-    if x.len() > y.len() { x } else { y }
+// Generator-based iteration (future syntax)
+gen fn iterate(vec: &Vec(T)): T where T {
+    for i in 0..vec.len() {
+        yield vec[i];
+    }
 }
 
-// Struct with lifetime
-struct Parser<'a> {
-    input: &'a str,
+// Usage
+for item in iterate(&my_vec) {
+    process(item);
 }
 
-// Multiple lifetimes
-fn complex<'a, 'b>(x: &'a str, y: &'b str) -> &'a str {
-    x
-}
+// Or with method syntax
+my_vec.each(|item| {
+    process(item);
+});
 ```
 
 ### 8.2 Region-Based Memory
@@ -576,9 +592,12 @@ fn batch_process(items: &[Item]) {
 |--------|----------|
 | Default semantics | Move |
 | Copy types | Primitives, opt-in for structs |
+| References | Second-class (parameters only) |
 | Borrowing | `&T` (shared) and `&mut T` (exclusive) |
-| Lifetime inference | Within function scope |
+| Lifetimes | No annotations needed |
 | Drop | Automatic at scope end |
+| Panic | Abort only (no unwinding) |
+| Overflow | Always trap |
 | Unsafe | Planned (not in v1) |
 
 ### Key Guarantees
@@ -588,14 +607,16 @@ fn batch_process(items: &[Item]) {
 3. **No data races**: Borrowing rules prevent concurrent mutation
 4. **No null pointers**: References are always valid (Option for nullable)
 5. **No uninitialized memory**: All values must be initialized
+6. **No reference escapes**: References cannot outlive their scope
+7. **No silent overflow**: Integer operations trap on overflow
 
 ### Extension Path
 
 SPL v1 establishes a foundation that can be extended with:
-- Full lifetime annotations for complex patterns
 - Multiple memory strategies (GC, arenas, manual)
 - Allocator-aware types
 - Unsafe escape hatches for systems programming
+- First-class references (if needed for specific use cases)
 
 The core ownership and borrowing model remains stable while additional features layer on top.
 
@@ -668,28 +689,36 @@ fn example() {
 }
 ```
 
-### Returning References
+### Working Without Returned References
+
+Since references cannot be returned, use these patterns instead:
 
 ```spl
-// Return reference to input (lifetime inferred)
-fn first_word(s: &str) -> &str {
+// Instead of returning a reference, return an owned value
+fn first_word(s: &str): String {
     let bytes = s.as_bytes();
-    for (i, &byte) in bytes.iter().enumerate() {
+    for (i, byte) in bytes.enumerate() {
         if byte == b' ' {
-            return &s[0..i];
+            return s[0..i].to_string();
         }
     }
-    s
+    return s.to_string();
 }
 
-// Return reference to struct field
-struct Container {
-    data: Vec<i32>,
-}
+// Use interior iteration with callbacks
+struct Container(data: Vec(i32))
 
 impl Container {
-    fn first(&self) -> Option<&i32> {
-        self.data.first()
+    // Instead of returning &i32, use a callback
+    fn with_first(&self, f: fn(&i32)) {
+        if self.data.len() > 0 {
+            f(&self.data[0]);
+        }
+    }
+
+    // Or return an owned copy
+    fn first(&self): Option(i32) {
+        return self.data.first().copied();
     }
 }
 ```
