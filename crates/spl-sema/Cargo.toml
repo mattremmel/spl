@@ -1,0 +1,21 @@
+[package]
+name = "spl-sema"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+spl-lexer.workspace = true
+spl-syntax.workspace = true
+spl-ast.workspace = true
+spl-diagnostic.workspace = true
+lasso.workspace = true
+rowan.workspace = true
+rustc-hash.workspace = true
+
+[dev-dependencies]
+spl-parser.workspace = true
+expect-test.workspace = true
+pretty_assertions.workspace = true

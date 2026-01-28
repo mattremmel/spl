@@ -1,0 +1,15 @@
+[package]
+name = "spl-parser"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+spl-lexer.workspace = true
+spl-syntax.workspace = true
+rowan.workspace = true
+
+[dev-dependencies]
+expect-test.workspace = true

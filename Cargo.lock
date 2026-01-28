@@ -1031,6 +1031,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
+name = "spl-ast"
+version = "0.1.0"
+dependencies = [
+ "expect-test",
+ "rowan",
+ "spl-lexer",
+ "spl-parser",
+ "spl-syntax",
+]
+
+[[package]]
 name = "spl-compiler"
 version = "0.1.0"
 dependencies = [
@@ -1053,8 +1064,11 @@ dependencies = [
  "rowan",
  "rustc-hash 2.1.1",
  "serde",
+ "spl-ast",
  "spl-diagnostic",
  "spl-lexer",
+ "spl-parser",
+ "spl-sema",
  "spl-syntax",
  "target-lexicon",
  "thiserror",
@@ -1075,6 +1089,32 @@ version = "0.1.0"
 dependencies = [
  "logos",
  "pretty_assertions",
+]
+
+[[package]]
+name = "spl-parser"
+version = "0.1.0"
+dependencies = [
+ "expect-test",
+ "rowan",
+ "spl-lexer",
+ "spl-syntax",
+]
+
+[[package]]
+name = "spl-sema"
+version = "0.1.0"
+dependencies = [
+ "expect-test",
+ "lasso",
+ "pretty_assertions",
+ "rowan",
+ "rustc-hash 2.1.1",
+ "spl-ast",
+ "spl-diagnostic",
+ "spl-lexer",
+ "spl-parser",
+ "spl-syntax",
 ]
 
 [[package]]

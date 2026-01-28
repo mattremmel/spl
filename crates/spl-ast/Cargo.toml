@@ -1,0 +1,16 @@
+[package]
+name = "spl-ast"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+spl-lexer.workspace = true
+spl-syntax.workspace = true
+rowan.workspace = true
+
+[dev-dependencies]
+spl-parser.workspace = true
+expect-test.workspace = true
