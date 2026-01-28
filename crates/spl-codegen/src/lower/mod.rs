@@ -18,14 +18,14 @@ use cranelift_frontend::{FunctionBuilder, Variable};
 use cranelift_module::{DataDescription, DataId, Linkage, Module};
 use rustc_hash::FxHashMap;
 
-use crate::codegen::error::CodegenError;
-use crate::codegen::layout::LayoutComputer;
-use crate::codegen::registry::FunctionRegistry;
-use crate::codegen::{CodegenContext, LocalMap, LocalStorage, TypeMapper};
-use crate::mir::body::Body;
-use crate::mir::terminator::BasicBlock;
-use crate::mir::types::Local;
-use crate::sema::types::{TypeId, TypeInterner};
+use crate::error::CodegenError;
+use crate::layout::LayoutComputer;
+use crate::registry::FunctionRegistry;
+use crate::{CodegenContext, LocalMap, LocalStorage, TypeMapper};
+use spl_mir::body::Body;
+use spl_mir::terminator::BasicBlock;
+use spl_mir::types::Local;
+use spl_sema::types::{TypeId, TypeInterner};
 
 /// Lowers MIR to Cranelift IR.
 pub struct FunctionLowerer<'a> {

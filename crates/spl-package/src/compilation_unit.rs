@@ -4,9 +4,9 @@
 //! unit, tracking the origin of each item for error reporting.
 
 use super::{FileId, SourceMap};
-use crate::ast::{Item, SourceFile as AstSourceFile};
-use crate::parser::{Parse, ParseError, parse};
 use rowan::ast::AstNode;
+use spl_ast::{Item, SourceFile as AstSourceFile};
+use spl_parser::{Parse, ParseError, parse};
 
 /// Aggregated AST from multiple source files.
 pub struct CompilationUnit {

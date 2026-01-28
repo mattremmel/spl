@@ -1,5 +1,10 @@
 //! Expression type synthesis and checking.
 
+use crate::folding::{LoweredExpr, try_lower_expr};
+use crate::types::{InferKind, Mutability, PrimitiveKind, Type, TypeId};
+use crate::{SymbolKind, Visibility};
+use rowan::ast::AstNode;
+use rustc_hash::FxHashMap;
 use spl_ast::{
     ArrayExpr, BinExpr, BlockExpr, BreakExpr, CallExpr, CastExpr, ContinueExpr, Expr, FieldExpr,
     ForExpr, IfExpr, IndexExpr, IsExpr, LoopExpr, MatchExpr, ParenExpr, Pat, PathExpr, PrefixExpr,
@@ -7,12 +12,7 @@ use spl_ast::{
 };
 use spl_ast::{Block, LetStmt, LiteralExpr, Stmt};
 use spl_diagnostic::Diagnostic;
-use crate::folding::{LoweredExpr, try_lower_expr};
-use crate::types::{InferKind, Mutability, PrimitiveKind, Type, TypeId};
-use crate::{SymbolKind, Visibility};
 use spl_syntax::SyntaxKind;
-use rowan::ast::AstNode;
-use rustc_hash::FxHashMap;
 
 use super::UnifyError;
 use super::engine::{InferEngine, LoopKind};

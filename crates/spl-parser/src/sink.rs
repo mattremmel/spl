@@ -3,8 +3,8 @@
 use crate::Parse;
 use crate::event::{Event, ParseError};
 use crate::source::Token;
-use spl_syntax::Lang;
 use rowan::{GreenNodeBuilder, Language};
+use spl_syntax::Lang;
 
 /// Converts parse events into a syntax tree.
 pub struct Sink<'src> {

@@ -1,0 +1,17 @@
+[package]
+name = "spl-package"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+spl-lexer.workspace = true
+spl-parser.workspace = true
+spl-ast.workspace = true
+rowan.workspace = true
+rustc-hash.workspace = true
+
+[dev-dependencies]
+pretty_assertions.workspace = true

@@ -35,13 +35,13 @@
 //! an error type. This allows reporting multiple errors per compilation and
 //! enables downstream phases to handle partial results gracefully.
 
-use spl_diagnostic::Diagnostic;
-use spl_lexer::Span;
 use crate::SemanticContext;
 use crate::resolver::ResolveResult;
 use crate::symbol::DefId;
 use crate::types::{Mutability, PrimitiveKind, TypeId, TypeInterner, TypeVar};
 use rustc_hash::FxHashMap;
+use spl_diagnostic::Diagnostic;
+use spl_lexer::Span;
 
 use super::{InferResult, SelfParam};
 

@@ -105,8 +105,8 @@ pub use scope::{Scope, ScopeId, ScopeKind};
 pub use symbol::{DefId, Symbol, SymbolKind, Visibility};
 pub use types::{Mutability, PrimitiveKind, Type, TypeId, TypeInterner, TypeVar};
 
-use spl_lexer::Span;
 use lasso::{Rodeo, Spur};
+use spl_lexer::Span;
 
 pub use module::{ModuleId, ModuleTree, PathResolveError};
 

@@ -422,7 +422,7 @@ mod tests {
 
     #[test]
     fn test_link_error_to_codegen_error() {
-        use crate::codegen::CodegenError;
+        use crate::CodegenError;
 
         let link_err = LinkError::LinkerFailed {
             status: Some(1),

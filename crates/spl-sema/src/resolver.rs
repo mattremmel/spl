@@ -33,6 +33,9 @@
 //! multiple errors and enables partial analysis of valid code regions.
 
 use crate::DefId;
+use crate::{ScopeKind, SemanticContext, SymbolKind, Visibility, is_visible};
+use rowan::ast::AstNode;
+use rustc_hash::FxHashMap;
 use spl_ast::{
     Block, CallExpr, Expr, ExternBlock, ExternFn, FieldDef, FunctionDef, GenericParam, ImplBlock,
     Item, LetStmt, Name, NameRef, Param, ParamList, Pat, Path, PathSegment, SelfParam, SourceFile,
@@ -40,9 +43,6 @@ use spl_ast::{
 };
 use spl_diagnostic::Diagnostic;
 use spl_lexer::Span;
-use crate::{ScopeKind, SemanticContext, SymbolKind, Visibility, is_visible};
-use rowan::ast::AstNode;
-use rustc_hash::FxHashMap;
 
 /// Result of name resolution.
 pub struct ResolveResult {
@@ -1386,9 +1386,7 @@ impl<'ctx> Resolver<'ctx> {
                 let token = ident_pat
                     .name()
                     .and_then(|n| Self::get_ident_token(&n))
-                    .or_else(|| {
-                        spl_ast::token(ident_pat.syntax(), spl_syntax::SyntaxKind::IDENT)
-                    });
+                    .or_else(|| spl_ast::token(ident_pat.syntax(), spl_syntax::SyntaxKind::IDENT));
 
                 // Check if the pattern has a `mut` keyword (for nested patterns like `(mut a, b)`)
                 // or if the outer binding is mutable (for `let mut x = ...`)
@@ -1582,8 +1580,8 @@ pub fn resolve(source_file: &SourceFile) -> ResolveResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spl_parser::parse;
     use rowan::ast::AstNode;
+    use spl_parser::parse;
 
     fn check_ok(source: &str) {
         let parse = parse(source);

@@ -3,9 +3,9 @@
 //! This module defines the HIR pattern types which are arena-allocated
 //! and have bindings resolved to `DefIds`.
 
+use la_arena::Idx;
 use spl_lexer::Span;
 use spl_sema::{DefId, TypeId};
-use la_arena::Idx;
 
 /// A stable identifier for patterns in the HIR arena.
 pub type PatId = Idx<HirPat>;

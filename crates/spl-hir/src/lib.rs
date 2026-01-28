@@ -16,10 +16,10 @@ pub use item::{HirField, HirFunction, HirImpl, HirItem, HirParam, HirStruct, Hir
 pub use pat::{HirPat, HirPatKind, PatId};
 pub use stmt::{HirStmt, HirStmtKind, StmtId};
 
-use spl_lexer::Span;
-use spl_sema::{DefId, PrimitiveKind, TypeId, TypeInterner};
 use la_arena::Arena;
 use rustc_hash::FxHashMap;
+use spl_lexer::Span;
+use spl_sema::{DefId, PrimitiveKind, TypeId, TypeInterner};
 
 /// A lowered expression for literals that need folding.
 ///

@@ -15,24 +15,14 @@ spl-ast.workspace = true
 spl-sema.workspace = true
 spl-hir.workspace = true
 spl-mir.workspace = true
+spl-codegen.workspace = true
+spl-package.workspace = true
 ariadne.workspace = true
 la-arena.workspace = true
 lasso.workspace = true
 logos.workspace = true
 rowan.workspace = true
 rustc-hash.workspace = true
-
-# Cranelift code generation
-cranelift-codegen.workspace = true
-cranelift-frontend.workspace = true
-cranelift-module.workspace = true
-cranelift-jit.workspace = true
-cranelift-native.workspace = true
-cranelift-object.workspace = true
-target-lexicon.workspace = true
-
-# Object file parsing (for AOT validation)
-object.workspace = true
 
 # Stdlib embedding at compile time
 include_dir.workspace = true

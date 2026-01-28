@@ -3,10 +3,10 @@
 use cranelift_codegen::ir::{InstBuilder, MemFlags, TrapCode, Value};
 use cranelift_module::Module;
 
-use crate::codegen::error::{CodegenError, TRAP_ASSERT_FAILED, TRAP_RESUME, TRAP_UNREACHABLE};
-use crate::mir::operand::{Constant, Operand};
-use crate::mir::terminator::{Terminator, TerminatorKind};
-use crate::mir::types::Local;
+use crate::error::{CodegenError, TRAP_ASSERT_FAILED, TRAP_RESUME, TRAP_UNREACHABLE};
+use spl_mir::operand::{Constant, Operand};
+use spl_mir::terminator::{Terminator, TerminatorKind};
+use spl_mir::types::Local;
 
 use super::FunctionLowerer;
 
@@ -319,11 +319,8 @@ impl<'a> FunctionLowerer<'a> {
     }
 
     /// Compute the result type of a place after applying all projections.
-    fn compute_place_result_type(
-        &self,
-        place: &crate::mir::types::Place,
-    ) -> crate::sema::types::TypeId {
-        use crate::mir::types::PlaceElem;
+    fn compute_place_result_type(&self, place: &spl_mir::types::Place) -> spl_sema::types::TypeId {
+        use spl_mir::types::PlaceElem;
 
         let mut current_ty = self.body.local_decl(place.local).ty;
 

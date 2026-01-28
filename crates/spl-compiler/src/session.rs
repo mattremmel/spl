@@ -319,7 +319,8 @@ impl<'src> CompileSession<'src> {
         match crate::mir::lower_hir_to_mir(hir_db) {
             Ok(bodies) => self.mir = Some(bodies),
             Err(ice) => {
-                self.diagnostics.push(crate::Diagnostic::from(ice.to_diagnostic()));
+                self.diagnostics
+                    .push(crate::Diagnostic::from(ice.to_diagnostic()));
             }
         }
     }

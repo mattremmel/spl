@@ -14,15 +14,15 @@ mod unify;
 #[cfg(test)]
 mod tests;
 
-use spl_ast::SourceFile;
-use spl_diagnostic::Diagnostic;
-use spl_lexer::Span;
 use crate::SemanticContext;
 use crate::SymbolKind;
 use crate::resolver::ResolveResult;
 use crate::symbol::DefId;
 use crate::types::{InferKind, Mutability, Type, TypeId, TypeInterner};
 use rustc_hash::FxHashMap;
+use spl_ast::SourceFile;
+use spl_diagnostic::Diagnostic;
+use spl_lexer::Span;
 
 pub use engine::InferEngine;
 pub use engine::IntrinsicKind;

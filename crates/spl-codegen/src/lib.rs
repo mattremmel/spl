@@ -1,6 +1,6 @@
 //! Native code generation via Cranelift.
 //!
-//! This module provides JIT and AOT compilation support for SPL programs using
+//! This crate provides JIT and AOT compilation support for SPL programs using
 //! the Cranelift code generator. The compilation pipeline is:
 //!
 //! ```text
@@ -25,7 +25,7 @@
 //! For immediate execution:
 //!
 //! ```ignore
-//! use spl_compiler::codegen::CodegenContext;
+//! use spl_codegen::CodegenContext;
 //!
 //! let mut ctx = CodegenContext::new_jit()?;
 //! // ... declare and define functions ...
@@ -38,7 +38,7 @@
 //! For generating object files and executables:
 //!
 //! ```ignore
-//! use spl_compiler::codegen::{AotModuleCompiler, link_object_to_executable};
+//! use spl_codegen::{AotModuleCompiler, link_object_to_executable};
 //! use std::path::Path;
 //!
 //! // Compile to object file
@@ -77,9 +77,9 @@ pub use runtime::{Runtime, RuntimeFunction};
 pub use target::TargetConfig;
 pub use types::{AbiRepr, TypeMapper, build_signature};
 
-use crate::mir::Body;
-use crate::sema::symbol::DefId;
-use crate::sema::types::TypeInterner;
+use spl_mir::Body;
+use spl_sema::symbol::DefId;
+use spl_sema::types::TypeInterner;
 
 /// JIT compile MIR bodies and return a compiled module.
 ///
@@ -108,12 +108,12 @@ pub fn codegen_jit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mir::body::Body;
-    use crate::mir::operand::{Operand, Rvalue};
-    use crate::mir::statement::Statement;
-    use crate::mir::terminator::Terminator;
-    use crate::mir::types::{Local, Place};
-    use crate::sema::types::TypeId;
+    use spl_mir::body::Body;
+    use spl_mir::operand::{Operand, Rvalue};
+    use spl_mir::statement::Statement;
+    use spl_mir::terminator::Terminator;
+    use spl_mir::types::{Local, Place};
+    use spl_sema::types::TypeId;
 
     const DUMMY_TY: TypeId = TypeId::new(0);
 

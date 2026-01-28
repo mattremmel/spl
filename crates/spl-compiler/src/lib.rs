@@ -66,8 +66,12 @@
 //!   diagnose bugs, converting them to user-friendly diagnostics.
 
 pub mod ast;
-pub mod codegen;
 pub mod diagnostic;
+
+/// Native code generation via Cranelift.
+///
+/// This module re-exports the spl-codegen crate for JIT and AOT compilation.
+pub use spl_codegen as codegen;
 pub mod hir;
 pub mod lexer;
 pub mod mir;

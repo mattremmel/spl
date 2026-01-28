@@ -1,7 +1,7 @@
 //! Helper functions for type inference.
 
-use spl_lexer::Span;
 use crate::types::PrimitiveKind;
+use spl_lexer::Span;
 
 /// Convert a rowan `TextRange` to a Span.
 pub fn text_range_to_span(range: rowan::TextRange) -> Span {

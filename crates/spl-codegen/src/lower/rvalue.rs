@@ -4,11 +4,11 @@ use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::types;
 use cranelift_codegen::ir::{InstBuilder, MemFlags, Value};
 
-use crate::codegen::LocalStorage;
-use crate::codegen::error::CodegenError;
-use crate::mir::operand::{AggregateKind, BinOp, CastKind, Constant, Operand, Rvalue, UnOp};
-use crate::mir::types::{Local, Place, PlaceElem};
-use crate::sema::types::TypeId;
+use crate::LocalStorage;
+use crate::error::CodegenError;
+use spl_mir::operand::{AggregateKind, BinOp, CastKind, Constant, Operand, Rvalue, UnOp};
+use spl_mir::types::{Local, Place, PlaceElem};
+use spl_sema::types::TypeId;
 
 use super::FunctionLowerer;
 
@@ -92,7 +92,7 @@ impl<'a> FunctionLowerer<'a> {
                 let place_ty = self.local_spl_type(place.local);
                 let ty_data = self.types.get(place_ty);
                 match ty_data {
-                    crate::sema::types::Type::Array(_, count) => {
+                    spl_sema::types::Type::Array(_, count) => {
                         // Return the static array length as a pointer-sized constant
                         let ptr_ty = self.type_mapper.pointer_type();
                         Ok(Some(self.builder.ins().iconst(ptr_ty, *count as i64)))
@@ -892,20 +892,20 @@ impl<'a> FunctionLowerer<'a> {
                     .ok_or_else(|| CodegenError::Internal("projected compound type".to_string()))
             }
             Operand::Constant(constant) => match constant {
-                crate::mir::operand::Constant::Int(..) => Ok(types::I64),
-                crate::mir::operand::Constant::Bool(_) => Ok(types::I8),
-                crate::mir::operand::Constant::Float(..) => Ok(types::F64),
-                crate::mir::operand::Constant::Char(_) => Ok(types::I32),
-                crate::mir::operand::Constant::Unit => {
+                spl_mir::operand::Constant::Int(..) => Ok(types::I64),
+                spl_mir::operand::Constant::Bool(_) => Ok(types::I8),
+                spl_mir::operand::Constant::Float(..) => Ok(types::F64),
+                spl_mir::operand::Constant::Char(_) => Ok(types::I32),
+                spl_mir::operand::Constant::Unit => {
                     Err(CodegenError::Internal("unit constant".to_string()))
                 }
-                crate::mir::operand::Constant::String(_) => {
+                spl_mir::operand::Constant::String(_) => {
                     Err(CodegenError::Internal("string constant".to_string()))
                 }
-                crate::mir::operand::Constant::FnDef(_) => {
+                spl_mir::operand::Constant::FnDef(_) => {
                     Err(CodegenError::Internal("fn def constant".to_string()))
                 }
-                crate::mir::operand::Constant::Zeroed(ty) => self
+                spl_mir::operand::Constant::Zeroed(ty) => self
                     .type_mapper
                     .map_type(*ty, self.types)
                     .ok_or_else(|| CodegenError::Internal("ZST zeroed".to_string())),

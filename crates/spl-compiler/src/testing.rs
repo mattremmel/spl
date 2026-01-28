@@ -300,7 +300,11 @@ pub fn resolve_err(source: &str) -> Vec<Diagnostic> {
         "expected resolution errors but resolution succeeded"
     );
     // Convert spl_diagnostic::Diagnostic to crate::Diagnostic
-    result.diagnostics.into_iter().map(Diagnostic::from).collect()
+    result
+        .diagnostics
+        .into_iter()
+        .map(Diagnostic::from)
+        .collect()
 }
 
 /// Run type inference on source code and return the result, panicking on error.
@@ -362,7 +366,11 @@ pub fn infer_err(source: &str) -> Vec<Diagnostic> {
         "expected type inference errors but inference succeeded"
     );
     // Convert spl_diagnostic::Diagnostic to crate::Diagnostic
-    infer_result.diagnostics.into_iter().map(Diagnostic::from).collect()
+    infer_result
+        .diagnostics
+        .into_iter()
+        .map(Diagnostic::from)
+        .collect()
 }
 
 // ============================================================================

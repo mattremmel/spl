@@ -6,9 +6,7 @@ use spl_syntax::SyntaxKind;
 use super::{expr, expr_no_struct};
 
 /// Parse a block expression.
-pub(super) fn block_expr(
-    p: &mut Parser<'_>,
-) -> Result<Option<CompletedMarker>, crate::ParseError> {
+pub(super) fn block_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
     let m = p.start();
     if let Err(e) = block(p) {
         m.abandon(p);
@@ -23,9 +21,7 @@ pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseE
 }
 
 /// Parse an if expression.
-pub(super) fn if_expr(
-    p: &mut Parser<'_>,
-) -> Result<Option<CompletedMarker>, crate::ParseError> {
+pub(super) fn if_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::IF_KW) {
         m.abandon(p);
@@ -60,9 +56,7 @@ pub(super) fn if_expr(
 }
 
 /// Parse a while expression.
-pub(super) fn while_expr(
-    p: &mut Parser<'_>,
-) -> Result<Option<CompletedMarker>, crate::ParseError> {
+pub(super) fn while_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::WHILE_KW) {
         m.abandon(p);
@@ -80,9 +74,7 @@ pub(super) fn while_expr(
 }
 
 /// Parse a for expression.
-pub(super) fn for_expr(
-    p: &mut Parser<'_>,
-) -> Result<Option<CompletedMarker>, crate::ParseError> {
+pub(super) fn for_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
     let m = p.start();
     p.expect(SyntaxKind::FOR_KW)?;
 
@@ -111,9 +103,7 @@ pub(super) fn for_expr(
 }
 
 /// Parse a loop expression.
-pub(super) fn loop_expr(
-    p: &mut Parser<'_>,
-) -> Result<Option<CompletedMarker>, crate::ParseError> {
+pub(super) fn loop_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::LOOP_KW) {
         m.abandon(p);
@@ -127,9 +117,7 @@ pub(super) fn loop_expr(
 }
 
 /// Parse a break expression.
-pub(super) fn break_expr(
-    p: &mut Parser<'_>,
-) -> Result<Option<CompletedMarker>, crate::ParseError> {
+pub(super) fn break_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::BREAK_KW) {
         m.abandon(p);
@@ -187,9 +175,7 @@ pub(super) fn return_expr(
 }
 
 /// Parse a yield expression: `yield expr`
-pub(super) fn yield_expr(
-    p: &mut Parser<'_>,
-) -> Result<Option<CompletedMarker>, crate::ParseError> {
+pub(super) fn yield_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::YIELD_KW) {
         m.abandon(p);

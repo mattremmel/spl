@@ -1,7 +1,7 @@
 //! Typed AST wrappers over the untyped syntax tree.
 
-use spl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::ast::AstNode;
+use spl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 
 mod expressions;
 mod items;
@@ -125,8 +125,8 @@ pub fn token(parent: &SyntaxNode, kind: SyntaxKind) -> Option<SyntaxToken> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spl_parser::parse;
     use rowan::ast::AstNode;
+    use spl_parser::parse;
 
     #[test]
     fn ast_enum_can_cast() {

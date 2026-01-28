@@ -9,7 +9,7 @@ use cranelift_codegen::ir::StackSlot;
 use cranelift_frontend::Variable;
 use rustc_hash::FxHashMap;
 
-use crate::mir::Local;
+use spl_mir::Local;
 
 /// Storage location for a local variable in generated code.
 #[derive(Clone, Copy, Debug)]

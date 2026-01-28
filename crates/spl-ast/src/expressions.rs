@@ -1,8 +1,8 @@
 //! Expression AST nodes.
 
 use crate::{Block, NameRef, Pat, Type, ast_enum, ast_node, child, children, token};
-use spl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::ast::AstNode;
+use spl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 
 ast_node!(LiteralExpr);
 ast_node!(PathExpr);
@@ -481,8 +481,8 @@ impl MatchArm {
 mod tests {
     use super::*;
     use crate::SourceFile;
-    use spl_parser::parse;
     use rowan::ast::AstNode;
+    use spl_parser::parse;
 
     /// Helper to parse source and find first expression of a specific kind.
     fn parse_expr<E: AstNode<Language = spl_syntax::Lang>>(source: &str) -> E {

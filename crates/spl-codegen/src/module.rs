@@ -14,9 +14,9 @@ use super::registry::{FunctionInfo, FunctionRegistry};
 use super::runtime::{Runtime, intrinsics};
 use super::target::TargetConfig;
 use super::types::build_signature;
-use crate::mir::body::Body;
-use crate::sema::symbol::DefId;
-use crate::sema::types::TypeInterner;
+use spl_mir::body::Body;
+use spl_sema::symbol::DefId;
+use spl_sema::types::TypeInterner;
 
 /// A function definition with its `DefId` and MIR body.
 pub struct FunctionDef<'a> {
@@ -435,13 +435,13 @@ impl AotModuleCompiler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mir::body::Body;
-    use crate::mir::operand::{Constant, Operand, Rvalue};
-    use crate::mir::statement::Statement;
-    use crate::mir::terminator::{Terminator, TerminatorKind};
-    use crate::mir::types::{Local, Place};
-    use crate::sema::types::TypeId;
     use object::{Object, ObjectSymbol};
+    use spl_mir::body::Body;
+    use spl_mir::operand::{Constant, Operand, Rvalue};
+    use spl_mir::statement::Statement;
+    use spl_mir::terminator::{Terminator, TerminatorKind};
+    use spl_mir::types::{Local, Place};
+    use spl_sema::types::TypeId;
 
     const DUMMY_TY: TypeId = TypeId::new(0);
 
@@ -586,7 +586,7 @@ mod tests {
             .push_statement(Statement::assign(
                 Place::from_local(Local::RETURN_PLACE),
                 Rvalue::BinaryOp(
-                    crate::mir::operand::BinOp::Add,
+                    spl_mir::operand::BinOp::Add,
                     Operand::copy_local(Local(1)),
                     Operand::copy_local(Local(2)),
                 ),
@@ -728,7 +728,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            crate::codegen::error::RuntimeError::MainNotFound
+            crate::error::RuntimeError::MainNotFound
         ));
     }
 
@@ -777,7 +777,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            crate::codegen::error::RuntimeError::MainNotFound
+            crate::error::RuntimeError::MainNotFound
         ));
     }
 
@@ -1011,7 +1011,7 @@ mod tests {
         body.block_mut(entry).push_statement(Statement::assign(
             Place::from_local(Local::RETURN_PLACE),
             Rvalue::BinaryOp(
-                crate::mir::operand::BinOp::Add,
+                spl_mir::operand::BinOp::Add,
                 Operand::copy_local(Local(1)),
                 Operand::const_int(1, DUMMY_TY),
             ),
@@ -1030,7 +1030,7 @@ mod tests {
 
     #[test]
     fn aot_compile_conditionals() {
-        use crate::mir::terminator::SwitchTargets;
+        use spl_mir::terminator::SwitchTargets;
 
         let types = TypeInterner::new();
         let i32_ty = types.i32();

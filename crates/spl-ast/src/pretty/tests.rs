@@ -1,6 +1,6 @@
 use super::*;
-use spl_parser::parse;
 use expect_test::{Expect, expect};
+use spl_parser::parse;
 
 fn check(source: &str, expected: &Expect) {
     let parsed = parse(source);

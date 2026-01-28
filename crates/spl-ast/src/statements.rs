@@ -1,8 +1,8 @@
 //! Statement AST nodes.
 
 use crate::{Expr, Pat, Type, ast_enum, ast_node, child, children, token};
-use spl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::ast::AstNode;
+use spl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 
 ast_node!(Block);
 ast_node!(LetStmt);
@@ -73,8 +73,8 @@ impl ExprStmt {
 mod tests {
     use super::*;
     use crate::SourceFile;
-    use spl_parser::parse;
     use rowan::ast::AstNode;
+    use spl_parser::parse;
 
     /// Helper to parse source and get the function body block.
     fn parse_block(source: &str) -> Block {

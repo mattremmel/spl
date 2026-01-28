@@ -21,9 +21,9 @@
 //! #![exclude_module_if(prod, "dev_utils")]
 //! ```
 
-use crate::ast::{InnerAttribute, SourceFile};
-use crate::parser;
 use rowan::ast::AstNode;
+use spl_ast::{InnerAttribute, SourceFile};
+use spl_parser as parser;
 use std::fmt;
 
 /// Errors that can occur when parsing module directives.

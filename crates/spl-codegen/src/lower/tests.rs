@@ -4,17 +4,17 @@
 
 use std::mem;
 
-use crate::codegen::CodegenContext;
-use crate::codegen::module::{FunctionDef, ModuleCompiler};
-use crate::mir::body::{Body, LocalDecl};
-use crate::mir::operand::{
+use crate::CodegenContext;
+use crate::module::{FunctionDef, ModuleCompiler};
+use spl_mir::body::{Body, LocalDecl};
+use spl_mir::operand::{
     AggregateKind, BinOp, BorrowKind, CastKind, Constant, Operand, Rvalue, UnOp,
 };
-use crate::mir::statement::Statement;
-use crate::mir::terminator::{SwitchTargets, Terminator, TerminatorKind};
-use crate::mir::types::{FieldIdx, Local, Place, PlaceElem};
-use crate::sema::symbol::DefId;
-use crate::sema::types::{Mutability, PrimitiveKind, TypeId, TypeInterner};
+use spl_mir::statement::Statement;
+use spl_mir::terminator::{SwitchTargets, Terminator, TerminatorKind};
+use spl_mir::types::{FieldIdx, Local, Place, PlaceElem};
+use spl_sema::symbol::DefId;
+use spl_sema::types::{Mutability, PrimitiveKind, TypeId, TypeInterner};
 
 /// Dummy type ID for tests that don't need a real type.
 const DUMMY_TY: TypeId = TypeId::new(0);

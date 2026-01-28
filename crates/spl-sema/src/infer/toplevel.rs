@@ -1,11 +1,11 @@
 //! Top-level type inference for source files and functions.
 
-use spl_ast::{Expr, ExternFn, FunctionDef, Item, SourceFile, WhereClause};
-use spl_diagnostic::Diagnostic;
 use crate::symbol::DefId;
 use crate::types::{Mutability, PrimitiveKind, Type, TypeId};
 use rowan::ast::AstNode;
 use rustc_hash::FxHashSet;
+use spl_ast::{Expr, ExternFn, FunctionDef, Item, SourceFile, WhereClause};
+use spl_diagnostic::Diagnostic;
 
 use super::engine::{FnSignature, InferEngine, LoopKind, ParamInfo};
 use super::helpers::text_range_to_span;

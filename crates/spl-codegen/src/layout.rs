@@ -9,7 +9,7 @@
 
 use cranelift_codegen::ir::Type as ClifType;
 
-use crate::sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
+use spl_sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
 
 /// The memory layout of a type.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn pointer_layouts_64bit() {
         let mut interner = TypeInterner::new();
-        use crate::sema::types::Mutability;
+        use spl_sema::types::Mutability;
         let ref_ty = interner.mk_ref(Mutability::Shared, interner.i32());
 
         let computer = LayoutComputer::new(&interner, types::I64);
@@ -362,7 +362,7 @@ mod tests {
     #[test]
     fn pointer_layouts_32bit() {
         let mut interner = TypeInterner::new();
-        use crate::sema::types::Mutability;
+        use spl_sema::types::Mutability;
         let ref_ty = interner.mk_ref(Mutability::Shared, interner.i32());
 
         let computer = LayoutComputer::new(&interner, types::I32);
@@ -485,7 +485,7 @@ mod tests {
     #[test]
     fn pointee_type_lookup() {
         let mut interner = TypeInterner::new();
-        use crate::sema::types::Mutability;
+        use spl_sema::types::Mutability;
         let i32_ty = interner.i32();
         let ref_ty = interner.mk_ref(Mutability::Shared, i32_ty);
 

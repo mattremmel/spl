@@ -1042,37 +1042,51 @@ dependencies = [
 ]
 
 [[package]]
-name = "spl-compiler"
+name = "spl-codegen"
 version = "0.1.0"
 dependencies = [
- "ariadne",
  "cranelift-codegen",
  "cranelift-frontend",
  "cranelift-jit",
  "cranelift-module",
  "cranelift-native",
  "cranelift-object",
+ "object",
+ "pretty_assertions",
+ "rustc-hash 2.1.1",
+ "spl-diagnostic",
+ "spl-mir",
+ "spl-sema",
+ "target-lexicon",
+ "thiserror",
+]
+
+[[package]]
+name = "spl-compiler"
+version = "0.1.0"
+dependencies = [
+ "ariadne",
  "datatest-stable",
  "expect-test",
  "include_dir",
  "la-arena",
  "lasso",
  "logos",
- "object",
  "pretty_assertions",
  "proptest",
  "rowan",
  "rustc-hash 2.1.1",
  "serde",
  "spl-ast",
+ "spl-codegen",
  "spl-diagnostic",
  "spl-hir",
  "spl-lexer",
  "spl-mir",
+ "spl-package",
  "spl-parser",
  "spl-sema",
  "spl-syntax",
- "target-lexicon",
  "thiserror",
  "toml",
 ]
@@ -1113,6 +1127,18 @@ dependencies = [
  "spl-lexer",
  "spl-sema",
  "thiserror",
+]
+
+[[package]]
+name = "spl-package"
+version = "0.1.0"
+dependencies = [
+ "pretty_assertions",
+ "rowan",
+ "rustc-hash 2.1.1",
+ "spl-ast",
+ "spl-lexer",
+ "spl-parser",
 ]
 
 [[package]]

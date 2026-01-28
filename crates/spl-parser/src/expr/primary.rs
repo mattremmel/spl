@@ -52,9 +52,7 @@ pub(super) fn primary_expr(
 }
 
 /// Parse a match expression: `match expr { arms }`
-pub(super) fn match_expr(
-    p: &mut Parser<'_>,
-) -> Result<Option<CompletedMarker>, crate::ParseError> {
+pub(super) fn match_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::MATCH_KW) {
         m.abandon(p);
@@ -305,9 +303,7 @@ pub(super) fn paren_or_tuple_expr(
 }
 
 /// Parse an array expression.
-pub(super) fn array_expr(
-    p: &mut Parser<'_>,
-) -> Result<Option<CompletedMarker>, crate::ParseError> {
+pub(super) fn array_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::L_BRACKET) {
         m.abandon(p);

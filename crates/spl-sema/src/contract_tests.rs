@@ -104,11 +104,11 @@ mod tests {
     // =========================================================================
 
     mod type_inference {
-        use spl_ast::SourceFile;
-        use spl_parser::parse;
         use crate::infer::infer;
         use crate::resolver::resolve;
         use rowan::ast::AstNode;
+        use spl_ast::SourceFile;
+        use spl_parser::parse;
 
         #[test]
         fn unify_simple_types_no_cycle() {
@@ -250,10 +250,10 @@ mod tests {
     // =========================================================================
 
     mod resolver_contracts {
-        use spl_ast::SourceFile;
-        use spl_parser::parse;
         use crate::resolver::resolve;
         use rowan::ast::AstNode;
+        use spl_ast::SourceFile;
+        use spl_parser::parse;
 
         #[test]
         fn two_pass_forward_references() {
@@ -418,11 +418,11 @@ mod tests {
     // =========================================================================
 
     mod synth_contracts {
-        use spl_ast::SourceFile;
-        use spl_parser::parse;
         use crate::infer::infer;
         use crate::resolver::resolve;
         use rowan::ast::AstNode;
+        use spl_ast::SourceFile;
+        use spl_parser::parse;
 
         #[test]
         fn synth_array_returns_array_type() {
@@ -612,11 +612,11 @@ mod tests {
     // =========================================================================
 
     mod integration {
-        use spl_ast::SourceFile;
-        use spl_parser::parse;
         use crate::infer::infer;
         use crate::resolver::resolve;
         use rowan::ast::AstNode;
+        use spl_ast::SourceFile;
+        use spl_parser::parse;
 
         #[test]
         fn full_pipeline_comprehensive() {
@@ -964,11 +964,11 @@ mod tests {
     // =========================================================================
 
     mod user_facing_bounds_checks {
-        use spl_ast::SourceFile;
-        use spl_parser::parse;
         use crate::infer::infer;
         use crate::resolver::resolve;
         use rowan::ast::AstNode;
+        use spl_ast::SourceFile;
+        use spl_parser::parse;
 
         /// Out-of-bounds tuple field access emits a diagnostic, not a panic.
         ///

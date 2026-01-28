@@ -300,10 +300,7 @@ fn resolve_all_bodies(
 ///
 /// Takes the resolved package and produces type assignments for all expressions
 /// and bindings across all files.
-pub fn infer_package(
-    package: &Package,
-    resolve_result: &ResolveResult,
-) -> InferResult {
+pub fn infer_package(package: &Package, resolve_result: &ResolveResult) -> InferResult {
     let mut engine = InferEngine::new(resolve_result);
 
     // Phase 1: Collect signatures from ALL modules first

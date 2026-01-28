@@ -1,0 +1,31 @@
+[package]
+name = "spl-codegen"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+spl-mir.workspace = true
+spl-sema.workspace = true
+spl-diagnostic.workspace = true
+
+# Cranelift code generation
+cranelift-codegen.workspace = true
+cranelift-frontend.workspace = true
+cranelift-module.workspace = true
+cranelift-jit.workspace = true
+cranelift-native.workspace = true
+cranelift-object.workspace = true
+target-lexicon.workspace = true
+
+# Object file parsing (for AOT validation)
+object.workspace = true
+
+# Other dependencies
+rustc-hash.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+pretty_assertions.workspace = true

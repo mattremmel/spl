@@ -2,9 +2,9 @@
 
 use cranelift_codegen::ir::{InstBuilder, MemFlags};
 
-use crate::codegen::LocalStorage;
-use crate::codegen::error::CodegenError;
-use crate::mir::statement::{Statement, StatementKind};
+use crate::LocalStorage;
+use crate::error::CodegenError;
+use spl_mir::statement::{Statement, StatementKind};
 
 use super::FunctionLowerer;
 

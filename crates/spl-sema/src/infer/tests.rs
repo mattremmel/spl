@@ -3,11 +3,11 @@
 //! These tests are written first following TDD methodology.
 //! The implementation should make all these tests pass.
 
-use spl_ast::SourceFile;
-use spl_parser::parse;
 use crate::infer::infer;
 use crate::resolver::resolve;
 use rowan::ast::AstNode;
+use spl_ast::SourceFile;
+use spl_parser::parse;
 
 /// Parse source, run resolution, run inference, and verify the type of the first `let` binding.
 fn check(source: &str, expected: &str) {

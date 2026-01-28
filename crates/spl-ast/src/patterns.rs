@@ -153,8 +153,8 @@ impl RestPat {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spl_parser::parse;
     use rowan::ast::AstNode;
+    use spl_parser::parse;
 
     /// Helper to parse source and find first pattern of a specific kind.
     fn parse_pat<P: AstNode<Language = spl_syntax::Lang>>(source: &str) -> P {

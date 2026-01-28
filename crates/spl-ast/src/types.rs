@@ -83,8 +83,8 @@ impl PathType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spl_parser::parse;
     use rowan::ast::AstNode;
+    use spl_parser::parse;
 
     /// Helper to parse source and find first type of a specific kind.
     fn parse_type<T: AstNode<Language = spl_syntax::Lang>>(source: &str) -> T {

@@ -454,7 +454,7 @@ impl InlineMathIntrinsic {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::codegen::context::CodegenContext;
+    use crate::context::CodegenContext;
     use cranelift_codegen::ir::AbiParam;
     use std::f64::consts::PI;
     use std::mem;

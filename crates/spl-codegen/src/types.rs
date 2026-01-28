@@ -8,7 +8,7 @@ use cranelift_codegen::ir::AbiParam;
 use cranelift_codegen::ir::Type as ClifType;
 use cranelift_codegen::ir::types;
 
-use crate::sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
+use spl_sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
 
 /// How a type is represented at ABI boundaries.
 ///
@@ -209,7 +209,7 @@ impl TypeMapper {
 pub fn build_signature(
     call_conv: cranelift_codegen::isa::CallConv,
     type_mapper: &TypeMapper,
-    body: &crate::mir::body::Body,
+    body: &spl_mir::body::Body,
     types: &TypeInterner,
 ) -> cranelift_codegen::ir::Signature {
     let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
@@ -383,7 +383,7 @@ mod tests {
         let mapper = mapper_64();
         let mut interner = TypeInterner::new();
 
-        use crate::sema::types::Mutability;
+        use spl_sema::types::Mutability;
         let ref_ty = interner.mk_ref(Mutability::Shared, interner.i32());
         let mut_ref_ty = interner.mk_ref(Mutability::Mutable, interner.i32());
 
@@ -441,7 +441,7 @@ mod tests {
         let mapper = mapper_64();
         let mut interner = TypeInterner::new();
 
-        use crate::sema::DefId;
+        use spl_sema::DefId;
         let struct_ty = interner.mk_struct(DefId::new(0), vec![]);
         assert_eq!(mapper.map_type(struct_ty, &interner), None);
     }
@@ -697,7 +697,7 @@ mod tests {
         let mapper = mapper_64();
         let mut interner = TypeInterner::new();
 
-        use crate::sema::types::Mutability;
+        use spl_sema::types::Mutability;
         let ref_ty = interner.mk_ref(Mutability::Shared, interner.i32());
         assert!(!mapper.is_fat_pointer(ref_ty, &interner));
     }

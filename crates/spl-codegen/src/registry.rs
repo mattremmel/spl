@@ -6,7 +6,7 @@ use cranelift_codegen::ir::Signature;
 use cranelift_module::FuncId;
 use rustc_hash::FxHashMap;
 
-use crate::sema::symbol::DefId;
+use spl_sema::symbol::DefId;
 
 /// Information about a compiled function.
 #[derive(Clone, Debug)]

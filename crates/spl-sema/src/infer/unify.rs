@@ -789,13 +789,13 @@ impl<'a> InferEngine<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spl_ast::SourceFile;
-    use spl_parser::parse;
     use crate::infer::UnifyError;
     use crate::resolver::ResolveResult;
     use crate::resolver::resolve;
     use crate::symbol::DefId;
     use rowan::ast::AstNode;
+    use spl_ast::SourceFile;
+    use spl_parser::parse;
 
     /// Helper to create a minimal `ResolveResult` for testing.
     fn create_test_resolve_result() -> ResolveResult {

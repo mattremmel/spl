@@ -30,8 +30,8 @@
 //! The `is_mutable` flag tracks whether a binding was declared with `mut`.
 //! This is used by later phases to validate mutation and borrow checking.
 
-use spl_lexer::Span;
 use lasso::Spur;
+use spl_lexer::Span;
 
 use super::scope::ScopeId;
 

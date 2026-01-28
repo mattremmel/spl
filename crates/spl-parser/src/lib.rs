@@ -62,11 +62,11 @@ mod sink;
 mod source;
 mod stmt;
 
-use spl_lexer::{Lexer, SpannedToken};
-use spl_syntax::{SyntaxKind, SyntaxNode};
 use event::Event;
 use sink::Sink;
 use source::Source;
+use spl_lexer::{Lexer, SpannedToken};
+use spl_syntax::{SyntaxKind, SyntaxNode};
 
 pub use event::ParseError;
 

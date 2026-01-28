@@ -77,8 +77,8 @@ pub struct HirImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spl_sema::TypeInterner;
     use la_arena::Arena;
+    use spl_sema::TypeInterner;
 
     // =========================================================================
     // HirFunction Tests

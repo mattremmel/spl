@@ -288,9 +288,7 @@ fn opt_visibility(p: &mut Parser<'_>) -> Option<CompletedMarker> {
 /// Parse a function definition: `[attrs] [pub] fn name(params) [: Type] [where ...] { body }`
 ///
 /// Return type syntax: `fn foo(): i32 where T { ... }`
-pub(crate) fn function_def(
-    p: &mut Parser<'_>,
-) -> Result<CompletedMarker, crate::ParseError> {
+pub(crate) fn function_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
 
     // Optional attributes
@@ -624,10 +622,7 @@ fn paren_field_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseE
 }
 
 /// Parse a field in parenthesized struct: `[pub] name: Type` or `[pub] Type`
-fn paren_field_def(
-    p: &mut Parser<'_>,
-    index: u32,
-) -> Result<CompletedMarker, crate::ParseError> {
+fn paren_field_def(p: &mut Parser<'_>, index: u32) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
     opt_visibility(p);
 
@@ -803,9 +798,7 @@ fn visibility_lookahead_at(p: &mut Parser<'_>, start_offset: usize) -> usize {
 }
 
 /// Parse an extern block: `extern "ABI" { fn name(...); ... }`
-pub(crate) fn extern_block(
-    p: &mut Parser<'_>,
-) -> Result<CompletedMarker, crate::ParseError> {
+pub(crate) fn extern_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
 
     // extern keyword

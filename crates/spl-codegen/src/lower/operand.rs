@@ -3,11 +3,11 @@
 use cranelift_codegen::ir::types;
 use cranelift_codegen::ir::{InstBuilder, MemFlags, Value};
 
-use crate::codegen::LocalStorage;
-use crate::codegen::error::CodegenError;
-use crate::mir::operand::{Constant, Operand};
-use crate::mir::types::{Local, Place, PlaceElem};
-use crate::sema::types::TypeId;
+use crate::LocalStorage;
+use crate::error::CodegenError;
+use spl_mir::operand::{Constant, Operand};
+use spl_mir::types::{Local, Place, PlaceElem};
+use spl_sema::types::TypeId;
 
 use super::FunctionLowerer;
 

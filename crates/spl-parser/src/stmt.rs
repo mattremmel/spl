@@ -107,9 +107,7 @@ fn let_stmt(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
 }
 
 /// Parse a type annotation.
-pub(crate) fn type_annotation(
-    p: &mut Parser<'_>,
-) -> Result<CompletedMarker, crate::ParseError> {
+pub(crate) fn type_annotation(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
 
     // Never type: !

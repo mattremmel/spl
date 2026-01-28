@@ -2,9 +2,9 @@
 //!
 //! This module defines the HIR statement types which are arena-allocated.
 
+use la_arena::Idx;
 use spl_lexer::Span;
 use spl_sema::TypeId;
-use la_arena::Idx;
 
 use crate::{ExprId, PatId};
 
