@@ -52,6 +52,11 @@ self_only_used_in_recursion = "allow"
 map_unwrap_or = "allow"
 
 [workspace.dependencies]
+# Internal crates
+spl-lexer = { path = "crates/spl-lexer" }
+spl-diagnostic = { path = "crates/spl-diagnostic" }
+spl-syntax = { path = "crates/spl-syntax" }
+
 # Core dependencies
 ariadne = "0.5"
 la-arena = "0.3"

@@ -7,6 +7,9 @@ edition.workspace = true
 workspace = true
 
 [dependencies]
+spl-lexer.workspace = true
+spl-diagnostic.workspace = true
+spl-syntax.workspace = true
 ariadne.workspace = true
 la-arena.workspace = true
 lasso.workspace = true

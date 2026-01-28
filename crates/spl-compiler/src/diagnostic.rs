@@ -1,83 +1,20 @@
-//! Diagnostic reporting for SPL compiler errors.
+//! Re-exports from spl-diagnostic crate with compiler-internal extensions.
 //!
-//! Provides rich error messages with source code snippets using ariadne.
-//!
-//! # Example
-//!
-//! ```text
-//! Error: expected ';' after statement
-//!    ╭─[src/main.spl:3:15]
-//!    │
-//!  3 │     let x = 42
-//!    │               ┬
-//!    │               ╰── expected ';'
-//! ───╯
-//! ```
+//! This module re-exports all types from `spl_diagnostic` and adds
+//! compiler-internal functionality like `FileId` tracking.
 
-use crate::Span;
+pub use spl_diagnostic::{
+    DiagnosticRenderer, Label, RenderConfig, Severity, Span, render_diagnostic,
+    render_diagnostic_plain,
+};
+
 use crate::package::FileId;
-use ariadne::{Color, Config, Label as AriadneLabel, Report, ReportKind, Source};
-use std::io;
 use std::path::PathBuf;
 
-/// Severity level of a diagnostic.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Severity {
-    /// A fatal error that prevents compilation.
-    Error,
-    /// A warning that doesn't prevent compilation.
-    Warning,
-}
-
-impl Severity {
-    /// Returns the display name of the severity.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Severity::Error => "error",
-            Severity::Warning => "warning",
-        }
-    }
-
-    fn to_report_kind(self) -> ReportKind<'static> {
-        match self {
-            Severity::Error => ReportKind::Error,
-            Severity::Warning => ReportKind::Warning,
-        }
-    }
-}
-
-/// A labeled span within the source code.
-#[derive(Debug, Clone)]
-pub struct Label {
-    /// The byte range in the source.
-    pub span: Span,
-    /// The message to display under the span.
-    pub message: String,
-    /// Whether this is the primary label or secondary.
-    pub primary: bool,
-}
-
-impl Label {
-    /// Create a new primary label.
-    pub fn primary(span: Span, message: impl Into<String>) -> Self {
-        Self {
-            span,
-            message: message.into(),
-            primary: true,
-        }
-    }
-
-    /// Create a new secondary label.
-    pub fn secondary(span: Span, message: impl Into<String>) -> Self {
-        Self {
-            span,
-            message: message.into(),
-            primary: false,
-        }
-    }
-}
-
 /// A diagnostic message with source location and annotations.
+///
+/// This is an extension of `spl_diagnostic::Diagnostic` that adds
+/// compiler-internal `file_id` tracking for multi-file compilation.
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
     /// The severity of the diagnostic.
@@ -161,159 +98,41 @@ impl Diagnostic {
         self
     }
 
-    /// Build an ariadne Report from this diagnostic.
-    fn to_report<'a>(&self, file_name: &'a str, config: Config) -> Report<'a, (&'a str, Span)> {
-        // Find the primary span for the report header
-        let primary_span = self.labels.first().map(|l| l.span.clone()).unwrap_or(0..0);
+    /// Convert to the base `spl_diagnostic::Diagnostic` for rendering.
+    pub fn to_base(&self) -> spl_diagnostic::Diagnostic {
+        let mut base = if self.severity == Severity::Error {
+            spl_diagnostic::Diagnostic::error(&self.message)
+        } else {
+            spl_diagnostic::Diagnostic::warning(&self.message)
+        };
 
-        let mut builder = Report::build(self.severity.to_report_kind(), (file_name, primary_span))
-            .with_config(config)
-            .with_message(&self.message);
-
-        // Add labels
         for label in &self.labels {
-            let color = if label.primary {
-                match self.severity {
-                    Severity::Error => Color::Red,
-                    Severity::Warning => Color::Yellow,
-                }
+            if label.primary {
+                base = base.with_label(label.span.clone(), &label.message);
             } else {
-                Color::Blue
-            };
-
-            let ariadne_label =
-                AriadneLabel::new((file_name, label.span.clone())).with_color(color);
-
-            let ariadne_label = if label.message.is_empty() {
-                ariadne_label
-            } else {
-                ariadne_label.with_message(&label.message)
-            };
-
-            builder = builder.with_label(ariadne_label);
+                base = base.with_secondary_label(label.span.clone(), &label.message);
+            }
         }
 
-        // Add notes
         for note in &self.notes {
-            builder = builder.with_note(note);
+            base = base.with_note(note);
         }
 
-        // Add hints (ariadne calls these "help")
         for hint in &self.hints {
-            builder = builder.with_help(hint);
+            base = base.with_hint(hint);
         }
 
-        builder.finish()
-    }
-}
-
-/// Configuration for diagnostic rendering.
-#[derive(Debug, Clone)]
-pub struct RenderConfig {
-    /// Whether to use colors in output.
-    pub colors: bool,
-    /// The file name to display in the header.
-    pub file_name: Option<String>,
-}
-
-impl Default for RenderConfig {
-    fn default() -> Self {
-        Self {
-            colors: true,
-            file_name: None,
+        if let Some(path) = &self.file_path {
+            base = base.with_file_path(path.clone());
         }
+
+        base
     }
-}
-
-impl RenderConfig {
-    /// Create a new render config with colors enabled.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Set whether to use colors.
-    pub fn with_colors(mut self, colors: bool) -> Self {
-        self.colors = colors;
-        self
-    }
-
-    /// Set the file name to display.
-    pub fn with_file_name(mut self, name: impl Into<String>) -> Self {
-        self.file_name = Some(name.into());
-        self
-    }
-}
-
-/// Renderer for diagnostics.
-pub struct DiagnosticRenderer {
-    source: String,
-    config: RenderConfig,
-}
-
-impl DiagnosticRenderer {
-    /// Create a new diagnostic renderer.
-    pub fn new(source: &str, config: RenderConfig) -> Self {
-        Self {
-            source: source.to_string(),
-            config,
-        }
-    }
-
-    /// Render a diagnostic to a string.
-    pub fn render(&self, diagnostic: &Diagnostic) -> String {
-        let file_name = self.config.file_name.as_deref().unwrap_or("<input>");
-        let ariadne_config = Config::default().with_color(self.config.colors);
-        let report = diagnostic.to_report(file_name, ariadne_config);
-
-        let mut output = Vec::new();
-        report
-            .write((file_name, Source::from(&self.source)), &mut output)
-            .expect("failed to write diagnostic");
-
-        String::from_utf8(output).expect("diagnostic output is not valid UTF-8")
-    }
-
-    /// Write the diagnostic to stderr.
-    pub fn eprint(&self, diagnostic: &Diagnostic) -> io::Result<()> {
-        let file_name = self.config.file_name.as_deref().unwrap_or("<input>");
-        let ariadne_config = Config::default().with_color(self.config.colors);
-        let report = diagnostic.to_report(file_name, ariadne_config);
-
-        report
-            .eprint((file_name, Source::from(&self.source)))
-            .map_err(io::Error::other)
-    }
-}
-
-/// Convenience function to render a diagnostic with default settings.
-pub fn render_diagnostic(source: &str, diagnostic: &Diagnostic) -> String {
-    let renderer = DiagnosticRenderer::new(source, RenderConfig::default());
-    renderer.render(diagnostic)
-}
-
-/// Convenience function to render a diagnostic without colors.
-pub fn render_diagnostic_plain(source: &str, diagnostic: &Diagnostic) -> String {
-    let config = RenderConfig::new().with_colors(false);
-    let renderer = DiagnosticRenderer::new(source, config);
-    renderer.render(diagnostic)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use expect_test::{Expect, expect};
-
-    /// Helper to render a diagnostic and compare against expected output.
-    fn check(source: &str, diagnostic: &Diagnostic, expected: &Expect) {
-        let config = RenderConfig::new()
-            .with_colors(false)
-            .with_file_name("test.spl");
-        let renderer = DiagnosticRenderer::new(source, config);
-        let output = renderer.render(diagnostic);
-        expected.assert_eq(&output);
-    }
-
-    // === Diagnostic builder tests ===
 
     #[test]
     fn diagnostic_builder_error() {
@@ -347,231 +166,28 @@ mod tests {
         assert!(!diag.labels[1].primary);
     }
 
-    // === Render output tests with expect-test ===
-
     #[test]
-    fn render_simple_error() {
-        let source = "let x = ;";
-        let diag = Diagnostic::error("expected expression").with_label(8..9, "unexpected ';'");
+    fn diagnostic_to_base_conversion() {
+        let diag = Diagnostic::error("test error")
+            .with_label(0..5, "here")
+            .with_note("a note")
+            .with_hint("a hint")
+            .with_file_path("/test/file.spl");
 
-        check(
-            source,
-            &diag,
-            &expect![[r#"
-                Error: expected expression
-                   ╭─[ test.spl:1:9 ]
-                   │
-                 1 │ let x = ;
-                   │         ┬  
-                   │         ╰── unexpected ';'
-                ───╯
-            "#]],
-        );
+        let base = diag.to_base();
+        assert_eq!(base.severity, Severity::Error);
+        assert_eq!(base.message, "test error");
+        assert_eq!(base.labels.len(), 1);
+        assert_eq!(base.notes.len(), 1);
+        assert_eq!(base.hints.len(), 1);
+        assert!(base.file_path.is_some());
     }
-
-    #[test]
-    fn render_error_with_note() {
-        let source = "let 123 = x;";
-        let diag = Diagnostic::error("expected identifier")
-            .with_label(4..7, "invalid identifier")
-            .with_note("identifiers cannot start with a digit");
-
-        check(
-            source,
-            &diag,
-            &expect![[r#"
-                Error: expected identifier
-                   ╭─[ test.spl:1:5 ]
-                   │
-                 1 │ let 123 = x;
-                   │     ─┬─  
-                   │      ╰─── invalid identifier
-                   │ 
-                   │ Note: identifiers cannot start with a digit
-                ───╯
-            "#]],
-        );
-    }
-
-    #[test]
-    fn render_error_with_hint() {
-        let source = "let x = 42";
-        let diag = Diagnostic::error("missing semicolon")
-            .with_label(8..10, "expected ';' after this")
-            .with_hint("add ';' at the end of the statement");
-
-        check(
-            source,
-            &diag,
-            &expect![[r#"
-                Error: missing semicolon
-                   ╭─[ test.spl:1:9 ]
-                   │
-                 1 │ let x = 42
-                   │         ─┬  
-                   │          ╰── expected ';' after this
-                   │ 
-                   │ Help: add ';' at the end of the statement
-                ───╯
-            "#]],
-        );
-    }
-
-    #[test]
-    fn render_error_with_note_and_hint() {
-        let source = "fn foo {}";
-        let diag = Diagnostic::error("expected '(' after function name")
-            .with_label(7..8, "unexpected '{'")
-            .with_note("function definitions require a parameter list")
-            .with_hint("add '()' before '{'");
-
-        check(
-            source,
-            &diag,
-            &expect![[r#"
-                Error: expected '(' after function name
-                   ╭─[ test.spl:1:8 ]
-                   │
-                 1 │ fn foo {}
-                   │        ┬  
-                   │        ╰── unexpected '{'
-                   │ 
-                   │ Help: add '()' before '{'
-                   │ 
-                   │ Note: function definitions require a parameter list
-                ───╯
-            "#]],
-        );
-    }
-
-    #[test]
-    fn render_warning() {
-        let source = "let _unused = 42;";
-        let diag = Diagnostic::warning("unused variable '_unused'")
-            .with_label(4..11, "this variable is never used");
-
-        check(
-            source,
-            &diag,
-            &expect![[r#"
-                Warning: unused variable '_unused'
-                   ╭─[ test.spl:1:5 ]
-                   │
-                 1 │ let _unused = 42;
-                   │     ───┬───  
-                   │        ╰───── this variable is never used
-                ───╯
-            "#]],
-        );
-    }
-
-    #[test]
-    fn render_multiline_source() {
-        let source = "fn main() {\n    let x = ;\n}";
-        // ';' is at position 24 (after "fn main() {\n    let x = ")
-        let diag = Diagnostic::error("expected expression").with_label(24..25, "unexpected ';'");
-
-        check(
-            source,
-            &diag,
-            &expect![[r#"
-                Error: expected expression
-                   ╭─[ test.spl:2:13 ]
-                   │
-                 2 │     let x = ;
-                   │             ┬  
-                   │             ╰── unexpected ';'
-                ───╯
-            "#]],
-        );
-    }
-
-    #[test]
-    fn render_multiple_labels_same_line() {
-        let source = "let x = y + ;";
-        let diag = Diagnostic::error("expected expression after '+'")
-            .with_label(12..13, "unexpected ';'")
-            .with_secondary_label(10..11, "operator here");
-
-        check(
-            source,
-            &diag,
-            &expect![[r#"
-                Error: expected expression after '+'
-                   ╭─[ test.spl:1:13 ]
-                   │
-                 1 │ let x = y + ;
-                   │           ┬ ┬  
-                   │           ╰──── operator here
-                   │             │  
-                   │             ╰── unexpected ';'
-                ───╯
-            "#]],
-        );
-    }
-
-    #[test]
-    fn render_wide_underline() {
-        let source = "let very_long_identifier = something_else;";
-        let diag =
-            Diagnostic::error("unknown identifier").with_label(27..41, "not found in this scope");
-
-        check(
-            source,
-            &diag,
-            &expect![[r#"
-                Error: unknown identifier
-                   ╭─[ test.spl:1:28 ]
-                   │
-                 1 │ let very_long_identifier = something_else;
-                   │                            ───────┬──────  
-                   │                                   ╰──────── not found in this scope
-                ───╯
-            "#]],
-        );
-    }
-
-    #[test]
-    fn render_label_without_message() {
-        let source = "let x = ;";
-        let diag = Diagnostic::error("expected expression").with_label(8..9, "");
-
-        check(
-            source,
-            &diag,
-            &expect![[r#"
-                Error: expected expression
-                   ╭─[ test.spl:1:9 ]
-                   │
-                 1 │ let x = ;
-                ───╯
-            "#]],
-        );
-    }
-
-    #[test]
-    fn render_no_labels() {
-        let source = "let x = 42;";
-        let diag = Diagnostic::error("general error").with_note("this is a general note");
-
-        check(
-            source,
-            &diag,
-            &expect![[r#"
-                Error: general error
-            "#]],
-        );
-    }
-
-    // === Test severity display ===
 
     #[test]
     fn severity_as_str() {
         assert_eq!(Severity::Error.as_str(), "error");
         assert_eq!(Severity::Warning.as_str(), "warning");
     }
-
-    // === Test Label constructors ===
 
     #[test]
     fn label_primary() {
@@ -588,8 +204,6 @@ mod tests {
         assert_eq!(label.message, "test message");
         assert!(!label.primary);
     }
-
-    // === Test RenderConfig ===
 
     #[test]
     fn render_config_defaults() {

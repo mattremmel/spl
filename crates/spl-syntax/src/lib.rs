@@ -1,6 +1,6 @@
 //! Concrete syntax tree infrastructure for SPL.
 
-use crate::lexer::Token;
+use spl_lexer::Token;
 
 /// All syntax kinds (tokens + composite nodes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

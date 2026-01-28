@@ -1053,9 +1053,36 @@ dependencies = [
  "rowan",
  "rustc-hash 2.1.1",
  "serde",
+ "spl-diagnostic",
+ "spl-lexer",
+ "spl-syntax",
  "target-lexicon",
  "thiserror",
  "toml",
+]
+
+[[package]]
+name = "spl-diagnostic"
+version = "0.1.0"
+dependencies = [
+ "ariadne",
+ "expect-test",
+]
+
+[[package]]
+name = "spl-lexer"
+version = "0.1.0"
+dependencies = [
+ "logos",
+ "pretty_assertions",
+]
+
+[[package]]
+name = "spl-syntax"
+version = "0.1.0"
+dependencies = [
+ "rowan",
+ "spl-lexer",
 ]
 
 [[package]]
