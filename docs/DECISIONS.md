@@ -167,13 +167,17 @@ Panic = abort only. No unwinding, simpler implementation.
 ## 6. Advanced Features
 
 ### 6.1 Iteration
-Interior iteration with coroutines/generators. `for` loops desugar to generator-based iteration.
+Interior iteration with coroutines/generators. `for` loops desugar to generator-based iteration. See [ADR-011](designs/011-iteration-and-generators.md) for full design.
 
+**Phase 1 (Initial):** Generator methods that consume `self` for ergonomic chaining:
 ```spl
-my_vec.each(|item| {
-    process(item);
-});
+vec.iter()
+    .filter(|n| n > 0)
+    .map(|n| n * 2)
+    .for_each(|n| println(n));
 ```
+
+**Phase 2 (Future):** First-class references for `&self` receivers, enabling zero-copy borrowing iteration.
 
 ### 6.2 Tail Call Optimization
 Guaranteed for all tail calls.

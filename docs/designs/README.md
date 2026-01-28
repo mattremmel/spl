@@ -16,6 +16,7 @@ This directory contains Architecture Decision Records documenting key design dec
 | [008](008-rowan-based-cst.md) | Rowan-Based CST | Accepted | Lossless syntax trees |
 | [009](009-event-based-parser-recovery.md) | Event-Based Parser with Recovery | Accepted | Error recovery for IDE support |
 | [010](010-type-interning.md) | Type Interning | Accepted | Efficient type equality via interning |
+| [011](011-iteration-and-generators.md) | Iteration and Generators | Accepted | Interior iteration via generator methods |
 
 ## ADR Template
 
