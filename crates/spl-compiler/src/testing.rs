@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```
-//! use spl::testing::{compile_ok, compile_err, assert_has_error};
+//! use spl_compiler::testing::{compile_ok, compile_err, assert_has_error};
 //!
 //! // Test successful compilation
 //! let bodies = compile_ok("fn main() {}");
@@ -37,7 +37,7 @@ use rowan::ast::AstNode;
 /// # Example
 ///
 /// ```
-/// use spl::testing::compile_ok;
+/// use spl_compiler::testing::compile_ok;
 ///
 /// let bodies = compile_ok("fn main() {}");
 /// assert_eq!(bodies.len(), 1);
@@ -65,7 +65,7 @@ pub fn compile_ok(source: &str) -> Vec<mir::Body> {
 /// # Example
 ///
 /// ```
-/// use spl::testing::compile_err;
+/// use spl_compiler::testing::compile_err;
 ///
 /// let diags = compile_err("fn main() { x; }");
 /// assert!(!diags.is_empty());
@@ -88,7 +88,7 @@ pub fn compile_err(source: &str) -> Vec<Diagnostic> {
 /// # Example
 ///
 /// ```
-/// use spl::testing::session;
+/// use spl_compiler::testing::session;
 ///
 /// let mut sess = session("fn main() { let x = 1; }");
 ///
@@ -118,7 +118,7 @@ pub fn session(source: &str) -> CompileSession<'_> {
 /// # Example
 ///
 /// ```
-/// use spl::testing::span_to_source;
+/// use spl_compiler::testing::span_to_source;
 ///
 /// let source = "let x = 42;";
 /// let span = 4..5; // 'x'
@@ -137,7 +137,7 @@ pub fn span_to_source<'a>(source: &'a str, span: &Span) -> &'a str {
 /// # Example
 ///
 /// ```
-/// use spl::testing::assert_span_text;
+/// use spl_compiler::testing::assert_span_text;
 ///
 /// let source = "let x = 42;";
 /// let span = 4..5;
@@ -164,7 +164,7 @@ pub fn assert_span_text(source: &str, span: &Span, expected: &str) {
 /// # Example
 ///
 /// ```
-/// use spl::testing::{compile_err, format_diagnostics};
+/// use spl_compiler::testing::{compile_err, format_diagnostics};
 ///
 /// let diags = compile_err("fn main() { x; }");
 /// let formatted = format_diagnostics(&diags);
@@ -202,7 +202,7 @@ pub fn format_parse_errors(errors: &[ParseError]) -> String {
 /// # Example
 ///
 /// ```
-/// use spl::testing::parse_ok;
+/// use spl_compiler::testing::parse_ok;
 ///
 /// let ast = parse_ok("fn main() {}");
 /// assert!(ast.items().next().is_some());
@@ -228,7 +228,7 @@ pub fn parse_ok(source: &str) -> SourceFile {
 /// # Example
 ///
 /// ```
-/// use spl::testing::parse_err;
+/// use spl_compiler::testing::parse_err;
 ///
 /// let errors = parse_err("@@@ fn main() {}");
 /// assert!(!errors.is_empty());
@@ -250,7 +250,7 @@ pub fn parse_err(source: &str) -> Vec<ParseError> {
 /// # Example
 ///
 /// ```
-/// use spl::testing::resolve_ok;
+/// use spl_compiler::testing::resolve_ok;
 ///
 /// let result = resolve_ok("fn main() { let x = 1; x; }");
 /// assert!(!result.resolutions.is_empty());
@@ -277,7 +277,7 @@ pub fn resolve_ok(source: &str) -> ResolveResult {
 /// # Example
 ///
 /// ```
-/// use spl::testing::resolve_err;
+/// use spl_compiler::testing::resolve_err;
 ///
 /// let diags = resolve_err("fn main() { undefined; }");
 /// assert!(!diags.is_empty());
@@ -303,7 +303,7 @@ pub fn resolve_err(source: &str) -> Vec<Diagnostic> {
 /// # Example
 ///
 /// ```
-/// use spl::testing::infer_ok;
+/// use spl_compiler::testing::infer_ok;
 ///
 /// let result = infer_ok("fn main() { let x = 1; }");
 /// assert!(!result.binding_types.is_empty());
@@ -337,7 +337,7 @@ pub fn infer_ok(source: &str) -> InferResult {
 /// # Example
 ///
 /// ```
-/// use spl::testing::infer_err;
+/// use spl_compiler::testing::infer_err;
 ///
 /// let diags = infer_err("fn main() { let x: bool = 1; }");
 /// assert!(!diags.is_empty());
@@ -364,7 +364,7 @@ pub fn infer_err(source: &str) -> Vec<Diagnostic> {
 /// # Example
 ///
 /// ```
-/// use spl::testing::{compile_ok, MirInspector};
+/// use spl_compiler::testing::{compile_ok, MirInspector};
 ///
 /// let bodies = compile_ok("fn main() {} fn foo() {}");
 /// let inspector = MirInspector::new(&bodies);
@@ -553,7 +553,7 @@ impl<'a> BlockInspector<'a> {
 /// # Example
 ///
 /// ```
-/// use spl::testing::{compile_ok, format_mir};
+/// use spl_compiler::testing::{compile_ok, format_mir};
 ///
 /// let bodies = compile_ok("fn main() {}");
 /// let mir_text = format_mir(&bodies[0]);
@@ -569,7 +569,7 @@ pub fn format_mir(body: &Body) -> String {
 
 use crate::package::{Package, PackageError};
 
-/// Load a package from `tests/packages/`, panicking on error.
+/// Load a package from `tests/packages/` at the workspace root, panicking on error.
 ///
 /// # Panics
 ///
@@ -578,21 +578,21 @@ use crate::package::{Package, PackageError};
 /// # Example
 ///
 /// ```ignore
-/// use spl::testing::package_ok;
+/// use spl_compiler::testing::package_ok;
 ///
 /// let pkg = package_ok("simple");
 /// assert_eq!(pkg.file_count(), 2);
 /// ```
 pub fn package_ok(name: &str) -> Package {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+    // Navigate from crate dir to workspace root
     let path = std::path::Path::new(&manifest_dir)
-        .join("tests")
-        .join("packages")
+        .join("../../tests/packages")
         .join(name);
     Package::load(&path).unwrap_or_else(|e| panic!("failed to load package '{name}': {e:?}"))
 }
 
-/// Load a package from `tests/packages/` and expect it to fail.
+/// Load a package from `tests/packages/` at the workspace root and expect it to fail.
 ///
 /// # Panics
 ///
@@ -601,16 +601,16 @@ pub fn package_ok(name: &str) -> Package {
 /// # Example
 ///
 /// ```ignore
-/// use spl::testing::package_err;
+/// use spl_compiler::testing::package_err;
 ///
 /// let err = package_err("empty");
 /// // Error is returned for inspection
 /// ```
 pub fn package_err(name: &str) -> PackageError {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+    // Navigate from crate dir to workspace root
     let path = std::path::Path::new(&manifest_dir)
-        .join("tests")
-        .join("packages")
+        .join("../../tests/packages")
         .join(name);
     match Package::load(&path) {
         Ok(_) => panic!("expected package '{name}' to fail, but it succeeded"),
@@ -623,7 +623,7 @@ pub fn package_err(name: &str) -> PackageError {
 /// # Example
 ///
 /// ```ignore
-/// use spl::testing::load_package;
+/// use spl_compiler::testing::load_package;
 ///
 /// let result = load_package("path/to/package");
 /// assert!(result.is_ok());
@@ -639,7 +639,7 @@ pub fn load_package(path: impl AsRef<std::path::Path>) -> Result<Package, Packag
 /// # Example
 ///
 /// ```ignore
-/// use spl::testing::check_mir;
+/// use spl_compiler::testing::check_mir;
 /// use expect_test::expect;
 ///
 /// check_mir("fn main() {}", &expect![[r#"
@@ -670,7 +670,7 @@ pub fn check_mir(source: &str, expected: &expect_test::Expect) {
 /// # Example
 ///
 /// ```ignore
-/// use spl::testing::load_fixture;
+/// use spl_compiler::testing::load_fixture;
 ///
 /// let source = load_fixture("simple_main.spl");
 /// assert!(source.contains("fn main"));
@@ -694,7 +694,7 @@ pub fn load_fixture(name: &str) -> String {
 /// # Example
 ///
 /// ```ignore
-/// use spl::testing::compile_fixture_ok;
+/// use spl_compiler::testing::compile_fixture_ok;
 ///
 /// let bodies = compile_fixture_ok("simple_main.spl");
 /// assert_eq!(bodies.len(), 1);
@@ -713,7 +713,7 @@ pub fn compile_fixture_ok(name: &str) -> Vec<mir::Body> {
 /// # Example
 ///
 /// ```ignore
-/// use spl::testing::compile_fixture_err;
+/// use spl_compiler::testing::compile_fixture_err;
 ///
 /// let diags = compile_fixture_err("error_undefined.spl");
 /// assert!(!diags.is_empty());
@@ -732,7 +732,7 @@ pub fn compile_fixture_err(name: &str) -> Vec<Diagnostic> {
 /// # Example
 ///
 /// ```
-/// use spl::testing::{compile_err, assert_has_error};
+/// use spl_compiler::testing::{compile_err, assert_has_error};
 ///
 /// let diags = compile_err("fn main() { x; }");
 /// assert_has_error(&diags, "cannot find");
@@ -757,7 +757,7 @@ pub fn assert_has_error(diags: &[Diagnostic], pattern: &str) {
 /// # Example
 ///
 /// ```
-/// use spl::testing::{compile_err, assert_error_count};
+/// use spl_compiler::testing::{compile_err, assert_error_count};
 ///
 /// let diags = compile_err("fn main() { x; y; }");
 /// assert_error_count(&diags, 2);
@@ -822,7 +822,7 @@ pub struct TestDirectives {
 /// # Example
 ///
 /// ```
-/// use spl::testing::parse_directives;
+/// use spl_compiler::testing::parse_directives;
 ///
 /// let source = r#"
 /// //@ run-pass
@@ -898,7 +898,7 @@ pub struct ExecuteResult {
 /// # Example
 ///
 /// ```ignore
-/// use spl::testing::run_spl_test;
+/// use spl_compiler::testing::run_spl_test;
 /// use std::path::Path;
 ///
 /// let source = r#"

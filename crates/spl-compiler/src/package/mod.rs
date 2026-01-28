@@ -11,7 +11,7 @@
 //! # Basic Usage
 //!
 //! ```ignore
-//! use spl::package::Package;
+//! use spl_compiler::package::Package;
 //!
 //! let pkg = Package::load("path/to/package")?;
 //! for item in pkg.items() {
@@ -371,9 +371,9 @@ mod tests {
     use super::*;
 
     fn test_packages_path(name: &str) -> PathBuf {
+        // Navigate from crate dir to workspace root's tests/packages
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("packages")
+            .join("../../tests/packages")
             .join(name)
     }
 

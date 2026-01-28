@@ -4,8 +4,8 @@
 //! Each test package has a `_test.toml` file that specifies test expectations.
 
 use serde::Deserialize;
-use spl::Severity;
-use spl::package::Package;
+use spl_compiler::Severity;
+use spl_compiler::package::Package;
 use std::path::Path;
 
 /// Test configuration from `_test.toml`.
@@ -126,7 +126,7 @@ fn run_package_test(path: &Path) -> datatest_stable::Result<()> {
         }
         "compile-pass" => {
             let pkg = result.map_err(|e| format!("{}: load failed: {:?}", path.display(), e))?;
-            let compile_result = spl::package::compile_package(&pkg);
+            let compile_result = spl_compiler::package::compile_package(&pkg);
 
             if compile_result.is_err() {
                 let errors: Vec<_> = compile_result.errors().map(|d| d.message.clone()).collect();
@@ -140,7 +140,7 @@ fn run_package_test(path: &Path) -> datatest_stable::Result<()> {
         }
         "compile-fail" => {
             let pkg = result.map_err(|e| format!("{}: load failed: {:?}", path.display(), e))?;
-            let compile_result = spl::package::compile_package(&pkg);
+            let compile_result = spl_compiler::package::compile_package(&pkg);
 
             // Check that compilation actually failed
             let has_errors = compile_result
@@ -179,5 +179,5 @@ fn run_package_test(path: &Path) -> datatest_stable::Result<()> {
 }
 
 datatest_stable::harness! {
-    { test = run_package_test, root = "tests/packages", pattern = r".*/_test\.toml$" },
+    { test = run_package_test, root = "../../tests/packages", pattern = r".*/_test\.toml$" },
 }

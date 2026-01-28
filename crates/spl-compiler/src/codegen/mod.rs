@@ -25,7 +25,7 @@
 //! For immediate execution:
 //!
 //! ```ignore
-//! use spl::codegen::CodegenContext;
+//! use spl_compiler::codegen::CodegenContext;
 //!
 //! let mut ctx = CodegenContext::new_jit()?;
 //! // ... declare and define functions ...
@@ -38,7 +38,7 @@
 //! For generating object files and executables:
 //!
 //! ```ignore
-//! use spl::codegen::{AotModuleCompiler, link_object_to_executable};
+//! use spl_compiler::codegen::{AotModuleCompiler, link_object_to_executable};
 //! use std::path::Path;
 //!
 //! // Compile to object file

@@ -4,9 +4,9 @@
 //! using randomly generated test cases to find edge cases.
 
 use proptest::prelude::*;
-use spl::parser::parse;
+use spl_compiler::parser::parse;
 #[allow(unused_imports)]
-use spl::testing::{compile_ok, parse_ok};
+use spl_compiler::testing::{compile_ok, parse_ok};
 
 // =============================================================================
 // Generators for SPL Source Code
@@ -231,8 +231,8 @@ proptest! {
         let source = format!("fn main() {{ let x: i32 = {n}; }}");
 
         // Run type inference twice
-        let result1 = spl::compile(&source);
-        let result2 = spl::compile(&source);
+        let result1 = spl_compiler::compile(&source);
+        let result2 = spl_compiler::compile(&source);
 
         // Both should have same success/failure status
         prop_assert_eq!(result1.is_ok(), result2.is_ok());
@@ -294,8 +294,8 @@ proptest! {
     fn compilation_is_deterministic(n in 0i32..100) {
         let source = format!("fn main(): i32 {{ {n} }}");
 
-        let result1 = spl::compile(&source);
-        let result2 = spl::compile(&source);
+        let result1 = spl_compiler::compile(&source);
+        let result2 = spl_compiler::compile(&source);
 
         // Both should succeed or both should fail
         prop_assert_eq!(result1.is_ok(), result2.is_ok());
@@ -317,7 +317,7 @@ proptest! {
     #[test]
     fn empty_functions_compile(name in valid_ident()) {
         let source = format!("fn {name}() {{}}");
-        let result = spl::compile(&source);
+        let result = spl_compiler::compile(&source);
         prop_assert!(
             result.is_ok(),
             "Empty function failed to compile: {:?}",

@@ -5,7 +5,7 @@
 
 #[allow(unused_imports)]
 use expect_test::{Expect, expect};
-use spl::testing::{compile_err, format_diagnostics};
+use spl_compiler::testing::{compile_err, format_diagnostics};
 
 /// Check that the diagnostics for a source contain the expected patterns.
 #[allow(dead_code)]
@@ -348,13 +348,13 @@ fn for_loop_cannot_iterate_float_range() {
 #[test]
 fn float_range_without_iteration_is_valid() {
     // Float range as a value (not iterated) should compile
-    spl::testing::compile_ok("fn main() { let r = 0.0..10.0; }");
+    spl_compiler::testing::compile_ok("fn main() { let r = 0.0..10.0; }");
 }
 
 #[test]
 fn integer_range_iteration_is_valid() {
     // Integer range iteration should still work
-    spl::testing::compile_ok("fn main() { for x in 0..10 { } }");
+    spl_compiler::testing::compile_ok("fn main() { for x in 0..10 { } }");
 }
 
 // =============================================================================

@@ -155,7 +155,7 @@ impl CompileResult {
 /// # Example
 ///
 /// ```
-/// use spl::compile;
+/// use spl_compiler::compile;
 ///
 /// let result = compile("fn main() {}");
 /// if result.is_ok() {
@@ -278,7 +278,7 @@ pub enum JitError {
 /// # Example
 ///
 /// ```
-/// use spl::jit_execute;
+/// use spl_compiler::jit_execute;
 ///
 /// let result = jit_execute("fn main(): i32 { 42 }");
 /// assert_eq!(result.unwrap(), 42);
@@ -372,7 +372,7 @@ pub enum AotError {
 /// # Example
 ///
 /// ```
-/// use spl::compile_to_object;
+/// use spl_compiler::compile_to_object;
 ///
 /// let object_bytes = compile_to_object("fn main(): i32 { 42 }").unwrap();
 /// // object_bytes can be written to a .o file or linked into an executable
@@ -428,7 +428,7 @@ pub fn compile_to_object(source: &str) -> Result<Vec<u8>, AotError> {
 /// # Example
 ///
 /// ```ignore
-/// use spl::compile_and_link;
+/// use spl_compiler::compile_and_link;
 /// use std::path::Path;
 ///
 /// compile_and_link("fn main(): i32 { 42 }", Path::new("/tmp/my_program")).unwrap();
@@ -456,7 +456,7 @@ pub fn compile_and_link(source: &str, output: &Path) -> Result<(), AotError> {
 /// # Example
 ///
 /// ```ignore
-/// use spl::{compile_and_link_with_options, codegen::LinkOptions};
+/// use spl_compiler::{compile_and_link_with_options, codegen::LinkOptions};
 /// use std::path::Path;
 ///
 /// let options = LinkOptions::new()
@@ -500,7 +500,7 @@ pub enum ProjectError {
 /// # Example
 ///
 /// ```ignore
-/// use spl::compile_project;
+/// use spl_compiler::compile_project;
 /// use std::path::Path;
 ///
 /// let result = compile_project(Path::new("path/to/project"));
@@ -743,10 +743,17 @@ mod compile_tests {
 
     // === compile_project tests ===
 
+    fn test_packages_path(name: &str) -> std::path::PathBuf {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+        std::path::Path::new(&manifest_dir)
+            .join("../../tests/packages")
+            .join(name)
+    }
+
     #[test]
     fn compile_project_simple_package() {
-        let path = Path::new("tests/packages/simple");
-        let result = compile_project(path);
+        let path = test_packages_path("simple");
+        let result = compile_project(&path);
         assert!(result.is_ok(), "load error: {:?}", result.err());
         let result = result.unwrap();
         assert!(result.is_ok(), "compile errors: {:?}", result.diagnostics);
@@ -760,8 +767,8 @@ mod compile_tests {
 
     #[test]
     fn compile_project_cross_module_imports() {
-        let path = Path::new("tests/packages/imports_simple");
-        let result = compile_project(path).unwrap();
+        let path = test_packages_path("imports_simple");
+        let result = compile_project(&path).unwrap();
         assert!(result.is_ok(), "errors: {:?}", result.diagnostics);
     }
 
@@ -769,8 +776,8 @@ mod compile_tests {
 
     #[test]
     fn compile_project_diagnostics_have_file_path() {
-        let path = Path::new("tests/packages/error_in_submodule");
-        let result = compile_project(path).unwrap();
+        let path = test_packages_path("error_in_submodule");
+        let result = compile_project(&path).unwrap();
         assert!(result.is_err());
 
         let has_file_path = result.diagnostics.iter().any(|d| d.file_path.is_some());
@@ -783,8 +790,8 @@ mod compile_tests {
 
     #[test]
     fn compile_project_diagnostic_file_path_correct() {
-        let path = Path::new("tests/packages/error_in_submodule");
-        let result = compile_project(path).unwrap();
+        let path = test_packages_path("error_in_submodule");
+        let result = compile_project(&path).unwrap();
         assert!(result.is_err());
 
         // Error is in utils/utils.spl
@@ -809,8 +816,8 @@ mod compile_tests {
 
     #[test]
     fn compile_project_private_visibility_error() {
-        let path = Path::new("tests/packages/import_private");
-        let result = compile_project(path).unwrap();
+        let path = test_packages_path("import_private");
+        let result = compile_project(&path).unwrap();
         assert!(result.is_err());
         assert!(
             result
@@ -823,8 +830,8 @@ mod compile_tests {
 
     #[test]
     fn compile_project_missing_module_error() {
-        let path = Path::new("tests/packages/import_missing");
-        let result = compile_project(path).unwrap();
+        let path = test_packages_path("import_missing");
+        let result = compile_project(&path).unwrap();
         assert!(result.is_err());
         assert!(
             result

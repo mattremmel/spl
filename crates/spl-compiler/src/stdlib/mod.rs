@@ -18,8 +18,8 @@ use include_dir::{Dir, include_dir};
 use crate::Diagnostic;
 use crate::mir::Body;
 
-/// Embedded stdlib directory.
-static STDLIB_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/stdlib");
+/// Embedded stdlib directory (at workspace root).
+static STDLIB_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../stdlib");
 
 /// Compiled standard library definitions.
 ///
@@ -44,7 +44,7 @@ impl StdlibDefs {
     /// # Example
     ///
     /// ```
-    /// use spl::stdlib::StdlibDefs;
+    /// use spl_compiler::stdlib::StdlibDefs;
     ///
     /// let stdlib = StdlibDefs::compile();
     /// // Currently returns Ok with empty bodies since prelude is minimal

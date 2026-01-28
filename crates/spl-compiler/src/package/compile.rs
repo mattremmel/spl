@@ -43,7 +43,7 @@ fn attach_file_paths(diagnostics: &mut [Diagnostic], source_map: &SourceMap) {
 /// # Example
 ///
 /// ```ignore
-/// use spl::package::{Package, compile_package};
+/// use spl_compiler::package::{Package, compile_package};
 ///
 /// let pkg = Package::load("path/to/package")?;
 /// let result = compile_package(&pkg);

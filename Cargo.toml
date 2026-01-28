@@ -1,9 +1,12 @@
-[package]
-name = "spl"
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[lints.clippy]
+[workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 # Allow common pedantic lints that are too noisy
 module_name_repetitions = "allow"
@@ -48,7 +51,8 @@ self_only_used_in_recursion = "allow"
 # Map unwrap patterns - map/unwrap_or can be clearer and avoids borrow issues
 map_unwrap_or = "allow"
 
-[dependencies]
+[workspace.dependencies]
+# Core dependencies
 ariadne = "0.5"
 la-arena = "0.3"
 lasso = "0.7"
@@ -74,18 +78,10 @@ include_dir = "0.7"
 # Error handling
 thiserror = "2"
 
-[dev-dependencies]
+# Dev dependencies
 datatest-stable = { version = "0.3.3", features = ["include-dir"] }
 pretty_assertions = "1.4"
 expect-test = "1.5"
 toml = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 proptest = "1"
-
-[[test]]
-name = "stdlib_tests"
-harness = false
-
-[[test]]
-name = "package_tests"
-harness = false

@@ -7,7 +7,7 @@
 //! control test behavior. See `spl::testing::TestDirectives` for details.
 
 use datatest_stable::include_dir;
-use spl::testing::run_spl_test;
+use spl_compiler::testing::run_spl_test;
 use std::path::Path;
 
 /// Run a single SPL test file.
@@ -20,5 +20,5 @@ fn run_test(path: &Path, contents: String) -> datatest_stable::Result<()> {
 }
 
 datatest_stable::harness! {
-    { test = run_test, root = include_dir!("tests/stdlib"), pattern = r".*\.spl$" },
+    { test = run_test, root = include_dir!("$CARGO_MANIFEST_DIR/../../tests/stdlib"), pattern = r".*\.spl$" },
 }

@@ -351,7 +351,7 @@ impl<'a> LexResult<'a> {
 /// # Example
 ///
 /// ```
-/// use spl::lexer::{lex_all, Token, LexErrorKind};
+/// use spl_compiler::lexer::{lex_all, Token, LexErrorKind};
 ///
 /// let result = lex_all("let x = @;");
 /// assert!(result.has_errors());

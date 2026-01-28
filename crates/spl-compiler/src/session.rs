@@ -9,7 +9,7 @@
 //! # Example
 //!
 //! ```
-//! use spl::session::CompileSession;
+//! use spl_compiler::session::CompileSession;
 //!
 //! let mut session = CompileSession::new("fn main() {}");
 //!

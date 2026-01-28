@@ -2,7 +2,7 @@
 //!
 //! These tests verify the full compilation pipeline from source to MIR.
 
-use spl::testing::{
+use spl_compiler::testing::{
     assert_error_count, assert_has_error, compile_err, compile_ok, format_diagnostics,
 };
 

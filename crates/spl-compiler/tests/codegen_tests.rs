@@ -15,7 +15,7 @@ fn execute(source: &str) -> i32 {
     let exe_name = format!("spl_codegen_test_{}_{}", std::process::id(), counter);
     let exe_path = temp_dir.join(exe_name);
 
-    spl::compile_and_link(source, &exe_path).expect("compilation failed");
+    spl_compiler::compile_and_link(source, &exe_path).expect("compilation failed");
 
     let output = Command::new(&exe_path).output().expect("failed to execute");
 
