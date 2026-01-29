@@ -309,7 +309,7 @@ trait Clone {
 // Trait with associated type
 trait Iterator {
     type Item;
-    fn next(&mut self): Option(Self.Item);
+    fn next(&mut self): Option(T: Self.Item);
 }
 
 // Trait with default implementation

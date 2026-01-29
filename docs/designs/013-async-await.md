@@ -448,7 +448,7 @@ let (user, posts) = join(
 let handles = urls.iter()
     .map(|url| spawn(|| fetch(url)))
     .collect();
-let results: Vec(Response) = join_all(handles);
+let results: Vec(T: Response) = join_all(handles);
 ```
 
 #### Select: Wait for First
@@ -805,7 +805,7 @@ fn handle_connection(stream: TcpStream): () {
 ```spl
 use std.task.scope;
 
-fn process_batch(items: Vec(Item)): Vec(Result) {
+fn process_batch(items: Vec(T: Item)): Vec(T: Result) {
     return scope(|s| {
         let handles: Vec(_) = items.iter()
             .map(|item| s.spawn(|item| process(item)))
@@ -855,7 +855,7 @@ fn main(): () {
 use std.task.{spawn, select, sleep};
 use std.time.Duration;
 
-fn fetch_with_retry(url: String, max_retries: i32): Result(Response, Error) {
+fn fetch_with_retry(url: String, max_retries: i32): Result(T: Response, E: Error) {
     for attempt in 1..=max_retries {
         let result = select(
             spawn(|~url| fetch(url)),

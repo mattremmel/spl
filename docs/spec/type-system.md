@@ -677,7 +677,7 @@ trait Container {
 // Associated type: one Item type per Iterator impl
 trait Iterator {
     type Item;
-    fn next(&mut self): Option(Self.Item);
+    fn next(&mut self): Option(T: Self.Item);
 }
 
 // Type parameter: can implement Add for many RHS types

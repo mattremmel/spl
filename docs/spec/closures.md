@@ -123,6 +123,8 @@ The compiler infers escaping from:
 | Copy types | copy | copy | copy |
 | Non-Copy types | borrow | **move** | `~` = clone |
 
+> **Copy and Clone:** All `Copy` types implicitly implement `Clone` with trivial (bitwise) semantics. Using `~` on a Copy type is valid but redundant—it simply copies the value. A future lint may warn about unnecessary `~` on Copy types.
+
 ### The `~` Clone Modifier
 
 Use `~` before a capture to clone it at closure creation time:

@@ -238,7 +238,7 @@ trait Iterable {
 
 ## 3. Ranges
 
-Ranges are built-in types that implement `Iterable`.
+Ranges are built-in types that implement `Iterator`, yielding owned values.
 
 ### Range Types
 
@@ -277,22 +277,34 @@ let count = r.len();            // 10
 
 ### Range Implementation
 
+Ranges implement `Iterator` rather than `Iterable` because they produce computed values rather than references to stored data:
+
 ```spl
 struct Range(
     start: T,
     end: T,
 ) where T: Step
 
-impl Iterable for Range(T: T) where T: Step {
+impl Iterator for Range(T: T) where T: Step {
     type Item = T;
 
+    fn next(&mut self): Option(T: T) {
+        if self.start < self.end {
+            let value = self.start;
+            self.start = self.start.forward(1);
+            return Some(value);
+        }
+        return None;
+    }
+}
+
+impl Range(T: T) where T: Step {
     fn len(&self): usize {
         self.end.steps_from(&self.start)
     }
 
-    fn get(&self, index: usize): &T {
-        // Returns reference to computed value
-        // (implementation detail: may use internal buffer)
+    fn contains(&self, value: &T): bool {
+        value >= &self.start && value < &self.end
     }
 }
 ```
@@ -513,6 +525,8 @@ GeneratorDef = "gen" "fn" IDENTIFIER "(" [ ParamList ] ")" ":" Type [ WhereClaus
 
 YieldExpr = "yield" Expression ;
 ```
+
+> **Note:** The `: Type` in a generator signature specifies the **yield type** (the type of values produced by `yield`), not the return type. The actual return type is `Generator(T: Type)`. This follows the intuition that the type annotation describes "what you get" from calling the function—for generators, that's the yielded values.
 
 ### Basic Generators
 

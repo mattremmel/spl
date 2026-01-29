@@ -219,7 +219,7 @@ let add_x: fn(i32): i32 = |a| a + x;  // Capturing closure - also valid
 ### Example 1: Iterator Chains (Non-Escaping)
 
 ```spl
-fn process_users(users: Vec(User)): Vec(String) {
+fn process_users(users: Vec(T: User)): Vec(T: String) {
     let min_age = 18;
     let department = String.from("Engineering");
     let active_status = Status.Active;
@@ -245,7 +245,7 @@ fn process_users(users: Vec(User)): Vec(String) {
 
 ```spl
 // Function signature indicates non-escaping (closure called, not stored)
-fn with_retry(attempts: i32, f: fn(): Result(T, Error)): Result(T, Error) where T {
+fn with_retry(attempts: i32, f: fn(): Result(T: T, E: Error)): Result(T: T, E: Error) where T {
     for _ in 0..attempts {
         match f() {
             Ok(v) => { return Ok(v); },
@@ -255,7 +255,7 @@ fn with_retry(attempts: i32, f: fn(): Result(T, Error)): Result(T, Error) where 
     return Err(Error.new("Max retries exceeded"));
 }
 
-fn fetch_data(config: Config, client: HttpClient): Result(Data, Error) {
+fn fetch_data(config: Config, client: HttpClient): Result(T: Data, E: Error) {
     let url = config.endpoint.clone();
     let timeout = config.timeout;
 
@@ -280,7 +280,7 @@ struct Button(
     on_hover: fn(): (),
 )
 
-fn create_button(label: String, counter: Arc(Cell(i32))): Button {
+fn create_button(label: String, counter: Arc(T: Cell(T: i32))): Button {
     // Escaping closures: stored in struct
     // label moved (button owns it), counter must be cloned to share
     return Button(
@@ -301,7 +301,7 @@ fn create_button(label: String, counter: Arc(Cell(i32))): Button {
 ### Example 4: Thread Spawning (Escaping)
 
 ```spl
-fn parallel_process(data: Vec(Item), config: Arc(Config)): Vec(Handle) {
+fn parallel_process(data: Vec(T: Item), config: Arc(T: Config)): Vec(T: Handle) {
     let handles = Vec.new();
 
     for chunk in data.chunks(100) {
@@ -356,7 +356,7 @@ fn make_shared_counter(initial: i32): fn(): i32 {
 ### Example 6: Async Contexts (Escaping)
 
 ```spl
-async fn fetch_all(urls: Vec(String), client: Arc(HttpClient)): Vec(Response) {
+async fn fetch_all(urls: Vec(T: String), client: Arc(T: HttpClient)): Vec(T: Response) {
     let timeout = Duration.from_secs(30);  // Copy
 
     let futures = urls.iter()
@@ -401,8 +401,8 @@ fn create_processor(config: Config): fn(Vec(i32)): Vec(i32) {
 
 ```spl
 struct App(
-    state: Arc(Mutex(AppState)),
-    handlers: Vec(fn(Event): ()),
+    state: Arc(T: Mutex(T: AppState)),
+    handlers: Vec(T: fn(Event): ()),
 )
 
 impl App {
@@ -430,11 +430,11 @@ impl App {
 
 ```spl
 fn build_pipeline(
-    source: DataSource,       // Move-only, owns resource
-    transform: Arc(Transform), // Shared, clone
-    sink: Sink,               // Move-only, owns resource
-    logger: Arc(Logger),      // Shared, clone
-): fn(): Result((), Error) {
+    source: DataSource,          // Move-only, owns resource
+    transform: Arc(T: Transform), // Shared, clone
+    sink: Sink,                  // Move-only, owns resource
+    logger: Arc(T: Logger),      // Shared, clone
+): fn(): Result(T: (), E: Error) {
 
     // source and sink moved (pipeline owns them)
     // transform and logger cloned (might be shared elsewhere)
@@ -504,9 +504,9 @@ fn demonstrate_errors() {
 
 ```spl
 fn spawn_many_workers(
-    config: Arc(Config),
-    logger: Arc(Logger),
-    metrics: Arc(Metrics),
+    config: Arc(T: Config),
+    logger: Arc(T: Logger),
+    metrics: Arc(T: Metrics),
 ) {
     // Without shorthand - repetitive
     for i in 0..10 {
@@ -735,7 +735,7 @@ impl Fn(i32) for __Closure_1 {
 
 ## Open Questions
 
-1. **Syntax for type annotations in captures?** - `|~data: Arc(Data)|` or infer?
+1. **Syntax for type annotations in captures?** - `|~data: Arc(T: Data)|` or infer?
 2. **`clone` vs `~` consistency** - Should `clone |...|` use different keyword?
 3. **Async closure syntax** - `async |x| { ... }` or `|x| async { ... }`?
 

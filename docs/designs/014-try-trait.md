@@ -33,7 +33,7 @@ trait Try {
     type Residual;      // The early-return value type
 
     // Extract success value or return residual for early return
-    fn branch(self): ControlFlow(Self.Output, Self.Residual);
+    fn branch(self): ControlFlow(C: Self.Output, B: Self.Residual);
 
     // Construct success case from output
     fn from_output(output: Self.Output): Self;
@@ -56,11 +56,11 @@ enum ControlFlow{
 ### 2. Result Implementation
 
 ```spl
-impl Try for Result(T, E) where T, E {
+impl Try for Result(T: T, E: E) where T, E {
     type Output = T;
     type Residual = E;
 
-    fn branch(self): ControlFlow(T, E) {
+    fn branch(self): ControlFlow(C: T, B: E) {
         match self {
             Ok(v) => ControlFlow.Continue(v),
             Err(e) => ControlFlow.Break(e),
@@ -76,14 +76,14 @@ impl Try for Result(T, E) where T, E {
 Usage:
 
 ```spl
-fn read_config(path: &str): Result(Config, IoError) {
+fn read_config(path: &str): Result(T: Config, E: IoError) {
     let contents = fs.read_to_string(path)?;  // Early return on Err
     let config = parse_config(contents)?;     // Early return on Err
     return Ok(config);
 }
 ```
 
-The `?` operator on `Result(T, E)`:
+The `?` operator on `Result(T: T, E: E)`:
 1. Calls `branch()` on the value
 2. If `Continue(v)`, evaluates to `v`
 3. If `Break(e)`, returns `Err(e)` from the enclosing function
@@ -93,11 +93,11 @@ The `?` operator on `Result(T, E)`:
 ### 3. Option Implementation
 
 ```spl
-impl Try for Option(T) where T {
+impl Try for Option(T: T) where T {
     type Output = T;
     type Residual = ();      // None carries no information
 
-    fn branch(self): ControlFlow(T, ()) {
+    fn branch(self): ControlFlow(C: T, B: ()) {
         match self {
             Some(v) => ControlFlow.Continue(v),
             None => ControlFlow.Break(()),
@@ -113,7 +113,7 @@ impl Try for Option(T) where T {
 Usage in Option-returning functions:
 
 ```spl
-fn find_user_email(users: &[User], id: UserId): Option(String) {
+fn find_user_email(users: &[User], id: UserId): Option(T: String) {
     let user = users.iter().find(|u| u.id == id)?;  // Early return None
     let email = user.email.clone()?;                 // Early return None
     return Some(email);
@@ -135,7 +135,7 @@ trait FromResidual(R) {
 #### Option to Result Conversion
 
 ```spl
-impl FromResidual(()) for Result(T, E) where T, E: Default {
+impl FromResidual(R: ()) for Result(T: T, E: E) where T, E: Default {
     fn from_residual(residual: ()): Self {
         return Err(E.default());
     }
@@ -145,8 +145,8 @@ impl FromResidual(()) for Result(T, E) where T, E: Default {
 This allows:
 
 ```spl
-fn process(): Result(i32, Error) {
-    let x: Option(i32) = get_optional();
+fn process(): Result(T: i32, E: Error) {
+    let x: Option(T: i32) = get_optional();
     let value = x?;  // None becomes Err(Error.default())
     return Ok(value * 2);
 }
@@ -157,8 +157,8 @@ fn process(): Result(i32, Error) {
 For clarity and control over the error value, explicit conversion is preferred:
 
 ```spl
-fn process(): Result(i32, Error) {
-    let x: Option(i32) = get_optional();
+fn process(): Result(T: i32, E: Error) {
+    let x: Option(T: i32) = get_optional();
     let value = x.ok_or(Error.NotFound)?;  // Explicit error
     return Ok(value * 2);
 }
@@ -167,9 +167,9 @@ fn process(): Result(i32, Error) {
 **Standard conversion methods on Option:**
 
 ```spl
-impl Option(T) where T {
+impl Option(T: T) where T {
     // Convert to Result with explicit error
-    fn ok_or(self, err: E): Result(T, E) where E {
+    fn ok_or(self, err: E): Result(T: T, E: E) where E {
         match self {
             Some(v) => Ok(v),
             None => Err(err),
@@ -177,7 +177,7 @@ impl Option(T) where T {
     }
 
     // Convert to Result with lazy error
-    fn ok_or_else(self, f: fn(): E): Result(T, E) where E {
+    fn ok_or_else(self, f: fn(): E): Result(T: T, E: E) where E {
         match self {
             Some(v) => Ok(v),
             None => Err(f()),
@@ -191,7 +191,7 @@ impl Option(T) where T {
 For converting between Result types with different error types:
 
 ```spl
-impl FromResidual(E1) for Result(T, E2) where T, E1, E2, E2: From(E1) {
+impl FromResidual(R: E1) for Result(T: T, E: E2) where T, E1, E2, E2: From(T: E1) {
     fn from_residual(residual: E1): Self {
         return Err(E2.from(residual));
     }
@@ -201,7 +201,7 @@ impl FromResidual(E1) for Result(T, E2) where T, E1, E2, E2: From(E1) {
 This enables:
 
 ```spl
-fn read_and_parse(path: &str): Result(Config, AppError) {
+fn read_and_parse(path: &str): Result(T: Config, E: AppError) {
     // IoError automatically converts to AppError via From trait
     let contents = fs.read_to_string(path)?;
     // ParseError automatically converts to AppError via From trait
@@ -254,7 +254,7 @@ This is **not in the initial design** but reserved for future consideration.
 `?` in closures returns from the closure, not the enclosing function:
 
 ```spl
-fn process_items(items: Vec(Item)): Result(Vec(Output), Error) {
+fn process_items(items: Vec(T: Item)): Result(T: Vec(T: Output), E: Error) {
     // ? returns from the closure, which is correct here
     let outputs = items.iter()
         .map(|item| {
@@ -275,7 +275,7 @@ Since SPL has no function coloring (see ADR-013), `?` works identically in all c
 ```spl
 use std.task.spawn;
 
-fn fetch_data(url: String): Result(Data, Error) {
+fn fetch_data(url: String): Result(T: Data, E: Error) {
     let response = http.get(url)?;  // May yield, ? works normally
     let data = parse(response.body())?;
     return Ok(data);
@@ -308,11 +308,11 @@ enum Response{
     ServerError(u16, String),
 } where T
 
-impl Try for Response(T) where T {
+impl Try for Response(T: T) where T {
     type Output = T;
     type Residual = (u16, String, bool);  // (code, message, is_server_error)
 
-    fn branch(self): ControlFlow(T, Self.Residual) {
+    fn branch(self): ControlFlow(C: T, B: Self.Residual) {
         match self {
             Success(v) => ControlFlow.Continue(v),
             ClientError(code, msg) => ControlFlow.Break((code, msg, false)),
@@ -325,7 +325,7 @@ impl Try for Response(T) where T {
     }
 }
 
-impl FromResidual((u16, String, bool)) for Response(T) where T {
+impl FromResidual(R: (u16, String, bool)) for Response(T: T) where T {
     fn from_residual(r: (u16, String, bool)): Self {
         let (code, msg, is_server) = r;
         if is_server {
@@ -349,7 +349,7 @@ enum ControlFlow{
     Break(B),
 } where C, B
 
-impl ControlFlow(C, B) where C, B {
+impl ControlFlow(C: C, B: B) where C, B {
     fn is_continue(&self): bool {
         match self {
             Continue(_) => true,
@@ -361,14 +361,14 @@ impl ControlFlow(C, B) where C, B {
         return !self.is_continue();
     }
 
-    fn continue_value(self): Option(C) {
+    fn continue_value(self): Option(T: C) {
         match self {
             Continue(c) => Some(c),
             Break(_) => None,
         }
     }
 
-    fn break_value(self): Option(B) {
+    fn break_value(self): Option(T: B) {
         match self {
             Continue(_) => None,
             Break(b) => Some(b),
@@ -464,7 +464,7 @@ Rust developers will find the model familiar but simpler:
 ### Basic Error Propagation
 
 ```spl
-fn load_config(): Result(Config, Error) {
+fn load_config(): Result(T: Config, E: Error) {
     let path = env.var("CONFIG_PATH").ok_or(Error.MissingEnv("CONFIG_PATH"))?;
     let contents = fs.read_to_string(path)?;
     let config = toml.parse(contents)?;
@@ -481,19 +481,19 @@ enum AppError{
     Validation(String),
 }
 
-impl From(IoError) for AppError {
+impl From(T: IoError) for AppError {
     fn from(e: IoError): Self {
         return AppError.Io(e);
     }
 }
 
-impl From(ParseError) for AppError {
+impl From(T: ParseError) for AppError {
     fn from(e: ParseError): Self {
         return AppError.Parse(e);
     }
 }
 
-fn process_file(path: &str): Result(Data, AppError) {
+fn process_file(path: &str): Result(T: Data, E: AppError) {
     let contents = fs.read_to_string(path)?;  // IoError -> AppError
     let parsed = json.parse(contents)?;       // ParseError -> AppError
 
@@ -508,7 +508,7 @@ fn process_file(path: &str): Result(Data, AppError) {
 ### Option Chaining
 
 ```spl
-fn get_user_city(db: &Database, user_id: UserId): Option(String) {
+fn get_user_city(db: &Database, user_id: UserId): Option(T: String) {
     let user = db.find_user(user_id)?;
     let address = user.address?;
     let city = address.city.clone()?;
@@ -519,7 +519,7 @@ fn get_user_city(db: &Database, user_id: UserId): Option(String) {
 ### Mixing Option and Result
 
 ```spl
-fn fetch_optional_config(): Result(Config, Error) {
+fn fetch_optional_config(): Result(T: Config, E: Error) {
     // Explicit conversion preferred
     let path = env.var("OPTIONAL_CONFIG").ok_or(Error.NoConfig)?;
     let contents = fs.read_to_string(path)?;
@@ -536,7 +536,7 @@ fn fetch_optional_config(): Result(Config, Error) {
 3. **Error context** - Should there be built-in support for error context/wrapping (like anyhow's `.context()`)?
 4. **Optional chaining** - Should SPL add a separate optional chaining operator (like Kotlin/Swift/TypeScript `?.`) that short-circuits to `None` without early return? This would be distinct from the early-return `?` operator:
    - `get_user()?.address` — early return if None, then access field (current Rust-style behavior)
-   - `user&.address&.city` — optional chain returning `Option(String)`, no early return (hypothetical)
+   - `user&.address&.city` — optional chain returning `Option(T: String)`, no early return (hypothetical)
 
    These serve different use cases: `?` requires the enclosing function to return `Option`/`Result`, while optional chaining works anywhere and keeps the result wrapped.
 

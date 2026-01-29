@@ -103,7 +103,7 @@ trait Try {
     type Residual;   // The early-return value type
 
     /// Extract success value or return residual for early return
-    fn branch(self): ControlFlow(Self.Output, Self.Residual);
+    fn branch(self): ControlFlow(C: Self.Output, B: Self.Residual);
 
     /// Construct success case from output
     fn from_output(output: Self.Output): Self;

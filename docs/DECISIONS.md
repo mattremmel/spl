@@ -96,7 +96,7 @@ trait Clone {
 
 trait Iterator {
     type Item;
-    fn next(&mut self): Option(Self.Item);
+    fn next(&mut self): Option(T: Self.Item);
 }
 ```
 
@@ -234,7 +234,7 @@ let result = catch_panic(|| risky_operation());
 
 Follows Rust semantics: `expr?.field` means early-return then field access (parses as `(expr?).field`).
 
-**Future consideration:** Optional chaining (`?.` as single operator) for expressions like `user?.address?.city` that return `Option(String)` without early return. Would need distinct syntax to avoid confusion with early-return `?` (e.g., `&.` like Ruby).
+**Future consideration:** Optional chaining (`?.` as single operator) for expressions like `user?.address?.city` that return `Option(T: String)` without early return. Would need distinct syntax to avoid confusion with early-return `?` (e.g., `&.` like Ruby).
 
 ---
 
