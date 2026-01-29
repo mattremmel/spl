@@ -385,6 +385,8 @@ let r: &mut i32 = &mut x;
 | `&T`           | Many allowed | Read-only |
 | `&mut T`       | Exclusive | Read-write |
 
+**Second-Class References:** SPL uses second-class references—references can only be function parameters, never stored in structs or returned from functions. This eliminates the need for lifetime annotations. See [memory-model.md](memory-model.md) for full details.
+
 ---
 
 ## 5. Type Inference
@@ -1022,7 +1024,7 @@ fn greet(name: String, title: String?): () {
 
 **Nesting:** `T??` is `Option(T: Option(T: T))`, though this is rarely useful.
 
-**Note:** The `?` postfix on types (optional type) is distinct from the `?` postfix operator on expressions (try/early-return). They appear in different syntactic positions and do not conflict. See [error-handling.md](error-handling.md) for full `?` operator semantics.
+**Note:** The `?` postfix on types (optional type) is distinct from the `!` postfix operator on expressions (try/propagate). They appear in different syntactic positions and do not conflict. See [error-handling.md](error-handling.md) for full `!` operator semantics.
 
 ### Type Compatibility Rules
 

@@ -457,7 +457,11 @@ impl Format for Amount(T: EUR) {
 ### Type Aliases
 
 ```ebnf
-TypeAlias = "type" IDENTIFIER [ WhereClause ] "=" Type ";" ;
+TypeAlias = "type" IDENTIFIER [ GenericParams ] "=" Type [ WhereClause ] ";" ;
+
+GenericParams = "(" TypeParamList ")" ;
+
+TypeParamList = IDENTIFIER { "," IDENTIFIER } [ "," ] ;
 ```
 
 ### Use Declarations
@@ -783,8 +787,12 @@ AdditiveExpr = MultiplicativeExpr { ( "+" | "-" ) MultiplicativeExpr } ;
 
 MultiplicativeExpr = UnaryExpr { ( "*" | "/" | "%" ) UnaryExpr } ;
 
-UnaryExpr = ( "!" | "-" | "&" [ "mut" ] ) UnaryExpr
+UnaryExpr = ( "!" | "-" | "&" [ "mut" ] | "*" ) UnaryExpr
           | PostfixExpr ;
+
+(* Note: The `*` operator dereferences references (`*r = 10`). Raw pointers
+   (`Ptr`, `MutPtr`) use explicit `.read()` and `.write()` methods instead—
+   see unsafe.md. *)
 
 (* No :: for paths - use . only *)
 PostfixExpr = PrimaryExpr { PostfixOp } ;

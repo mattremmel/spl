@@ -114,10 +114,13 @@ Both uses share the concept of "yield a value from this block without returning 
 | `..`     | Exclusive range (end not included) |
 | `..=`    | Inclusive range (end included)    |
 | `$`      | Package root (paths) / array length (indexing/slices) |
-| `?`      | Error propagation (Try operator)  |
+| `!`      | Try/propagate (postfix)           |
+| `?.`     | Optional chaining                 |
+| `??`     | Nullish coalescing                |
 | `~`      | Clone capture (in closures)       |
 | `@`      | Force value argument (for uppercase identifiers) |
 | `^`      | Force type argument (for lowercase identifiers) |
+| `*`      | Dereference (for references)      |
 
 **Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses with named args: `Vec(T: i32)` instead of `Vec<i32>`. Package-root paths use `$`: `$.utils.helper`. The `as` keyword is used only for import renaming, not type casting (use methods like `.widen()`, `.truncate()` for conversions).
 
@@ -147,18 +150,19 @@ arr[1:$-1]   // All elements except first and last
 | Precedence | Operators                    | Associativity | Description |
 |------------|------------------------------|---------------|-------------|
 | 1 (lowest) | `=` `+=` `-=` `*=` `/=` `%=` | Right         | Assignment |
-| 2          | `\|\|`                       | Left          | Logical OR |
-| 3          | `&&`                         | Left          | Logical AND |
-| 4          | `is`                         | Left          | Pattern match |
-| 5          | `==` `!=`                    | Left          | Equality |
-| 6          | `<` `>` `<=` `>=`            | Left          | Comparison |
-| 7          | `..` `..=`                   | Left          | Range |
-| 8          | `+` `-`                      | Left          | Additive |
-| 9          | `*` `/` `%`                  | Left          | Multiplicative |
-| 10         | `!` `-` (unary) `&`          | Right         | Unary |
-| 11 (highest) | `.` `()` `[]` `?`          | Left          | Postfix |
+| 2          | `??`                         | Right         | Nullish coalescing |
+| 3          | `\|\|`                       | Left          | Logical OR |
+| 4          | `&&`                         | Left          | Logical AND |
+| 5          | `is`                         | Left          | Pattern match |
+| 6          | `==` `!=`                    | Left          | Equality |
+| 7          | `<` `>` `<=` `>=`            | Left          | Comparison |
+| 8          | `..` `..=`                   | Left          | Range |
+| 9          | `+` `-`                      | Left          | Additive |
+| 10         | `*` `/` `%`                  | Left          | Multiplicative |
+| 11         | `!` `-` `&` `*` (unary)      | Right         | Unary |
+| 12 (highest) | `.` `?.` `()` `[]` `!`     | Left          | Postfix |
 
-Note: `as` is not in the precedence table as it is not used for type casting. Type conversions use methods like `.widen()`, `.truncate()`, `.saturate()`. This table matches the precedence in `syntax-grammar.md`.
+Note: `as` is not in the precedence table as it is not used for type casting. Type conversions use methods like `.widen()`, `.truncate()`, `.saturate()`. The `!` operator appears twice: as unary logical NOT and as postfix try/propagate. The `?.` operator is for optional chaining. The `??` operator provides a default value for `None`. This table matches the precedence in `syntax-grammar.md`.
 
 ---
 
