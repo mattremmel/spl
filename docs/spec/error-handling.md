@@ -380,6 +380,181 @@ The following are in the prelude (no import needed):
 
 ---
 
+## 10. The `throws` Keyword
+
+The `throws` keyword provides syntactic sugar for functions that return `Result`, making error-prone functions more visible in signatures and reducing boilerplate.
+
+### Typed `throws`
+
+A function declared with `throws ErrorType` returns `Result(T: ReturnType, E: ErrorType)`:
+
+```spl
+// These two declarations are equivalent:
+fn read_file(path: &str): String throws IoError { ... }
+fn read_file(path: &str): Result(T: String, E: IoError) { ... }
+```
+
+**Desugaring:**
+
+| Declaration | Equivalent |
+|-------------|------------|
+| `fn foo(): T throws E` | `fn foo(): Result(T: T, E: E)` |
+| `fn foo() throws E` | `fn foo(): Result(T: (), E: E)` |
+| `fn foo(): T throws` | `fn foo(): Result(T: T, E: Error)` |
+| `fn foo() throws` | `fn foo(): Result(T: (), E: Error)` |
+
+### Untyped `throws`
+
+When no error type is specified, the function uses the `Error` trait object type, enabling any error to be returned (similar to Rust's `anyhow`):
+
+```spl
+fn process_data(input: &str): Data throws {
+    let parsed = parse(input)?;      // ParseError converted to Error
+    let validated = validate(parsed)?; // ValidationError converted to Error
+    return transform(validated);
+}
+```
+
+**Note:** Untyped `throws` requires trait objects. See [trait objects specification] for details on the `Error` trait and `dyn Error` type.
+
+### Implicit `Ok` Wrapping
+
+In a `throws` function, return values are automatically wrapped in `Ok`:
+
+```spl
+fn parse_number(s: &str): i32 throws ParseError {
+    if s.is_empty() {
+        throw .Empty;
+    }
+    return s.parse_int();  // Automatically wrapped: Ok(s.parse_int())
+}
+
+// Equivalent explicit version:
+fn parse_number(s: &str): Result(T: i32, E: ParseError) {
+    if s.is_empty() {
+        return Err(.Empty);
+    }
+    return Ok(s.parse_int());
+}
+```
+
+**Rules:**
+- `return value;` in a `throws` function desugars to `return Ok(value);`
+- `return;` in a `throws` function (unit return) desugars to `return Ok(());`
+- Implicit block returns also get wrapped: `fn foo(): i32 throws E { 42 }` returns `Ok(42)`
+
+---
+
+## 11. The `throw` Keyword
+
+The `throw` keyword provides concise syntax for returning errors, analogous to `bail!()` in Rust's anyhow:
+
+```spl
+throw error_value;
+// Desugars to:
+return Err(error_value);
+```
+
+### Basic Usage
+
+```spl
+fn divide(a: i32, b: i32): i32 throws MathError {
+    if b == 0 {
+        throw .DivisionByZero;
+    }
+    return a / b;
+}
+```
+
+### With Error Construction
+
+```spl
+fn validate_age(age: i32): () throws ValidationError {
+    if age < 0 {
+        throw .Invalid("age cannot be negative");
+    }
+    if age > 150 {
+        throw .Invalid("age seems unrealistic");
+    }
+}
+```
+
+### In Untyped `throws` Functions
+
+When using untyped `throws`, any error type can be thrown:
+
+```spl
+fn process(path: &str): Data throws {
+    if !path.exists() {
+        throw IoError.NotFound(path);  // IoError converted to Error
+    }
+    let content = read_file(path)?;
+    if content.is_empty() {
+        throw ValidationError.Empty;   // ValidationError converted to Error
+    }
+    return parse(content)?;
+}
+```
+
+### `throw` vs `?` Operator
+
+| Use Case | Syntax | When to Use |
+|----------|--------|-------------|
+| Propagate existing error | `operation()?` | Calling fallible functions |
+| Create and return new error | `throw .Foo` | Validation, guards, custom errors |
+
+```spl
+fn process_file(path: &str): Config throws ConfigError {
+    // Use ? to propagate errors from called functions
+    let content = read_file(path)?;
+
+    // Use throw to create new errors
+    if content.is_empty() {
+        throw .EmptyFile(path);
+    }
+
+    return parse_config(content)?;
+}
+```
+
+---
+
+## 12. Error Type Conversion with `throws`
+
+### Typed `throws` with Conversion
+
+When using typed `throws`, errors from called functions are converted via the `From` trait, just like with explicit `Result`:
+
+```spl
+enum AppError{
+    Io(IoError),
+    Parse(ParseError),
+}
+
+impl From(T: IoError) for AppError { ... }
+impl From(T: ParseError) for AppError { ... }
+
+fn load_config(path: &str): Config throws AppError {
+    let content = read_file(path)?;   // IoError -> AppError via From
+    let config = parse(content)?;      // ParseError -> AppError via From
+    return config;
+}
+```
+
+### Untyped `throws` Conversion
+
+With untyped `throws`, any error implementing the `Error` trait is automatically converted:
+
+```spl
+fn load_and_process(path: &str): Result throws {
+    let config = load_config(path)?;  // AppError -> Error
+    let data = fetch_data(config)?;   // NetworkError -> Error
+    return process(data)?;            // ProcessError -> Error
+}
+```
+
+---
+
 ## Summary
 
 | Feature | Description |
@@ -391,6 +566,9 @@ The following are in the prelude (no import needed):
 | `FromResidual` trait | Enables cross-type `?` conversion |
 | `ok_or(err)` | Convert Option to Result with explicit error |
 | `From` trait | Enables automatic error type conversion |
+| `throws E` | Sugar for `Result(T: T, E: E)` return type |
+| `throws` | Sugar for `Result(T: T, E: Error)` (any error) |
+| `throw expr` | Sugar for `return Err(expr)` |
 
 ### Common Patterns
 
@@ -403,4 +581,13 @@ let value = optional_value.ok_or(Error.NotFound)?;
 
 // Error type unification via From
 impl From(T: SourceError) for TargetError { ... }
+
+// Using throws for cleaner signatures
+fn process(input: &str): Output throws ProcessError {
+    let parsed = parse(input)?;
+    if !valid(parsed) {
+        throw .Invalid;
+    }
+    return transform(parsed);
+}
 ```

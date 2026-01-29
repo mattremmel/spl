@@ -10,7 +10,7 @@ The lexer transforms source text into a stream of tokens. Whitespace and comment
 
 ## Keywords
 
-SPL reserves 36 keywords that cannot be used as identifiers:
+SPL reserves 38 keywords that cannot be used as identifiers:
 
 | Keyword    | Description                          |
 |------------|--------------------------------------|
@@ -33,6 +33,8 @@ SPL reserves 36 keywords that cannot be used as identifiers:
 | `continue` | Skip to next iteration               |
 | `return`   | Return from function                 |
 | `yield`    | Yield value from block (see note)    |
+| `throw`    | Return an error in throws function   |
+| `throws`   | Function may return an error         |
 | `as`       | Import renaming                      |
 | `true`     | Boolean literal true                 |
 | `false`    | Boolean literal false                |

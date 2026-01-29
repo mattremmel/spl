@@ -119,10 +119,13 @@ static mut GLOBAL_STATE: i32 = 0;  // Requires unsafe to access
 ### Function Definitions
 
 ```ebnf
-FunctionDef = "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ WhereClause ] Block ;
+FunctionDef = "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ ThrowsClause ] [ WhereClause ] Block ;
 
 (* Generator functions yield multiple values lazily *)
 GeneratorDef = "gen" "fn" IDENTIFIER "(" [ ParamList ] ")" ":" Type [ WhereClause ] Block ;
+
+(* Throws clause for functions returning Result *)
+ThrowsClause = "throws" [ Type ] ;
 
 ParamList = Param { "," Param } [ "," ] ;
 
@@ -175,6 +178,20 @@ fn add(_ a: i32, _ b: i32): i32 {
 // Generic with bounds
 fn clone_it(x: &T): T where T: Clone {
     return x.clone();
+}
+
+// Function with typed throws (returns Result(T: String, E: IoError))
+fn read_file(path: &str): String throws IoError {
+    if !path.exists() {
+        throw .NotFound(path);
+    }
+    return fs.read_to_string(path);
+}
+
+// Function with untyped throws (returns Result(T: Data, E: Error))
+fn process(input: &str): Data throws {
+    let parsed = parse(input)?;
+    return transform(parsed);
 }
 ```
 
@@ -814,7 +831,8 @@ PrimaryExpr = LiteralExpr
             | BreakExpr
             | ContinueExpr
             | ReturnExpr
-            | YieldExpr ;
+            | YieldExpr
+            | ThrowExpr ;
 
 (* Type expressions - types used as values for associated function calls *)
 (* Requires GenericArgs to distinguish from PathExpr *)
@@ -974,6 +992,9 @@ ReturnExpr = "return" [ Expression ] ;
 
 (* Yield provides a value for block expressions *)
 YieldExpr = "yield" Expression ;
+
+(* Throw an error in a throws function - desugars to return Err(expr) *)
+ThrowExpr = "throw" Expression ;
 ```
 
 **Pattern Matching in Control Flow:**
