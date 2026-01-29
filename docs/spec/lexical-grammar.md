@@ -10,7 +10,7 @@ The lexer transforms source text into a stream of tokens. Whitespace and comment
 
 ## Keywords
 
-SPL reserves 38 keywords that cannot be used as identifiers:
+SPL reserves 36 keywords that cannot be used as identifiers:
 
 | Keyword    | Description                          |
 |------------|--------------------------------------|
@@ -32,7 +32,7 @@ SPL reserves 38 keywords that cannot be used as identifiers:
 | `break`    | Exit loop                            |
 | `continue` | Skip to next iteration               |
 | `return`   | Return from function                 |
-| `yield`    | Yield value (blocks and generators)  |
+| `yield`    | Yield value from block (see note)    |
 | `as`       | Import renaming                      |
 | `true`     | Boolean literal true                 |
 | `false`    | Boolean literal false                |
@@ -52,6 +52,12 @@ SPL reserves 38 keywords that cannot be used as identifiers:
 | `unsafe`   | Unsafe block/function                |
 | `async`    | Async function declaration           |
 | `await`    | Await async expression               |
+
+**Note on `yield`:** The `yield` keyword serves two related purposes:
+1. **Block expressions**: Provides the value of a multi-statement block (`let x = { let a = 1; yield a + 1; };`)
+2. **Generators**: Yields values from a generator function (`gen fn` context)
+
+Both uses share the concept of "yield a value from this block without returning from the function." The context (`gen fn` vs regular block) disambiguates which semantics apply.
 
 ---
 
@@ -304,7 +310,7 @@ C_STRING = 'c"' [^"]* '"'
 **Rules:**
 - Prefixed with `c`
 - Automatically null-terminated
-- Type is `&CStr`
+- Type is `CStr`
 - Cannot contain interior null bytes (compile error)
 
 **Examples:** `c"Hello, C!"`, `c"/path/to/file"`
@@ -341,7 +347,7 @@ Boolean values use the keywords `true` and `false`.
 | Raw string | `r` | `r"C:\path"` | `&str` |
 | Byte string | `b` | `b"bytes"` | `&[u8]` |
 | Raw byte string | `br` | `br"raw"` | `&[u8]` |
-| C string | `c` | `c"ffi"` | `&CStr` |
+| C string | `c` | `c"ffi"` | `CStr` |
 | Character | (none) | `'a'` | `char` |
 | Byte character | `b` | `b'A'` | `u8` |
 

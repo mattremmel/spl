@@ -136,8 +136,9 @@ TypedParam = [ LabelSpec ] [ "mut" ] IDENTIFIER ":" Type ;
 (* "_" means no label required at call site *)
 LabelSpec = "_" | IDENTIFIER ;
 
-(* Where clause for generic constraints *)
-WhereClause = "where" TypeParam { "," TypeParam } ;
+(* Where clause declares type parameters and optional constraints *)
+(* Unlike Rust, `where` both introduces AND constrains type parameters *)
+WhereClause = "where" TypeParam { "," TypeParam } [ "," ] ;
 
 TypeParam = IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] ;
 
@@ -154,7 +155,7 @@ fn add(a: i32, b: i32): i32 {
     return a + b;
 }
 
-// Generic function with where clause
+// Generic function - `where T` declares the type parameter T
 fn identity(x: T): T where T {
     return x;
 }
@@ -196,14 +197,20 @@ struct Point(x: f64, y: f64)
 // Empty struct
 struct Empty()
 
-// Generic struct with where clause
+// Generic struct - `where T` declares type parameter T
 struct Box(value: T) where T
 
 // Public fields
-struct Point(pub x: f64, pub y: f64)
+pub struct Point(pub x: f64, pub y: f64)
 
-// Generic with bounds
+// Generic with bounds - `where T: Clone` declares T and requires Clone
 struct Container(items: Vec(T)) where T: Clone
+
+// Multiple type parameters
+struct Pair(first: T, second: U) where T, U
+
+// Multiple type parameters with bounds
+struct Map(keys: Vec(K), values: Vec(V)) where K: Hash + Eq, V
 ```
 
 ### Enum Definitions
@@ -890,15 +897,22 @@ Single-expression blocks are concise and unambiguous. Multi-statement blocks req
 Patterns are used in `let` bindings, `for` loops, `is` expressions, and match arms.
 
 ```ebnf
-Pattern = IdentifierPattern
-        | WildcardPattern
-        | LiteralPattern
-        | RangePattern
-        | TuplePattern
-        | SlicePattern
-        | StructPattern
-        | EnumPattern
-        | ReferencePattern ;
+(* Or-patterns: match any of the alternatives *)
+Pattern = SinglePattern { "|" SinglePattern } ;
+
+SinglePattern = IdentifierPattern
+              | WildcardPattern
+              | LiteralPattern
+              | RangePattern
+              | TuplePattern
+              | SlicePattern
+              | StructPattern
+              | EnumPattern
+              | ReferencePattern
+              | GroupedPattern ;
+
+(* Parentheses for grouping in complex or-patterns *)
+GroupedPattern = "(" Pattern ")" ;
 
 IdentifierPattern = [ "mut" ] IDENTIFIER ;
 
@@ -965,6 +979,31 @@ ReferencePattern = "&" [ "mut" ] Pattern ;
 | `Err(e)`              | Match Result Err variant             |
 | `&x`                  | Match reference                      |
 | `&mut x`              | Match mutable reference              |
+| `1 \| 2 \| 3`         | Or-pattern: match any alternative    |
+| `Some(x) \| None`     | Or-pattern with variants             |
+| `"yes" \| "y"`        | Or-pattern with strings              |
+
+**Or-Pattern Examples:**
+
+```spl
+match value {
+    1 | 2 | 3 => "small",
+    4 | 5 | 6 => "medium",
+    _ => "large",
+}
+
+match option {
+    Some(0) | None => "empty or zero",
+    Some(n) => "has value",
+}
+
+// Bindings must be consistent across alternatives
+match point {
+    Point(x: 0, y) | Point(x: y, y: 0) => "on axis",  // ERROR: inconsistent bindings
+    Point(x, y: 0) | Point(x: 0, y: x) => ...,        // ERROR: inconsistent bindings
+    Point(x: 0, y) | Point(x, y: 0) => use_coord(y),  // OK: y bound in both
+}
+```
 
 ---
 
@@ -1261,6 +1300,7 @@ impl Point(T) where T {
 | Generic application | `Vec<T>`                  | `Vec(T)`                     |
 | Return type         | `-> T`                    | `: T`                        |
 | Generic declaration | `fn foo<T>() {}`          | `fn foo() where T {}`        |
+| Where clause        | Constrains only           | Declares AND constrains      |
 | Turbofish           | `::<T>`                   | Not needed (use parentheses) |
 | Struct literal      | `Point { x: 1 }`          | `Point(x: 1)`                |
 | Pattern matching    | `if let Some(x) = v {}`   | `if v is Some(x) {}`         |

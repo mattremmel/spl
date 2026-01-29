@@ -215,11 +215,12 @@ struct PackedData(
 
 C strings are null-terminated byte arrays with no encoding guarantee. SPL provides types for safe interoperation.
 
-### CStr - Borrowed C String
+### CStr - C String Reference
 
-`CStr` is a borrowed reference to a null-terminated C string. It does not own the memory.
+`CStr` is a lightweight handle to a null-terminated C string. It wraps a pointer and does not own the memory. `CStr` is `Copy` since it's just a pointer internally.
 
 ```spl
+#[derive(Copy, Clone)]
 pub struct CStr(
     ptr: Ptr(u8),
 )
@@ -229,8 +230,8 @@ impl CStr {
     ///
     /// # Safety
     /// - `ptr` must point to a valid null-terminated string
-    /// - The memory must remain valid for the lifetime of the CStr
-    pub unsafe fn from_ptr(ptr: Ptr(u8)): CStr;  // Returns CStr(ptr: ptr)
+    /// - The memory must remain valid while the CStr is used
+    pub unsafe fn from_ptr(ptr: Ptr(u8)): CStr;
 
     /// Get as raw bytes (excluding null terminator)
     pub fn as_bytes(&self): &[u8];
@@ -264,8 +265,8 @@ impl CString {
     /// Returns error if string contains interior null bytes.
     pub fn new(s: &str): Result(CString, NulError);
 
-    /// Borrow as CStr
-    pub fn as_cstr(&self): &CStr;
+    /// Get as CStr (shares the same pointer)
+    pub fn as_cstr(&self): CStr;
 
     /// Get raw pointer for FFI
     pub fn as_ptr(&self): Ptr(u8);
@@ -289,22 +290,23 @@ impl Drop for CString {
 
 ### C String Literals
 
-The `c"..."` literal syntax creates a `&CStr`:
+The `c"..."` literal syntax creates a `CStr` pointing to static memory:
 
 ```spl
-let s: &CStr = c"Hello, world!";
+let s: CStr = c"Hello, world!";
 ```
 
 - Compile-time null-terminated
-- Static lifetime
+- Points to static memory (valid for program lifetime)
 - Guaranteed valid UTF-8 (but API treats as bytes for consistency)
+- Returns `CStr` directly (not a reference) since `CStr` is `Copy`
 
 ### Encoding Philosophy
 
 C strings are treated as **opaque bytes**, not UTF-8:
 
 ```spl
-let c_str: &CStr = unsafe { CStr.from_ptr(some_c_function()) };
+let c_str: CStr = unsafe { CStr.from_ptr(some_c_function()) };
 
 // Must explicitly convert to SPL string
 let bytes: &[u8] = c_str.as_bytes();           // Always works
@@ -493,7 +495,7 @@ fn sort_ints(arr: &mut [i32]) {
         qsort(
             arr.as_mut_ptr().cast(u8),
             arr.len(),
-            size_of(i32)(),
+            size_of(i32),
             my_compare,
         );
     }
@@ -760,7 +762,7 @@ impl Drop for MyLib {
 | Function pointer type | `extern "C" fn(...): T` |
 | Link native library | `#[link(name = "foo")]` |
 | Link static library | `#[link(name = "foo", kind = "static")]` |
-| Borrowed C string | `CStr` |
+| C string handle (non-owning, Copy) | `CStr` |
 | Owned C string | `CString` |
 | C string literal | `c"hello"` |
 | Platform conditional | `#[cfg(target_os = "linux")]` |

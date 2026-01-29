@@ -302,9 +302,11 @@ UseTreeList = UseTree { "," UseTree } [ "," ] ;
 
 | Keyword | Meaning |
 |---------|---------|
-| `$.` | Root of current package (like Rust's `crate::`) |
-| `self.` | Current module (directory) |
-| `super.` | Parent module |
+| `$` | Root of current package (like Rust's `crate`) |
+| `self` | Current module (directory) |
+| `super` | Parent module |
+
+**Note:** These keywords are followed by `.` (the path separator) when accessing items. For example, `$.utils.helper` is the token `$`, then `.`, then `utils`, then `.`, then `helper`. The `.` is always the path separator—there is no `$.` or `self.` token.
 
 ### Examples
 
@@ -442,7 +444,7 @@ pub(in $.api) fn api_only() { }
    - Prelude items
 
 2. **Qualified paths** resolve:
-   - `$.` from the package root
+   - `$` from the package root
    - `self.` from the current module
    - `super.` from the parent module
    - Other identifiers from current scope or imports
@@ -699,7 +701,7 @@ pub use details.Config;
 | Directory unit | Module | Module | Package | Package |
 | Project unit | Package | Crate | Module | Distribution |
 | Import syntax | `use path.item` | `use path::item` | `import "path"` | `from x import y` |
-| Package root | `$.` | `crate::` | N/A | N/A |
+| Package root | `$` | `crate` | N/A | N/A |
 | Glob import | `use path.*` | `use path::*` | `.` import | `from x import *` |
 | Visibility default | Private | Private | Capitalization | Public |
 | Package-private | `pub(package)` | `pub(crate)` | N/A | `_prefix` |

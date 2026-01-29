@@ -605,7 +605,7 @@ pub struct Box(T)(
 
 impl Box(T) where T {
     pub fn new(value: T): Box(T) {
-        let p: MutPtr(T) = unsafe { malloc(size_of(T)()) }.cast(T);
+        let p: MutPtr(T) = unsafe { malloc(size_of(T)) }.cast(T);
         if p.is_null() {
             panic("allocation failed");
         }

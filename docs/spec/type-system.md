@@ -119,7 +119,7 @@ let result = huge * huge;  // No overflow
 
 **Conversions:**
 - From fixed-size integers: `let b: bigint = 42.to_bigint();`
-- To fixed-size integers: `let n: i64 = b.try_into()?;` (returns `None` if out of range)
+- To fixed-size integers: `let n: i64 = b.try_into()?;` (returns `Err` if out of range)
 
 ### Boolean Type
 
@@ -551,20 +551,26 @@ Generics enable writing code that works with multiple types through type paramet
 
 ### Type Parameters
 
-Type parameters are declared in `where` clauses.
+Type parameters are declared in `where` clauses. Unlike Rust (which uses `<T>` syntax), SPL's `where` clause both **declares** and optionally **constrains** type parameters.
 
 ```spl
+// `where T` declares type parameter T (no constraints)
 struct Point(x: T, y: T) where T
 
+// `where T` declares T for use in parameters and return type
 fn identity(x: T): T where T {
     return x;
 }
 
+// `where T` declares T for the impl block
 impl Point(T) where T {
     fn new(x: T, y: T): Point(T) {
         return Point(x: x, y: y);
     }
 }
+
+// Multiple type parameters
+struct Pair(first: A, second: B) where A, B
 ```
 
 ### Trait Bounds
@@ -776,7 +782,7 @@ SPL uses methods for explicit type conversions instead of a cast operator. This 
 | `.widen()` | Safe widening (infers target type) |
 | `.truncate()` | Explicit lossy truncation |
 | `.saturate()` | Clamp to target type's range |
-| `.try_into()` | Fallible conversion returning `Option` |
+| `.try_into()` | Fallible conversion returning `Result` |
 | `.reinterpret()` | Bit reinterpretation |
 
 ```spl
@@ -784,7 +790,7 @@ let a: i32 = 1000;
 let b: i64 = a.widen();           // Sign extension: 1000
 let c: i8 = a.truncate();         // Explicit truncation: -24
 let d: i8 = a.saturate();         // Clamped to 127
-let e: Option(i8) = a.try_into(); // None (out of range)
+let e: Result(i8, TryFromIntError) = a.try_into(); // Err (out of range)
 let f: f64 = a.widen();           // 1000.0
 
 let g: f64 = 3.7;

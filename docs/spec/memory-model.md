@@ -420,11 +420,13 @@ All closures implement `FnOnce`. Closures that don't consume captures also imple
 
 ### Closure Limitations
 
-Due to second-class references, closures cannot:
+Due to second-class references and implementation constraints, closures cannot:
 - Return references to captured variables
-- Be stored in structs (closures have unknown size)
+- Be stored in structs (closures have unique anonymous types with unknown size)
 
-For these cases, use function pointers or trait objects (future feature).
+**Note:** Closures *can* capture references temporarily (the reference lives in the closure's implicit environment), but the closure itself cannot be stored or returned. The captured reference's lifetime is bounded by the closure's usage scope.
+
+For cases requiring stored callables, use function pointers (`fn(Args): Return`) which have a known size but cannot capture environment.
 
 ---
 

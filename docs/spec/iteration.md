@@ -149,7 +149,9 @@ for item in &vec {
 
 Types that support `for` loop iteration implement `Iterable`.
 
-### Definition
+> **Note:** The trait definition below is *conceptual*. The `for` loop is implemented via compiler magic that transforms the loop into indexed access without literally calling these methods. This avoids violating the second-class reference rule (references cannot be returned from functions). A future version of this specification will provide more detailed semantics.
+
+### Definition (Conceptual)
 
 ```spl
 trait Iterable {
@@ -159,14 +161,18 @@ trait Iterable {
     fn len(&self): usize;
 
     /// Access element by index (immutable)
+    /// Note: Conceptual - actual for-loop uses compiler transformation
     fn get(&self, index: usize): &Self.Item;
 
     /// Access element by index (mutable)
+    /// Note: Conceptual - actual for-loop uses compiler transformation
     fn get_mut(&mut self, index: usize): &mut Self.Item;
 }
 ```
 
-### Standard Implementations
+### Standard Implementations (Conceptual)
+
+These implementations illustrate the contract that iterable types satisfy. The compiler uses this information to transform `for` loops.
 
 ```spl
 impl Iterable for Vec(T) where T {
@@ -373,7 +379,7 @@ Terminal operations consume the adapter and produce a result:
 ```spl
 impl Iter(S) /* and all adapters */ {
     /// Collect into a Vec
-    fn collect(self): Vec(T) where T {
+    fn collect(self): Vec(T) where T: Clone {
         let mut result: Vec(T) = Vec.new();
         self.each(|item| result.push(item.clone()));
         result
@@ -517,20 +523,15 @@ gen fn countdown(from: i32): i32 { ... }
 fn countdown(from: i32): Generator(i32) { ... }
 ```
 
-The `Generator(T)` type implements `Iterable`:
+The `Generator(T)` type can be used in `for` loops:
 
 ```spl
 struct Generator(T)(
     // Internal state (compiler-generated)
 )
-
-impl Iterable for Generator(T) where T {
-    type Item = T;
-
-    fn len(&self): usize;  // May be unknown (returns usize.MAX for unbounded)
-    fn get(&self, index: usize): &T;
-}
 ```
+
+> **Note:** Generators are consumed during iteration. Unlike indexable collections, generators maintain internal state and produce values on-demand. The `for` loop over a generator uses the `Iterator` trait (with `next()` returning owned values), not `Iterable`. See "Consuming Iteration" below for the `Iterator` trait.
 
 ### Infinite Generators
 
@@ -775,7 +776,7 @@ for value in tree.inorder() {
 
 | Trait | Purpose |
 |-------|---------|
-| `Iterable` | Indexable collections (enables `for` loop) |
+| `Iterable` | Indexable collections (conceptual; enables `for` loop via compiler magic) |
 | `Iterator` | External iterator (owned values only) |
 | `IntoIterator` | Converting to consuming iterator |
 | `Step` | Types that can form ranges |
@@ -783,7 +784,7 @@ for value in tree.inorder() {
 ### Design Principles
 
 1. **Second-class references respected**: References never escape their scope
-2. **`for` loops are magic**: Compiler desugars to safe indexed access
+2. **`for` loops use compiler magic**: Transformed to safe indexed access without calling methods that return references
 3. **Internal iteration for references**: Closures scope the borrows
 4. **Generators yield owned values**: No reference lifetime issues
 5. **Consuming iteration when necessary**: For non-indexable types
