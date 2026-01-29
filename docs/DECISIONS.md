@@ -169,7 +169,28 @@ let checked: Option(i8) = x.try_into();
 ```
 
 ### 4.4 Panic Behavior
-Panic = abort only. No unwinding, simpler implementation.
+Panic unwinds the stack, running destructors for proper resource cleanup. This enables:
+- Task isolation (panicked tasks don't crash the whole program)
+- Guaranteed destructor execution (files closed, locks released)
+- Optional recovery via `catch_panic`
+
+```spl
+fn example() {
+    let file = File.create("data.txt");
+    let guard = mutex.lock();
+
+    panic("something went wrong");
+
+    // Destructors run during unwind:
+    // - guard released (no deadlock)
+    // - file closed (no leak)
+}
+
+// Catch and recover if needed
+let result = catch_panic(|| risky_operation());
+```
+
+**FFI boundary**: Panic aborts if it would unwind across FFI boundaries (undefined behavior). SPL automatically catches at `extern fn` call sites.
 
 ---
 
@@ -201,8 +222,15 @@ Guaranteed for all tail calls.
 ### 6.3 Variadic Functions
 Native support: `fn print(args: ...Display)` - reduces macro dependency.
 
-### 6.4 Async/Await
-Built-in runtime (Go-style simplicity). `async fn main()` just works. See [ADR-013](designs/013-async-await.md) for full design.
+### 6.4 Concurrency
+**No function coloring** - any function can yield, no async/sync distinction. Built-in runtime with Go-style simplicity. See [ADR-013](designs/013-async-await.md) for full design.
+
+Key points:
+- `Task.spawn()` for concurrent tasks, returns `JoinHandle(T)`
+- Growable stacks with adaptive sizing (Go 1.19+ model)
+- Async preemption for tight loops (Go 1.14+ model)
+- Task isolation with unwinding (panic in task doesn't crash program)
+- Drop `JoinHandle` = cancel task
 
 ### 6.5 Macros
 Look like regular function calls - no `!` required.
@@ -226,8 +254,9 @@ Look like regular function calls - no `!` required.
 | Lifetimes | `'a` annotations | None needed |
 | Overflow | Debug trap, release wrap | Always trap |
 | Type casting | `as` | Methods |
-| Panic | Unwind or abort | Abort only |
+| Panic | Unwind or abort | Unwind (abort at FFI) |
 | Iteration | Exterior (iterators) | Interior (generators) |
 | Closures | Borrow default, `move` all | Move default, `~` for clone |
-| Async runtime | External | Built-in |
+| Concurrency | async/await (colored) | No coloring (Go-style) |
+| Runtime | External (tokio, etc.) | Built-in |
 | Macros | `macro!()` | `macro()` |

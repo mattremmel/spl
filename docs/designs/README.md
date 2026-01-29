@@ -18,7 +18,7 @@ This directory contains Architecture Decision Records documenting key design dec
 | [010](010-type-interning.md) | Type Interning | Accepted | Efficient type equality via interning |
 | [011](011-iteration-and-generators.md) | Iteration and Generators | Accepted | Interior iteration via generator methods |
 | [012](012-closures.md) | Closures and Capture Semantics | Accepted | Move-by-default, explicit clone with `~` |
-| [013](013-async-await.md) | Async/Await and Runtime Model | Draft | Built-in runtime, Go-style simplicity |
+| [013](013-async-await.md) | Concurrency Model and Runtime | Draft | No function coloring, Go-style runtime, task isolation |
 
 ## ADR Template
 

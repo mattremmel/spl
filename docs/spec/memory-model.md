@@ -11,7 +11,7 @@ SPL's memory model provides:
 - **Copy types**: Small, trivially-copyable types are copied implicitly
 - **Second-class references**: References can only be function parameters, never stored or returned
 - **No garbage collector** (v1): Memory is managed through ownership and scoping
-- **Panic = abort**: No unwinding, panics terminate the program immediately
+- **Panic = unwind**: Panics unwind the stack, running destructors for cleanup. Aborts at FFI boundaries.
 
 ### Design Philosophy
 
@@ -596,7 +596,7 @@ fn batch_process(items: &[Item]) {
 | Borrowing | `&T` (shared) and `&mut T` (exclusive) |
 | Lifetimes | No annotations needed |
 | Drop | Automatic at scope end |
-| Panic | Abort only (no unwinding) |
+| Panic | Unwind (abort at FFI boundary) |
 | Overflow | Always trap |
 | Unsafe | Planned (not in v1) |
 
