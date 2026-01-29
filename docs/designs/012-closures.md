@@ -201,15 +201,15 @@ let increment = || { count = count + 1; };
 let consume = || { return take_ownership(data); };
 ```
 
-### Function Pointer Coercion
+### Function Types
 
-Closures that capture nothing coerce to function pointers:
+The `fn(...)` type represents any callable with a matching signature, including closures with captures:
 
 ```spl
-let add: fn(i32, i32): i32 = |a, b| a + b;  // OK: no captures
+let add: fn(i32, i32): i32 = |a, b| a + b;  // Non-capturing closure
 
 let x = 10;
-let add_x: fn(i32): i32 = |a| a + x;  // ERROR: captures x
+let add_x: fn(i32): i32 = |a| a + x;  // Capturing closure - also valid
 ```
 
 ---

@@ -101,7 +101,7 @@ Some types are small and trivially copyable. These implement the `Copy` trait an
 | `&mut T` | No | Exclusive access semantics |
 | `[T; N]` | If `T: Copy` | Copies element-by-element |
 | `(T, U, ...)` | If all elements `Copy` | Copies each element |
-| `fn(...): T` | Yes | Function pointer |
+| `fn(...): T` | Yes | Function type |
 | `decimal` | Yes | Fixed-size decimal (128-bit) |
 | `bigint` | No | Heap-allocated, arbitrary precision |
 
@@ -387,7 +387,7 @@ Closures implement traits based on how they use captures:
 
 **Hierarchy:** `Fn` ⊂ `FnMut` ⊂ `FnOnce`
 
-Closures that capture nothing coerce to function pointers (`fn(Args): Return`).
+The `fn(Args): Return` type represents any callable with matching signature, including closures with captures.
 
 ---
 

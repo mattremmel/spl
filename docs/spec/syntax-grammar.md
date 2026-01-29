@@ -519,7 +519,7 @@ Type = BaseType [ "?" ] ;              (* Optional postfix: T? = Option(T: T) *)
 BaseType = ReferenceType
          | ArrayType
          | TupleType
-         | FnPointerType
+         | FnType
          | NeverType
          | PathType ;
 
@@ -532,8 +532,8 @@ TupleType = "(" [ TupleTypeElement { "," TupleTypeElement } [ "," ] ] ")" ;
 
 TupleTypeElement = [ IDENTIFIER ":" ] Type ;
 
-(* Function pointer return type uses colon *)
-FnPointerType = "fn" "(" [ TypeList ] ")" [ ":" Type ] ;
+(* Function type return uses colon *)
+FnType = "fn" "(" [ TypeList ] ")" [ ":" Type ] ;
 
 TypeList = Type { "," Type } [ "," ] ;
 
@@ -569,9 +569,9 @@ TypeArg = [ "^" ] IDENTIFIER ":" Type ;       (* named type argument, e.g., T: i
 | `(x: T, y: U)`      | Tuple type (named fields)          |
 | `(T, name: U)`      | Tuple type (mixed)                 |
 | `()`                | Unit type                          |
-| `fn(i32): bool`     | Function pointer                   |
-| `fn(T, U): V`       | Generic function pointer           |
-| `fn()`              | Function pointer returning unit    |
+| `fn(i32): bool`     | Function type                      |
+| `fn(T, U): V`       | Generic function type              |
+| `fn()`              | Function type returning unit       |
 | `!`                 | Never type                         |
 | `HashMap(K: String, V: i32)` | Multi-param generic type   |
 | `Result(T: i32, E: Error)` | Named type arguments         |
@@ -884,12 +884,12 @@ set_color(.Blue)
 let c: Color = .Green
 
 // With variant data
-let msg: Message = .Move(x: 10, y: 20)
-let result: Result(T: i32, E: Error) = .Ok(42)
+let msg: Message = .Move(x: 10, y: 20);
+let result: Result(T: i32, E: Error) = .Ok(42);
 
 // In return statements (type inferred from function signature)
 fn default_color(): Color {
-    return .Red
+    return .Red;
 }
 
 // Comparison with known enum type
@@ -1383,7 +1383,7 @@ impl Point(T: T) where T {
 }
 
 // Type alias with generic
-type Pair(T) = (T, T)
+type Pair(T) = (T, T);
 
 // Named parameters with labels
 fn distance(from p1: &Point(T: f64), to p2: &Point(T: f64)): f64 {
@@ -1491,10 +1491,10 @@ fn main() {
     };
 }
 
-// Function pointer types (colon for return)
-type Predicate = fn(i32): bool
-type BinaryOp = fn(i32, i32): i32
-type Action = fn()
+// Function types (colon for return)
+type Predicate = fn(i32): bool;
+type BinaryOp = fn(i32, i32): i32;
+type Action = fn();
 
 // Omit labels with underscore
 fn apply(_ f: fn(i32): i32, _ x: i32): i32 {

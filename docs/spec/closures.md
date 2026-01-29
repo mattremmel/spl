@@ -229,16 +229,24 @@ let increment = || { count += 1; };
 let consume = || take_ownership(data);
 ```
 
-### Function Pointer Coercion
+### Function Types
 
-Closures that capture nothing coerce to function pointers:
+The `fn(...)` type represents any callable with a matching signature, including both plain functions and closures (with or without captures):
 
 ```spl
-let add: fn(i32, i32): i32 = |a, b| a + b;  // OK: no captures
+// Non-capturing closure
+let add: fn(i32, i32): i32 = |a, b| a + b;
 
+// Capturing closure - also valid
 let x = 10;
-let add_x: fn(i32): i32 = |a| a + x;  // ERROR: captures x
+let add_x: fn(i32): i32 = |a| a + x;
+
+// Named function
+fn double(n: i32): i32 { return n * 2; }
+let f: fn(i32): i32 = double;
 ```
+
+This unified model (like Go and Swift) simplifies the type system at the cost of some optimization opportunities. The compiler cannot inline through `fn` types since the concrete callable is not known at compile time.
 
 ---
 

@@ -324,17 +324,17 @@ let y = 4.0;
 let p2 = Point(x, y);  // Same as Point(x: x, y: y)
 ```
 
-### Function Pointers
+### Function Types
 
-Function pointer types represent the type of a function.
+Function types represent any callable with a given signature, including named functions and closures (with or without captures).
 
 **Syntax**: `fn(Args): Return`
 
 | Type               | Description |
 |--------------------|-------------|
-| `fn()`             | Function taking no args, returning unit |
-| `fn(i32): bool`    | Function taking i32, returning bool |
-| `fn(T, U): V`      | Generic function pointer |
+| `fn()`             | Callable taking no args, returning unit |
+| `fn(i32): bool`    | Callable taking i32, returning bool |
+| `fn(T, U): V`      | Generic callable type |
 
 ```spl
 fn add(a: i32, b: i32): i32 {
@@ -343,6 +343,10 @@ fn add(a: i32, b: i32): i32 {
 
 let f: fn(i32, i32): i32 = add;
 let result = f(2, 3);  // 5
+
+// Closures (including capturing) also use fn types
+let x = 10;
+let add_x: fn(i32): i32 = |n| n + x;
 
 type Predicate = fn(i32): bool;
 type BinaryOp = fn(i32, i32): i32;
@@ -515,12 +519,12 @@ update(.Active)
 
 // Return - type from signature
 fn default_status(): Status {
-    return .Pending
+    return .Pending;
 }
 
 // Comparison - type from other operand
 fn is_done(s: Status): bool {
-    return s == .Complete
+    return s == .Complete;
 }
 
 // With variant data
@@ -528,9 +532,9 @@ enum Result{Ok(T), Err(E)} where T, E
 
 fn parse(input: &str): Result(T: i32, E: ParseError) {
     if input.is_empty() {
-        return .Err(ParseError.Empty)
+        return .Err(ParseError.Empty);
     }
-    return .Ok(input.parse_int())
+    return .Ok(input.parse_int());
 }
 ```
 
@@ -987,7 +991,7 @@ fn bar(x: &T) where T: ?Sized { }     // T may be unsized
 | Tuple | `(T, U, ...)` | Yes | Heterogeneous |
 | Struct | User-defined | Yes | Named fields |
 | Reference | `&T`, `&mut T` | Yes | Borrowing |
-| Function pointer | `fn(...): T` | Yes | Function type |
+| Function type | `fn(...): T` | Yes | Any callable |
 
 ---
 

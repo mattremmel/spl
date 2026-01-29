@@ -454,45 +454,45 @@ pub struct Point(
 impl Point {
     // Return type uses colon, not arrow
     pub fn new(x: f64, y: f64): Point {
-        return Point(x: x, y: y)
+        return Point(x: x, y: y);
     }
 
     // Named parameters with 'from' label
     pub fn distance(&self, from other: &Point): f64 {
-        let dx = self.x - other.x
-        let dy = self.y - other.y
-        return (dx * dx + dy * dy).sqrt()
+        let dx = self.x - other.x;
+        let dy = self.y - other.y;
+        return (dx * dx + dy * dy).sqrt();
     }
 }
 
 // Generic function with where clause
 fn identity(x: T): T where T {
-    return x
+    return x;
 }
 
 fn main() {
     // Struct instantiation with named fields
-    let mut p1 = Point.new(0.0, 0.0)
-    let p2 = Point(x: 3.0, y: 4.0)
+    let mut p1 = Point.new(0.0, 0.0);
+    let p2 = Point(x: 3.0, y: 4.0);
 
     // Calculate distance using named argument
-    let dist = p1.distance(from: &p2)
+    let dist = p1.distance(from: &p2);
 
     /* Update p1 position
        using compound assignment */
-    p1.x += 1.5e1
-    p1.y += 0x0A.widen()
+    p1.x += 1.5e1;
+    p1.y += 0x0A.widen();
 
     // Loop with range
     for i in 0..10 {
         if i % 2 == 0 {
-            continue
+            continue;
         }
         // Process odd numbers
     }
 
     // Pattern matching with 'is'
-    let maybe_value: Option(T: i32) = Some(42)
+    let maybe_value: Option(T: i32) = Some(42);
     if maybe_value is Some(v) {
         // Use v here
     }
@@ -505,22 +505,22 @@ fn main() {
     let result = match maybe_value {
         Some(x) => x * 2,
         None => 0,
-    }
+    };
 
     // Boolean and character literals
-    let flag: bool = true
-    let ch: char = '\n'
-    let msg: str = "Hello, SPL!\n"
+    let flag: bool = true;
+    let ch: char = '\n';
+    let msg: &str = "Hello, SPL!\n";
 
     // Control flow
     while flag && dist > 0.0 {
         if dist <= 5.0 {
-            break
+            break;
         }
     }
 
     loop {
-        return
+        return;
     }
 }
 ```
