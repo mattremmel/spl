@@ -202,7 +202,7 @@ Guaranteed for all tail calls.
 Native support: `fn print(args: ...Display)` - reduces macro dependency.
 
 ### 6.4 Async/Await
-Built-in runtime (Go-style simplicity). `async fn main()` just works.
+Built-in runtime (Go-style simplicity). `async fn main()` just works. See [ADR-013](designs/013-async-await.md) for full design.
 
 ### 6.5 Macros
 Look like regular function calls - no `!` required.

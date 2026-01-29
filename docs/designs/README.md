@@ -17,6 +17,8 @@ This directory contains Architecture Decision Records documenting key design dec
 | [009](009-event-based-parser-recovery.md) | Event-Based Parser with Recovery | Accepted | Error recovery for IDE support |
 | [010](010-type-interning.md) | Type Interning | Accepted | Efficient type equality via interning |
 | [011](011-iteration-and-generators.md) | Iteration and Generators | Accepted | Interior iteration via generator methods |
+| [012](012-closures.md) | Closures and Capture Semantics | Accepted | Move-by-default, explicit clone with `~` |
+| [013](013-async-await.md) | Async/Await and Runtime Model | Draft | Built-in runtime, Go-style simplicity |
 
 ## ADR Template
 
