@@ -119,7 +119,7 @@ let result = huge * huge;  // No overflow
 
 **Conversions:**
 - From fixed-size integers: `let b: bigint = 42.to_bigint();`
-- To fixed-size integers: `let n: i64 = b.try_into()?;` (returns `Err` if out of range)
+- To fixed-size integers: `let n: i64 = b.try_into()!;` (returns `Err` if out of range)
 
 ### Boolean Type
 

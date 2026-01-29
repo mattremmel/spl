@@ -413,7 +413,7 @@ fn build_pipeline(
         logger.log("Starting pipeline");
         for item in source.read() {
             let transformed = transform.apply(item);
-            sink.write(transformed)?;
+            sink.write(transformed)!;
         }
         logger.log("Pipeline complete");
         return Ok(());

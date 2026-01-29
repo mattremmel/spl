@@ -310,7 +310,7 @@ let c_str: CStr = unsafe { CStr.from_ptr(some_c_function()) };
 
 // Must explicitly convert to SPL string
 let bytes: &[u8] = c_str.as_bytes();           // Always works
-let text: &str = c_str.to_str()?;              // Fails if not UTF-8
+let text: &str = c_str.to_str()!;              // Fails if not UTF-8
 let text: String = c_str.to_str_lossy();       // Replaces invalid bytes
 ```
 

@@ -190,7 +190,7 @@ fn read_file(path: &str): String throws IoError {
 
 // Function with untyped throws (returns Result(T: Data, E: Error))
 fn process(input: &str): Data throws {
-    let parsed = parse(input)?;
+    let parsed = parse(input)!;
     return transform(parsed);
 }
 ```
@@ -741,16 +741,17 @@ Expressions are defined using layered production rules that encode operator prec
 | Precedence | Operators                    | Associativity | Production         |
 |------------|------------------------------|---------------|--------------------|
 | 1 (lowest) | `=` `+=` `-=` `*=` `/=` `%=` | Right         | AssignmentExpr     |
-| 2          | `\|\|`                       | Left          | OrExpr             |
-| 3          | `&&`                         | Left          | AndExpr            |
-| 4          | `is`                         | Left          | IsExpr             |
-| 5          | `==` `!=`                    | Left          | EqualityExpr       |
-| 6          | `<` `>` `<=` `>=`            | Left          | ComparisonExpr     |
-| 7          | `..` `..=`                   | Left          | RangeExpr          |
-| 8          | `+` `-`                      | Left          | AdditiveExpr       |
-| 9          | `*` `/` `%`                  | Left          | MultiplicativeExpr |
-| 10         | `!` `-` `&` (unary)          | Right         | UnaryExpr          |
-| 11 (highest)| `.` `()` `[]` `[:]` `?`     | Left          | PostfixExpr        |
+| 2          | `??`                         | Right         | CoalesceExpr       |
+| 3          | `\|\|`                       | Left          | OrExpr             |
+| 4          | `&&`                         | Left          | AndExpr            |
+| 5          | `is`                         | Left          | IsExpr             |
+| 6          | `==` `!=`                    | Left          | EqualityExpr       |
+| 7          | `<` `>` `<=` `>=`            | Left          | ComparisonExpr     |
+| 8          | `..` `..=`                   | Left          | RangeExpr          |
+| 9          | `+` `-`                      | Left          | AdditiveExpr       |
+| 10         | `*` `/` `%`                  | Left          | MultiplicativeExpr |
+| 11         | `!` `-` `&` (unary)          | Right         | UnaryExpr          |
+| 12 (highest)| `.` `?.` `()` `[]` `[:]` `!` | Left          | PostfixExpr        |
 
 Note: Type conversions use methods (`.widen()`, `.truncate()`, `.try_into()`) rather than a cast operator.
 
@@ -759,9 +760,11 @@ Note: Type conversions use methods (`.widen()`, `.truncate()`, `.try_into()`) ra
 ```ebnf
 Expression = AssignmentExpr ;
 
-AssignmentExpr = OrExpr [ AssignOp AssignmentExpr ] ;
+AssignmentExpr = CoalesceExpr [ AssignOp AssignmentExpr ] ;
 
 AssignOp = "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
+
+CoalesceExpr = OrExpr { "??" OrExpr } ;
 
 OrExpr = AndExpr { "||" AndExpr } ;
 
@@ -788,10 +791,12 @@ PostfixExpr = PrimaryExpr { PostfixOp } ;
 
 PostfixOp = "." IDENTIFIER [ GenericArgs ]                   (* field or associated item *)
           | "." IDENTIFIER [ GenericArgs ] "(" [ ArgList ] ")" (* method call *)
+          | "?." IDENTIFIER                                   (* optional chain field *)
+          | "?." IDENTIFIER "(" [ ArgList ] ")"               (* optional chain method *)
           | "(" [ ArgList ] ")"                               (* function call *)
           | "[" Expression "]"                                (* index *)
           | "[" SliceExpr "]"                                 (* slice *)
-          | "?" ;                                             (* error propagation *)
+          | "!" ;                                             (* try/propagate *)
 
 SliceExpr = [ IndexExpr ] ":" [ IndexExpr ] ;
 
@@ -1205,16 +1210,17 @@ From lowest to highest precedence:
 | Prec | Category       | Operators                       | Assoc | Example                   |
 |------|----------------|--------------------------------|-------|---------------------------|
 | 1    | Assignment     | `=` `+=` `-=` `*=` `/=` `%=`   | Right | `x = y = 1`               |
-| 2    | Logical OR     | `\|\|`                         | Left  | `a \|\| b \|\| c`         |
-| 3    | Logical AND    | `&&`                           | Left  | `a && b && c`             |
-| 4    | Pattern Match  | `is`                           | Left  | `x is Some(v)`            |
-| 5    | Equality       | `==` `!=`                      | Left  | `a == b != c`             |
-| 6    | Comparison     | `<` `>` `<=` `>=`              | Left  | `a < b`                   |
-| 7    | Range          | `..` `..=`                     | Left  | `0..10`, `0..=10`         |
-| 8    | Additive       | `+` `-`                        | Left  | `a + b - c`               |
-| 9    | Multiplicative | `*` `/` `%`                    | Left  | `a * b / c`               |
-| 10   | Unary          | `!` `-` `&` `&mut`             | Right | `!&mut x`                 |
-| 11   | Postfix        | `.` `()` `[]` `[:]` `?`        | Left  | `a.b()?.c[0]`             |
+| 2    | Coalesce       | `??`                           | Right | `a ?? b ?? c`             |
+| 3    | Logical OR     | `\|\|`                         | Left  | `a \|\| b \|\| c`         |
+| 4    | Logical AND    | `&&`                           | Left  | `a && b && c`             |
+| 5    | Pattern Match  | `is`                           | Left  | `x is Some(v)`            |
+| 6    | Equality       | `==` `!=`                      | Left  | `a == b != c`             |
+| 7    | Comparison     | `<` `>` `<=` `>=`              | Left  | `a < b`                   |
+| 8    | Range          | `..` `..=`                     | Left  | `0..10`, `0..=10`         |
+| 9    | Additive       | `+` `-`                        | Left  | `a + b - c`               |
+| 10   | Multiplicative | `*` `/` `%`                    | Left  | `a * b / c`               |
+| 11   | Unary          | `!` `-` `&` `&mut`             | Right | `!&mut x`                 |
+| 12   | Postfix        | `.` `?.` `()` `[]` `[:]` `!`   | Left  | `a.b()!.c[0]`             |
 
 ---
 

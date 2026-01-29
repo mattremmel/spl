@@ -1,17 +1,19 @@
 # SPL Error Handling
 
-This document specifies error handling in SPL, including the `?` operator, the `Try` trait, and cross-type error conversion.
+This document specifies error handling in SPL, including the `!` operator, the `Try` trait, optional chaining (`?.`), nullish coalescing (`??`), and cross-type error conversion.
 
 ## Overview
 
-SPL uses the `Result` and `Option` types for error handling, with the `?` operator for concise error propagation. The `Try` trait enables `?` to work uniformly across these types and user-defined types.
+SPL uses the `Result` and `Option` types for error handling, with the `!` operator for concise error propagation. The `Try` trait enables `!` to work uniformly across these types and user-defined types.
 
 **Key Concepts:**
 
 - **`Result(T: T, E: E)`**: Represents success (`Ok(T)`) or failure (`Err(E)`)
 - **`Option(T: T)`**: Represents presence (`Some(T)`) or absence (`None`)
-- **`?` operator**: Early return on failure, unwrap on success
-- **`Try` trait**: Enables `?` for any conforming type
+- **`!` operator**: Early return on failure, unwrap on success (postfix try)
+- **`?.` operator**: Optional chaining - access field/method if Some, else None
+- **`??` operator**: Nullish coalescing - unwrap or use default
+- **`Try` trait**: Enables `!` for any conforming type
 - **`FromResidual` trait**: Enables cross-type error conversion
 
 ---
@@ -53,9 +55,9 @@ Represents a control flow decision: continue execution with a value, or break/re
 
 ---
 
-## 2. The `?` Operator
+## 2. The `!` Operator (Try/Propagate)
 
-The `?` operator provides concise error propagation. When applied to a `Try` type:
+The `!` operator provides concise error propagation. When applied to a `Try` type:
 
 - On success: extracts and returns the inner value
 - On failure: returns early from the enclosing function with the error
@@ -64,25 +66,25 @@ The `?` operator provides concise error propagation. When applied to a `Try` typ
 
 ```spl
 fn read_config(path: &str): Result(T: Config, E: IoError) {
-    let contents = fs.read_to_string(path)?;  // Early return on Err
-    let config = parse_config(contents)?;     // Early return on Err
+    let contents = fs.read_to_string(path)!;  // Early return on Err
+    let config = parse_config(contents)!;     // Early return on Err
     return Ok(config);
 }
 
 fn find_user_email(users: &[User], id: UserId): String? {
-    let user = users.iter().find(|u| u.id == id)?;  // Early return None
-    let email = user.email.clone()?;                 // Early return None
+    let user = users.iter().find(|u| u.id == id)!;  // Early return None
+    let email = user.email.clone()!;                 // Early return None
     return Some(email);
 }
 ```
 
 ### Desugaring
 
-The `?` operator desugars to a match with early return:
+The `!` operator desugars to a match with early return:
 
 ```spl
 // This:
-let value = expr?;
+let value = expr!;
 
 // Desugars to:
 let value = match Try.branch(expr) {
@@ -93,9 +95,115 @@ let value = match Try.branch(expr) {
 
 ---
 
-## 3. The Try Trait
+## 3. Optional Chaining (`?.`)
 
-The `Try` trait defines how a type participates in `?` operations.
+The `?.` operator provides safe navigation through optional values. When applied to an `Option`:
+
+- On `Some(v)`: accesses the field/method on `v`, wrapping result in `Some`
+- On `None`: short-circuits and returns `None`
+
+### Basic Usage
+
+```spl
+fn get_email(user: User?): String? {
+    return user?.email;           // None if user is None
+}
+
+fn get_manager_name(user: User?): String? {
+    return user?.manager?.name;   // Chain through multiple optionals
+}
+
+fn call_method(obj: Service?): Response? {
+    return obj?.process();        // Method call on optional
+}
+```
+
+### Desugaring
+
+```spl
+// This:
+let email = user?.email;
+
+// Desugars to:
+let email = match user {
+    Some(u) => Some(u.email),
+    None => None,
+};
+```
+
+### Extracting with `!` vs Chaining with `?.`
+
+| Operator | Input | Output | On None |
+|----------|-------|--------|---------|
+| `!` | `T?` | `T` | Early return from function |
+| `?.` | `T?` | `U?` | Propagates None in expression |
+
+```spl
+fn example(user: User?): String throws Error {
+    // ! extracts value or returns early
+    let u = user!;              // u: User, returns if None
+
+    // ?. chains through optionals
+    let name = user?.name;      // name: String?, None propagates
+
+    return u.name;
+}
+```
+
+---
+
+## 4. Nullish Coalescing (`??`)
+
+The `??` operator provides a default value when an `Option` is `None`:
+
+```spl
+let name = user?.name ?? "Anonymous";
+let count = map.get(key) ?? 0;
+let config = load_config() ?? Config.default();
+```
+
+### Desugaring
+
+```spl
+// This:
+let name = expr ?? default;
+
+// Desugars to:
+let name = match expr {
+    Some(v) => v,
+    None => default,
+};
+```
+
+### Precedence
+
+`??` has lower precedence than `||`, allowing:
+
+```spl
+let value = config.primary ?? config.fallback ?? default;  // Right-associative chain
+let flag = opt_bool ?? false || other_condition;           // ?? binds tighter than ||
+```
+
+### Lazy Evaluation
+
+The `??` operator uses **lazy evaluation**: the right-hand side is only evaluated if the left-hand side is `None`. This matches `||` behavior and enables efficient patterns:
+
+```spl
+let config = cached ?? load_from_disk();      // load_from_disk() only called if cached is None
+let user = find_by_id(id) ?? create_default(); // create_default() only called if not found
+```
+
+### Comparison with Methods
+
+| Syntax | Equivalent Method |
+|--------|-------------------|
+| `opt ?? default` | `opt.unwrap_or_else(\|\| default)` |
+
+---
+
+## 5. The Try Trait
+
+The `Try` trait defines how a type participates in `!` operations.
 
 ```spl
 trait Try {
@@ -152,9 +260,9 @@ impl Try for Option(T: T) where T {
 
 ---
 
-## 4. Cross-Type Conversion
+## 6. Cross-Type Conversion
 
-When using `?` in a function returning a different `Try` type, conversion happens via `FromResidual`.
+When using `!` in a function returning a different `Try` type, conversion happens via `FromResidual`.
 
 ### The FromResidual Trait
 
@@ -181,16 +289,16 @@ This enables:
 ```spl
 fn process(path: &str): Result(T: Data, E: AppError) {
     // IoError converts to AppError via From trait
-    let contents = fs.read_to_string(path)?;
+    let contents = fs.read_to_string(path)!;
     // ParseError converts to AppError via From trait
-    let data = parse(contents)?;
+    let data = parse(contents)!;
     return Ok(data);
 }
 ```
 
 ### Option to Result Conversion
 
-Options can be used with `?` in Result-returning functions:
+Options can be used with `!` in Result-returning functions:
 
 ```spl
 impl FromResidual(R: ()) for Result(T: T, E: E) where T, E: Default {
@@ -205,7 +313,7 @@ impl FromResidual(R: ()) for Result(T: T, E: E) where T, E: Default {
 ```spl
 fn process(): Result(T: i32, E: Error) {
     let x: i32? = get_optional();
-    let value = x.ok_or(Error.NotFound)?;  // Explicit error
+    let value = x.ok_or(Error.NotFound)!;  // Explicit error
     return Ok(value * 2);
 }
 ```
@@ -234,7 +342,7 @@ impl Option(T: T) where T {
 
 ---
 
-## 5. Error Type Unification
+## 7. Error Type Unification
 
 A common pattern is defining an application error type that unifies multiple error sources:
 
@@ -258,8 +366,8 @@ impl From(T: ParseError) for AppError {
 }
 
 fn process_file(path: &str): Result(T: Data, E: AppError) {
-    let contents = fs.read_to_string(path)?;  // IoError -> AppError
-    let parsed = json.parse(contents)?;       // ParseError -> AppError
+    let contents = fs.read_to_string(path)!;  // IoError -> AppError
+    let parsed = json.parse(contents)!;       // ParseError -> AppError
 
     if !validate(parsed) {
         return Err(AppError.Validation("invalid data"));
@@ -271,26 +379,26 @@ fn process_file(path: &str): Result(T: Data, E: AppError) {
 
 ---
 
-## 6. Closures and `?`
+## 8. Closures and `!`
 
-The `?` operator in closures returns from the closure, not the enclosing function:
+The `!` operator in closures returns from the closure, not the enclosing function:
 
 ```spl
 fn process_items(items: Vec(T: Item)): Result(T: Vec(T: Output), E: Error) {
-    // ? returns from the closure
+    // ! returns from the closure
     let outputs = items.iter()
         .map(|item| {
-            let processed = transform(item)?;
+            let processed = transform(item)!;
             return Ok(processed);
         })
-        .collect()?;  // collect handles the Result from each closure
+        .collect()!;  // collect handles the Result from each closure
     return Ok(outputs);
 }
 ```
 
 ---
 
-## 7. Custom Try Implementations
+## 9. Custom Try Implementations
 
 Users can implement `Try` for custom types:
 
@@ -332,7 +440,7 @@ impl FromResidual(R: (u16, String, bool)) for Response(T: T) where T {
 
 ---
 
-## 8. ControlFlow Methods
+## 10. ControlFlow Methods
 
 ```spl
 impl ControlFlow(C: C, B: B) where C, B {
@@ -365,7 +473,7 @@ impl ControlFlow(C: C, B: B) where C, B {
 
 ---
 
-## 9. Prelude
+## 11. Prelude
 
 The following are in the prelude (no import needed):
 
@@ -380,7 +488,7 @@ The following are in the prelude (no import needed):
 
 ---
 
-## 10. The `throws` Keyword
+## 12. The `throws` Keyword
 
 The `throws` keyword provides syntactic sugar for functions that return `Result`, making error-prone functions more visible in signatures and reducing boilerplate.
 
@@ -409,8 +517,8 @@ When no error type is specified, the function uses the `Error` trait object type
 
 ```spl
 fn process_data(input: &str): Data throws {
-    let parsed = parse(input)?;      // ParseError converted to Error
-    let validated = validate(parsed)?; // ValidationError converted to Error
+    let parsed = parse(input)!;      // ParseError converted to Error
+    let validated = validate(parsed)!; // ValidationError converted to Error
     return transform(validated);
 }
 ```
@@ -445,7 +553,7 @@ fn parse_number(s: &str): Result(T: i32, E: ParseError) {
 
 ---
 
-## 11. The `throw` Keyword
+## 13. The `throw` Keyword
 
 The `throw` keyword provides concise syntax for returning errors, analogous to `bail!()` in Rust's anyhow:
 
@@ -488,38 +596,38 @@ fn process(path: &str): Data throws {
     if !path.exists() {
         throw IoError.NotFound(path);  // IoError converted to Error
     }
-    let content = read_file(path)?;
+    let content = read_file(path)!;
     if content.is_empty() {
         throw ValidationError.Empty;   // ValidationError converted to Error
     }
-    return parse(content)?;
+    return parse(content)!;
 }
 ```
 
-### `throw` vs `?` Operator
+### `throw` vs `!` Operator
 
 | Use Case | Syntax | When to Use |
 |----------|--------|-------------|
-| Propagate existing error | `operation()?` | Calling fallible functions |
+| Propagate existing error | `operation()!` | Calling fallible functions |
 | Create and return new error | `throw .Foo` | Validation, guards, custom errors |
 
 ```spl
 fn process_file(path: &str): Config throws ConfigError {
-    // Use ? to propagate errors from called functions
-    let content = read_file(path)?;
+    // Use ! to propagate errors from called functions
+    let content = read_file(path)!;
 
     // Use throw to create new errors
     if content.is_empty() {
         throw .EmptyFile(path);
     }
 
-    return parse_config(content)?;
+    return parse_config(content)!;
 }
 ```
 
 ---
 
-## 12. Error Type Conversion with `throws`
+## 14. Error Type Conversion with `throws`
 
 ### Typed `throws` with Conversion
 
@@ -535,8 +643,8 @@ impl From(T: IoError) for AppError { ... }
 impl From(T: ParseError) for AppError { ... }
 
 fn load_config(path: &str): Config throws AppError {
-    let content = read_file(path)?;   // IoError -> AppError via From
-    let config = parse(content)?;      // ParseError -> AppError via From
+    let content = read_file(path)!;   // IoError -> AppError via From
+    let config = parse(content)!;      // ParseError -> AppError via From
     return config;
 }
 ```
@@ -547,9 +655,9 @@ With untyped `throws`, any error implementing the `Error` trait is automatically
 
 ```spl
 fn load_and_process(path: &str): Result throws {
-    let config = load_config(path)?;  // AppError -> Error
-    let data = fetch_data(config)?;   // NetworkError -> Error
-    return process(data)?;            // ProcessError -> Error
+    let config = load_config(path)!;  // AppError -> Error
+    let data = fetch_data(config)!;   // NetworkError -> Error
+    return process(data)!;            // ProcessError -> Error
 }
 ```
 
@@ -561,9 +669,11 @@ fn load_and_process(path: &str): Result throws {
 |---------|-------------|
 | `Result(T: T, E: E)` | Success or error type |
 | `Option(T: T)` | Present or absent type |
-| `expr?` | Early return on failure, unwrap on success |
-| `Try` trait | Enables `?` for a type |
-| `FromResidual` trait | Enables cross-type `?` conversion |
+| `expr!` | Early return on failure, unwrap on success (try/propagate) |
+| `expr?.field` | Optional chaining - access if Some, else None |
+| `expr ?? default` | Nullish coalescing - unwrap or use default |
+| `Try` trait | Enables `!` for a type |
+| `FromResidual` trait | Enables cross-type `!` conversion |
 | `ok_or(err)` | Convert Option to Result with explicit error |
 | `From` trait | Enables automatic error type conversion |
 | `throws E` | Sugar for `Result(T: T, E: E)` return type |
@@ -574,17 +684,23 @@ fn load_and_process(path: &str): Result throws {
 
 ```spl
 // Basic error propagation
-let value = fallible_operation()?;
+let value = fallible_operation()!;
+
+// Optional chaining
+let name = user?.profile?.name;
+
+// Nullish coalescing
+let name = user?.name ?? "Anonymous";
 
 // Option to Result with explicit error
-let value = optional_value.ok_or(Error.NotFound)?;
+let value = optional_value.ok_or(Error.NotFound)!;
 
 // Error type unification via From
 impl From(T: SourceError) for TargetError { ... }
 
 // Using throws for cleaner signatures
 fn process(input: &str): Output throws ProcessError {
-    let parsed = parse(input)?;
+    let parsed = parse(input)!;
     if !valid(parsed) {
         throw .Invalid;
     }
