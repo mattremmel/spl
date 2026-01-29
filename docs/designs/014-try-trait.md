@@ -534,6 +534,11 @@ fn fetch_optional_config(): Result(Config, Error) {
 1. **NeverShortCircuit** - Should there be a "never fails" wrapper for infallible operations in `?` chains?
 2. **try blocks** - Should SPL support `try { }` blocks that collect `?` results?
 3. **Error context** - Should there be built-in support for error context/wrapping (like anyhow's `.context()`)?
+4. **Optional chaining** - Should SPL add a separate optional chaining operator (like Kotlin/Swift/TypeScript `?.`) that short-circuits to `None` without early return? This would be distinct from the early-return `?` operator:
+   - `get_user()?.address` — early return if None, then access field (current Rust-style behavior)
+   - `user&.address&.city` — optional chain returning `Option(String)`, no early return (hypothetical)
+
+   These serve different use cases: `?` requires the enclosing function to return `Option`/`Result`, while optional chaining works anywhere and keeps the result wrapped.
 
 ---
 

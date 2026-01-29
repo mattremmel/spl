@@ -232,6 +232,10 @@ let result = catch_panic(|| risky_operation());
 ### 5.1 Try Operator
 `?` works with any type implementing `Try` trait (includes Option and Result).
 
+Follows Rust semantics: `expr?.field` means early-return then field access (parses as `(expr?).field`).
+
+**Future consideration:** Optional chaining (`?.` as single operator) for expressions like `user?.address?.city` that return `Option(String)` without early return. Would need distinct syntax to avoid confusion with early-return `?` (e.g., `&.` like Ruby).
+
 ---
 
 ## 6. Advanced Features
