@@ -446,10 +446,10 @@ The following example demonstrates all token categories:
 
 ```spl
 // Point struct with public fields
-pub struct Point{
+pub struct Point(
     pub x: f64,
     pub y: f64,
-}
+)
 
 impl Point {
     // Return type uses colon, not arrow

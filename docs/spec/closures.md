@@ -321,10 +321,10 @@ fn process_users(users: Vec(T: User)): Vec(T: String) {
 ### Stored Callbacks (Escaping)
 
 ```spl
-struct Button{
+struct Button(
     label: String,
     on_click: fn(): (),
-}
+)
 
 fn create_button(label: String, counter: Arc(T: Cell(T: i32))): Button {
     // Escaping: stored in struct

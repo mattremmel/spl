@@ -181,59 +181,62 @@ fn clone_it(x: &T): T where T: Clone {
 ### Struct Definitions
 
 ```ebnf
-(* Named structs use braces, tuple structs use parentheses *)
-StructDef = "struct" IDENTIFIER ( NamedFields | TupleFields ) [ WhereClause ] ;
+(* All structs use parentheses - named vs positional distinguished by : *)
+StructDef = "struct" IDENTIFIER "(" [ FieldList ] ")" [ WhereClause ] ;
 
-(* Named fields: struct Point{x: i32, y: i32} *)
-NamedFields = "{" [ FieldList ] "}" ;
 FieldList = Field { "," Field } [ "," ] ;
-Field = [ "pub" ] IDENTIFIER ":" Type ;
 
-(* Tuple fields: struct Pair(i32, i32) *)
-TupleFields = "(" [ TupleFieldList ] ")" ;
-TupleFieldList = TupleField { "," TupleField } [ "," ] ;
-TupleField = [ "pub" ] Type ;
+(* Field with optional name - named: `x: i32`, positional: `i32` *)
+Field = [ "pub" ] ( IDENTIFIER ":" Type | Type ) ;
 ```
 
 **Examples:**
 
 ```spl
 // Named struct - fields accessed by name
-struct Point{x: f64, y: f64}
+struct Point(x: f64, y: f64)
 
-// Tuple struct - fields accessed by position (.0, .1, etc.)
+// Positional struct - fields accessed by position (.0, .1, etc.)
 struct Pair(i32, i32)
 
 // Empty structs
-struct Empty{}
+struct Empty()
 struct Unit()
 
 // Generic named struct
-struct Box{value: T} where T
+struct Box(value: T) where T
 
-// Generic tuple struct (wrapper type)
+// Generic positional struct (wrapper type)
 struct Wrapper(T) where T
 
 // Public fields
-pub struct Point{pub x: f64, pub y: f64}
+pub struct Point(pub x: f64, pub y: f64)
 pub struct Newtype(pub i32)
 
 // Generic with bounds
-struct Container{items: Vec(T: T)} where T: Clone
+struct Container(items: Vec(T: T)) where T: Clone
 
 // Multiple type parameters
-struct Pair{first: T, second: U} where T, U
+struct Pair(first: T, second: U) where T, U
 
 // Multiple type parameters with bounds
-struct Map{keys: Vec(T: K), values: Vec(T: V)} where K: Hash + Eq, V
+struct Map(keys: Vec(T: K), values: Vec(T: V)) where K: Hash + Eq, V
 ```
 
 **Syntax Rationale:**
-- Named structs use braces `{}` to visually distinguish field declarations from expressions
-- Tuple structs use parentheses `()` because their declaration mirrors their usage:
-  - Declaration: `struct Pair(i32, i32)`
-  - Instantiation: `Pair(1, 2)`
-  - Pattern: `let Pair(a, b) = p`
+
+SPL uses a consistent delimiter philosophy:
+- **Braces `{}`** = code blocks and item lists (enum body, trait body, impl body, function body)
+- **Parentheses `()`** = data shapes (struct fields, enum variant data, tuples, function params, generic args)
+
+All structs use parentheses because declaration mirrors usage:
+- Declaration: `struct Point(x: i32, y: i32)`
+- Instantiation: `Point(x: 1, y: 2)`
+- Pattern: `let Point(x, y) = p`
+
+Named vs positional fields are distinguished by the presence of `:` after an identifier:
+- Named: `Point(x: i32, y: i32)` - has `name: type`
+- Positional: `Pair(i32, i32)` - just types
 
 ### Enum Definitions
 
@@ -1314,11 +1317,11 @@ value is Some(x) && x > 0 // (value is Some(x)) && (x > 0)
 The following program demonstrates key grammar constructs:
 
 ```spl
-// Struct with braces
-pub struct Point{
+// Struct with parentheses
+pub struct Point(
     pub x: T,
     pub y: T,
-} where T
+) where T
 
 impl Point(T: T) where T {
     // Return type with colon
@@ -1476,8 +1479,8 @@ impl Point(T: T) where T {
 | Generic declaration | `fn foo<T>() {}`          | `fn foo() where T {}`        |
 | Where clause        | Constrains only           | Declares AND constrains      |
 | Turbofish           | `::<T>`                   | Not needed (use parentheses) |
-| Named struct decl   | `struct Point { x: i32 }` | `struct Point{x: i32}`       |
-| Tuple struct decl   | `struct Pair(i32, i32);`  | `struct Pair(i32, i32)`      |
+| Named struct decl   | `struct Point { x: i32 }` | `struct Point(x: i32)`       |
+| Positional struct   | `struct Pair(i32, i32);`  | `struct Pair(i32, i32)`      |
 | Struct literal      | `Point { x: 1 }`          | `Point(x: 1)` (instantiation) |
 | Pattern matching    | `if let Some(x) = v {}`   | `if v is Some(x) {}`         |
 | Function return     | `expr` (implicit tail)    | `expr` (single) or `return` (multi-stmt) |

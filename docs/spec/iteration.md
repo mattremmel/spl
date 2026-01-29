@@ -278,10 +278,10 @@ let count = r.len();            // 10
 ### Range Implementation
 
 ```spl
-struct Range{
+struct Range(
     start: T,
     end: T,
-} where T: Step
+) where T: Step
 
 impl Iterable for Range(T: T) where T: Step {
     type Item = T;
@@ -352,7 +352,7 @@ impl Vec(T: T) where T {
     }
 }
 
-struct Iter{source: S} where S
+struct Iter(source: S) where S
 
 impl Iter(S: S) where S: Iterable {
     /// Transform elements
@@ -546,9 +546,9 @@ fn countdown(from: i32): Generator(T: i32) { ... }
 The `Generator(T: T)` type can be used in `for` loops:
 
 ```spl
-struct Generator{
+struct Generator(
     // Internal state (compiler-generated)
-} where T
+) where T
 ```
 
 > **Note:** Generators are consumed during iteration. Unlike indexable collections, generators maintain internal state and produce values on-demand. The `for` loop over a generator uses the `Iterator` trait (with `next()` returning owned values), not `Iterable`. See "Consuming Iteration" below for the `Iterator` trait.
@@ -863,11 +863,11 @@ fn main() {
 ### Custom Iterable Type
 
 ```spl
-struct CircularBuffer{
+struct CircularBuffer(
     data: [T; 8],
     head: usize,
     len: usize,
-} where T
+) where T
 
 impl Iterable for CircularBuffer(T: T) where T {
     type Item = T;

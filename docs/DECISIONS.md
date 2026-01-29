@@ -49,16 +49,44 @@ enum Message{
 }
 ```
 
-### 2.3 Struct Syntax
-- Named structs use braces: `struct Point{x: i32, y: i32}`
-- Tuple structs use parentheses: `struct Pair(i32, i32)`
+### 2.3 Delimiter Philosophy: Braces vs Parentheses
 
-Tuple structs use parentheses because declaration mirrors usage:
-- Declaration: `struct Pair(i32, i32)`
-- Instantiation: `Pair(1, 2)`
-- Pattern: `let Pair(a, b) = p`
+SPL uses a consistent delimiter philosophy throughout the language:
 
-### 2.4 Trait Syntax
+**Braces `{}` = code blocks and item lists**
+- Enum body: `enum Color{Red, Green, Blue}`
+- Trait body: `trait Clone { fn clone(&self): Self; }`
+- Impl body: `impl Point { fn new(): Self { ... } }`
+- Function body: `fn foo() { ... }`
+
+**Parentheses `()` = data shapes**
+- Struct fields: `struct Point(x: i32, y: i32)`
+- Enum variant data: `Some(T)`, `Move(x: i32, y: i32)`
+- Tuples: `(i32, String)`
+- Function params: `fn foo(x: i32, y: i32)`
+- Generic args: `Vec(T: i32)`
+- Instantiation: `Point(x: 1, y: 2)`
+- Future named tuples: `(x: i32, y: i32)`
+
+Named vs positional fields are distinguished by presence of `:` after identifier:
+- Named: `Point(x: i32, y: i32)` - has name `:` type
+- Positional: `Pair(i32, i32)` - just types
+
+### 2.4 Struct Syntax
+All structs use parentheses for their fields:
+
+```spl
+struct Point(x: i32, y: i32)   // named fields
+struct Pair(i32, i32)           // positional fields
+struct Empty()                  // unit struct
+```
+
+Declaration mirrors usage:
+- Declaration: `struct Point(x: i32, y: i32)`
+- Instantiation: `Point(x: 1, y: 2)`
+- Pattern: `let Point(x, y) = p`
+
+### 2.5 Trait Syntax
 Traits use braces:
 
 ```spl
@@ -72,7 +100,7 @@ trait Iterator {
 }
 ```
 
-### 2.5 Trait Implementation
+### 2.6 Trait Implementation
 `impl Trait for Type` syntax:
 
 ```spl
@@ -83,13 +111,13 @@ impl Clone for Point {
 }
 ```
 
-### 2.6 Associated Types
+### 2.7 Associated Types
 Traits support associated types.
 
-### 2.7 Function Return Types
+### 2.8 Function Return Types
 **Mandatory** - all functions must declare their return type, including `()` for unit.
 
-### 2.8 Closures
+### 2.9 Closures
 Escaping vs non-escaping semantics with move-by-default. See [ADR-012](designs/012-closures.md).
 
 **Non-escaping closures** (passed to `map`, `filter`, etc.): borrow by default
@@ -108,7 +136,7 @@ spawn(clone |a, b, c| { ... });
 
 Single-expression closures allow implicit return: `|a, b| a + b`
 
-### 2.9 Type Aliases
+### 2.10 Type Aliases
 Use where clause with optional constraints:
 
 ```spl
@@ -250,7 +278,7 @@ Look like regular function calls - no `!` required.
 | Paths | `::` | `.` |
 | Return type | `->` | `:` |
 | Type application | `Vec<i32>` | `Vec(i32)` |
-| Named struct decl | `struct Point { x: i32 }` | `struct Point{x: i32}` |
+| Named struct decl | `struct Point { x: i32 }` | `struct Point(x: i32)` |
 | Tuple struct decl | `struct Pair(i32, i32);` | `struct Pair(i32, i32)` |
 | Struct literal | `Point { x: 1 }` | `Point(x: 1)` |
 | Pattern matching | `if let Some(x) = v` | `if v is Some(x)` |

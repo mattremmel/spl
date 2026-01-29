@@ -274,11 +274,11 @@ fn fetch_data(config: Config, client: HttpClient): Result(Data, Error) {
 ### Example 3: Stored Callbacks (Escaping)
 
 ```spl
-struct Button{
+struct Button(
     label: String,
     on_click: fn(): (),
     on_hover: fn(): (),
-}
+)
 
 fn create_button(label: String, counter: Arc(Cell(i32))): Button {
     // Escaping closures: stored in struct
@@ -400,10 +400,10 @@ fn create_processor(config: Config): fn(Vec(i32)): Vec(i32) {
 ### Example 8: Event Handlers with Shared State
 
 ```spl
-struct App{
+struct App(
     state: Arc(Mutex(AppState)),
     handlers: Vec(fn(Event): ()),
-}
+)
 
 impl App {
     fn register_handlers(&mut self) {
@@ -707,10 +707,10 @@ let s = String.from("hello");
 let f = |~s, y| x + y + s.len();
 
 // Compiled (conceptual)
-struct __Closure_1{
+struct __Closure_1(
     x: i32,      // copied (Copy type)
     s: String,   // cloned (~ modifier)
-}
+)
 
 impl Fn(i32) for __Closure_1 {
     type Output = i32;

@@ -167,10 +167,10 @@ Structs passed across FFI boundaries must use `#[repr(C)]`:
 
 ```spl
 #[repr(C)]
-struct Point{
+struct Point(
     x: f64,
     y: f64,
-}
+)
 
 extern "C" {
     fn distance(a: Ptr(T: Point), b: Ptr(T: Point)): f64;
@@ -201,10 +201,10 @@ For structs with no padding (matching C's `__attribute__((packed))`):
 
 ```spl
 #[repr(C, packed)]
-struct PackedData{
+struct PackedData(
     a: u8,
     b: u32,  // No padding before this
-}
+)
 ```
 
 **Warning:** Packed structs may require unaligned memory access, which has performance implications and may not be supported on all architectures.
@@ -221,9 +221,9 @@ C strings are null-terminated byte arrays with no encoding guarantee. SPL provid
 
 ```spl
 #[derive(Copy, Clone)]
-pub struct CStr{
+pub struct CStr(
     ptr: Ptr(T: u8),
-}
+)
 
 impl CStr {
     /// Wrap a pointer to a C string.
@@ -255,10 +255,10 @@ impl CStr {
 `CString` is an owned null-terminated string allocated by SPL.
 
 ```spl
-pub struct CString{
+pub struct CString(
     ptr: MutPtr(T: u8),
     len: usize,
-}
+)
 
 impl CString {
     /// Create from SPL string (adds null terminator).
@@ -527,9 +527,9 @@ extern "C" {
 }
 
 #[repr(C)]
-struct Context{
+struct Context(
     multiplier: i32,
-}
+)
 
 extern "C" fn callback(value: i32, user_data: MutPtr(T: u8)) {
     let ctx = unsafe { user_data.cast(T: Context).read() };
@@ -705,9 +705,9 @@ extern "C" {
 }
 
 // Safe public API
-pub struct MyLib{
+pub struct MyLib(
     handle: MutPtr(T: Handle),
-}
+)
 
 impl MyLib {
     pub fn new(): Option(T: MyLib) {
@@ -756,7 +756,7 @@ impl Drop for MyLib {
 | Declare foreign function | `extern "C" { fn name(...): T; }` |
 | Variadic function | `extern "C" { fn printf(fmt: Ptr(T: u8), ...): i32; }` |
 | Call foreign function | `unsafe { malloc(1024) }` |
-| C-compatible struct | `#[repr(C)] struct Name{}` |
+| C-compatible struct | `#[repr(C)] struct Name()` |
 | C-compatible enum | `#[repr(C)] enum Name { }` |
 | Export function to C | `extern "C" fn name(...): T { }` |
 | Function pointer type | `extern "C" fn(...): T` |
