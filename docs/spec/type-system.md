@@ -628,6 +628,42 @@ let p: Pair<i32> = (1, 2);
 let q: (i32, i32) = p;    // OK: Pair<i32> is (i32, i32)
 ```
 
+### Optional Type Syntax
+
+The postfix `?` on a type is syntactic sugar for `Option(T)`:
+
+| Syntax | Equivalent |
+|--------|------------|
+| `T?` | `Option(T)` |
+| `i32?` | `Option(i32)` |
+| `String?` | `Option(String)` |
+| `Vec(i32)?` | `Option(Vec(i32))` |
+
+```spl
+// These are equivalent:
+fn find_user(id: UserId): User? { ... }
+fn find_user(id: UserId): Option(User) { ... }
+
+// In struct fields:
+struct Person(
+    name: String,
+    email: String?,      // Optional email
+    phone: String?,      // Optional phone
+)
+
+// In function parameters:
+fn greet(name: String, title: String?): () {
+    match title {
+        Some(t) => println(t + " " + name),
+        None => println(name),
+    }
+}
+```
+
+**Nesting:** `T??` is `Option(Option(T))`, though this is rarely useful.
+
+**Note:** The `?` postfix on types (optional type) is distinct from the `?` postfix operator on expressions (try/early-return). They appear in different syntactic positions and do not conflict.
+
 ### Type Compatibility Rules
 
 | Types | Compatible? | Reason |

@@ -19,6 +19,7 @@ This directory contains Architecture Decision Records documenting key design dec
 | [011](011-iteration-and-generators.md) | Iteration and Generators | Accepted | Interior iteration via generator methods |
 | [012](012-closures.md) | Closures and Capture Semantics | Accepted | Move-by-default, explicit clone with `~` |
 | [013](013-async-await.md) | Concurrency Model and Runtime | Draft | No function coloring, Go-style runtime, task isolation |
+| [014](014-try-trait.md) | Try Trait and Error Propagation | Draft | Unified `?` for Option/Result, FromResidual conversion |
 
 ## ADR Template
 
