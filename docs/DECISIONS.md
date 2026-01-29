@@ -96,7 +96,7 @@ trait Clone {
 
 trait Iterator {
     type Item;
-    fn next(&mut self): Option(T: Self.Item);
+    fn next(&mut self): Self.Item?;
 }
 ```
 
@@ -198,7 +198,7 @@ Methods instead of `as` keyword:
 let wide: i64 = x.widen();
 let truncated: i8 = x.truncate();
 let saturated: i8 = x.saturate();
-let checked: Option(i8) = x.try_into();
+let checked: i8? = x.try_into();
 ```
 
 ### 4.4 Panic Behavior

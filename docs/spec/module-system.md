@@ -476,7 +476,7 @@ Imports can shadow prelude items:
 use custom_types.Option;  // Now 'Option' refers to custom_types.Option
 
 // Original still accessible via full path
-let x: std.option.Option(T: i32) = Some(42);
+let x: i32? = Some(42);
 ```
 
 ---
@@ -509,7 +509,7 @@ println                 // Print with newline
 
 ```spl
 // No imports needed for prelude items
-fn example(): Option(T: i32) {
+fn example(): i32? {
     let v: Vec(T: i32) = Vec.new();
     let s: String = String.from("hello");
 

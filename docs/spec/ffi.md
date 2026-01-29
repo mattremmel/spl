@@ -710,7 +710,7 @@ pub struct MyLib(
 )
 
 impl MyLib {
-    pub fn new(): Option(T: MyLib) {
+    pub fn new(): MyLib? {
         let h = unsafe { mylib_create() };
         if h.is_null() {
             None

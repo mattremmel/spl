@@ -492,7 +492,7 @@ fn main() {
     }
 
     // Pattern matching with 'is'
-    let maybe_value: Option(T: i32) = Some(42);
+    let maybe_value: i32? = Some(42);
     if maybe_value is Some(v) {
         // Use v here
     }

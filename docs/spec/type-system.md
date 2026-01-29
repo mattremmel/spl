@@ -631,14 +631,14 @@ Traits can declare associated types—type placeholders that implementors define
 trait Iterator {
     type Item;  // Associated type
 
-    fn next(&mut self): Option(T: Self.Item);
+    fn next(&mut self): Self.Item?;
 }
 
 // Implementor specifies the associated type
 impl Iterator for Counter {
     type Item = i32;
 
-    fn next(&mut self): Option(T: i32) {
+    fn next(&mut self): i32? {
         // ...
     }
 }
@@ -677,7 +677,7 @@ trait Container {
 // Associated type: one Item type per Iterator impl
 trait Iterator {
     type Item;
-    fn next(&mut self): Option(T: Self.Item);
+    fn next(&mut self): Self.Item?;
 }
 
 // Type parameter: can implement Add for many RHS types

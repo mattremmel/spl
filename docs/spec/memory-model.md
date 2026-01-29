@@ -766,7 +766,7 @@ impl Container {
     }
 
     // Or return an owned copy
-    fn first(&self): Option(T: i32) {
+    fn first(&self): i32? {
         return self.data.first().copied();
     }
 }

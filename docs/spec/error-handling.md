@@ -69,7 +69,7 @@ fn read_config(path: &str): Result(T: Config, E: IoError) {
     return Ok(config);
 }
 
-fn find_user_email(users: &[User], id: UserId): Option(T: String) {
+fn find_user_email(users: &[User], id: UserId): String? {
     let user = users.iter().find(|u| u.id == id)?;  // Early return None
     let email = user.email.clone()?;                 // Early return None
     return Some(email);
@@ -204,7 +204,7 @@ impl FromResidual(R: ()) for Result(T: T, E: E) where T, E: Default {
 
 ```spl
 fn process(): Result(T: i32, E: Error) {
-    let x: Option(T: i32) = get_optional();
+    let x: i32? = get_optional();
     let value = x.ok_or(Error.NotFound)?;  // Explicit error
     return Ok(value * 2);
 }
@@ -347,14 +347,14 @@ impl ControlFlow(C: C, B: B) where C, B {
         return !self.is_continue();
     }
 
-    fn continue_value(self): Option(T: C) {
+    fn continue_value(self): C? {
         match self {
             Continue(c) => Some(c),
             Break(_) => None,
         }
     }
 
-    fn break_value(self): Option(T: B) {
+    fn break_value(self): B? {
         match self {
             Continue(_) => None,
             Break(b) => Some(b),

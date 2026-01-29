@@ -113,7 +113,7 @@ impl Try for Option(T: T) where T {
 Usage in Option-returning functions:
 
 ```spl
-fn find_user_email(users: &[User], id: UserId): Option(T: String) {
+fn find_user_email(users: &[User], id: UserId): String? {
     let user = users.iter().find(|u| u.id == id)?;  // Early return None
     let email = user.email.clone()?;                 // Early return None
     return Some(email);
@@ -146,7 +146,7 @@ This allows:
 
 ```spl
 fn process(): Result(T: i32, E: Error) {
-    let x: Option(T: i32) = get_optional();
+    let x: i32? = get_optional();
     let value = x?;  // None becomes Err(Error.default())
     return Ok(value * 2);
 }
@@ -158,7 +158,7 @@ For clarity and control over the error value, explicit conversion is preferred:
 
 ```spl
 fn process(): Result(T: i32, E: Error) {
-    let x: Option(T: i32) = get_optional();
+    let x: i32? = get_optional();
     let value = x.ok_or(Error.NotFound)?;  // Explicit error
     return Ok(value * 2);
 }
@@ -361,14 +361,14 @@ impl ControlFlow(C: C, B: B) where C, B {
         return !self.is_continue();
     }
 
-    fn continue_value(self): Option(T: C) {
+    fn continue_value(self): C? {
         match self {
             Continue(c) => Some(c),
             Break(_) => None,
         }
     }
 
-    fn break_value(self): Option(T: B) {
+    fn break_value(self): B? {
         match self {
             Continue(_) => None,
             Break(b) => Some(b),
@@ -508,7 +508,7 @@ fn process_file(path: &str): Result(T: Data, E: AppError) {
 ### Option Chaining
 
 ```spl
-fn get_user_city(db: &Database, user_id: UserId): Option(T: String) {
+fn get_user_city(db: &Database, user_id: UserId): String? {
     let user = db.find_user(user_id)?;
     let address = user.address?;
     let city = address.city.clone()?;

@@ -309,7 +309,7 @@ trait Clone {
 // Trait with associated type
 trait Iterator {
     type Item;
-    fn next(&mut self): Option(T: Self.Item);
+    fn next(&mut self): Self.Item?;
 }
 
 // Trait with default implementation
@@ -1410,7 +1410,7 @@ fn main() {
     }
 
     // Pattern matching with is
-    let maybe: Option(T: i32) = Some(42);
+    let maybe: i32? = Some(42);
     if maybe is Some(x) {
         // x is bound
     }

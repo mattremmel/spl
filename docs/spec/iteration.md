@@ -288,7 +288,7 @@ struct Range(
 impl Iterator for Range(T: T) where T: Step {
     type Item = T;
 
-    fn next(&mut self): Option(T: T) {
+    fn next(&mut self): T? {
         if self.start < self.end {
             let value = self.start;
             self.start = self.start.forward(1);
@@ -435,7 +435,7 @@ impl Iter(S: S) /* and all adapters */ {
     }
 
     /// Find first matching element
-    fn find(self, pred: fn(&S.Item): bool): Option(T: S.Item) {
+    fn find(self, pred: fn(&S.Item): bool): S.Item? {
         // Returns owned clone of found element
     }
 
@@ -453,19 +453,19 @@ impl Iter(S: S) /* and all adapters */ {
     fn count(self): usize { ... }
 
     /// Get first element
-    fn first(self): Option(T: S.Item) { ... }
+    fn first(self): S.Item? { ... }
 
     /// Get last element
-    fn last(self): Option(T: S.Item) { ... }
+    fn last(self): S.Item? { ... }
 
     /// Get nth element
-    fn nth(self, n: usize): Option(T: S.Item) { ... }
+    fn nth(self, n: usize): S.Item? { ... }
 
     /// Get min element
-    fn min(self): Option(T: S.Item) where S.Item: Ord { ... }
+    fn min(self): S.Item? where S.Item: Ord { ... }
 
     /// Get max element
-    fn max(self): Option(T: S.Item) where S.Item: Ord { ... }
+    fn max(self): S.Item? where S.Item: Ord { ... }
 }
 ```
 
@@ -490,7 +490,7 @@ let sum_of_small: i32 = numbers
 // 10
 
 // Find first match
-let first_even: Option(T: i32) = numbers
+let first_even: i32? = numbers
     .iter()
     .find(|x| x % 2 == 0);
 // Some(2)
@@ -727,7 +727,7 @@ trait IntoIterator {
 trait Iterator {
     type Item;
 
-    fn next(&mut self): Option(T: Self.Item);
+    fn next(&mut self): Self.Item?;
 }
 ```
 
