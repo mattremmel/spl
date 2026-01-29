@@ -24,6 +24,31 @@ This ADR defines SPL's concurrency model based on lessons learned from Go, Rust,
 - **Java Loom**: Virtual threads, blocking detection
 - **Erlang**: Task isolation, "let it crash" philosophy
 
+### Module Organization
+
+Concurrency primitives are organized in the standard library:
+
+```spl
+std.task        // Task spawning, joining, scopes
+std.channel     // All channel types
+std.sync        // Mutex, RwLock, Barrier, etc.
+std.runtime     // Runtime configuration
+```
+
+Usage patterns:
+```spl
+// Import module, use qualified names
+use std.task;
+task.spawn(|| work());
+
+// Import specific functions
+use std.task.spawn;
+spawn(|| work());
+
+// Import multiple items
+use std.task.{spawn, scope, JoinHandle};
+```
+
 ---
 
 ## Decision
@@ -33,6 +58,8 @@ This ADR defines SPL's concurrency model based on lessons learned from Go, Rust,
 Unlike Rust's async/await, SPL does not distinguish between "async" and "sync" functions at the type level. Any function can yield to the scheduler.
 
 ```spl
+use std.task.spawn;
+
 // No async keyword needed - any function can yield
 fn fetch(url: String): Response {
     let conn = TcpStream.connect(url);  // May yield
@@ -40,10 +67,10 @@ fn fetch(url: String): Response {
     return response;
 }
 
-// Looks like regular code, runs concurrently
-fn main() {
-    let handle = Task.spawn(|| fetch("https://example.com"));
-    let result = handle.await;
+// main() runs inside an implicit runtime
+fn main(): () {
+    let handle = spawn(|| fetch("https://example.com"));
+    let result = handle.await();
 }
 ```
 
@@ -75,8 +102,10 @@ SPL uses **growable contiguous stacks** with **adaptive initial sizing**, follow
 4. **No hot-split**: Contiguous copying (Go 1.3+) eliminates the hot-split problem
 
 ```spl
+use std.task.spawn;
+
 // Task starts with adaptive size (e.g., 8KB if recent average)
-Task.spawn(|| {
+spawn(|| {
     // Deep recursion triggers growth: 8KB -> 16KB -> 32KB
     recursive_algorithm(data);
 });
@@ -97,7 +126,7 @@ SPL uses **cooperative preemption at function calls** plus **async preemption vi
 - Function calls (stack check prologue)
 - Channel operations
 - I/O operations
-- Explicit `Task.yield()`
+- Explicit `task.yield()` (or `yield()` if imported)
 
 #### Async Preemption (Go 1.14+ model)
 
@@ -132,20 +161,22 @@ fn compute_forever() {
 
 ### 4. Task Spawning
 
-Tasks are spawned via `Task.spawn()`, which returns a `JoinHandle(T)`.
+Tasks are spawned via `task.spawn()`, which returns a `JoinHandle(T)`.
 
 #### Basic Usage
 
 ```spl
+use std.task.{spawn, JoinHandle};
+
 // Spawn a task - returns immediately
-let handle: JoinHandle(Response) = Task.spawn(|| {
+let handle: JoinHandle(Response) = spawn(|| {
     return fetch(url);
 });
 
 // Do other work...
 
-// Await the result
-let response: Response = handle.await;
+// Await the result - .await() is a method on JoinHandle
+let response: Response = handle.await();
 ```
 
 #### Closure Capture Semantics
@@ -153,11 +184,14 @@ let response: Response = handle.await;
 Task closures follow ADR-012 capture rules (escaping closures):
 
 ```spl
+use std.task.spawn;
+use std.sync.Arc;
+
 let data = load_data();
 let config = Arc.new(Config.load());
 
 // data moved (default), config cloned (~)
-let handle = Task.spawn(|data, ~config| {
+let handle = spawn(|data, ~config| {
     return process(data, config);
 });
 
@@ -168,7 +202,9 @@ println(config.name);
 #### Configuration via Named Arguments
 
 ```spl
-let handle = Task.spawn(
+use std.task.spawn;
+
+let handle = spawn(
     || fetch(url),
     name = "http-fetch",
     timeout = Duration.from_secs(30),
@@ -202,6 +238,19 @@ enum TaskError {
 }
 ```
 
+#### Note on `.await()`
+
+Unlike Rust's `.await` postfix keyword, SPL's `.await()` is a regular method. This is consistent with "no function coloring" - there's no special syntax needed because any function can yield.
+
+Types that represent pending work (like `JoinHandle`, oneshot receivers) implement an `Awaitable` trait:
+
+```spl
+trait Awaitable {
+    type Output;
+    fn await(self): Self.Output;
+}
+```
+
 ---
 
 ### 5. Cancellation
@@ -209,17 +258,19 @@ enum TaskError {
 **Dropping a JoinHandle cancels the task.** This prevents orphaned tasks.
 
 ```spl
+use std.task.spawn;
+
 {
-    let handle = Task.spawn(|| long_work());
+    let handle = spawn(|| long_work());
 }  // handle dropped here - task cancelled
 
 // Explicit cancel
-let handle = Task.spawn(|| long_work());
+let handle = spawn(|| long_work());
 handle.cancel();
 let result = handle.try_await();  // Returns Err(TaskError.Cancelled)
 
 // Fire-and-forget (explicit opt-in)
-let handle = Task.spawn(|| background_work());
+let handle = spawn(|| background_work());
 handle.detach();  // Task continues, handle consumed
 ```
 
@@ -233,9 +284,11 @@ handle.detach();  // Task continues, handle consumed
 #### CancellationToken for Cooperative Checking
 
 ```spl
+use std.task.{spawn, CancellationToken};
+
 let token = CancellationToken.new();
 
-let handle = Task.spawn(
+let handle = spawn(
     |~token| {
         for item in large_dataset {
             if token.is_cancelled() {
@@ -259,7 +312,9 @@ token.cancel();
 **Panic unwinds the task's stack, running destructors.** Other tasks are unaffected.
 
 ```spl
-let handle = Task.spawn(|| {
+use std.task.{spawn, TaskError};
+
+let handle = spawn(|| {
     let file = File.create("temp.txt");
     let guard = mutex.lock();
 
@@ -277,8 +332,8 @@ match handle.try_await() {
     Err(TaskError.Cancelled) => log("Task cancelled"),
 }
 
-// Or let it propagate (handle.await panics if task panicked)
-let result = handle.await;  // Panics here if task panicked
+// Or let it propagate (handle.await() panics if task panicked)
+let result = handle.await();  // Panics here if task panicked
 ```
 
 #### Catch and Recover
@@ -349,7 +404,7 @@ let rx2 = rx.clone();  // Multiple consumers
 let (tx, rx) = channel.oneshot();
 
 tx.send(value);        // Consumes tx
-let val = rx.await;    // rx is awaitable
+let val = rx.await();  // rx is awaitable
 ```
 
 #### Broadcast (All receivers get all messages)
@@ -369,7 +424,7 @@ let (tx, rx) = channel.watch(initial_value);
 
 tx.send(new_value);       // Update value
 let val = rx.borrow();    // Current value (no wait)
-rx.changed().await;       // Wait for change
+rx.changed().await();     // Wait for change
 ```
 
 ---
@@ -381,33 +436,38 @@ Functions for managing concurrent task lifetimes.
 #### Join: Wait for All
 
 ```spl
+use std.task.{spawn, join, join_all};
+
 // Heterogeneous (tuple return)
-let (user, posts) = Task.join(
-    Task.spawn(|| fetch_user(id)),
-    Task.spawn(|| fetch_posts(id)),
+let (user, posts) = join(
+    spawn(|| fetch_user(id)),
+    spawn(|| fetch_posts(id)),
 );
 
 // Homogeneous (vec return)
 let handles = urls.iter()
-    .map(|url| Task.spawn(|| fetch(url)))
+    .map(|url| spawn(|| fetch(url)))
     .collect();
-let results: Vec(Response) = Task.join_all(handles);
+let results: Vec(Response) = join_all(handles);
 ```
 
 #### Select: Wait for First
 
 ```spl
+use std.task.{spawn, select, sleep};
+use std.time.Duration;
+
 // First to complete wins, others cancelled
-let result = Task.select(vec![
-    Task.spawn(|| fetch(primary_url)),
-    Task.spawn(|| fetch(backup_url)),
-]);
+let result = select(
+    spawn(|| fetch(primary_url)),
+    spawn(|| fetch(backup_url)),
+);
 
 // Timeout pattern
-let result = Task.select(
-    Task.spawn(|| slow_operation()),
-    Task.spawn(|| {
-        Task.sleep(Duration.from_secs(5));
+let result = select(
+    spawn(|| slow_operation()),
+    spawn(|| {
+        sleep(Duration.from_secs(5));
         return Err(Error.Timeout);
     }),
 );
@@ -416,12 +476,14 @@ let result = Task.select(
 #### Scope: Bounded Task Lifetime
 
 ```spl
+use std.task.scope;
+
 // All tasks must complete before scope exits
-let results = Task.scope(|s| {
+let results = scope(|s| {
     let h1 = s.spawn(|| fetch(url1));
     let h2 = s.spawn(|| fetch(url2));
 
-    return (h1.await, h2.await);
+    return (h1.await(), h2.await());
 });
 // Guaranteed: all tasks done or cancelled here
 ```
@@ -468,10 +530,13 @@ fn checksum(data: &[u8]): u32 {
 For non-FFI blocking operations:
 
 ```spl
-let result = Task.spawn_blocking(|| {
+use std.task.spawn_blocking;
+use std.fs;
+
+let result = spawn_blocking(|| {
     // Runs on blocking thread pool
-    std::fs::read_to_string("large_file.txt")
-}).await;
+    fs.read_to_string("large_file.txt")
+}).await();
 ```
 
 #### Blocking Pool Behavior
@@ -490,8 +555,10 @@ For high-performance scenarios requiring thread pinning.
 #### Pinned Scope
 
 ```spl
+use std.task.scope_pinned;
+
 // All tasks in scope run on specified core
-Task.scope_pinned(core = 0, |s| {
+scope_pinned(core = 0, |s| {
     s.spawn(|| handle_shard_0());
     s.spawn(|| process_local_data());
 });
@@ -500,8 +567,10 @@ Task.scope_pinned(core = 0, |s| {
 #### Local Scope
 
 ```spl
+use std.task.scope_local;
+
 // Tasks stay on current thread (no migration)
-Task.scope_local(|s| {
+scope_local(|s| {
     // Can use !Send types safely
     s.spawn(|| use_thread_local_cache());
 });
@@ -526,25 +595,73 @@ Task.scope_local(|s| {
 
 ### 11. Runtime Configuration
 
+#### Implicit Runtime for main
+
+`fn main()` automatically runs inside a default runtime. No wrapper or attribute needed:
+
+```spl
+use std.task.spawn;
+
+fn main(): () {
+    // Already inside the runtime - can spawn tasks directly
+    let handle = spawn(|| fetch("https://example.com"));
+    let result = handle.await();
+}
+```
+
+The default runtime uses sane defaults and respects environment variable overrides.
+
+#### Customizing the Runtime
+
+For custom configuration, use the `#[runtime]` attribute on main:
+
+```spl
+#[runtime(
+    worker_threads = 4,
+    blocking_threads = 256,
+    stack_size = 8 * 1024,
+)]
+fn main(): () {
+    // Runs with custom runtime settings
+}
+```
+
+#### Programmatic Configuration
+
+For dynamic configuration (e.g., based on config files), use `runtime.set_global()` at the start of main:
+
+```spl
+use std.runtime;
+use std.task.spawn;
+
+fn main(): () {
+    // Must be called before spawning any tasks
+    runtime.set_global(
+        runtime.builder()
+            .worker_threads(config.threads)
+            .blocking_threads(config.blocking)
+            .on_task_spawn(|info| metrics.record_spawn(info))
+            .build()
+    );
+
+    // Now use the custom runtime
+    let handle = spawn(|| work());
+}
+```
+
+**Note:** `set_global()` panics if called after any task has been spawned, or if called more than once. This ensures runtime configuration is deterministic.
+
 #### Builder API
 
 ```spl
-fn main() {
-    Runtime.builder()
-        .worker_threads(4)           // Default: num_cpus
-        .blocking_threads(512)       // Default: 512
-        .stack_size(4 * 1024)        // Default: adaptive from 2KB
-        .max_stack_size(1024 * 1024) // Default: 1MB
-        .build()
-        .run(|| {
-            main_logic();
-        });
-}
+use std.runtime;
 
-// Or use defaults
-fn main() {
-    Runtime.run(|| main_logic());
-}
+runtime.builder()
+    .worker_threads(4)           // Default: num_cpus
+    .blocking_threads(512)       // Default: 512
+    .stack_size(4 * 1024)        // Default: adaptive from 2KB
+    .max_stack_size(1024 * 1024) // Default: 1MB
+    .build()
 ```
 
 #### Environment Variable Overrides
@@ -566,10 +683,18 @@ SPL_WORKER_THREADS=2 ./my_server
 #### Diagnostic Hooks
 
 ```spl
-Runtime.builder()
-    .on_task_spawn(|info| log("Spawned: " + info.name))
-    .on_task_complete(|info, duration| metrics.record(duration))
-    .build()
+use std.runtime;
+
+fn main(): () {
+    runtime.set_global(
+        runtime.builder()
+            .on_task_spawn(|info| log("Spawned: " + info.name))
+            .on_task_complete(|info, duration| metrics.record(duration))
+            .build()
+    );
+
+    run_server();
+}
 ```
 
 ---
@@ -656,18 +781,19 @@ Safe by default. Most FFI calls into C libraries may block unpredictably. Treati
 ### HTTP Server
 
 ```spl
-fn main() {
-    Runtime.run(|| {
-        let listener = TcpListener.bind("127.0.0.1:8080");
+use std.task.spawn;
+use std.net.TcpListener;
 
-        loop {
-            let (stream, addr) = listener.accept();
-            Task.spawn(|stream| handle_connection(stream));
-        }
-    });
+fn main(): () {
+    let listener = TcpListener.bind("127.0.0.1:8080");
+
+    loop {
+        let (stream, addr) = listener.accept();
+        spawn(|stream| handle_connection(stream));
+    }
 }
 
-fn handle_connection(stream: TcpStream) {
+fn handle_connection(stream: TcpStream): () {
     let request = read_request(stream);
     let response = process_request(request);
     stream.write_all(response.as_bytes());
@@ -677,14 +803,16 @@ fn handle_connection(stream: TcpStream) {
 ### Parallel Processing with Scope
 
 ```spl
+use std.task.scope;
+
 fn process_batch(items: Vec(Item)): Vec(Result) {
-    return Task.scope(|s| {
+    return scope(|s| {
         let handles: Vec(_) = items.iter()
             .map(|item| s.spawn(|item| process(item)))
             .collect();
 
         return handles.iter()
-            .map(|h| h.await)
+            .map(|h| h.await())
             .collect();
     });
 }
@@ -693,19 +821,22 @@ fn process_batch(items: Vec(Item)): Vec(Result) {
 ### Producer-Consumer Pipeline
 
 ```spl
-fn pipeline() {
+use std.task.spawn;
+use std.channel;
+
+fn main(): () {
     let (tx1, rx1) = channel.mpsc(100);
     let (tx2, rx2) = channel.mpsc(100);
 
     // Stage 1: Produce
-    Task.spawn(|tx1| {
+    spawn(|tx1| {
         for i in 0..1000 {
             tx1.send(generate(i));
         }
     });
 
     // Stage 2: Transform
-    Task.spawn(|rx1, tx2| {
+    spawn(|rx1, tx2| {
         while let Some(item) = rx1.recv() {
             tx2.send(transform(item));
         }
@@ -721,12 +852,15 @@ fn pipeline() {
 ### Timeout with Retry
 
 ```spl
+use std.task.{spawn, select, sleep};
+use std.time.Duration;
+
 fn fetch_with_retry(url: String, max_retries: i32): Result(Response, Error) {
     for attempt in 1..=max_retries {
-        let result = Task.select(
-            Task.spawn(|~url| fetch(url)),
-            Task.spawn(|| {
-                Task.sleep(Duration.from_secs(5));
+        let result = select(
+            spawn(|~url| fetch(url)),
+            spawn(|| {
+                sleep(Duration.from_secs(5));
                 return Err(Error.Timeout);
             }),
         );
@@ -734,7 +868,7 @@ fn fetch_with_retry(url: String, max_retries: i32): Result(Response, Error) {
         match result {
             Ok(response) => return Ok(response),
             Err(e) if attempt < max_retries => {
-                Task.sleep(Duration.from_millis(100 * attempt));
+                sleep(Duration.from_millis(100 * attempt));
                 continue;
             },
             Err(e) => return Err(e),

@@ -226,7 +226,7 @@ Native support: `fn print(args: ...Display)` - reduces macro dependency.
 **No function coloring** - any function can yield, no async/sync distinction. Built-in runtime with Go-style simplicity. See [ADR-013](designs/013-async-await.md) for full design.
 
 Key points:
-- `Task.spawn()` for concurrent tasks, returns `JoinHandle(T)`
+- `std.task.spawn()` for concurrent tasks, returns `JoinHandle(T)`
 - Growable stacks with adaptive sizing (Go 1.19+ model)
 - Async preemption for tight loops (Go 1.14+ model)
 - Task isolation with unwinding (panic in task doesn't crash program)
