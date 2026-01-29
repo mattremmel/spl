@@ -167,10 +167,10 @@ Structs passed across FFI boundaries must use `#[repr(C)]`:
 
 ```spl
 #[repr(C)]
-struct Point {
+struct Point(
     x: f64,
     y: f64,
-}
+)
 
 extern "C" {
     fn distance(a: Ptr(Point), b: Ptr(Point)): f64;
@@ -188,11 +188,11 @@ extern "C" {
 
 ```spl
 #[repr(C)]
-enum Color {
+enum Color(
     Red = 0,
     Green = 1,
     Blue = 2,
-}
+)
 ```
 
 ### Packed Structs
@@ -201,10 +201,10 @@ For structs with no padding (matching C's `__attribute__((packed))`):
 
 ```spl
 #[repr(C, packed)]
-struct PackedData {
+struct PackedData(
     a: u8,
     b: u32,  // No padding before this
-}
+)
 ```
 
 **Warning:** Packed structs may require unaligned memory access, which has performance implications and may not be supported on all architectures.
@@ -220,9 +220,9 @@ C strings are null-terminated byte arrays with no encoding guarantee. SPL provid
 `CStr` is a borrowed reference to a null-terminated C string. It does not own the memory.
 
 ```spl
-pub struct CStr {
+pub struct CStr(
     ptr: Ptr(u8),
-}
+)
 
 impl CStr {
     /// Wrap a pointer to a C string.
@@ -230,7 +230,7 @@ impl CStr {
     /// # Safety
     /// - `ptr` must point to a valid null-terminated string
     /// - The memory must remain valid for the lifetime of the CStr
-    pub unsafe fn from_ptr(ptr: Ptr(u8)): CStr;
+    pub unsafe fn from_ptr(ptr: Ptr(u8)): CStr;  // Returns CStr(ptr: ptr)
 
     /// Get as raw bytes (excluding null terminator)
     pub fn as_bytes(&self): &[u8];
@@ -254,10 +254,10 @@ impl CStr {
 `CString` is an owned null-terminated string allocated by SPL.
 
 ```spl
-pub struct CString {
+pub struct CString(
     ptr: MutPtr(u8),
     len: usize,
-}
+)
 
 impl CString {
     /// Create from SPL string (adds null terminator).
@@ -304,7 +304,7 @@ let s: &CStr = c"Hello, world!";
 C strings are treated as **opaque bytes**, not UTF-8:
 
 ```spl
-let c_str: &CStr = unsafe { CStr::from_ptr(some_c_function()) };
+let c_str: &CStr = unsafe { CStr.from_ptr(some_c_function()) };
 
 // Must explicitly convert to SPL string
 let bytes: &[u8] = c_str.as_bytes();           // Always works
@@ -333,7 +333,7 @@ fn main() {
     unsafe { puts(c"Hello from SPL!".as_ptr()) };
 
     // SPL string -> C (dynamic)
-    let msg = CString::new("Dynamic string").unwrap();
+    let msg = CString.new("Dynamic string").unwrap();
     unsafe { puts(msg.as_ptr()) };
 
     // C string -> SPL
@@ -342,7 +342,7 @@ fn main() {
         if ptr.is_null() {
             None
         } else {
-            Some(CStr::from_ptr(ptr).to_str_lossy())
+            Some(CStr.from_ptr(ptr).to_str_lossy())
         }
     };
 }
@@ -370,6 +370,103 @@ extern "C" fn compare(a: Ptr(i32), b: Ptr(i32)): i32 {
 - Signature must use C-compatible types only (no generics, no SPL strings)
 - Body can use any SPL features
 - Panics abort at FFI boundary (see [unsafe.md](unsafe.md))
+
+### The `#[no_mangle]` Attribute
+
+By default, SPL mangles function names to include type information. Use `#[no_mangle]` to preserve the exact function name for FFI:
+
+```spl
+// Without no_mangle: symbol might be "_ZN7mylib7my_funcEv" or similar
+extern "C" fn my_func(): i32 { return 42; }
+
+// With no_mangle: symbol is exactly "my_func"
+#[no_mangle]
+extern "C" fn my_func(): i32 { return 42; }
+```
+
+**When to use `#[no_mangle]`:**
+- Functions called by name from C code
+- Plugin entry points
+- Shared library exports
+- Any function where C code uses the literal name
+
+**When NOT needed:**
+- Functions only passed as function pointers (name doesn't matter)
+- Internal callbacks within SPL code
+
+### Building Shared Libraries
+
+To build SPL code as a shared library callable from C:
+
+**1. Create a library package:**
+
+```spl
+// lib.spl
+use std.ptr.Ptr;
+
+#[no_mangle]
+pub extern "C" fn mylib_init(): i32 {
+    // Initialization code
+    return 0;
+}
+
+#[no_mangle]
+pub extern "C" fn mylib_process(data: Ptr(u8), len: usize): i32 {
+    // Process data
+    return 0;
+}
+
+#[no_mangle]
+pub extern "C" fn mylib_cleanup() {
+    // Cleanup code
+}
+```
+
+**2. Build as a shared library:**
+
+```bash
+splc --crate-type cdylib -o libmylib.so lib.spl
+```
+
+**3. Create a C header (manually or with a tool):**
+
+```c
+// mylib.h
+#ifndef MYLIB_H
+#define MYLIB_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+int32_t mylib_init(void);
+int32_t mylib_process(const uint8_t* data, size_t len);
+void mylib_cleanup(void);
+
+#endif
+```
+
+**4. Use from C:**
+
+```c
+#include "mylib.h"
+
+int main() {
+    mylib_init();
+    uint8_t data[] = {1, 2, 3};
+    mylib_process(data, sizeof(data));
+    mylib_cleanup();
+    return 0;
+}
+```
+
+**Crate Types:**
+
+| Type | Output | Use Case |
+|------|--------|----------|
+| `bin` | Executable | Standalone programs |
+| `lib` | SPL library | SPL-to-SPL dependencies |
+| `cdylib` | Shared library (.so/.dylib/.dll) | C/FFI consumption |
+| `staticlib` | Static library (.a/.lib) | Static linking from C |
 
 ### Function Pointer Types
 
@@ -428,9 +525,9 @@ extern "C" {
 }
 
 #[repr(C)]
-struct Context {
+struct Context(
     multiplier: i32,
-}
+)
 
 extern "C" fn callback(value: i32, user_data: MutPtr(u8)) {
     let ctx = unsafe { user_data.cast(Context).read() };
@@ -438,7 +535,7 @@ extern "C" fn callback(value: i32, user_data: MutPtr(u8)) {
 }
 
 fn main() {
-    let ctx = Context { multiplier: 2 };
+    let ctx = Context(multiplier: 2);
     unsafe {
         register_callback(callback, (&ctx).cast(u8));
     }
@@ -606,9 +703,9 @@ extern "C" {
 }
 
 // Safe public API
-pub struct MyLib {
+pub struct MyLib(
     handle: MutPtr(Handle),
-}
+)
 
 impl MyLib {
     pub fn new(): Option(MyLib) {
@@ -616,7 +713,7 @@ impl MyLib {
         if h.is_null() {
             None
         } else {
-            Some(MyLib { handle: h })
+            Some(MyLib(handle: h))
         }
     }
 
@@ -627,7 +724,7 @@ impl MyLib {
         if result == 0 {
             Ok(())
         } else {
-            Err(Error::from_code(result))
+            Err(Error.from_code(result))
         }
     }
 }
@@ -657,7 +754,7 @@ impl Drop for MyLib {
 | Declare foreign function | `extern "C" { fn name(...): T; }` |
 | Variadic function | `extern "C" { fn printf(fmt: Ptr(u8), ...): i32; }` |
 | Call foreign function | `unsafe { malloc(1024) }` |
-| C-compatible struct | `#[repr(C)] struct Name { }` |
+| C-compatible struct | `#[repr(C)] struct Name()` |
 | C-compatible enum | `#[repr(C)] enum Name { }` |
 | Export function to C | `extern "C" fn name(...): T { }` |
 | Function pointer type | `extern "C" fn(...): T` |

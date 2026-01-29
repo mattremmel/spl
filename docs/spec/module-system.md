@@ -76,11 +76,11 @@ fn utils_function(): i32 {
 }
 
 // In myproject/network/client.spl
-pub struct Client { }
+pub struct Client()
 
 impl Client {
     pub fn new(): Client {
-        Client { }
+        Client()
     }
 }
 ```
@@ -235,7 +235,7 @@ pub fn write_file(path: &str, data: &[u8]): Result((), IoError) {
     // Linux-specific implementation
 }
 
-pub struct FileHandle { fd: i32 }
+pub struct FileHandle(fd: i32)
 ```
 
 ### Configuration Inheritance
@@ -370,11 +370,11 @@ pub fn public_api(): i32 {
 }
 
 // Public struct with mixed field visibility
-pub struct Config {
+pub struct Config(
     pub name: String,          // Public field
     pub(package) id: u64,      // Package-private field
     secret_key: String,        // Private field (module only)
-}
+)
 ```
 
 ### Privacy and Modules
@@ -661,13 +661,13 @@ pub use self.user.User;
 pub use self.session.Session;
 
 // models/user.spl
-pub struct User {
+pub struct User(
     pub name: String,
-}
+)
 
 impl User {
     pub fn new(name: &str): User {
-        User { name: String.from(name) }
+        User(name: String.from(name))
     }
 }
 ```

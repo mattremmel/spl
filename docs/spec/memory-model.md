@@ -36,7 +36,7 @@ Every value in SPL has exactly one **owner** at any point in time:
 
 ```spl
 fn example() {
-    let s = String::from("hello");  // s owns the String
+    let s = String.from("hello");  // s owns the String
     // s is valid here
 }  // s goes out of scope, String is dropped
 ```
@@ -46,7 +46,7 @@ fn example() {
 By default, assigning a value to another variable **moves** ownership:
 
 ```spl
-let s1 = String::from("hello");
+let s1 = String.from("hello");
 let s2 = s1;  // s1 is moved to s2
 // s1 is no longer valid here
 println(s2);  // OK
@@ -65,7 +65,7 @@ fn take_ownership(s: String) {
 }  // s dropped here
 
 fn example() {
-    let s = String::from("hello");
+    let s = String.from("hello");
     take_ownership(s);  // s moved into function
     // s is no longer valid
 }
@@ -101,7 +101,7 @@ Some types are small and trivially copyable. These implement the `Copy` trait an
 | `&mut T` | No | Exclusive access semantics |
 | `[T; N]` | If `T: Copy` | Copies element-by-element |
 | `(T, U, ...)` | If all elements `Copy` | Copies each element |
-| `fn(...) -> T` | Yes | Function pointer |
+| `fn(...): T` | Yes | Function pointer |
 
 ### Copy Semantics
 
@@ -120,12 +120,12 @@ Structs can opt into `Copy` semantics if all their fields are `Copy`:
 
 ```spl
 #[derive(Copy)]
-struct Point {
+struct Point(
     x: f64,
     y: f64,
-}
+)
 
-let p1 = Point { x: 1.0, y: 2.0 };
+let p1 = Point(x: 1.0, y: 2.0);
 let p2 = p1;  // Copied, not moved
 // Both p1 and p2 are valid
 ```
@@ -140,7 +140,7 @@ let p2 = p1;  // Copied, not moved
 Types that are expensive to copy can implement `Clone` for explicit copying:
 
 ```spl
-let s1 = String::from("hello");
+let s1 = String.from("hello");
 let s2 = s1.clone();  // Explicit deep copy
 // Both s1 and s2 are valid
 ```
@@ -224,7 +224,7 @@ println(r);       // while immutable borrow is active
 References must not outlive their referent:
 
 ```spl
-fn dangling() -> &i32 {
+fn dangling(): &i32 {
     let x = 42;
     &x  // ERROR: x does not live long enough
 }  // x dropped here, reference would be invalid
@@ -253,7 +253,7 @@ Values are dropped when their owning variable goes out of scope:
 
 ```spl
 {
-    let s = String::from("hello");
+    let s = String.from("hello");
     // s is valid
 }  // s dropped here
 
@@ -301,9 +301,9 @@ fn process(data: &[i32]) {
 Types can implement `Drop` to run custom cleanup code:
 
 ```spl
-struct FileHandle {
+struct FileHandle(
     fd: i32,
-}
+)
 
 impl Drop for FileHandle {
     fn drop(&mut self) {
@@ -313,7 +313,7 @@ impl Drop for FileHandle {
 }
 
 fn example() {
-    let f = FileHandle { fd: open("file.txt") };
+    let f = FileHandle(fd: open("file.txt"));
     // Use f...
 }  // f.drop() called automatically
 ```
@@ -324,8 +324,8 @@ Values are dropped in reverse order of declaration:
 
 ```spl
 {
-    let a = A::new();  // Created first
-    let b = B::new();  // Created second
+    let a = A.new();  // Created first
+    let b = B.new();  // Created second
 }  // b dropped first, then a
 ```
 
@@ -344,7 +344,91 @@ drop(lock);  // Release lock early
 
 ---
 
-## 6. Memory Layout
+## 6. Closures and Capture
+
+Closures are anonymous functions that can capture variables from their enclosing scope.
+
+### Capture Modes
+
+SPL closures capture variables by the most permissive mode needed:
+
+| Capture Mode | When Used | Effect |
+|--------------|-----------|--------|
+| By reference | Closure only reads the variable | Borrows `&T` |
+| By mutable reference | Closure mutates the variable | Borrows `&mut T` |
+| By move | Closure takes ownership or variable is `Copy` | Moves or copies value |
+
+```spl
+let x = 42;
+let y = String.from("hello");
+
+// Capture by reference (x is Copy, y is borrowed)
+let read_both = || {
+    println(x);      // x: Copy, so copied
+    println(&y);     // y: borrowed as &String
+};
+
+// Capture by mutable reference
+let mut count = 0;
+let mut increment = || {
+    count += 1;      // count: borrowed as &mut i32
+};
+
+// Capture by move
+let owned = String.from("moved");
+let take_ownership = || {
+    let s = owned;   // owned is moved into closure
+    println(&s);
+};
+// owned is no longer valid here
+```
+
+### Move Closures
+
+Use the `move` keyword to force all captures to be by value:
+
+```spl
+let data: Vec(i32) = [1, 2, 3];  // Array coerces to Vec
+
+// Without move: data is borrowed
+let borrow_closure = || println(&data);
+
+// With move: data is moved into the closure
+let move_closure = move || {
+    // data is owned by the closure
+    println(&data);
+};
+// data is no longer valid here
+
+// Useful for spawning threads or returning closures
+fn make_adder(n: i32): fn(i32): i32 {
+    return move |x| x + n;  // n is copied into closure
+}
+```
+
+### Closure Types
+
+Each closure has a unique anonymous type. Closures implement traits based on how they use captures:
+
+| Trait | Requirement | Call syntax |
+|-------|-------------|-------------|
+| `Fn` | Only reads captures | `closure()` |
+| `FnMut` | May mutate captures | `closure()` |
+| `FnOnce` | May consume captures | `closure()` |
+
+All closures implement `FnOnce`. Closures that don't consume captures also implement `FnMut`. Closures that don't mutate captures also implement `Fn`.
+
+### Closure Limitations
+
+Due to second-class references, closures cannot:
+- Return references to captured variables
+- Be stored in structs (closures have unknown size)
+
+For these cases, use function pointers or trait objects (future feature).
+
+---
+
+## 7. Memory Layout
 
 ### Stack vs Heap
 
@@ -370,14 +454,14 @@ References are pointer-sized (8 bytes on 64-bit).
 Structs are laid out with padding for alignment:
 
 ```spl
-struct Example {
+struct Example(
     a: u8,   // 1 byte
     // 3 bytes padding
     b: u32,  // 4 bytes
     c: u8,   // 1 byte
     // 7 bytes padding
     d: u64,  // 8 bytes
-}  // Total: 24 bytes
+)  // Total: 24 bytes
 ```
 
 ### Unsized Types
@@ -398,7 +482,7 @@ Fat pointers contain (pointer, length):
 
 ---
 
-## 7. Interior Mutability (Future)
+## 8. Interior Mutability (Future)
 
 Some patterns require mutation through shared references. SPL will provide controlled escape hatches:
 
@@ -406,12 +490,12 @@ Some patterns require mutation through shared references. SPL will provide contr
 
 ```spl
 // Single-threaded interior mutability
-Cell<T>      // For Copy types, get/set
-RefCell<T>   // Runtime borrow checking
+Cell(T)      // For Copy types, get/set
+RefCell(T)   // Runtime borrow checking
 
 // Thread-safe interior mutability
-Mutex<T>     // Mutual exclusion
-RwLock<T>    // Reader-writer lock
+Mutex(T)     // Mutual exclusion
+RwLock(T)    // Reader-writer lock
 Atomic*      // Lock-free atomics
 ```
 
@@ -429,7 +513,7 @@ unsafe {
 
 ---
 
-## 8. Future Extensions
+## 9. Future Extensions
 
 SPL's memory model is designed to support multiple memory management strategies in future versions.
 
@@ -463,8 +547,8 @@ Inspired by Cyclone and Vale, regions provide arena-style allocation:
 ```spl
 // Hypothetical syntax
 region r {
-    let x = r.alloc(Point { x: 1.0, y: 2.0 });
-    let y = r.alloc(Point { x: 3.0, y: 4.0 });
+    let x = r.alloc(Point(x: 1.0, y: 2.0));
+    let y = r.alloc(Point(x: 3.0, y: 4.0));
     // All allocations freed when region ends
 }
 ```
@@ -481,7 +565,7 @@ Types that accept custom allocators:
 ```spl
 // Hypothetical syntax
 fn process(allocator: Allocator) {
-    let list = ArrayList<i32>::init(allocator);
+    let list = ArrayList(i32).init(allocator);
     defer list.deinit();
 
     list.push(1);
@@ -490,7 +574,7 @@ fn process(allocator: Allocator) {
 
 // Stack allocator for temporary work
 let buffer: [u8; 1024] = undefined;
-let stack_alloc = FixedBufferAllocator::init(&buffer);
+let stack_alloc = FixedBufferAllocator.init(&buffer);
 process(stack_alloc);
 
 // Or use the heap
@@ -504,10 +588,10 @@ Opt-in GC for specific types or regions:
 ```spl
 // Hypothetical syntax
 @gc
-struct Node {
+struct Node(
     value: i32,
-    children: Vec<Node>,  // Cycles OK with GC
-}
+    children: Vec(Node),  // Cycles OK with GC
+)
 
 // Or region-based GC
 gc_region {
@@ -522,8 +606,8 @@ References with generation counts for safe manual memory:
 
 ```spl
 // Hypothetical syntax
-let x = gen_alloc(Point { x: 1.0, y: 2.0 });
-let r: GenRef<Point> = &x;
+let x = gen_alloc(Point(x: 1.0, y: 2.0));
+let r: GenRef(Point) = &x;
 
 gen_free(x);  // Explicitly free
 
@@ -537,9 +621,9 @@ Types that must be used exactly once:
 
 ```spl
 // Hypothetical syntax
-linear struct FileHandle {
+linear struct FileHandle(
     fd: i32,
-}
+)
 
 fn example() {
     let f = open("file.txt");
@@ -557,9 +641,9 @@ Future SPL may allow choosing memory strategy per-module or per-type:
 
 // Type-level override
 #[memory(owned)]  // This type uses ownership
-struct Performance {
-    data: Vec<f64>,
-}
+struct Performance(
+    data: Vec(f64),
+)
 
 // Function-level arena
 #[arena]
@@ -570,7 +654,7 @@ fn batch_process(items: &[Item]) {
 
 ---
 
-## 9. Comparison with Other Languages
+## 10. Comparison with Other Languages
 
 | Feature | SPL v1 | Rust | Go | Zig | D |
 |---------|--------|------|----|----|---|
@@ -584,7 +668,7 @@ fn batch_process(items: &[Item]) {
 
 ---
 
-## 10. Summary
+## 11. Summary
 
 ### V1 Memory Model
 
@@ -629,7 +713,7 @@ The core ownership and borrowing model remains stable while additional features 
 ```spl
 fn ownership_example() {
     // Stack allocation with move
-    let s1 = String::from("hello");
+    let s1 = String.from("hello");
     let s2 = s1;  // s1 moved to s2
     // println(s1);  // ERROR: s1 was moved
     println(s2);     // OK
@@ -646,7 +730,7 @@ fn ownership_example() {
 
 ```spl
 fn borrowing_example() {
-    let mut data = vec![1, 2, 3];
+    let mut data: Vec(i32) = [1, 2, 3];  // Array coerces to Vec
 
     // Immutable borrows for reading
     let sum: i32 = data.iter().sum();
@@ -680,7 +764,7 @@ fn modify(s: &mut String) {
 }
 
 fn example() {
-    let mut s = String::from("hello");
+    let mut s = String.from("hello");
 
     inspect(&s);      // Borrow
     modify(&mut s);   // Mutable borrow
@@ -706,7 +790,9 @@ fn first_word(s: &str): String {
 }
 
 // Use interior iteration with callbacks
-struct Container(data: Vec(i32))
+struct Container(
+    data: Vec(i32),
+)
 
 impl Container {
     // Instead of returning &i32, use a callback

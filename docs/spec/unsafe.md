@@ -21,8 +21,9 @@ The following operations require an `unsafe` context:
 | Calling an unsafe function | Function has preconditions the compiler cannot verify |
 | Calling an extern function | FFI cannot guarantee memory safety |
 | Reading or writing a mutable static | Data races possible without synchronization |
-| Accessing a field of a union | Union may contain a different variant |
 | Implementing an unsafe trait | Trait has invariants the compiler cannot verify |
+
+**Note:** SPL does not have union types. C unions accessed via FFI should use `#[repr(C)]` structs with appropriate pointer casts and unsafe access patterns.
 
 ### What Remains Safe
 
@@ -53,7 +54,7 @@ block        = "{" statement* expression? "}"
 use std.ptr.Ptr;
 
 let x = 42;
-let p: Ptr(i32) = &x;
+let p: Ptr(i32) = (&x).as_ptr();
 
 // Safe: creating and comparing pointers
 let is_null = p.is_null();
@@ -158,25 +159,27 @@ use std.ptr.{Ptr, MutPtr};
 
 ### Creating Pointers
 
-From references (safe):
+From references using `.as_ptr()` method (safe):
 
 ```spl
 use std.ptr.{Ptr, MutPtr};
 
 let x = 42;
-let p: Ptr(i32) = &x;           // From immutable reference
+let p: Ptr(i32) = (&x).as_ptr();           // From immutable reference
 
 let mut y = 100;
-let mp: MutPtr(i32) = &mut y;   // From mutable reference
+let mp: MutPtr(i32) = (&mut y).as_mut_ptr();   // From mutable reference
 ```
+
+**Note:** References do not implicitly coerce to raw pointers. Use the explicit `.as_ptr()` or `.as_mut_ptr()` methods to convert. This makes the conversion visible and intentional.
 
 Null pointers:
 
 ```spl
 use std.ptr;
 
-let p: Ptr(i32) = ptr::null();
-let mp: MutPtr(i32) = ptr::null_mut();
+let p: Ptr(i32) = ptr.null();
+let mp: MutPtr(i32) = ptr.null_mut();
 ```
 
 From address:
@@ -184,8 +187,8 @@ From address:
 ```spl
 use std.ptr;
 
-let p: Ptr(i32) = ptr::from_addr(0x1000);
-let mp: MutPtr(i32) = ptr::from_addr_mut(0x1000);
+let p: Ptr(i32) = ptr.from_addr(0x1000);
+let mp: MutPtr(i32) = ptr.from_addr_mut(0x1000);
 ```
 
 ### Reading and Writing
@@ -196,7 +199,7 @@ All memory access through pointers requires unsafe and uses explicit methods:
 use std.ptr.{Ptr, MutPtr};
 
 let x = 42;
-let p: Ptr(i32) = &x;
+let p: Ptr(i32) = (&x).as_ptr();
 
 // Read through Ptr (unsafe)
 let value = unsafe { p.read() };
@@ -205,7 +208,7 @@ let value = unsafe { p.read() };
 // unsafe { p.write(5) };  // ERROR: method not found
 
 let mut y = 100;
-let mp: MutPtr(i32) = &mut y;
+let mp: MutPtr(i32) = (&mut y).as_mut_ptr();
 
 // MutPtr can read AND write
 let value = unsafe { mp.read() };
@@ -222,7 +225,8 @@ There is no `*p` dereference operator for raw pointers. This design:
 ```spl
 use std.ptr.{Ptr, MutPtr};
 
-let mp: MutPtr(i32) = &mut x;
+let mut x = 42;
+let mp: MutPtr(i32) = (&mut x).as_mut_ptr();
 
 // MutPtr -> Ptr (safe, reduces capability)
 let p: Ptr(i32) = mp.as_const();
@@ -276,7 +280,7 @@ Pointer arithmetic is safe (it doesn't access memory) but can produce invalid po
 use std.ptr.Ptr;
 
 let arr = [1, 2, 3, 4, 5];
-let p: Ptr(i32) = &arr[0];
+let p: Ptr(i32) = arr.as_ptr();  // Get pointer to first element
 
 // Offset by element count (not bytes)
 let second = p.add(1);    // Points to arr[1]
@@ -296,8 +300,10 @@ Pointer comparison is safe:
 ```spl
 use std.ptr.Ptr;
 
-let a: Ptr(i32) = &x;
-let b: Ptr(i32) = &y;
+let x = 1;
+let y = 2;
+let a: Ptr(i32) = (&x).as_ptr();
+let b: Ptr(i32) = (&y).as_ptr();
 
 if a == b { }      // Equality
 if a != b { }      // Inequality
@@ -314,13 +320,14 @@ Pointers can be converted to and from integers:
 ```spl
 use std.ptr.{Ptr, ptr};
 
-let p: Ptr(i32) = &x;
+let x = 42;
+let p: Ptr(i32) = (&x).as_ptr();
 
 // Pointer to integer
 let addr: usize = p.addr();
 
 // Integer to pointer
-let p2: Ptr(i32) = ptr::from_addr(addr);
+let p2: Ptr(i32) = ptr.from_addr(addr);
 ```
 
 ---
@@ -455,11 +462,11 @@ The purpose of unsafe is to build safe abstractions. A well-designed API uses un
 ```spl
 use std.ptr.{MutPtr, ptr};
 
-struct Vec(T) where T {
+struct Vec(T)(
     ptr: MutPtr(T),
     len: usize,
     capacity: usize,
-}
+) where T
 
 impl Vec(T) where T {
     // Safe public API
@@ -502,11 +509,11 @@ When writing unsafe code:
 |---------|--------|-----------------|
 | Pointer types | `Ptr(T)`, `MutPtr(T)` | No (just types) |
 | Import pointers | `use std.ptr.{Ptr, MutPtr}` | No |
-| Create from ref | `&x` as `Ptr(T)` | No |
+| Create from ref | `(&x).as_ptr()` | No |
 | Pointer arithmetic | `p.add(n)` | No |
 | Pointer comparison | `p == q` | No |
 | Pointer to int | `p.addr()` | No |
-| Int to pointer | `ptr::from_addr(n)` | No |
+| Int to pointer | `ptr.from_addr(n)` | No |
 | Null check | `p.is_null()` | No |
 | Cast | `p.cast(U)` | No |
 | Ptr → MutPtr | `p.as_mut()` | No |
@@ -554,9 +561,9 @@ extern "C" {
 }
 
 /// Safe wrapper around C handle.
-pub struct SafeHandle {
+pub struct SafeHandle(
     inner: MutPtr(Handle),
-}
+)
 
 impl SafeHandle {
     pub fn new(): SafeHandle? {
@@ -564,7 +571,7 @@ impl SafeHandle {
         if p.is_null() {
             return None;
         }
-        return Some(SafeHandle { inner: p });
+        return Some(SafeHandle(inner: p));
     }
 
     pub fn process(&mut self, data: &[u8]): i32 {
@@ -592,9 +599,9 @@ extern "C" {
 }
 
 /// Heap-allocated value.
-pub struct Box(T) where T {
+pub struct Box(T)(
     ptr: MutPtr(T),
-}
+) where T
 
 impl Box(T) where T {
     pub fn new(value: T): Box(T) {
@@ -603,7 +610,7 @@ impl Box(T) where T {
             panic("allocation failed");
         }
         unsafe { p.write(value) };
-        return Box { ptr: p };
+        return Box(ptr: p);
     }
 }
 

@@ -10,7 +10,7 @@ The lexer transforms source text into a stream of tokens. Whitespace and comment
 
 ## Keywords
 
-SPL reserves 38 keywords that cannot be used as identifiers:
+SPL reserves 37 keywords that cannot be used as identifiers:
 
 | Keyword    | Description                          |
 |------------|--------------------------------------|
@@ -44,7 +44,6 @@ SPL reserves 38 keywords that cannot be used as identifiers:
 | `super`    | Parent module reference              |
 | `where`    | Generic type constraints             |
 | `is`       | Pattern matching operator            |
-| `not`      | Negation in `is not` pattern         |
 | `match`    | Match expression                     |
 | `extern`   | External function declaration        |
 | `const`    | Compile-time constant                |
@@ -103,29 +102,43 @@ SPL reserves 38 keywords that cannot be used as identifiers:
 |----------|-----------------------------------|
 | `.`      | Member access / path separator    |
 | `&`      | Reference                         |
-| `..`     | Range                             |
-| `$`      | Package root (paths) / array end (slices) |
+| `..`     | Exclusive range (end not included) |
+| `..=`    | Inclusive range (end included)    |
+| `$`      | Package root (paths) / array length (indexing/slices) |
 | `?`      | Error propagation (Try operator)  |
 
 **Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses: `Vec(i32)` instead of `Vec<i32>`. Package-root paths use `$`: `$.utils.helper`. The `as` keyword is used only for import renaming, not type casting (use methods like `.widen()`, `.truncate()` for conversions).
 
-### Operator Precedence (highest to lowest)
+**Range operators:** `..` creates an exclusive range (like Python's `range()`), `..=` creates an inclusive range.
+```spl
+0..5     // 0, 1, 2, 3, 4 (excludes 5)
+0..=5    // 0, 1, 2, 3, 4, 5 (includes 5)
+```
 
-| Precedence | Operators                    | Associativity |
-|------------|------------------------------|---------------|
-| 1          | `.` `()` `[]` `?`            | Left          |
-| 2          | `!` `-` (unary) `&`          | Right         |
-| 3          | `*` `/` `%`                  | Left          |
-| 4          | `+` `-`                      | Left          |
-| 5          | `..`                         | Left          |
-| 6          | `<` `>` `<=` `>=`            | Left          |
-| 7          | `==` `!=`                    | Left          |
-| 8          | `is` `is not`                | Left          |
-| 9          | `&&`                         | Left          |
-| 10         | `\|\|`                       | Left          |
-| 11         | `=` `+=` `-=` `*=` `/=` `%=` | Right         |
+**The `$` operator in indexing:** In index and slice expressions, `$` represents the array/slice length, enabling Python-style negative indexing:
+```spl
+arr[$-1]     // Last element (like Python's arr[-1])
+arr[$-2]     // Second to last element
+arr[1:$-1]   // All elements except first and last
+```
 
-Note: `as` is not in the precedence table as it is not used for type casting. Type conversions use methods like `.widen()`, `.truncate()`, `.saturate()`.
+### Operator Precedence (lowest to highest)
+
+| Precedence | Operators                    | Associativity | Description |
+|------------|------------------------------|---------------|-------------|
+| 1 (lowest) | `=` `+=` `-=` `*=` `/=` `%=` | Right         | Assignment |
+| 2          | `\|\|`                       | Left          | Logical OR |
+| 3          | `&&`                         | Left          | Logical AND |
+| 4          | `is`                         | Left          | Pattern match |
+| 5          | `==` `!=`                    | Left          | Equality |
+| 6          | `<` `>` `<=` `>=`            | Left          | Comparison |
+| 7          | `..` `..=`                   | Left          | Range |
+| 8          | `+` `-`                      | Left          | Additive |
+| 9          | `*` `/` `%`                  | Left          | Multiplicative |
+| 10         | `!` `-` (unary) `&`          | Right         | Unary |
+| 11 (highest) | `.` `()` `[]` `?`          | Left          | Postfix |
+
+Note: `as` is not in the precedence table as it is not used for type casting. Type conversions use methods like `.widen()`, `.truncate()`, `.saturate()`. This table matches the precedence in `syntax-grammar.md`.
 
 ---
 
@@ -165,12 +178,13 @@ Integers can be written in decimal, hexadecimal, binary, or octal:
 - Leading zeros in decimal literals are allowed (e.g., `007`)
 
 **Type Suffixes:**
-Integer literals may have a type suffix: `i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, `u128`, `isize`, `usize`.
+Integer literals may have a type suffix: `i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, `u128`, `isize`, `usize`, `bigint`.
 
 ```
 42i64       // i64
 255_u8      // u8 with underscore separator
 0xFF_u32    // u32 hex literal
+999999999999999999999bigint  // arbitrary precision integer
 ```
 
 **Regex:**
@@ -193,7 +207,15 @@ INTEGER = 0x[0-9a-fA-F][0-9a-fA-F_]*
 - Must have digits on both sides of the decimal point (`.5` and `5.` are invalid)
 - Exponent indicator is lowercase `e`
 - Underscores allowed between digits: `1_000.000_001`
-- Type suffixes: `f32`, `f64` (e.g., `3.14_f32`, `2.718f64`)
+- Type suffixes: `f32`, `f64`, `decimal` (e.g., `3.14_f32`, `2.718f64`, `0.10decimal`)
+
+**Decimal Literals:**
+The `decimal` suffix creates an exact decimal floating-point value, avoiding binary floating-point precision issues:
+
+```
+0.10decimal + 0.20decimal  // Exactly 0.30, not 0.30000000000000004
+19.99decimal * 1.0825decimal  // Precise monetary calculation
+```
 
 **Regex:**
 ```
@@ -218,23 +240,109 @@ STRING = "[^"\\]*(\\.[^"\\]*)*"
 | `\r`   | Carriage return      |
 | `\\`   | Backslash            |
 | `\"`   | Double quote         |
+| `\'`   | Single quote         |
 | `\0`   | Null character       |
+| `\xNN` | Byte value (hex)     |
+| `\u{NNNNNN}` | Unicode code point (1-6 hex digits) |
 
-**Examples:** `"hello"`, `"hello\nworld"`, `"say \"hi\""`
+**Examples:** `"hello"`, `"hello\nworld"`, `"say \"hi\""`, `"\u{1F600}"` (emoji)
+
+### Raw String Literals
+
+Raw strings do not process escape sequences. Useful for regex, paths, etc.
+
+```
+RAW_STRING = 'r"' [^"]* '"'
+           | 'r#"' .* '"#'
+           | 'r##"' .* '"##'
+           (* ... and so on with more # delimiters *)
+```
+
+**Rules:**
+- Start with `r"` and end with `"`
+- Or use `r#"` ... `"#` to allow `"` inside the string
+- Add more `#` characters for nesting: `r##"..."##`
+
+**Examples:**
+```spl
+let path = r"C:\Users\name";           // No escape processing
+let regex = r#"(\d+)-(\d+)"#;          // Contains quotes
+let nested = r##"He said "Hi""##;      // Nested quotes
+```
+
+### Byte String Literals
+
+Byte strings represent `&[u8]` data, not UTF-8 text:
+
+```
+BYTE_STRING = 'b"' [^\x80-\xff"\\]* '"'
+```
+
+**Rules:**
+- Prefixed with `b`
+- Contains only ASCII characters (0x00-0x7F)
+- Same escape sequences as regular strings
+- Type is `&[u8]`, not `&str`
+
+**Examples:** `b"hello"`, `b"data\x00\xFF"`
+
+### Raw Byte String Literals
+
+Combine raw and byte string features:
+
+**Examples:** `br"raw bytes"`, `br#"with "quotes""#`
+
+### C String Literals
+
+C strings are null-terminated and used for FFI:
+
+```
+C_STRING = 'c"' [^"]* '"'
+```
+
+**Rules:**
+- Prefixed with `c`
+- Automatically null-terminated
+- Type is `&CStr`
+- Cannot contain interior null bytes (compile error)
+
+**Examples:** `c"Hello, C!"`, `c"/path/to/file"`
 
 ### Character Literals
 
 Single characters enclosed in single quotes:
 
 ```
-CHAR = '[^'\\]' | '\\[ntr\\'0]'
+CHAR = '[^'\\]' | '\\[ntr\\'0]' | '\\x[0-9a-fA-F]{2}' | '\\u{[0-9a-fA-F]+}'
 ```
 
-**Examples:** `'a'`, `'\n'`, `'\\'`, `'\0'`
+**Examples:** `'a'`, `'\n'`, `'\\'`, `'\0'`, `'\x7F'`, `'\u{1F600}'`
+
+### Byte Character Literals
+
+Single byte values:
+
+```
+BYTE_CHAR = "b'" [^\x80-\xff'\\] "'" | "b'\\" ...
+```
+
+**Examples:** `b'A'`, `b'\x00'`, `b'\xFF'`
 
 ### Boolean Literals
 
 Boolean values use the keywords `true` and `false`.
+
+### Literal Summary
+
+| Literal Type | Prefix | Example | Result Type |
+|--------------|--------|---------|-------------|
+| String | (none) | `"hello"` | `&str` |
+| Raw string | `r` | `r"C:\path"` | `&str` |
+| Byte string | `b` | `b"bytes"` | `&[u8]` |
+| Raw byte string | `br` | `br"raw"` | `&[u8]` |
+| C string | `c` | `c"ffi"` | `&CStr` |
+| Character | (none) | `'a'` | `char` |
+| Byte character | `b` | `b'A'` | `u8` |
 
 ---
 
@@ -328,7 +436,7 @@ pub struct Point(
 impl Point {
     // Return type uses colon, not arrow
     pub fn new(x: f64, y: f64): Point {
-        return Point(x = x, y = y)
+        return Point(x: x, y: y)
     }
 
     // Named parameters with 'from' label
@@ -347,10 +455,10 @@ fn identity(x: T): T where T {
 fn main() {
     // Struct instantiation with named fields
     let mut p1 = Point.new(0.0, 0.0)
-    let p2 = Point(x = 3.0, y = 4.0)
+    let p2 = Point(x: 3.0, y: 4.0)
 
     // Calculate distance using named argument
-    let dist = p1.distance(from = &p2)
+    let dist = p1.distance(from: &p2)
 
     /* Update p1 position
        using compound assignment */
@@ -371,7 +479,7 @@ fn main() {
         // Use v here
     }
 
-    if maybe_value is not None {
+    if maybe_value.is_some() {
         // Value exists
     }
 

@@ -62,7 +62,7 @@ let sci = 1.5e10;      // sci: f64
 
 ### Decimal Type
 
-The `decimal` type provides exact decimal arithmetic for financial and monetary calculations, avoiding the precision issues of binary floating-point.
+The `decimal` type provides exact decimal arithmetic for financial and monetary calculations, avoiding the precision issues of binary floating-point. It is included in the prelude.
 
 | Type      | Description |
 |-----------|-------------|
@@ -73,6 +73,24 @@ let price: decimal = 0.10 + 0.20;  // Exactly 0.30
 let tax = price * 0.0825;          // Precise decimal arithmetic
 ```
 
+**Arithmetic Operators:**
+
+| Operator | Description |
+|----------|-------------|
+| `+` | Addition |
+| `-` | Subtraction |
+| `*` | Multiplication |
+| `/` | Division |
+| `%` | Remainder |
+| `-` (unary) | Negation |
+
+**Comparison:** All comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) are supported.
+
+**Conversions:**
+- From integer types: `let d: decimal = 42.widen();`
+- From float types: `let d: decimal = 3.14.to_decimal();` (may lose precision)
+- To float types: `let f: f64 = d.to_f64();` (may lose precision)
+
 ### Arbitrary Precision Integer
 
 The `bigint` type provides arbitrary precision integers that never overflow.
@@ -82,9 +100,26 @@ The `bigint` type provides arbitrary precision integers that never overflow.
 | `bigint` | Arbitrary precision integer (grows as needed) |
 
 ```spl
-let huge: bigint = 999999999999999999999999999999;
+let huge: bigint = 999999999999999999999999999999bigint;
 let result = huge * huge;  // No overflow
 ```
+
+**Arithmetic Operators:**
+
+| Operator | Description |
+|----------|-------------|
+| `+` | Addition |
+| `-` | Subtraction |
+| `*` | Multiplication |
+| `/` | Division (truncates toward zero) |
+| `%` | Remainder |
+| `-` (unary) | Negation |
+
+**Comparison:** All comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) are supported.
+
+**Conversions:**
+- From fixed-size integers: `let b: bigint = 42.to_bigint();`
+- To fixed-size integers: `let n: i64 = b.try_into()?;` (returns `None` if out of range)
 
 ### Boolean Type
 
@@ -128,8 +163,8 @@ fn print_hello() {
     // Implicitly returns ()
 }
 
-fn explicit_unit() -> () {
-    ()
+fn explicit_unit(): () {
+    return ();
 }
 ```
 
@@ -144,11 +179,11 @@ The never type `!` represents computations that never complete. This type has no
 A function returning `!` never returns normally (it panics, loops forever, or exits the program).
 
 ```spl
-fn panic(msg: &str) -> ! {
+fn panic(msg: &str): ! {
     // Terminates the program
 }
 
-fn infinite() -> ! {
+fn infinite(): ! {
     loop { }
 }
 ```
@@ -156,12 +191,10 @@ fn infinite() -> ! {
 The never type coerces to any other type, enabling code like:
 
 ```spl
-let x: i32 = if condition {
-    42
-} else {
-    panic("unreachable")  // ! coerces to i32
-};
+let x: i32 = if condition { 42 } else { panic("unreachable") };
 ```
+
+When a block contains a single expression, the value is implicit. Multi-statement blocks require explicit `yield` (or `return` in functions).
 
 ---
 
@@ -190,7 +223,7 @@ The `String` type is a heap-allocated, growable UTF-8 string. Unlike Rust, `Stri
 | `String` | Yes   | Owned, heap-allocated UTF-8 string |
 
 ```spl
-let mut s = String::from("Hello");
+let mut s = String.from("Hello");
 s.push_str(", world!");
 ```
 
@@ -264,55 +297,55 @@ let (x, y) = pair;
 
 Structs are named product types with named fields.
 
-**Syntax**: Defined with `struct` keyword, instantiated with `StructName { field: value }`.
+**Syntax**: Defined with `struct` keyword using parentheses, instantiated with `StructName(field: value)`.
 
 ```spl
-struct Point {
+struct Point(
     x: f64,
     y: f64,
-}
+)
 
-struct Rectangle {
+struct Rectangle(
     top_left: Point,
     width: f64,
     height: f64,
-}
+)
 
-let p = Point { x: 1.0, y: 2.0 };
-let r = Rectangle {
-    top_left: Point { x: 0.0, y: 0.0 },
+let p = Point(x: 1.0, y: 2.0);
+let r = Rectangle(
+    top_left: Point(x: 0.0, y: 0.0),
     width: 10.0,
     height: 5.0,
-};
+);
 
 // Field shorthand
 let x = 3.0;
 let y = 4.0;
-let p2 = Point { x, y };  // Same as Point { x: x, y: y }
+let p2 = Point(x, y);  // Same as Point(x: x, y: y)
 ```
 
 ### Function Pointers
 
 Function pointer types represent the type of a function.
 
-**Syntax**: `fn(Args) -> Return`
+**Syntax**: `fn(Args): Return`
 
 | Type               | Description |
 |--------------------|-------------|
 | `fn()`             | Function taking no args, returning unit |
-| `fn(i32) -> bool`  | Function taking i32, returning bool |
-| `fn(T, U) -> V`    | Generic function pointer |
+| `fn(i32): bool`    | Function taking i32, returning bool |
+| `fn(T, U): V`      | Generic function pointer |
 
 ```spl
-fn add(a: i32, b: i32) -> i32 {
-    a + b
+fn add(a: i32, b: i32): i32 {
+    return a + b;
 }
 
-let f: fn(i32, i32) -> i32 = add;
+let f: fn(i32, i32): i32 = add;
 let result = f(2, 3);  // 5
 
-type Predicate = fn(i32) -> bool;
-type BinaryOp = fn(i32, i32) -> i32;
+type Predicate = fn(i32): bool;
+type BinaryOp = fn(i32, i32): i32;
 ```
 
 ---
@@ -365,21 +398,25 @@ let flag = true;     // flag: bool
 let s = "hello";     // s: &str
 ```
 
-**Function return types**: Return type annotations are mandatory. Functions must explicitly declare their return type.
+**Function return types**: Return type annotations are mandatory for non-unit returns. Functions must explicitly declare their return type.
 
 ```spl
-fn five(): i32 { return 5; }
-fn greet(): &str { return "hi"; }
-fn nothing(): () { }              // Explicit unit return
+fn five(): i32 { 5 }              // Single expression: implicit return
+fn greet(): &str { return "hi"; } // Explicit return also works
+fn compute(): i32 {               // Multi-statement: explicit return required
+    let x = 5;
+    return x * 2;
+}
+fn nothing() { }                  // Unit return type can be omitted
 ```
 
 **Generic instantiation**: Type parameters are inferred from usage context.
 
 ```spl
-let v = Vec::new();      // Vec<?>
-v.push(42);              // Now Vec<i32>
+let v = Vec.new();       // Vec(?)
+v.push(42);              // Now Vec(i32)
 
-let p = Point { x: 1.0, y: 2.0 };  // Point<f64>
+let p = Point(x: 1.0, y: 2.0);  // Point(f64)
 ```
 
 ### Required Annotations
@@ -389,24 +426,24 @@ Some positions always require explicit type annotations:
 **Function parameters**: Must always be annotated.
 
 ```spl
-fn add(a: i32, b: i32) -> i32 { a + b }  // Required
-fn bad(a, b) { a + b }                    // ERROR: missing types
+fn add(a: i32, b: i32): i32 { a + b }  // Required
+fn bad(a, b) { a + b }                  // ERROR: missing types
 ```
 
 **Struct fields**: Must always be annotated.
 
 ```spl
-struct Point {
+struct Point(
     x: f64,    // Required
     y: f64,    // Required
-}
+)
 ```
 
 **Ambiguous contexts**: When inference cannot determine a unique type.
 
 ```spl
-let x = Vec::new();  // ERROR: cannot infer type
-let x: Vec<i32> = Vec::new();  // OK
+let x = Vec.new();  // ERROR: cannot infer type
+let x: Vec(i32) = Vec.new();  // OK
 
 let n = "42".parse();      // ERROR: cannot infer result type
 let n: i32 = "42".parse(); // OK
@@ -525,8 +562,118 @@ fn identity(x: T): T where T {
 
 impl Point(T) where T {
     fn new(x: T, y: T): Point(T) {
-        return Point(x = x, y = y);
+        return Point(x: x, y: y);
     }
+}
+```
+
+### Trait Bounds
+
+Trait bounds constrain type parameters to types that implement specific traits. Bounds are specified with `:` in the `where` clause.
+
+```spl
+// T must implement Clone
+fn duplicate(x: &T): T where T: Clone {
+    return x.clone();
+}
+
+// Multiple bounds with +
+fn print_and_clone(x: &T): T where T: Clone + Debug {
+    println(x.debug());
+    return x.clone();
+}
+
+// Multiple type parameters with different bounds
+fn convert(input: T): U where T: Into(U), U {
+    return input.into();
+}
+
+// Bounds on struct type parameters
+struct SortedVec(items: Vec(T)) where T: Ord
+
+impl SortedVec(T) where T: Ord {
+    fn insert(&mut self, item: T) {
+        // Can use comparison because T: Ord
+        // ...
+    }
+}
+```
+
+**Common Trait Bounds:**
+
+| Bound | Meaning |
+|-------|---------|
+| `T: Clone` | T can be explicitly cloned |
+| `T: Copy` | T can be implicitly copied |
+| `T: Debug` | T can be formatted for debugging |
+| `T: Default` | T has a default value |
+| `T: Eq` | T supports equality comparison |
+| `T: Ord` | T supports ordering comparison |
+| `T: Hash` | T can be hashed |
+| `T: Send` | T can be sent between threads |
+| `T: Sync` | T can be shared between threads |
+
+### Associated Types
+
+Traits can declare associated types—type placeholders that implementors define.
+
+```spl
+trait Iterator {
+    type Item;  // Associated type
+
+    fn next(&mut self): Option(Self.Item);
+}
+
+// Implementor specifies the associated type
+impl Iterator for Counter {
+    type Item = i32;
+
+    fn next(&mut self): Option(i32) {
+        // ...
+    }
+}
+```
+
+**Using Associated Types in Bounds:**
+
+```spl
+// Constrain the associated type
+fn sum_all(iter: &mut I): i32 where I: Iterator(Item = i32) {
+    let mut total = 0;
+    while iter.next() is Some(n) {
+        total += n;
+    }
+    return total;
+}
+
+// Access associated type with Self.TypeName
+trait Container {
+    type Item;
+
+    fn contains(&self, item: &Self.Item): bool;
+}
+```
+
+**Associated Types vs Type Parameters:**
+
+| Feature | Associated Type | Type Parameter |
+|---------|-----------------|----------------|
+| Syntax | `trait Foo { type Bar; }` | `trait Foo(T) where T` |
+| Determined by | Implementor | Caller |
+| Multiple impls | One per type | Many per type |
+| Use case | Output types | Input types |
+
+```spl
+// Associated type: one Item type per Iterator impl
+trait Iterator {
+    type Item;
+    fn next(&mut self): Option(Self.Item);
+}
+
+// Type parameter: can implement Add for many RHS types
+trait Add(RHS) where RHS {
+    type Output;
+    fn add(self, rhs: RHS): Self.Output;
 }
 ```
 
@@ -536,10 +683,10 @@ Generic types become concrete through instantiation, either explicitly or throug
 
 ```spl
 // Explicit instantiation
-let p: Point(i32) = Point(x = 1, y = 2);
+let p: Point(i32) = Point(x: 1, y: 2);
 
 // Inferred instantiation
-let q = Point(x = 1.0, y = 2.0);  // Point(f64)
+let q = Point(x: 1.0, y: 2.0);  // Point(f64)
 
 // Explicit type application
 let id = identity(i32)(42);
@@ -566,11 +713,11 @@ Within an `impl` block, `Self` refers to the implementing type.
 ```spl
 impl Point(T) where T {
     fn origin(): Self {
-        return Self(x = 0, y = 0);  // Self = Point(T)
+        return Self(x: 0, y: 0);  // Self = Point(T)
     }
 
     fn clone(&self): Self {
-        return Self(x = self.x, y = self.y);
+        return Self(x: self.x, y: self.y);
     }
 }
 ```
@@ -591,6 +738,7 @@ SPL performs very few implicit coercions to maintain type safety.
 |------|----|-------------|
 | `&mut T` | `&T` | Mutable to immutable reference |
 | `!` | Any type | Never type to any type |
+| `[T; N]` | `Vec(T)` | Array to Vec (when target type is known) |
 
 ```spl
 fn take_ref(r: &i32) { }
@@ -600,6 +748,13 @@ let r: &mut i32 = &mut x;
 take_ref(r);  // &mut i32 coerces to &i32
 
 let y: i32 = if true { 1 } else { panic("!") };  // ! coerces to i32
+
+// Array to Vec coercion
+let v: Vec(i32) = [1, 2, 3];  // Array literal coerces to Vec
+fn take_vec(v: Vec(i32)) { }
+take_vec([1, 2, 3]);          // Coerced at call site
+
+let arr = [1, 2, 3];          // No coercion: arr is [i32; 3]
 ```
 
 **No implicit numeric coercions**: Unlike C, SPL never implicitly converts between numeric types.
@@ -657,10 +812,10 @@ let w = x.checked_add(1);      // None
 SPL uses nominal typing: types are distinguished by their names, not their structure.
 
 ```spl
-struct Meters { value: f64 }
-struct Feet { value: f64 }
+struct Meters(value: f64)
+struct Feet(value: f64)
 
-let m = Meters { value: 100.0 };
+let m = Meters(value: 100.0);
 let f: Feet = m;  // ERROR: Meters != Feet, despite same structure
 ```
 
@@ -671,10 +826,10 @@ Two types are equal if and only if they have the same name (and same type argume
 Generic types are equal only when their type arguments are equal.
 
 ```spl
-Point<i32> == Point<i32>   // Equal
-Point<i32> != Point<i64>   // Not equal
-Point<i32> != Point<u32>   // Not equal
-Vec<String> != Vec<&str>   // Not equal
+Point(i32) == Point(i32)   // Equal
+Point(i32) != Point(i64)   // Not equal
+Point(i32) != Point(u32)   // Not equal
+Vec(String) != Vec(&str)   // Not equal
 ```
 
 ### Type Aliases
@@ -683,13 +838,13 @@ Type aliases are transparent: they create a new name for an existing type, not a
 
 ```spl
 type Int = i32;
-type Pair<T> = (T, T);
+type Pair(T) = (T, T) where T;
 
 let x: Int = 42;
 let y: i32 = x;           // OK: Int and i32 are the same type
 
-let p: Pair<i32> = (1, 2);
-let q: (i32, i32) = p;    // OK: Pair<i32> is (i32, i32)
+let p: Pair(i32) = (1, 2);
+let q: (i32, i32) = p;    // OK: Pair(i32) is (i32, i32)
 ```
 
 ### Optional Type Syntax
@@ -736,7 +891,7 @@ fn greet(name: String, title: String?): () {
 | `i32` and `i64` | No | Different types |
 | `&T` and `&mut T` | One-way | `&mut T` coerces to `&T` |
 | `[T; 3]` and `[T; 4]` | No | Different sizes |
-| `Point<i32>` and `Point<i64>` | No | Different type arguments |
+| `Point(i32)` and `Point(i64)` | No | Different type arguments |
 | `type A = i32` and `i32` | Yes | Alias is transparent |
 
 ---
@@ -770,8 +925,8 @@ let arr: &[i32] = &[1,2,3]; // OK: reference to slice
 When trait bounds are added, a `Sized` bound will constrain type parameters to sized types:
 
 ```spl
-fn foo<T>(x: T) { }         // T: Sized implicitly
-fn bar<T: ?Sized>(x: &T) { } // T may be unsized
+fn foo(x: T) where T { }              // T: Sized implicitly
+fn bar(x: &T) where T: ?Sized { }     // T may be unsized
 ```
 
 ---
@@ -793,7 +948,7 @@ fn bar<T: ?Sized>(x: &T) { } // T may be unsized
 | Tuple | `(T, U, ...)` | Yes | Heterogeneous |
 | Struct | User-defined | Yes | Named fields |
 | Reference | `&T`, `&mut T` | Yes | Borrowing |
-| Function pointer | `fn(...) -> T` | Yes | Function type |
+| Function pointer | `fn(...): T` | Yes | Function type |
 
 ---
 
@@ -850,22 +1005,22 @@ struct Pair(first: T, second: U) where T, U
 
 impl Pair(T, U) where T, U {
     fn new(first: T, second: U): Self {
-        return Self(first = first, second = second);
+        return Self(first: first, second: second);
     }
 
     fn swap(self): Pair(U, T) {
         return Pair(
-            first = self.second,
-            second = self.first,
+            first: self.second,
+            second: self.first,
         );
     }
 }
 
 fn example_generics() {
-    let p1 = Pair.new(1, "hello");           // Pair(i32, &str)
-    let p2 = Pair.new(3.14, true);           // Pair(f64, bool)
-    let p3: Pair(i64, i64) = Pair.new(1, 2); // Explicit types
-    let swapped = p1.swap();                 // Pair(&str, i32)
+    let p1 = Pair.new(1, "hello");            // Pair(i32, &str)
+    let p2 = Pair.new(3.14, true);            // Pair(f64, bool)
+    let p3: Pair(i64, i64) = Pair.new(1, 2);  // Explicit types
+    let swapped = p1.swap();                  // Pair(&str, i32)
 }
 ```
 

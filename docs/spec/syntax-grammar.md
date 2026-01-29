@@ -8,7 +8,7 @@ SPL uses a clean, consistent syntax with several key principles:
 
 1. **Unified path separator**: Use `.` for all paths (no `::`).
 2. **Parentheses for application**: Type arguments use `()` not `<>`: `Vec(i32)`.
-3. **Named arguments with `=`**: Struct fields and call args use `=`: `Point(x = 1, y = 2)`.
+3. **Named arguments with `:`**: Struct fields and call args use `:`: `Point(x: 1, y: 2)`.
 4. **Return type with `:`**: Functions use `:` for return type: `fn foo(): i32`.
 5. **Where clauses for generics**: `fn id(x: T): T where T`.
 6. **Pattern matching with `is`**: `if value is Some(x)` instead of `if let`.
@@ -35,13 +35,83 @@ Trailing commas are allowed in all comma-separated lists (Rust-style).
 ## 1. Program Structure
 
 ```ebnf
-Program = { Item } ;
+Program = { InnerAttribute } { Item } ;
 
-Item = [ Visibility ] ( FunctionDef | StructDef | EnumDef | TraitDef | ImplBlock | TypeAlias | UseDecl | ModuleDecl ) ;
+Item = { OuterAttribute } [ Visibility ] ItemKind ;
+
+ItemKind = FunctionDef
+         | StructDef
+         | EnumDef
+         | TraitDef
+         | ImplBlock
+         | TypeAlias
+         | ConstDef
+         | StaticDef
+         | ExternBlock
+         | ExternFnDef
+         | UseDecl
+         | ModuleDecl ;
 
 Visibility = "pub" [ "(" VisibilityScope ")" ] ;
 
 VisibilityScope = "package" | "super" | "in" Path ;
+```
+
+### Attributes
+
+Attributes provide metadata for items, enabling compiler directives, conditional compilation, and derive macros.
+
+```ebnf
+(* Outer attributes apply to the following item *)
+OuterAttribute = "#" "[" AttrContent "]" ;
+
+(* Inner attributes apply to the enclosing item (e.g., module) *)
+InnerAttribute = "#" "!" "[" AttrContent "]" ;
+
+AttrContent = AttrPath [ AttrArgs ] ;
+
+AttrPath = IDENTIFIER { "." IDENTIFIER } ;
+
+AttrArgs = "(" AttrArgList ")"
+         | "=" Expression ;              (* e.g., #[doc = "..."] *)
+
+AttrArgList = AttrArg { "," AttrArg } [ "," ] ;
+
+AttrArg = IDENTIFIER [ "=" Expression ]  (* key or key = value *)
+        | Expression ;                   (* positional value *)
+```
+
+**Common Attributes:**
+
+| Attribute | Usage | Description |
+|-----------|-------|-------------|
+| `#[derive(Copy, Clone)]` | Structs/enums | Auto-implement traits |
+| `#[repr(C)]` | Structs/enums | C-compatible memory layout |
+| `#[repr(C, packed)]` | Structs | Packed layout (no padding) |
+| `#[link(name = "foo")]` | Extern blocks | Link native library |
+| `#[cfg(target_os = "linux")]` | Any item | Conditional compilation |
+| `#[no_mangle]` | Functions | Preserve symbol name for FFI |
+| `#[inline]` | Functions | Hint to inline |
+| `#![name("...")]` | Module file | Module configuration |
+
+### Const and Static Definitions
+
+```ebnf
+(* Compile-time constant *)
+ConstDef = "const" IDENTIFIER ":" Type "=" Expression ";" ;
+
+(* Static variable (module-level mutable state) *)
+StaticDef = "static" [ "mut" ] IDENTIFIER ":" Type "=" Expression ";" ;
+```
+
+**Examples:**
+
+```spl
+const MAX_SIZE: usize = 1024;
+const PI: f64 = 3.14159265359;
+
+static COUNTER: i32 = 0;
+static mut GLOBAL_STATE: i32 = 0;  // Requires unsafe to access
 ```
 
 ### Function Definitions
@@ -58,7 +128,7 @@ SelfParam = [ "&" [ "mut" ] ] "self" ;
 (* Parameters with optional labels *)
 TypedParam = [ LabelSpec ] [ "mut" ] IDENTIFIER ":" Type ;
 
-(* Label before parameter name: "to name" means call with "to = value" *)
+(* Label before parameter name: "to name" means call with "to: value" *)
 (* "_" means no label required at call site *)
 LabelSpec = "_" | IDENTIFIER ;
 
@@ -85,12 +155,12 @@ fn identity(x: T): T where T {
 
 // Named parameters (external label differs from internal name)
 fn greet(to person: String) {
-    // Called as: greet(to = "Alice")
+    // Called as: greet(to: "Alice")
 }
 
 // Omit label with underscore
 fn add(_ a: i32, _ b: i32): i32 {
-    // Called as: add(1, 2) instead of add(a = 1, b = 2)
+    // Called as: add(1, 2) instead of add(a: 1, b: 2)
     return a + b;
 }
 
@@ -229,14 +299,14 @@ ImplItem = [ "pub" ] FunctionDef ;
 // Inherent implementation
 impl Point {
     pub fn new(x: f64, y: f64): Point {
-        return Point(x = x, y = y);
+        return Point(x: x, y: y);
     }
 }
 
 // Trait implementation
 impl Clone for Point {
     fn clone(&self): Self {
-        return Self(x = self.x, y = self.y);
+        return Self(x: self.x, y: self.y);
     }
 }
 
@@ -257,7 +327,7 @@ impl Clone for Option(T) where T: Clone {
 // Simple impl
 impl Point {
     pub fn new(x: f64, y: f64): Point {
-        return Point(x = x, y = y);
+        return Point(x: x, y: y);
     }
 }
 
@@ -350,19 +420,67 @@ fn main() {
 
 **Note:** Inline modules are a future feature. See the module system roadmap.
 
+### Extern Blocks and FFI
+
+Extern blocks declare foreign functions. Extern function definitions create SPL functions callable from foreign code.
+
+```ebnf
+(* Declare foreign functions *)
+ExternBlock = "extern" AbiString "{" { ExternFnDecl } "}" ;
+
+ExternFnDecl = "fn" IDENTIFIER "(" [ ExternParamList ] [ "," "..." ] ")" [ ":" Type ] ";" ;
+
+ExternParamList = ExternParam { "," ExternParam } ;
+
+ExternParam = IDENTIFIER ":" Type ;
+
+(* Define SPL functions with C calling convention *)
+ExternFnDef = "extern" AbiString "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] Block ;
+
+AbiString = "\"C\"" ;
+```
+
+**Examples:**
+
+```spl
+// Declare foreign functions (in extern block)
+#[link(name = "mylib")]
+extern "C" {
+    fn c_function(x: i32): i32;
+    fn variadic_fn(fmt: Ptr(u8), ...): i32;
+}
+
+// Define SPL function callable from C (outside extern block)
+#[no_mangle]
+extern "C" fn my_callback(value: i32): i32 {
+    return value * 2;
+}
+
+// Function pointer type for callbacks
+type Callback = extern "C" fn(i32): i32;
+```
+
+**Notes:**
+- Calling functions declared in extern blocks requires `unsafe`
+- Functions defined with `extern "C" fn` use the C calling convention
+- `#[no_mangle]` preserves the function name for FFI
+- Variadic parameters (`...`) are only allowed in extern block declarations
+
 ---
 
 ## 2. Types
 
 ```ebnf
-Type = ReferenceType
-     | ArrayType
-     | TupleType
-     | FnPointerType
-     | NeverType
-     | PathType ;
+Type = BaseType [ "?" ] ;              (* Optional postfix: T? = Option(T) *)
 
-ReferenceType = "&" [ "mut" ] Type ;
+BaseType = ReferenceType
+         | ArrayType
+         | TupleType
+         | FnPointerType
+         | NeverType
+         | PathType ;
+
+ReferenceType = "&" [ "mut" ] BaseType ;
 
 ArrayType = "[" Type [ ";" Expression ] "]" ;
 
@@ -408,6 +526,9 @@ TypeArg = Type                       (* positional type argument *)
 | `!`                 | Never type                         |
 | `HashMap(K, V)`     | Multi-param generic type           |
 | `Result(T, E = Error)` | Named type argument             |
+| `i32?`              | Optional type (sugar for `Option(i32)`) |
+| `String?`           | Optional String                    |
+| `&T?`               | Reference to optional (rare)       |
 
 ---
 
@@ -427,9 +548,23 @@ ExpressionStatement = Expression ";"
 
 Block expressions (`if`, `while`, `for`, `loop`, and bare blocks) may omit the trailing semicolon when used as statements.
 
+**Semicolon Rules:**
+
+Unlike Rust, semicolons in SPL are purely syntactic terminators with no semantic significance:
+
+| Context | Rule |
+|---------|------|
+| Regular statements | Semicolon required: `let x = 1;` |
+| Block expressions as statements | Semicolon optional: `if x { ... }` or `if x { ... };` |
+| `return` statement | Semicolon required: `return 42;` |
+| `yield` statement | Semicolon required: `yield value;` |
+| Expression in block (not yield) | Semicolon required, value discarded |
+
+The semicolon does NOT determine whether an expression's value is used (unlike Rust). Instead, `return` and `yield` explicitly indicate intent.
+
 **Block Values:**
 
-Blocks do not have implicit tail expressions. To give a block a value, use `yield`:
+Blocks containing multiple statements require explicit `yield` to produce a value:
 
 ```spl
 let result = {
@@ -439,7 +574,14 @@ let result = {
 };
 ```
 
-Without `yield`, a block's type is `()` (unit).
+However, blocks containing a **single expression** have an implicit value—no `yield` is needed:
+
+```spl
+let doubled = if x > 0 { x * 2 } else { 0 };  // Single expression per branch
+let value = { compute() };                     // Single expression block
+```
+
+Without `yield` or a single expression, a block's type is `()` (unit).
 
 ---
 
@@ -454,10 +596,10 @@ Expressions are defined using layered production rules that encode operator prec
 | 1 (lowest) | `=` `+=` `-=` `*=` `/=` `%=` | Right         | AssignmentExpr     |
 | 2          | `\|\|`                       | Left          | OrExpr             |
 | 3          | `&&`                         | Left          | AndExpr            |
-| 4          | `is` `is not`                | Left          | IsExpr             |
+| 4          | `is`                         | Left          | IsExpr             |
 | 5          | `==` `!=`                    | Left          | EqualityExpr       |
 | 6          | `<` `>` `<=` `>=`            | Left          | ComparisonExpr     |
-| 7          | `..`                         | Left          | RangeExpr          |
+| 7          | `..` `..=`                   | Left          | RangeExpr          |
 | 8          | `+` `-`                      | Left          | AdditiveExpr       |
 | 9          | `*` `/` `%`                  | Left          | MultiplicativeExpr |
 | 10         | `!` `-` `&` (unary)          | Right         | UnaryExpr          |
@@ -478,14 +620,14 @@ OrExpr = AndExpr { "||" AndExpr } ;
 
 AndExpr = IsExpr { "&&" IsExpr } ;
 
-(* Pattern matching with is/is not *)
-IsExpr = EqualityExpr [ "is" [ "not" ] Pattern ] ;
+(* Pattern matching with is *)
+IsExpr = EqualityExpr [ "is" Pattern ] ;
 
 EqualityExpr = ComparisonExpr { ( "==" | "!=" ) ComparisonExpr } ;
 
 ComparisonExpr = RangeExpr { ( "<" | ">" | "<=" | ">=" ) RangeExpr } ;
 
-RangeExpr = AdditiveExpr [ ".." [ AdditiveExpr ] ] ;
+RangeExpr = AdditiveExpr [ ( ".." | "..=" ) [ AdditiveExpr ] ] ;
 
 AdditiveExpr = MultiplicativeExpr { ( "+" | "-" ) MultiplicativeExpr } ;
 
@@ -504,13 +646,16 @@ PostfixOp = "." IDENTIFIER [ GenericArgs ]                   (* field or associa
           | "[" SliceExpr "]"                                 (* slice *)
           | "?" ;                                             (* error propagation *)
 
-SliceExpr = [ Expression ] ":" [ Expression | "$" ] ;
+SliceExpr = [ IndexExpr ] ":" [ IndexExpr ] ;
 
-(* Arguments can be named with = *)
+IndexExpr = Expression
+          | "$" [ "-" Expression ] ;  (* $ = length, $-1 = last index *)
+
+(* Arguments can be named with : *)
 ArgList = Arg { "," Arg } [ "," ] ;
 
 Arg = Expression
-    | IDENTIFIER "=" Expression ;  (* named argument *)
+    | IDENTIFIER ":" Expression ;  (* named argument *)
 ```
 
 ### Primary Expressions
@@ -557,33 +702,34 @@ StructExprPath = TypePath [ GenericArgs ]
 
 StructFieldList = StructField { "," StructField } [ "," ] ;
 
-(* Field with optional expression; no colon needed *)
-StructField = IDENTIFIER [ "=" Expression ] ;
+(* Field with optional expression; colon separates name from value *)
+StructField = IDENTIFIER [ ":" Expression ] ;
 
 (* Match expression *)
 MatchExpr = "match" Expression "{" { MatchArm } "}" ;
 
-MatchArm = Pattern [ "if" Expression ] "=>" Expression "," ;
+(* Trailing comma optional; required if another arm follows *)
+MatchArm = Pattern [ "if" Expression ] "=>" Expression [ "," ] ;
 ```
 
 **Struct Expression Examples:**
 
 ```spl
 // All fields with values
-let p = Point(x = 1, y = 2)
+let p = Point(x: 1, y: 2)
 
 // Shorthand when variable name matches field
 let x = 1
 let y = 2
-let p = Point(x, y)  // Same as Point(x = x, y = y)
+let p = Point(x, y)  // Same as Point(x: x, y: y)
 
 // Generic type instantiation
-let b = Box(T = i32)(value = 42)
+let b = Box(i32)(value: 42)
 
 // Self in impl blocks
 impl Point {
     fn origin(): Self {
-        return Self(x = 0, y = 0);
+        return Self(x: 0, y: 0);
     }
 }
 ```
@@ -625,7 +771,7 @@ set_color(.Blue)
 let c: Color = .Green
 
 // With variant data
-let msg: Message = .Move(x = 10, y = 20)
+let msg: Message = .Move(x: 10, y: 20)
 let result: Result(i32, Error) = .Ok(42)
 
 // In return statements (type inferred from function signature)
@@ -675,9 +821,9 @@ if value is Some(x) {
     // x is bound here
 }
 
-// Negated pattern
-if value is not None {
-    // value is Some(_)
+// Check without binding
+if value.is_some() {
+    // value exists
 }
 
 // Combined with other conditions
@@ -693,35 +839,43 @@ while queue.pop() is Some(item) {
 
 **Explicit Return and Yield:**
 
-Functions must use `return` to return values. Block expressions must use `yield` to provide a value. Both require a trailing semicolon. Semicolons are purely syntactic terminators with no semantic significance.
+Functions must use `return` to return values, and block expressions must use `yield` to provide a value—**unless the block contains only a single expression**, in which case the value is implicit.
 
 ```spl
-// Function return (semicolon required)
-fn double(x: i32): i32 {
-    return x * 2;
+// Single-expression function: implicit return
+fn double(x: i32): i32 { x * 2 }
+
+// Multi-statement function: explicit return required
+fn compute(x: i32): i32 {
+    let temp = x * 2;
+    return temp + 1;
 }
 
-// Block value with yield (semicolon required)
+// Single-expression block: implicit value
+let result = if condition { x * 2 } else { 0 };
+
+// Multi-statement block: yield required
 let result = {
     let temp = compute();
     yield temp * 2;
 };
 
-// Error: missing return statement
+// Error: multi-statement without return
 fn bad(x: i32): i32 {
-    x * 2;  // This does NOT return!
+    let temp = x;
+    temp * 2;  // ERROR: missing return
 }
 
-// Error: missing yield
+// Error: multi-statement without yield
 let bad = {
     let x = 1;
     x + 1;  // Block has type (), not i32
 };
 ```
 
-**Why explicit return/yield?**
+**Why this design?**
 
-This design eliminates the subtle semantics where the presence or absence of a semicolon changes program behavior. In SPL, semicolons are always required as statement terminators, and the keywords `return`/`yield` explicitly indicate intent.
+Single-expression blocks are concise and unambiguous. Multi-statement blocks require explicit `return`/`yield` to avoid the subtle semantics where semicolon presence changes program behavior.
 
 ---
 
@@ -751,7 +905,7 @@ LiteralPattern = [ "-" ] INTEGER
                | "true"
                | "false" ;
 
-RangePattern = LiteralPattern ".." LiteralPattern ;
+RangePattern = LiteralPattern ( ".." | "..=" ) LiteralPattern ;
 
 TuplePattern = "(" [ Pattern { "," Pattern } [ "," ] ] ")" ;
 
@@ -786,8 +940,10 @@ ReferencePattern = "&" [ "mut" ] Pattern ;
 | `_`                   | Wildcard (ignore value)              |
 | `42`                  | Match literal integer                |
 | `-1`                  | Match negative literal               |
-| `0..10`               | Match range (inclusive start, exclusive end) |
-| `'a'..'z'`            | Match character range                |
+| `0..10`               | Match range 0-9 (exclusive end)      |
+| `0..=10`              | Match range 0-10 (inclusive end)     |
+| `'a'..'z'`            | Match characters a-y (exclusive end) |
+| `'a'..='z'`           | Match characters a-z (inclusive end) |
 | `(a, b)`              | Destructure tuple                    |
 | `[a, b, c]`           | Destructure fixed-size array/slice   |
 | `[first, ..]`         | Match first, ignore rest             |
@@ -833,10 +989,10 @@ From lowest to highest precedence:
 | 1    | Assignment     | `=` `+=` `-=` `*=` `/=` `%=`   | Right | `x = y = 1`               |
 | 2    | Logical OR     | `\|\|`                         | Left  | `a \|\| b \|\| c`         |
 | 3    | Logical AND    | `&&`                           | Left  | `a && b && c`             |
-| 4    | Pattern Match  | `is` `is not`                  | Left  | `x is Some(v)`            |
+| 4    | Pattern Match  | `is`                           | Left  | `x is Some(v)`            |
 | 5    | Equality       | `==` `!=`                      | Left  | `a == b != c`             |
 | 6    | Comparison     | `<` `>` `<=` `>=`              | Left  | `a < b`                   |
-| 7    | Range          | `..`                           | Left  | `0..10`                   |
+| 7    | Range          | `..` `..=`                     | Left  | `0..10`, `0..=10`         |
 | 8    | Additive       | `+` `-`                        | Left  | `a + b - c`               |
 | 9    | Multiplicative | `*` `/` `%`                    | Left  | `a * b / c`               |
 | 10   | Unary          | `!` `-` `&` `&mut`             | Right | `!&mut x`                 |
@@ -851,14 +1007,14 @@ From lowest to highest precedence:
 When the parser sees `IDENTIFIER(`, it must determine if this is a struct instantiation or a function call.
 
 **Rule:** Context and argument syntax disambiguate:
-- Named arguments with `=` indicate struct instantiation: `Point(x = 1, y = 2)`
+- Named fields with `:` indicate struct instantiation: `Point(x: 1, y: 2)`
 - Positional arguments indicate a function call: `add(1, 2)`
 
 ```spl
-Point(x = 1, y = 2)    // Struct instantiation (named fields)
+Point(x: 1, y: 2)      // Struct instantiation (named fields)
 Point(x, y)            // Struct instantiation (shorthand, variables x, y)
 add(1, 2)              // Function call (positional args)
-greet(to = "Alice")    // Function call (named argument)
+greet(to: "Alice")     // Function call (named argument)
 ```
 
 ### 2. Generic Arguments
@@ -898,13 +1054,13 @@ A parenthesized expression could be a tuple or a grouped expression.
 
 ### 5. Struct Field Shorthand
 
-When a struct field name matches a variable name, the `=` can be omitted.
+When a struct field name matches a variable name, the `:` can be omitted.
 
 ```spl
 let x = 1
 let y = 2
-Point(x, y)              // Equivalent to Point(x = x, y = y)
-Point(x, y = y + 1)      // Mixed shorthand and explicit
+Point(x, y)              // Equivalent to Point(x: x, y: y)
+Point(x, y: y + 1)       // Mixed shorthand and explicit
 ```
 
 ### 6. Index vs Slice
@@ -916,14 +1072,17 @@ A bracketed expression could be an index or a slice.
 ```spl
 arr[0]           // Index: element at position 0
 arr[i + 1]       // Index: element at computed position
+arr[$-1]         // Index: last element ($ = length)
+arr[$-2]         // Index: second to last element
 arr[1:3]         // Slice: elements 1, 2
 arr[:3]          // Slice: elements 0, 1, 2
 arr[1:]          // Slice: from index 1 to end
 arr[1:$]         // Slice: from index 1 to end (explicit $)
+arr[1:$-1]       // Slice: all except first and last
 arr[:]           // Slice: full copy
 ```
 
-The `$` symbol represents the end of the array and is only valid in slice expressions.
+The `$` symbol represents the array/slice length and is valid in index and slice expressions. It enables Python-style negative indexing: `$-1` is the last element, `$-2` is second to last, etc.
 
 ### 7. `is` vs Other Operators
 
@@ -950,7 +1109,7 @@ pub struct Point(
 impl Point(T) where T {
     // Return type with colon
     pub fn new(x: T, y: T): Point(T) {
-        return Point(x = x, y = y);
+        return Point(x: x, y: y);
     }
 
     pub fn swap(&mut self) {
@@ -973,10 +1132,10 @@ fn distance(from p1: &Point(f64), to p2: &Point(f64)): f64 {
 fn main() {
     // Struct instantiation with parentheses
     let mut origin = Point.new(0.0, 0.0);
-    let target = Point(x = 3.0, y = 4.0);
+    let target = Point(x: 3.0, y: 4.0);
 
     // Named arguments at call site
-    let dist = distance(from = &origin, to = &target);
+    let dist = distance(from: &origin, to: &target);
 
     // Control flow
     if dist > 5.0 {
@@ -989,7 +1148,7 @@ fn main() {
         // x is bound
     }
 
-    if maybe is not None {
+    if maybe.is_some() {
         // value exists
     }
 
@@ -1024,14 +1183,18 @@ fn main() {
     let widened = 65.widen();           // Type conversion via method
     let reference = &mut origin;        // Mutable reference
     let indexed = [1, 2, 3][0];         // Array indexing
-    let range = 0..100;                 // Range
+    let range = 0..100;                 // Exclusive range (0 to 99)
+    let inclusive = 0..=100;            // Inclusive range (0 to 100)
 
-    // Slicing
+    // Slicing and indexing with $
     let arr = [1, 2, 3, 4, 5];
+    let last = arr[$-1];                // 5 (last element)
+    let second_last = arr[$-2];         // 4 (second to last)
     let slice1 = arr[1:3];              // [2, 3]
     let slice2 = arr[:3];               // [1, 2, 3]
     let slice3 = arr[2:];               // [3, 4, 5]
     let slice4 = arr[2:$];              // [3, 4, 5] (explicit end)
+    let middle = arr[1:$-1];            // [2, 3, 4] (exclude first and last)
     let copy = arr[:];                  // full copy
 
     // Patterns
@@ -1061,11 +1224,11 @@ fn apply(_ f: fn(i32): i32, _ x: i32): i32 {
 // Self type in impl blocks
 impl Point(T) where T {
     fn origin(): Self {
-        return Self(x = 0, y = 0);
+        return Self(x: 0, y: 0);
     }
 
     fn clone(&self): Self {
-        return Self(x = self.x, y = self.y);
+        return Self(x: self.x, y: self.y);
     }
 }
 ```
@@ -1093,9 +1256,9 @@ impl Point(T) where T {
 | Return type         | `-> T`                    | `: T`                        |
 | Generic declaration | `fn foo<T>() {}`          | `fn foo() where T {}`        |
 | Turbofish           | `::<T>`                   | Not needed (use parentheses) |
-| Struct literal      | `Point { x: 1 }`          | `Point(x = 1)`               |
+| Struct literal      | `Point { x: 1 }`          | `Point(x: 1)`                |
 | Pattern matching    | `if let Some(x) = v {}`   | `if v is Some(x) {}`         |
-| Function return     | `expr` (implicit tail)    | `return expr;` (explicit)    |
-| Block value         | `expr` (implicit tail)    | `yield expr;` (explicit)     |
-| Semicolons          | Semantic (tail vs stmt)   | Syntactic (always required)  |
+| Function return     | `expr` (implicit tail)    | `expr` (single) or `return` (multi-stmt) |
+| Block value         | `expr` (implicit tail)    | `expr` (single) or `yield` (multi-stmt)  |
+| Semicolons          | Semantic (tail vs stmt)   | Required for statements      |
 | Named parameters    | Not built-in              | `fn foo(to name: T)`         |
