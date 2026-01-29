@@ -114,8 +114,18 @@ Both uses share the concept of "yield a value from this block without returning 
 | `$`      | Package root (paths) / array length (indexing/slices) |
 | `?`      | Error propagation (Try operator)  |
 | `~`      | Clone capture (in closures)       |
+| `@`      | Force value argument (for uppercase identifiers) |
+| `^`      | Force type argument (for lowercase identifiers) |
 
 **Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses with named args: `Vec(T: i32)` instead of `Vec<i32>`. Package-root paths use `$`: `$.utils.helper`. The `as` keyword is used only for import renaming, not type casting (use methods like `.widen()`, `.truncate()` for conversions).
+
+**Case-based argument disambiguation:** In argument lists, uppercase identifiers (e.g., `T:`) indicate type arguments while lowercase identifiers (e.g., `x:`) indicate value arguments. The `@` and `^` sigils override this default:
+```spl
+HashMap(K: String, V: i32)     // K, V uppercase → type arguments
+Point(x: 1, y: 2)              // x, y lowercase → value arguments
+Config(@URL: "...", @ID: 123)  // @ forces value arg with uppercase
+Functor(^f: Option)            // ^ forces type arg with lowercase
+```
 
 **Range operators:** `..` creates an exclusive range (like Python's `range()`), `..=` creates an inclusive range.
 ```spl

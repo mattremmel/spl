@@ -243,7 +243,7 @@ let mp2: MutPtr(T: i32) = p.as_mut();
 | `read_volatile` | `fn read_volatile(&self): T` | Yes | Volatile read |
 | `is_null` | `fn is_null(&self): bool` | No | Check if null |
 | `addr` | `fn addr(&self): usize` | No | Get address as integer |
-| `cast` | `fn cast(U)(&self): Ptr(T: U)` | No | Cast to different type |
+| `cast` | `fn cast(&self): Ptr(T: U) where U` | No | Cast to different type |
 | `as_mut` | `fn as_mut(&self): MutPtr(T: T)` | No | Convert to MutPtr |
 | `offset` | `fn offset(&self, count: isize): Ptr(T: T)` | No | Offset by elements |
 | `add` | `fn add(&self, count: usize): Ptr(T: T)` | No | Offset forward |
@@ -265,7 +265,7 @@ Arithmetic methods on `MutPtr(T: T)` return `MutPtr(T: T)`:
 
 | Method | Signature |
 |--------|-----------|
-| `cast` | `fn cast(U)(&self): MutPtr(T: U)` |
+| `cast` | `fn cast(&self): MutPtr(T: U) where U` |
 | `offset` | `fn offset(&self, count: isize): MutPtr(T: T)` |
 | `add` | `fn add(&self, count: usize): MutPtr(T: T)` |
 | `sub` | `fn sub(&self, count: usize): MutPtr(T: T)` |
@@ -345,15 +345,15 @@ The `std.ptr` module provides the pointer types and helper functions:
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `null` | `fn null(T)(): Ptr(T: T)` | Create null Ptr |
-| `null_mut` | `fn null_mut(T)(): MutPtr(T: T)` | Create null MutPtr |
-| `from_addr` | `fn from_addr(T)(addr: usize): Ptr(T: T)` | Ptr from address |
-| `from_addr_mut` | `fn from_addr_mut(T)(addr: usize): MutPtr(T: T)` | MutPtr from address |
-| `copy` | `unsafe fn copy(T)(src: Ptr(T: T), dst: MutPtr(T: T), count: usize)` | Copy (may overlap) |
-| `copy_nonoverlapping` | `unsafe fn copy_nonoverlapping(T)(...)` | Copy (must not overlap) |
-| `write_bytes` | `unsafe fn write_bytes(T)(dst: MutPtr(T: T), val: u8, count: usize)` | Fill with byte |
-| `swap` | `unsafe fn swap(T)(a: MutPtr(T: T), b: MutPtr(T: T))` | Swap values |
-| `replace` | `unsafe fn replace(T)(dst: MutPtr(T: T), val: T): T` | Replace, return old |
+| `null` | `fn null(): Ptr(T: T) where T` | Create null Ptr |
+| `null_mut` | `fn null_mut(): MutPtr(T: T) where T` | Create null MutPtr |
+| `from_addr` | `fn from_addr(addr: usize): Ptr(T: T) where T` | Ptr from address |
+| `from_addr_mut` | `fn from_addr_mut(addr: usize): MutPtr(T: T) where T` | MutPtr from address |
+| `copy` | `unsafe fn copy(src: Ptr(T: T), dst: MutPtr(T: T), count: usize) where T` | Copy (may overlap) |
+| `copy_nonoverlapping` | `unsafe fn copy_nonoverlapping(...) where T` | Copy (must not overlap) |
+| `write_bytes` | `unsafe fn write_bytes(dst: MutPtr(T: T), val: u8, count: usize) where T` | Fill with byte |
+| `swap` | `unsafe fn swap(a: MutPtr(T: T), b: MutPtr(T: T)) where T` | Swap values |
+| `replace` | `unsafe fn replace(dst: MutPtr(T: T), val: T): T where T` | Replace, return old |
 
 ---
 
@@ -515,7 +515,7 @@ When writing unsafe code:
 | Pointer to int | `p.addr()` | No |
 | Int to pointer | `ptr.from_addr(n)` | No |
 | Null check | `p.is_null()` | No |
-| Cast | `p.cast(U)` | No |
+| Cast | `p.cast()` (type inferred) | No |
 | Ptr → MutPtr | `p.as_mut()` | No |
 | MutPtr → Ptr | `mp.as_const()` | No |
 | Read from pointer | `p.read()` | **Yes** |
@@ -540,7 +540,7 @@ use std.ptr.{Ptr, MutPtr};
 /// - `src` must be valid for reads of `count` elements
 /// - `dst` must be valid for writes of `count` elements
 /// - `src` and `dst` must not overlap
-unsafe fn copy(T)(dst: MutPtr(T: T), src: Ptr(T: T), count: usize) where T {
+unsafe fn copy(dst: MutPtr(T: T), src: Ptr(T: T), count: usize) where T {
     let mut i: usize = 0;
     while i < count {
         dst.add(i).write(src.add(i).read());

@@ -563,8 +563,8 @@ fn identity(x: T): T where T {
 }
 
 // `where T` declares T for the impl block
-impl Point(T) where T {
-    fn new(x: T, y: T): Point(T) {
+impl Point(T: T) where T {
+    fn new(x: T, y: T): Point(T: T) {
         return Point(x: x, y: y);
     }
 }
@@ -590,7 +590,7 @@ fn print_and_clone(x: &T): T where T: Clone + Debug {
 }
 
 // Multiple type parameters with different bounds
-fn convert(input: T): U where T: Into(U), U {
+fn convert(input: T): U where T: Into(Target: U), U {
     return input.into();
 }
 
@@ -689,10 +689,10 @@ Generic types become concrete through instantiation, either explicitly or throug
 
 ```spl
 // Explicit instantiation
-let p: Point(i32) = Point(x: 1, y: 2);
+let p: Point(T: i32) = Point(x: 1, y: 2);
 
 // Inferred instantiation
-let q = Point(x: 1.0, y: 2.0);  // Point(f64)
+let q = Point(x: 1.0, y: 2.0);  // Point(T: f64)
 
 // Explicit type application (type args first, then value args)
 let id = identity(T: i32, 42);
@@ -703,12 +703,12 @@ let id = identity(T: i32, 42);
 SPL uses monomorphization: each unique instantiation of a generic generates specialized code at compile time.
 
 ```spl
-Point(i32)   // Generates code for Point with i32 fields
-Point(f64)   // Generates separate code for Point with f64 fields
+Point(T: i32)   // Generates code for Point with i32 fields
+Point(T: f64)   // Generates separate code for Point with f64 fields
 ```
 
 This means:
-- `Point(i32)` and `Point(f64)` are completely distinct types
+- `Point(T: i32)` and `Point(T: f64)` are completely distinct types
 - No runtime overhead for generics
 - Code size increases with more instantiations
 
@@ -717,9 +717,9 @@ This means:
 Within an `impl` block, `Self` refers to the implementing type.
 
 ```spl
-impl Point(T) where T {
+impl Point(T: T) where T {
     fn origin(): Self {
-        return Self(x: 0, y: 0);  // Self = Point(T)
+        return Self(x: 0, y: 0);  // Self = Point(T: T)
     }
 
     fn clone(&self): Self {
@@ -728,7 +728,7 @@ impl Point(T) where T {
 }
 ```
 
-`Self` is equivalent to the full type path with its type parameters (`Point(T)` in the example above).
+`Self` is equivalent to the full type path with its type parameters (`Point(T: T)` in the example above).
 
 ### Trait Objects (Future)
 
@@ -1042,12 +1042,12 @@ fn example_references() {
 ```spl
 struct Pair(first: T, second: U) where T, U
 
-impl Pair(T, U) where T, U {
+impl Pair(T: T, U: U) where T, U {
     fn new(first: T, second: U): Self {
         return Self(first: first, second: second);
     }
 
-    fn swap(self): Pair(U, T) {
+    fn swap(self): Pair(T: U, U: T) {
         return Pair(
             first: self.second,
             second: self.first,

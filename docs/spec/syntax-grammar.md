@@ -9,11 +9,12 @@ SPL uses a clean, consistent syntax with several key principles:
 1. **Unified path separator**: Use `.` for all paths (no `::`).
 2. **Parentheses for application**: Type arguments use `()` not `<>`: `Vec(T: i32)`.
 3. **Named arguments with `:`**: Struct fields and call args use `:`: `Point(x: 1, y: 2)`.
-4. **Return type with `:`**: Functions use `:` for return type: `fn foo(): i32`.
-5. **Where clauses for generics**: `fn id(x: T): T where T`.
-6. **Pattern matching with `is`**: `if value is Some(x)` instead of `if let`.
-7. **Explicit return/yield**: `return` for functions, `yield` for block values. Both require semicolons.
-8. **Uniform semicolons**: Semicolons are statement terminators with no semantic significance.
+4. **Case-based disambiguation**: Uppercase identifiers are type args (`T: i32`), lowercase are value args (`x: 1`).
+5. **Return type with `:`**: Functions use `:` for return type: `fn foo(): i32`.
+6. **Where clauses for generics**: `fn id(x: T): T where T`.
+7. **Pattern matching with `is`**: `if value is Some(x)` instead of `if let`.
+8. **Explicit return/yield**: `return` for functions, `yield` for block values. Both require semicolons.
+9. **Uniform semicolons**: Semicolons are statement terminators with no semantic significance.
 
 ## EBNF Notation
 
@@ -518,10 +519,11 @@ PathType = TypePath [ GenericArgs ]
 TypePath = IDENTIFIER { "." IDENTIFIER } ;
 
 (* Generic args use parentheses with named type arguments *)
-(* Named args required to distinguish from struct instantiation and function calls *)
+(* Case-based disambiguation: uppercase identifier = type arg, lowercase = value arg *)
+(* Use ^ sigil to force type arg with lowercase, @ sigil to force value arg with uppercase *)
 GenericArgs = "(" [ TypeArg { "," TypeArg } [ "," ] ] ")" ;
 
-TypeArg = IDENTIFIER ":" Type ;       (* named type argument, e.g., T: i32 *)
+TypeArg = [ "^" ] IDENTIFIER ":" Type ;       (* named type argument, e.g., T: i32 or ^t: i32 *)
 ```
 
 ### Type Examples
@@ -670,10 +672,15 @@ IndexExpr = Expression
           | "$" [ "-" Expression ] ;  (* $ = length, $-1 = last index *)
 
 (* Arguments can be named with : *)
+(* Case-based disambiguation: uppercase identifier = type arg, lowercase = value arg *)
+(* Use ^ sigil to force type arg with lowercase, @ sigil to force value arg with uppercase *)
 ArgList = Arg { "," Arg } [ "," ] ;
 
-Arg = Expression
-    | IDENTIFIER ":" Expression ;  (* named argument *)
+Arg = TypeArg                               (* type argument: T: Type or ^t: Type *)
+    | ValueArg                              (* value argument: name: expr or @NAME: expr *)
+    | Expression ;                          (* positional argument *)
+
+ValueArg = [ "@" ] IDENTIFIER ":" Expression ;  (* named value argument *)
 ```
 
 ### Primary Expressions
@@ -1104,20 +1111,18 @@ No turbofish needed - parentheses are unambiguous.
 
 ### 3. Explicit Type Application in Function Calls
 
-When calling a generic function with explicit type arguments, type args come first using named syntax (`Name: Type`), followed by value args:
+When calling a generic function with explicit type arguments, type args use uppercase identifiers and value args use lowercase identifiers (see section 9 for details):
 
 ```spl
-identity(T: i32, 42)              // Type arg T, then value arg
-convert(From: i32, To: f64, 100)  // Two type args, one value arg
-parse(T: Config, text)            // Type arg, positional value arg
+identity(T: i32, 42)              // T (uppercase) = type arg, 42 = positional
+convert(From: i32, To: f64, value: 100)  // From, To = type args, value = value arg
+parse(T: Config, input: text)     // T = type arg, input = value arg
 ```
 
-**Distinguishing type args from value args:**
-- Named type arg: `T: i32` (identifier `:` Type) - right side is a type
-- Named value arg: `to: "Alice"` (identifier `:` Expression) - right side is an expression
-- The function signature declares which names are type parameters
-
-**Rule:** Type arguments must precede value arguments. This maintains compatibility with variadic functions and provides a clear boundary between type and value arguments.
+**Case-based disambiguation:**
+- Uppercase identifier: type argument, RHS parsed as Type
+- Lowercase identifier: value argument, RHS parsed as Expression
+- Use `^` to force lowercase as type arg, `@` to force uppercase as value arg
 
 Most generic calls don't need explicit type args due to inference:
 
@@ -1203,33 +1208,69 @@ Named type arguments (`T: i32`) are syntactically distinct from value arguments,
 
 ### 9. Type Arguments vs Value Arguments
 
-Named type arguments eliminate ambiguity between type application, function calls, and struct instantiation:
+SPL uses **case-based disambiguation** to distinguish type arguments from value arguments:
+
+| Identifier Case | Interpretation | RHS Parsed As |
+|-----------------|----------------|---------------|
+| **Uppercase** (e.g., `T`, `Key`) | Type argument | Type |
+| **Lowercase** (e.g., `x`, `name`) | Value argument | Expression |
+
+This allows the parser to determine at parse time whether to invoke the Type or Expression grammar for the right-hand side of `Name: ...`.
+
+**Default rule:**
+```spl
+// Uppercase identifier → type argument → RHS is a Type
+Vec(T: i32)                    // T is uppercase, i32 parsed as Type
+HashMap(K: String, V: i32)     // K, V uppercase → type args
+
+// Lowercase identifier → value argument → RHS is an Expression
+Point(x: 1, y: 2)              // x, y lowercase → value args
+greet(to: "Alice")             // to lowercase → value arg
+```
+
+**Escape sigils for exceptions:**
+
+Use `@` to force a value argument with an uppercase identifier:
+```spl
+// Uppercase field names (e.g., from external APIs)
+Config(@URL: "https://example.com", @ID: 123, timeout: 30)
+HttpRequest(@Method: "GET", @URI: path)
+```
+
+Use `^` to force a type argument with a lowercase identifier:
+```spl
+// Lowercase type parameters (rare, Haskell-style)
+Functor(^f: Option, ^a: Int)
+Monad(^m: Result)
+```
+
+**Summary table:**
 
 | Syntax | Meaning |
 |--------|---------|
-| `Vec(T: i32)` | Type application - `T:` prefix indicates type arg |
-| `print(x)` | Function call - no `:` after identifier |
-| `Point(x: 1, y: 2)` | Struct instantiation - value after `:` |
-| `Point(x, y)` | Struct instantiation - field shorthand |
+| `T: i32` | Type arg (uppercase default) |
+| `^t: i32` | Type arg (lowercase with `^` sigil) |
+| `x: 1` | Value arg (lowercase default) |
+| `@X: 1` | Value arg (uppercase with `@` sigil) |
+| `x` | Positional arg or field shorthand |
 
-**The key distinction:**
-- **Type argument**: `Name: Type` where the right side is a type (e.g., `T: i32`, `K: String`)
-- **Value argument**: `name: expr` where the right side is an expression (e.g., `x: 1`, `to: "Alice"`)
-- **Shorthand**: `name` alone (struct field or function arg)
+**Mixed type and value arguments:**
+```spl
+// Generic function call with explicit type args
+parse(T: Config, input: text)          // T = type arg, input = value arg
+convert(From: i32, To: f64, value: 100) // From, To = type args, value = value arg
+
+// Struct instantiation with type parameters
+Container(T: i32, value: 42)           // T = type arg, value = value arg
+```
+
+**Positional arguments:**
+- Always parsed as expressions (value arguments)
+- Type arguments must be named
 
 ```spl
-// Type applications (named type args required)
-Vec(T: i32)
-HashMap(K: String, V: i32)
-Result(T: Config, E: IoError)
-
-// Function calls (value args)
-print(message)
-greet(to: "Alice")
-
-// Struct instantiation (fields)
-Point(x: 1, y: 2)
-Point(x, y)                    // Shorthand
+print("hello", 42)             // Positional value args
+foo(T: i32, 42, 43)            // T = type arg, 42 and 43 = positional value args
 ```
 
 ### 10. `is` vs Other Operators
@@ -1405,6 +1446,7 @@ impl Point(T: T) where T {
 |---------------------|---------------------------|------------------------------|
 | Path separator      | `::`                      | `.`                          |
 | Generic application | `Vec<T>`                  | `Vec(T: T)` or `Vec(T: i32)` |
+| Type vs value args  | Context-dependent         | Case-based: `T:` = type, `x:` = value |
 | Return type         | `-> T`                    | `: T`                        |
 | Generic declaration | `fn foo<T>() {}`          | `fn foo() where T {}`        |
 | Where clause        | Constrains only           | Declares AND constrains      |

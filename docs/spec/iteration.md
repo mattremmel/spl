@@ -244,11 +244,11 @@ Ranges are built-in types that implement `Iterable`.
 
 | Syntax | Type | Values | Description |
 |--------|------|--------|-------------|
-| `a..b` | `Range(T)` | a, a+1, ..., b-1 | Exclusive end |
-| `a..=b` | `RangeInclusive(T)` | a, a+1, ..., b | Inclusive end |
-| `a..` | `RangeFrom(T)` | a, a+1, ... | Unbounded end |
-| `..b` | `RangeTo(T)` | N/A | For slicing only |
-| `..=b` | `RangeToInclusive(T)` | N/A | For slicing only |
+| `a..b` | `Range(T: T)` | a, a+1, ..., b-1 | Exclusive end |
+| `a..=b` | `RangeInclusive(T: T)` | a, a+1, ..., b | Inclusive end |
+| `a..` | `RangeFrom(T: T)` | a, a+1, ... | Unbounded end |
+| `..b` | `RangeTo(T: T)` | N/A | For slicing only |
+| `..=b` | `RangeToInclusive(T: T)` | N/A | For slicing only |
 | `..` | `RangeFull` | N/A | For slicing only |
 
 ### Examples
@@ -278,12 +278,12 @@ let count = r.len();            // 10
 ### Range Implementation
 
 ```spl
-struct Range(T)(
+struct Range(
     start: T,
     end: T,
 ) where T: Step
 
-impl Iterable for Range(T) where T: Step {
+impl Iterable for Range(T: T) where T: Step {
     type Item = T;
 
     fn len(&self): usize {
@@ -356,37 +356,37 @@ struct Iter(S: S)(source: S)
 
 impl Iter(S: S) where S: Iterable {
     /// Transform elements
-    fn map(U)(self, f: fn(&S.Item): U): Map(Self, U) where U {
+    fn map(self, f: fn(&S.Item): U): Map(S: Self, U: U) where U {
         Map(source: self, func: f)
     }
 
     /// Filter elements
-    fn filter(self, pred: fn(&S.Item): bool): Filter(Self) {
+    fn filter(self, pred: fn(&S.Item): bool): Filter(S: Self) {
         Filter(source: self, predicate: pred)
     }
 
     /// Take first n elements
-    fn take(self, n: usize): Take(Self) {
+    fn take(self, n: usize): Take(S: Self) {
         Take(source: self, count: n)
     }
 
     /// Skip first n elements
-    fn skip(self, n: usize): Skip(Self) {
+    fn skip(self, n: usize): Skip(S: Self) {
         Skip(source: self, count: n)
     }
 
     /// Flatten nested iterables
-    fn flatten(self): Flatten(Self) where S.Item: Iterable {
+    fn flatten(self): Flatten(S: Self) where S.Item: Iterable {
         Flatten(source: self)
     }
 
     /// Chain with another iterable
-    fn chain(O)(self, other: O): Chain(Self, O) where O: Iterable(Item: S.Item) {
+    fn chain(self, other: O): Chain(A: Self, B: O) where O: Iterable(Item: S.Item) {
         Chain(first: self, second: other)
     }
 
     /// Zip with another iterable
-    fn zip(O)(self, other: O): Zip(Self, O) where O: Iterable {
+    fn zip(self, other: O): Zip(A: Self, B: O) where O: Iterable {
         Zip(first: self, second: other)
     }
 }
@@ -411,7 +411,7 @@ impl Iter(S: S) /* and all adapters */ {
     }
 
     /// Reduce to single value
-    fn fold(U)(self, init: U, f: fn(U, &S.Item): U): U where U {
+    fn fold(self, init: U, f: fn(U, &S.Item): U): U where U {
         let mut acc = init;
         self.each(|item| acc = f(acc, item));
         acc
@@ -534,21 +534,21 @@ for n in countdown(5) {
 
 ### Generator Type
 
-A generator function returns a `Generator(T)` type:
+A generator function returns a `Generator(T: T)` type:
 
 ```spl
 gen fn countdown(from: i32): i32 { ... }
 
 // Equivalent to returning:
-fn countdown(from: i32): Generator(i32) { ... }
+fn countdown(from: i32): Generator(T: i32) { ... }
 ```
 
-The `Generator(T)` type can be used in `for` loops:
+The `Generator(T: T)` type can be used in `for` loops:
 
 ```spl
-struct Generator(T)(
+struct Generator(
     // Internal state (compiler-generated)
-)
+) where T
 ```
 
 > **Note:** Generators are consumed during iteration. Unlike indexable collections, generators maintain internal state and produce values on-demand. The `for` loop over a generator uses the `Iterator` trait (with `next()` returning owned values), not `Iterable`. See "Consuming Iteration" below for the `Iterator` trait.
@@ -869,7 +869,7 @@ struct CircularBuffer(T: T)(
     len: usize,
 ) where T
 
-impl Iterable for CircularBuffer(T) where T {
+impl Iterable for CircularBuffer(T: T) where T {
     type Item = T;
 
     fn len(&self): usize { self.len }
@@ -892,7 +892,7 @@ impl Iterable for CircularBuffer(T) where T {
 }
 
 // Now works with for loops
-fn example(buf: &CircularBuffer(i32)) {
+fn example(buf: &CircularBuffer(T: i32)) {
     for item in buf {
         println(item);
     }
