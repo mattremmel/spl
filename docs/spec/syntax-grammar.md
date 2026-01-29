@@ -364,27 +364,75 @@ impl Clone for Option(T: T) where T: Clone {
 }
 ```
 
-**Examples:**
+**Impl Block Patterns:**
+
+SPL's `where` clause both **declares** and optionally **constrains** type parameters for impl blocks. This eliminates the redundancy of Rust's `impl<T> Type<T>` pattern.
 
 ```spl
-// Simple impl
+// Simple impl (non-generic type)
 impl Point {
     pub fn new(x: f64, y: f64): Point {
         return Point(x: x, y: y);
     }
 }
 
-// Generic impl with where clause
+// Generic impl - `where T` declares the type parameter
 impl Box(T: T) where T {
     pub fn unwrap(self): T {
         return self.value;
     }
 }
 
-// Impl with bounds
+// Conditional impl - bounds restrict which types this impl applies to
 impl Container(T: T) where T: Clone {
     pub fn clone_all(&self): Vec(T: T) {
         return self.items.clone();
+    }
+}
+
+// Concrete impl - no where clause, implements for specific type
+impl Box(T: u32) {
+    pub fn special_u32_method(&self): u32 {
+        return self.value * 2;
+    }
+}
+
+impl Box(T: String) {
+    pub fn special_string_method(&self): usize {
+        return self.value.len();
+    }
+}
+
+// Different names for impl vs struct type parameters
+// Emphasizes that T is the parameter NAME and R is the TYPE
+struct Wrapper(val: T) where T
+impl Wrapper(T: R) where R {
+    fn get(&self): &R { return &self.val; }
+}
+
+// Method-level generics - methods can have additional type parameters
+impl Vec(T: T) where T {
+    fn convert(&self): Vec(T: U) where U, T: Into(Target: U) {
+        // Each element converted from T to U
+    }
+}
+
+// Multiple concrete trait implementations
+trait Format {
+    fn display(&self): String;
+}
+
+struct Amount(value: T) where T
+
+impl Format for Amount(T: USD) {
+    fn display(&self): String {
+        return format("${}", self.value.cents);
+    }
+}
+
+impl Format for Amount(T: EUR) {
+    fn display(&self): String {
+        return format("{}€", self.value.cents);
     }
 }
 ```
@@ -1537,6 +1585,8 @@ impl Point(T: T) where T {
 | Return type         | `-> T`                    | `: T`                        |
 | Generic declaration | `fn foo<T>() {}`          | `fn foo() where T {}`        |
 | Where clause        | Constrains only           | Declares AND constrains      |
+| Impl block generics | `impl<T> Vec<T>`          | `impl Vec(T: T) where T`     |
+| Concrete impl       | `impl Vec<u32>`           | `impl Vec(T: u32)`           |
 | Turbofish           | `::<T>`                   | Not needed (use parentheses) |
 | Named struct decl   | `struct Point { x: i32 }` | `struct Point(x: i32)`       |
 | Positional struct   | `struct Pair(i32, i32);`  | `struct Pair(i32, i32)`      |

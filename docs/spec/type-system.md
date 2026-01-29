@@ -716,6 +716,104 @@ This means:
 - No runtime overhead for generics
 - Code size increases with more instantiations
 
+### Impl Block Patterns
+
+SPL's `where` clause approach to generics in impl blocks supports all the same patterns as Rust's `impl<T>` syntax, while eliminating redundant declarations.
+
+**Generic impl** - The `where` clause declares type parameters for the impl block:
+
+```spl
+impl Point(T: T) where T {
+    fn new(x: T, y: T): Point(T: T) {
+        return Point(x: x, y: y);
+    }
+}
+```
+
+**Conditional impl** - Bounds in the `where` clause restrict which types the impl applies to:
+
+```spl
+impl Container(T: T) where T: Clone {
+    fn clone_all(&self): Vec(T: T) {
+        return self.items.clone();
+    }
+}
+```
+
+**Concrete impl** - No `where` clause needed when implementing for a specific type:
+
+```spl
+impl Box(T: u32) {
+    fn special_method(&self): u32 {
+        return self.value * 2;
+    }
+}
+
+impl Box(T: String) {
+    fn special_method(&self): usize {
+        return self.value.len();
+    }
+}
+```
+
+**Different parameter names** - The impl can use different names than the struct definition to emphasize the distinction between parameter name and type variable:
+
+```spl
+struct Foo(val: T) where T
+
+// R is the type variable, T is the parameter name from the struct
+impl Foo(T: R) where R {
+    fn bar(val: R) {}
+}
+```
+
+Here `T` is the **parameter name** (from the struct definition), and `R` is the **type variable** declared by `where R`. The syntax `Foo(T: R)` means "Foo with its T parameter set to type R".
+
+**Method-level generics** - Methods can introduce additional type parameters beyond the impl block:
+
+```spl
+impl Vec(T: T) where T {
+    fn convert(&self): Vec(T: U) where U, T: Into(Target: U) {
+        // Convert each element from T to U
+    }
+}
+```
+
+**Trait impl with bounds** - Implementing traits conditionally:
+
+```spl
+impl Clone for Option(T: T) where T: Clone {
+    fn clone(&self): Self {
+        return match self {
+            Some(v) => Some(v.clone()),
+            None => None,
+        };
+    }
+}
+```
+
+**Multiple concrete trait implementations** - Different implementations for different type instantiations:
+
+```spl
+trait Cost {
+    fn pretty_cost(&self): String;
+}
+
+struct Price(val: T) where T
+
+impl Cost for Price(T: USD) {
+    fn pretty_cost(&self): String {
+        return format("${}", self.val.amount);
+    }
+}
+
+impl Cost for Price(T: EUR) {
+    fn pretty_cost(&self): String {
+        return format("{}€", self.val.amount);
+    }
+}
+```
+
 ### Self Type
 
 Within an `impl` block, `Self` refers to the implementing type.
