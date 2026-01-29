@@ -442,6 +442,70 @@ SPL uses a Hindley-Milner style inference algorithm with the following steps:
 3. **Defaulting**: Apply defaults for unconstrained numeric types (`i32`, `f64`)
 4. **Error if ambiguous**: Report errors for types that cannot be determined
 
+### Enum Variant Shorthand
+
+SPL supports Swift-style enum variant shorthand (`.Variant`) when the enum type can be inferred from context. This eliminates redundancy when the type is already known.
+
+**Valid inference contexts:**
+
+| Context | Example | Inferred From |
+|---------|---------|---------------|
+| Match arms | `match color { .Red => ... }` | Scrutinee type |
+| Function arguments | `set_color(.Blue)` | Parameter type |
+| Variable binding | `let c: Color = .Green` | Explicit annotation |
+| Return statement | `return .Ok(value)` | Function return type |
+| Binary comparison | `if color == .Red` | Other operand type |
+| Assignment | `color = .Blue` | Left-hand side type |
+| Array/collection literals | `let colors: Vec(Color) = [.Red, .Blue]` | Collection element type |
+
+**Examples:**
+
+```spl
+enum Status(Pending, Active, Complete)
+
+// Match - type from scrutinee
+fn describe(s: Status): &str {
+    match s {
+        .Pending => "waiting",
+        .Active => "in progress",
+        .Complete => "done",
+    }
+}
+
+// Function argument - type from parameter
+fn update(s: Status) { ... }
+update(.Active)
+
+// Return - type from signature
+fn default_status(): Status {
+    return .Pending
+}
+
+// Comparison - type from other operand
+fn is_done(s: Status): bool {
+    return s == .Complete
+}
+
+// With variant data
+enum Result(T, E)(Ok(T), Err(E)) where T, E
+
+fn parse(input: &str): Result(i32, ParseError) {
+    if input.is_empty() {
+        return .Err(ParseError.Empty)
+    }
+    return .Ok(input.parse_int())
+}
+```
+
+**Invalid contexts (explicit type required):**
+
+```spl
+let x = .Red;              // ERROR: cannot infer enum type
+foo(.Red, .Blue);          // ERROR if foo is generic over enum type
+```
+
+The shorthand improves readability when the enum type is contextually obvious, reducing visual noise while maintaining type safety.
+
 ---
 
 ## 6. Generics

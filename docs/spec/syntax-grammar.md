@@ -517,6 +517,7 @@ Arg = Expression
 
 ```ebnf
 PrimaryExpr = LiteralExpr
+            | EnumShorthandExpr
             | PathExpr
             | GroupedExpr
             | TupleExpr
@@ -534,6 +535,9 @@ PrimaryExpr = LiteralExpr
             | YieldExpr ;
 
 LiteralExpr = INTEGER | FLOAT | STRING | CHAR | "true" | "false" ;
+
+(* Enum variant shorthand - type inferred from context *)
+EnumShorthandExpr = "." IDENTIFIER [ "(" [ ExpressionList ] ")" ] ;
 
 (* Paths use dot separator *)
 PathExpr = IDENTIFIER { "." IDENTIFIER } ;
@@ -598,6 +602,39 @@ let description = match count {
     n if n < 10 => "few",
     _ => "many",
 }
+```
+
+**Enum Shorthand Examples:**
+
+When the enum type can be inferred from context, variants can be referenced with a leading dot without qualifying the enum type:
+
+```spl
+// In match arms (type inferred from scrutinee)
+let color: Color = get_color()
+match color {
+    .Red => "red",
+    .Green => "green",
+    .Blue => "blue",
+}
+
+// In function arguments (type inferred from parameter)
+fn set_color(c: Color) { ... }
+set_color(.Blue)
+
+// In variable bindings with explicit type
+let c: Color = .Green
+
+// With variant data
+let msg: Message = .Move(x = 10, y = 20)
+let result: Result(i32, Error) = .Ok(42)
+
+// In return statements (type inferred from function signature)
+fn default_color(): Color {
+    return .Red
+}
+
+// Comparison with known enum type
+if color == .Blue { ... }
 ```
 
 ### Control Flow Expressions
