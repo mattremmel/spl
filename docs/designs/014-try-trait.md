@@ -16,8 +16,8 @@ SPL's `?` operator enables concise error propagation. DECISIONS.md states "`?` w
 
 ### Current State
 
-- `enum Option(Some(T), None) where T`
-- `enum Result(Ok(T), Err(E)) where T, E`
+- `enum Option{Some(T), None} where T`
+- `enum Result{Ok(T), Err(E)} where T, E`
 - Both types are in the prelude
 - `?` operator is lexically defined but behavior unspecified
 
@@ -43,10 +43,10 @@ trait Try {
 Where `ControlFlow` is:
 
 ```spl
-enum ControlFlow(
+enum ControlFlow{
     Continue(C),    // Continue execution with value C
     Break(B),       // Early return with value B
-) where C, B
+} where C, B
 ```
 
 **Rationale**: The `branch` method determines whether to continue or early-return. Unlike Rust's split Try/FromResidual design, conversion happens through a separate mechanism (see Section 3).
@@ -302,11 +302,11 @@ No special `?` handling is needed for async code because:
 Users can implement Try for custom types:
 
 ```spl
-enum Response(
+enum Response{
     Success(T),
     ClientError(u16, String),
     ServerError(u16, String),
-) where T
+} where T
 
 impl Try for Response(T) where T {
     type Output = T;
@@ -344,10 +344,10 @@ impl FromResidual((u16, String, bool)) for Response(T) where T {
 `ControlFlow` is a general-purpose enum for control flow decisions, also useful for iteration (see ADR-011):
 
 ```spl
-enum ControlFlow(
+enum ControlFlow{
     Continue(C),
     Break(B),
-) where C, B
+} where C, B
 
 impl ControlFlow(C, B) where C, B {
     fn is_continue(&self): bool {
@@ -475,11 +475,11 @@ fn load_config(): Result(Config, Error) {
 ### Error Type Unification
 
 ```spl
-enum AppError(
+enum AppError{
     Io(IoError),
     Parse(ParseError),
     Validation(String),
-)
+}
 
 impl From(IoError) for AppError {
     fn from(e: IoError): Self {

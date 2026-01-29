@@ -21,10 +21,10 @@ SPL uses the `Result` and `Option` types for error handling, with the `?` operat
 ### Result
 
 ```spl
-enum Result(
+enum Result{
     Ok(T),
     Err(E),
-) where T, E
+} where T, E
 ```
 
 Represents an operation that may succeed with a value of type `T` or fail with an error of type `E`.
@@ -32,10 +32,10 @@ Represents an operation that may succeed with a value of type `T` or fail with a
 ### Option
 
 ```spl
-enum Option(
+enum Option{
     Some(T),
     None,
-) where T
+} where T
 ```
 
 Represents an optional value that may be present (`Some`) or absent (`None`).
@@ -43,10 +43,10 @@ Represents an optional value that may be present (`Some`) or absent (`None`).
 ### ControlFlow
 
 ```spl
-enum ControlFlow(
+enum ControlFlow{
     Continue(C),
     Break(B),
-) where C, B
+} where C, B
 ```
 
 Represents a control flow decision: continue execution with a value, or break/return early with a value. Used internally by the `Try` trait.
@@ -239,11 +239,11 @@ impl Option(T: T) where T {
 A common pattern is defining an application error type that unifies multiple error sources:
 
 ```spl
-enum AppError(
+enum AppError{
     Io(IoError),
     Parse(ParseError),
     Validation(String),
-)
+}
 
 impl From(T: IoError) for AppError {
     fn from(e: IoError): Self {
@@ -295,11 +295,11 @@ fn process_items(items: Vec(T: Item)): Result(T: Vec(T: Output), E: Error) {
 Users can implement `Try` for custom types:
 
 ```spl
-enum Response(
+enum Response{
     Success(T),
     ClientError(u16, String),
     ServerError(u16, String),
-) where T
+} where T
 
 impl Try for Response(T: T) where T {
     type Output = T;

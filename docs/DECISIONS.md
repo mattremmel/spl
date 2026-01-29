@@ -37,21 +37,26 @@ let result = {
 ```
 
 ### 2.2 Enum Syntax
-Enums use parentheses, consistent with struct syntax:
+Enums use braces for declarations, consistent with struct syntax:
 
 ```spl
-enum Option(Some(T), None) where T
+enum Option{Some(T), None} where T
 
-enum Message(
+enum Message{
     Quit,
     Move(x: i32, y: i32),  // named fields
     Write(String),          // tuple variant
-)
+}
 ```
 
-### 2.3 Struct/Enum Fields
-- Type-only = tuple style: `struct Point(i32, i32)`
-- With `:` = named fields: `struct Point(x: i32, y: i32)`
+### 2.3 Struct Syntax
+- Named structs use braces: `struct Point{x: i32, y: i32}`
+- Tuple structs use parentheses: `struct Pair(i32, i32)`
+
+Tuple structs use parentheses because declaration mirrors usage:
+- Declaration: `struct Pair(i32, i32)`
+- Instantiation: `Pair(1, 2)`
+- Pattern: `let Pair(a, b) = p`
 
 ### 2.4 Trait Syntax
 Traits use braces:
@@ -245,7 +250,9 @@ Look like regular function calls - no `!` required.
 | Paths | `::` | `.` |
 | Return type | `->` | `:` |
 | Type application | `Vec<i32>` | `Vec(i32)` |
-| Struct literal | `Point { x: 1 }` | `Point(x = 1)` |
+| Named struct decl | `struct Point { x: i32 }` | `struct Point{x: i32}` |
+| Tuple struct decl | `struct Pair(i32, i32);` | `struct Pair(i32, i32)` |
+| Struct literal | `Point { x: 1 }` | `Point(x: 1)` |
 | Pattern matching | `if let Some(x) = v` | `if v is Some(x)` |
 | Return | Implicit tail | Explicit `return` |
 | Block value | Implicit tail | Explicit `yield` |

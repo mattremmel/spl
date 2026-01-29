@@ -122,10 +122,10 @@ Structs can opt into `Copy` semantics if all their fields are `Copy`:
 
 ```spl
 #[derive(Copy)]
-struct Point(
+struct Point{
     x: f64,
     y: f64,
-)
+}
 
 let p1 = Point(x: 1.0, y: 2.0);
 let p2 = p1;  // Copied, not moved
@@ -303,9 +303,9 @@ fn process(data: &[i32]) {
 Types can implement `Drop` to run custom cleanup code:
 
 ```spl
-struct FileHandle(
+struct FileHandle{
     fd: i32,
-)
+}
 
 impl Drop for FileHandle {
     fn drop(&mut self) {
@@ -417,14 +417,14 @@ References are pointer-sized (8 bytes on 64-bit).
 Structs are laid out with padding for alignment:
 
 ```spl
-struct Example(
+struct Example{
     a: u8,   // 1 byte
     // 3 bytes padding
     b: u32,  // 4 bytes
     c: u8,   // 1 byte
     // 7 bytes padding
     d: u64,  // 8 bytes
-)  // Total: 24 bytes
+}  // Total: 24 bytes
 ```
 
 ### Unsized Types
@@ -551,10 +551,10 @@ Opt-in GC for specific types or regions:
 ```spl
 // Hypothetical syntax
 @gc
-struct Node(
+struct Node{
     value: i32,
     children: Vec(T: Node),  // Cycles OK with GC
-)
+}
 
 // Or region-based GC
 gc_region {
@@ -584,9 +584,9 @@ Types that must be used exactly once:
 
 ```spl
 // Hypothetical syntax
-linear struct FileHandle(
+linear struct FileHandle{
     fd: i32,
-)
+}
 
 fn example() {
     let f = open("file.txt");
@@ -604,9 +604,9 @@ Future SPL may allow choosing memory strategy per-module or per-type:
 
 // Type-level override
 #[memory(owned)]  // This type uses ownership
-struct Performance(
+struct Performance{
     data: Vec(T: f64),
-)
+}
 
 // Function-level arena
 #[arena]
@@ -753,9 +753,9 @@ fn first_word(s: &str): String {
 }
 
 // Use interior iteration with callbacks
-struct Container(
+struct Container{
     data: Vec(T: i32),
-)
+}
 
 impl Container {
     // Instead of returning &i32, use a callback

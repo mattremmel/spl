@@ -445,11 +445,11 @@ Whitespace is not significant except to separate tokens that would otherwise mer
 The following example demonstrates all token categories:
 
 ```spl
-// Point struct with public fields (parentheses, not braces)
-pub struct Point(
+// Point struct with public fields
+pub struct Point{
     pub x: f64,
     pub y: f64,
-)
+}
 
 impl Point {
     // Return type uses colon, not arrow

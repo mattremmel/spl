@@ -462,11 +462,11 @@ The purpose of unsafe is to build safe abstractions. A well-designed API uses un
 ```spl
 use std.ptr.{MutPtr, ptr};
 
-struct Vec(
+struct Vec{
     ptr: MutPtr(T: T),
     len: usize,
     capacity: usize,
-) where T
+} where T
 
 impl Vec(T: T) where T {
     // Safe public API
@@ -561,9 +561,9 @@ extern "C" {
 }
 
 /// Safe wrapper around C handle.
-pub struct SafeHandle(
+pub struct SafeHandle{
     inner: MutPtr(T: Handle),
-)
+}
 
 impl SafeHandle {
     pub fn new(): SafeHandle? {
@@ -599,9 +599,9 @@ extern "C" {
 }
 
 /// Heap-allocated value.
-pub struct Box(
+pub struct Box{
     ptr: MutPtr(T: T),
-) where T
+} where T
 
 impl Box(T: T) where T {
     pub fn new(value: T): Box(T: T) {

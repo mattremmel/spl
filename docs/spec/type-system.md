@@ -300,16 +300,16 @@ Structs are named product types with named fields.
 **Syntax**: Defined with `struct` keyword using parentheses, instantiated with `StructName(field: value)`.
 
 ```spl
-struct Point(
+struct Point{
     x: f64,
     y: f64,
-)
+}
 
-struct Rectangle(
+struct Rectangle{
     top_left: Point,
     width: f64,
     height: f64,
-)
+}
 
 let p = Point(x: 1.0, y: 2.0);
 let r = Rectangle(
@@ -433,10 +433,10 @@ fn bad(a, b) { a + b }                  // ERROR: missing types
 **Struct fields**: Must always be annotated.
 
 ```spl
-struct Point(
+struct Point{
     x: f64,    // Required
     y: f64,    // Required
-)
+}
 ```
 
 **Ambiguous contexts**: When inference cannot determine a unique type.
@@ -498,7 +498,7 @@ SPL supports Swift-style enum variant shorthand (`.Variant`) when the enum type 
 **Examples:**
 
 ```spl
-enum Status(Pending, Active, Complete)
+enum Status{Pending, Active, Complete}
 
 // Match - type from scrutinee
 fn describe(s: Status): &str {
@@ -524,7 +524,7 @@ fn is_done(s: Status): bool {
 }
 
 // With variant data
-enum Result(Ok(T), Err(E)) where T, E
+enum Result{Ok(T), Err(E)} where T, E
 
 fn parse(input: &str): Result(T: i32, E: ParseError) {
     if input.is_empty() {
@@ -555,7 +555,7 @@ Type parameters are declared in `where` clauses. Unlike Rust (which uses `<T>` s
 
 ```spl
 // `where T` declares type parameter T (no constraints)
-struct Point(x: T, y: T) where T
+struct Point{x: T, y: T} where T
 
 // `where T` declares T for use in parameters and return type
 fn identity(x: T): T where T {
@@ -570,7 +570,7 @@ impl Point(T: T) where T {
 }
 
 // Multiple type parameters
-struct Pair(first: A, second: B) where A, B
+struct Pair{first: A, second: B} where A, B
 ```
 
 ### Trait Bounds
@@ -595,7 +595,7 @@ fn convert(input: T): U where T: Into(Target: U), U {
 }
 
 // Bounds on struct type parameters
-struct SortedVec(items: Vec(T: T)) where T: Ord
+struct SortedVec{items: Vec(T: T)} where T: Ord
 
 impl SortedVec(T: T) where T: Ord {
     fn insert(&mut self, item: T) {
@@ -742,10 +742,10 @@ Trait objects would enable:
 Until then, use enums for heterogeneous collections:
 
 ```spl
-enum Shape(
+enum Shape{
     Circle(Circle),
     Rectangle(Rectangle),
-)
+}
 
 let shapes: Vec(T: Shape) = [Shape.Circle(c), Shape.Rectangle(r)];
 ```
@@ -851,8 +851,8 @@ let w = x.checked_add(1);      // None
 SPL uses nominal typing: types are distinguished by their names, not their structure.
 
 ```spl
-struct Meters(value: f64)
-struct Feet(value: f64)
+struct Meters{value: f64}
+struct Feet{value: f64}
 
 let m = Meters(value: 100.0);
 let f: Feet = m;  // ERROR: Meters != Feet, despite same structure
@@ -903,11 +903,11 @@ fn find_user(id: UserId): User? { ... }
 fn find_user(id: UserId): Option(T: User) { ... }
 
 // In struct fields:
-struct Person(
+struct Person{
     name: String,
     email: String?,      // Optional email
     phone: String?,      // Optional phone
-)
+}
 
 // In function parameters:
 fn greet(name: String, title: String?): () {
@@ -1040,7 +1040,7 @@ fn example_references() {
 ### Generic Types
 
 ```spl
-struct Pair(first: T, second: U) where T, U
+struct Pair{first: T, second: U} where T, U
 
 impl Pair(T: T, U: U) where T, U {
     fn new(first: T, second: U): Self {
