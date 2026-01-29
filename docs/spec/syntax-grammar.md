@@ -40,6 +40,7 @@ Program = { InnerAttribute } { Item } ;
 Item = { OuterAttribute } [ Visibility ] ItemKind ;
 
 ItemKind = FunctionDef
+         | GeneratorDef
          | StructDef
          | EnumDef
          | TraitDef
@@ -119,6 +120,9 @@ static mut GLOBAL_STATE: i32 = 0;  // Requires unsafe to access
 ```ebnf
 FunctionDef = "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ WhereClause ] Block ;
 
+(* Generator functions yield multiple values lazily *)
+GeneratorDef = "gen" "fn" IDENTIFIER "(" [ ParamList ] ")" ":" Type [ WhereClause ] Block ;
+
 ParamList = Param { "," Param } [ "," ] ;
 
 Param = SelfParam | TypedParam ;
@@ -139,6 +143,8 @@ TypeParam = IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] ;
 
 TypeBound = TypePath [ GenericArgs ] ;
 ```
+
+**Note:** Generator functions require a return type annotation (the yielded type). See [iteration.md](iteration.md) for full generator semantics.
 
 **Examples:**
 
