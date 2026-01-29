@@ -352,7 +352,7 @@ impl Vec(T: T) where T {
     }
 }
 
-struct Iter(S: S)(source: S)
+struct Iter(source: S) where S
 
 impl Iter(S: S) where S: Iterable {
     /// Transform elements
@@ -863,7 +863,7 @@ fn main() {
 ### Custom Iterable Type
 
 ```spl
-struct CircularBuffer(T: T)(
+struct CircularBuffer(
     data: [T; 8],
     head: usize,
     len: usize,

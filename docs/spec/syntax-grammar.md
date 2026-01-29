@@ -738,15 +738,19 @@ TupleExpr = "(" [ Expression "," [ Expression { "," Expression } ] [ "," ] ] ")"
 ArrayExpr = "[" [ Expression { "," Expression } [ "," ] ] "]"
           | "[" Expression ";" Expression "]" ;
 
-(* Struct instantiation uses parentheses with = for fields *)
-StructExpr = StructExprPath "(" [ StructFieldList ] ")" ;
+(* Struct instantiation uses parentheses; type args and fields in same list *)
+(* Case-based disambiguation: uppercase = type arg, lowercase = field *)
+StructExpr = StructExprPath "(" [ StructArgList ] ")" ;
 
-StructExprPath = TypePath [ GenericArgs ]
-               | "Self" ;
+StructExprPath = TypePath | "Self" ;
 
-StructFieldList = StructField { "," StructField } [ "," ] ;
+StructArgList = StructArg { "," StructArg } [ "," ] ;
+
+StructArg = TypeArg                            (* type argument: T: Type *)
+          | StructField ;                      (* value field: name: expr or shorthand *)
 
 (* Field with optional expression; colon separates name from value *)
+(* Bare identifier = shorthand: `x` means `x: x` *)
 StructField = IDENTIFIER [ ":" Expression ] ;
 
 (* Match expression *)
@@ -768,7 +772,7 @@ let y = 2
 let p = Point(x, y)  // Same as Point(x: x, y: y)
 
 // Generic type instantiation
-let b = Box(T: i32)(value: 42)
+let b = Box(T: i32, value: 42)
 
 // Self in impl blocks
 impl Point {

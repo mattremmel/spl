@@ -109,7 +109,7 @@ let greet = || { println("Hello"); };
 // ~ = clone (capture a clone at closure creation time)
 // no modifier = move (for escaping) or borrow (for non-escaping)
 
-let data = Arc::new(vec![1, 2, 3]);
+let data = Arc.new([1, 2, 3]);
 
 // Escaping: data is moved (default)
 let f = |data| process(data);
@@ -145,7 +145,7 @@ One might ask: why not just write `data.clone()` instead of `~data`?
 **The timing problem**: Captures happen at closure *creation* time, but expressions in the body execute at *call* time.
 
 ```spl
-let data = Arc::new(vec![1, 2, 3]);
+let data = Arc.new([1, 2, 3]);
 
 // WRONG: clone happens every call
 let f = || {
@@ -221,8 +221,8 @@ let add_x: fn(i32): i32 = |a| a + x;  // ERROR: captures x
 ```spl
 fn process_users(users: Vec(User)): Vec(String) {
     let min_age = 18;
-    let department = String::from("Engineering");
-    let active_status = Status::Active;
+    let department = String.from("Engineering");
+    let active_status = Status.Active;
 
     // ALL of these closures are non-escaping
     // They borrow freely - no annotations needed
@@ -252,7 +252,7 @@ fn with_retry(attempts: i32, f: fn(): Result(T, Error)): Result(T, Error) where 
             Err(_) => { continue; },
         }
     }
-    return Err(Error::new("Max retries exceeded"));
+    return Err(Error.new("Max retries exceeded"));
 }
 
 fn fetch_data(config: Config, client: HttpClient): Result(Data, Error) {
@@ -274,21 +274,21 @@ fn fetch_data(config: Config, client: HttpClient): Result(Data, Error) {
 ### Example 3: Stored Callbacks (Escaping)
 
 ```spl
-struct Button {
+struct Button(
     label: String,
     on_click: fn(): (),
     on_hover: fn(): (),
-}
+)
 
 fn create_button(label: String, counter: Arc(Cell(i32))): Button {
     // Escaping closures: stored in struct
     // label moved (button owns it), counter must be cloned to share
     return Button(
-        label = label,  // moved into struct field, not closure
-        on_click = |~counter| {
+        label: label,  // moved into struct field, not closure
+        on_click: |~counter| {
             counter.set(counter.get() + 1);
         },
-        on_hover = |~counter| {
+        on_hover: |~counter| {
             println("Count: " + counter.get().to_string());
         },
     );
@@ -302,7 +302,7 @@ fn create_button(label: String, counter: Arc(Cell(i32))): Button {
 
 ```spl
 fn parallel_process(data: Vec(Item), config: Arc(Config)): Vec(Handle) {
-    let handles = Vec::new();
+    let handles = Vec.new();
 
     for chunk in data.chunks(100) {
         // spawn() takes escaping closure
@@ -343,7 +343,7 @@ fn make_logger(prefix: String, suffix: String): fn(String): () {
 }
 
 fn make_shared_counter(initial: i32): fn(): i32 {
-    let count = Arc::new(Cell::new(initial));
+    let count = Arc.new(Cell.new(initial));
     // Clone to allow making multiple counters from same Arc
     return |~count| {
         let val = count.get();
@@ -357,7 +357,7 @@ fn make_shared_counter(initial: i32): fn(): i32 {
 
 ```spl
 async fn fetch_all(urls: Vec(String), client: Arc(HttpClient)): Vec(Response) {
-    let timeout = Duration::from_secs(30);  // Copy
+    let timeout = Duration.from_secs(30);  // Copy
 
     let futures = urls.iter()
         .map(|url| {
@@ -400,10 +400,10 @@ fn create_processor(config: Config): fn(Vec(i32)): Vec(i32) {
 ### Example 8: Event Handlers with Shared State
 
 ```spl
-struct App {
+struct App(
     state: Arc(Mutex(AppState)),
     handlers: Vec(fn(Event): ()),
-}
+)
 
 impl App {
     fn register_handlers(&mut self) {
@@ -459,8 +459,8 @@ fn build_pipeline(
 
 ```spl
 fn demonstrate_errors() {
-    let name = String::from("Alice");
-    let data = Vec::new();
+    let name = String.from("Alice");
+    let data = Vec.new();
     let count = 0;  // Copy type
 
     // --- ERROR: Using variable after move ---
@@ -641,7 +641,7 @@ fn make_counter(start: i32): gen i32 {
 Async blocks follow the same capture rules:
 
 ```spl
-let client = Arc::new(HttpClient::new());
+let client = Arc.new(HttpClient.new());
 
 // Async block is escaping - explicit clone needed
 let future = async |~client| {
@@ -703,7 +703,7 @@ Closures compile to anonymous structs:
 ```spl
 // Source
 let x = 1;
-let s = String::from("hello");
+let s = String.from("hello");
 let f = |~s, y| x + y + s.len();
 
 // Compiled (conceptual)

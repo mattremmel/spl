@@ -462,7 +462,7 @@ The purpose of unsafe is to build safe abstractions. A well-designed API uses un
 ```spl
 use std.ptr.{MutPtr, ptr};
 
-struct Vec(T: T)(
+struct Vec(
     ptr: MutPtr(T: T),
     len: usize,
     capacity: usize,
@@ -599,7 +599,7 @@ extern "C" {
 }
 
 /// Heap-allocated value.
-pub struct Box(T: T)(
+pub struct Box(
     ptr: MutPtr(T: T),
 ) where T
 

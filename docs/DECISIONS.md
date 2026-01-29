@@ -40,7 +40,7 @@ let result = {
 Enums use parentheses, consistent with struct syntax:
 
 ```spl
-enum Option(T)(Some(T), None) where T
+enum Option(Some(T), None) where T
 
 enum Message(
     Quit,
