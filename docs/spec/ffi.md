@@ -29,9 +29,9 @@ extern_fn    = "fn" identifier "(" param_list ("," "...")? ")" (":" type)? ";"
 
 ```spl
 extern "C" {
-    fn malloc(size: usize): MutPtr(u8);
-    fn free(ptr: MutPtr(u8));
-    fn strlen(s: Ptr(u8)): usize;
+    fn malloc(size: usize): MutPtr(T: u8);
+    fn free(ptr: MutPtr(T: u8));
+    fn strlen(s: Ptr(T: u8)): usize;
 }
 ```
 
@@ -70,7 +70,7 @@ C functions like `printf` accept a variable number of arguments.
 
 ```spl
 extern "C" {
-    fn printf(fmt: Ptr(u8), ...): i32;
+    fn printf(fmt: Ptr(T: u8), ...): i32;
 }
 ```
 
@@ -101,7 +101,7 @@ Variadic arguments are promoted according to C rules:
 use std.ffi.{c_int};
 
 extern "C" {
-    fn printf(fmt: Ptr(u8), ...): c_int;
+    fn printf(fmt: Ptr(T: u8), ...): c_int;
 }
 
 unsafe {
@@ -132,10 +132,10 @@ unsafe {
 | `ssize_t` / `ptrdiff_t` | `isize` | 4 or 8 |
 | `float` | `f32` | 4 |
 | `double` | `f64` | 8 |
-| `void*` | `MutPtr(u8)` | 4 or 8 |
-| `const void*` | `Ptr(u8)` | 4 or 8 |
-| `T*` | `MutPtr(T)` | 4 or 8 |
-| `const T*` | `Ptr(T)` | 4 or 8 |
+| `void*` | `MutPtr(T: u8)` | 4 or 8 |
+| `const void*` | `Ptr(T: u8)` | 4 or 8 |
+| `T*` | `MutPtr(T: T)` | 4 or 8 |
+| `const T*` | `Ptr(T: T)` | 4 or 8 |
 
 ### The `std.ffi` Module
 
@@ -173,7 +173,7 @@ struct Point(
 )
 
 extern "C" {
-    fn distance(a: Ptr(Point), b: Ptr(Point)): f64;
+    fn distance(a: Ptr(T: Point), b: Ptr(T: Point)): f64;
 }
 ```
 
@@ -222,7 +222,7 @@ C strings are null-terminated byte arrays with no encoding guarantee. SPL provid
 ```spl
 #[derive(Copy, Clone)]
 pub struct CStr(
-    ptr: Ptr(u8),
+    ptr: Ptr(T: u8),
 )
 
 impl CStr {
@@ -231,7 +231,7 @@ impl CStr {
     /// # Safety
     /// - `ptr` must point to a valid null-terminated string
     /// - The memory must remain valid while the CStr is used
-    pub unsafe fn from_ptr(ptr: Ptr(u8)): CStr;
+    pub unsafe fn from_ptr(ptr: Ptr(T: u8)): CStr;
 
     /// Get as raw bytes (excluding null terminator)
     pub fn as_bytes(&self): &[u8];
@@ -246,7 +246,7 @@ impl CStr {
     pub fn len(&self): usize;
 
     /// Raw pointer for FFI
-    pub fn as_ptr(&self): Ptr(u8);
+    pub fn as_ptr(&self): Ptr(T: u8);
 }
 ```
 
@@ -256,31 +256,31 @@ impl CStr {
 
 ```spl
 pub struct CString(
-    ptr: MutPtr(u8),
+    ptr: MutPtr(T: u8),
     len: usize,
 )
 
 impl CString {
     /// Create from SPL string (adds null terminator).
     /// Returns error if string contains interior null bytes.
-    pub fn new(s: &str): Result(CString, NulError);
+    pub fn new(s: &str): Result(T: CString, E: NulError);
 
     /// Get as CStr (shares the same pointer)
     pub fn as_cstr(&self): CStr;
 
     /// Get raw pointer for FFI
-    pub fn as_ptr(&self): Ptr(u8);
+    pub fn as_ptr(&self): Ptr(T: u8);
 
     /// Consume and return raw pointer.
     /// Caller is responsible for freeing the memory.
-    pub fn into_raw(self): MutPtr(u8);
+    pub fn into_raw(self): MutPtr(T: u8);
 
     /// Reconstruct from raw pointer.
     ///
     /// # Safety
     /// - `ptr` must have come from `into_raw()`
     /// - Must not have been freed
-    pub unsafe fn from_raw(ptr: MutPtr(u8)): CString;
+    pub unsafe fn from_raw(ptr: MutPtr(T: u8)): CString;
 }
 
 impl Drop for CString {
@@ -326,8 +326,8 @@ use std.ffi.{CStr, CString};
 use std.ptr.Ptr;
 
 extern "C" {
-    fn puts(s: Ptr(u8)): i32;
-    fn getenv(name: Ptr(u8)): Ptr(u8);
+    fn puts(s: Ptr(T: u8)): i32;
+    fn getenv(name: Ptr(T: u8)): Ptr(T: u8);
 }
 
 fn main() {
@@ -359,7 +359,7 @@ fn main() {
 Use `extern "C" fn` to define functions callable from C:
 
 ```spl
-extern "C" fn compare(a: Ptr(i32), b: Ptr(i32)): i32 {
+extern "C" fn compare(a: Ptr(T: i32), b: Ptr(T: i32)): i32 {
     let a_val = unsafe { a.read() };
     let b_val = unsafe { b.read() };
     return a_val - b_val;
@@ -413,7 +413,7 @@ pub extern "C" fn mylib_init(): i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn mylib_process(data: Ptr(u8), len: usize): i32 {
+pub extern "C" fn mylib_process(data: Ptr(T: u8), len: usize): i32 {
     // Process data
     return 0;
 }
@@ -474,11 +474,11 @@ int main() {
 
 ```spl
 // Declare a C function pointer type
-type Comparator = extern "C" fn(Ptr(i32), Ptr(i32)): i32;
+type Comparator = extern "C" fn(Ptr(T: i32), Ptr(T: i32)): i32;
 
 extern "C" {
     fn qsort(
-        base: MutPtr(u8),
+        base: MutPtr(T: u8),
         count: usize,
         size: usize,
         cmp: Comparator,
@@ -486,7 +486,7 @@ extern "C" {
 }
 
 // Usage
-extern "C" fn my_compare(a: Ptr(i32), b: Ptr(i32)): i32 {
+extern "C" fn my_compare(a: Ptr(T: i32), b: Ptr(T: i32)): i32 {
     unsafe { a.read() - b.read() }
 }
 
@@ -521,8 +521,8 @@ Many C APIs provide a `void* user_data` parameter for this purpose:
 ```spl
 extern "C" {
     fn register_callback(
-        cb: extern "C" fn(i32, MutPtr(u8)),
-        user_data: MutPtr(u8),
+        cb: extern "C" fn(i32, MutPtr(T: u8)),
+        user_data: MutPtr(T: u8),
     );
 }
 
@@ -531,8 +531,8 @@ struct Context(
     multiplier: i32,
 )
 
-extern "C" fn callback(value: i32, user_data: MutPtr(u8)) {
-    let ctx = unsafe { user_data.cast(Context).read() };
+extern "C" fn callback(value: i32, user_data: MutPtr(T: u8)) {
+    let ctx = unsafe { user_data.cast(T: Context).read() };
     println(value * ctx.multiplier);
 }
 
@@ -557,8 +557,8 @@ Specify native libraries to link against:
 ```spl
 #[link(name = "sqlite3")]
 extern "C" {
-    fn sqlite3_open(filename: Ptr(u8), db: MutPtr(MutPtr(Sqlite3))): i32;
-    fn sqlite3_close(db: MutPtr(Sqlite3)): i32;
+    fn sqlite3_open(filename: Ptr(T: u8), db: MutPtr(T: MutPtr(T: Sqlite3))): i32;
+    fn sqlite3_close(db: MutPtr(T: Sqlite3)): i32;
 }
 ```
 
@@ -593,7 +593,7 @@ extern "C" { }
 #[link(name = "ssl")]
 #[link(name = "crypto")]
 extern "C" {
-    fn SSL_new(ctx: MutPtr(SslCtx)): MutPtr(Ssl);
+    fn SSL_new(ctx: MutPtr(T: SslCtx)): MutPtr(T: Ssl);
 }
 ```
 
@@ -604,9 +604,9 @@ The C standard library is implicitly linked. No `#[link]` attribute is needed fo
 ```spl
 // libc functions - no #[link] required
 extern "C" {
-    fn malloc(size: usize): MutPtr(u8);
-    fn free(ptr: MutPtr(u8));
-    fn memcpy(dst: MutPtr(u8), src: Ptr(u8), n: usize): MutPtr(u8);
+    fn malloc(size: usize): MutPtr(T: u8);
+    fn free(ptr: MutPtr(T: u8));
+    fn memcpy(dst: MutPtr(T: u8), src: Ptr(T: u8), n: usize): MutPtr(T: u8);
 }
 ```
 
@@ -660,7 +660,7 @@ extern "C" {
 
 #[cfg(target_os = "linux")]
 extern "C" {
-    fn __errno_location(): MutPtr(i32);
+    fn __errno_location(): MutPtr(T: i32);
 }
 
 #[cfg(target_family = "unix")]
@@ -699,18 +699,18 @@ use std.ptr.{Ptr, MutPtr};
 // Raw C bindings (private)
 #[link(name = "mylib")]
 extern "C" {
-    fn mylib_create(): MutPtr(Handle);
-    fn mylib_destroy(h: MutPtr(Handle));
-    fn mylib_process(h: MutPtr(Handle), data: Ptr(u8), len: usize): i32;
+    fn mylib_create(): MutPtr(T: Handle);
+    fn mylib_destroy(h: MutPtr(T: Handle));
+    fn mylib_process(h: MutPtr(T: Handle), data: Ptr(T: u8), len: usize): i32;
 }
 
 // Safe public API
 pub struct MyLib(
-    handle: MutPtr(Handle),
+    handle: MutPtr(T: Handle),
 )
 
 impl MyLib {
-    pub fn new(): Option(MyLib) {
+    pub fn new(): Option(T: MyLib) {
         let h = unsafe { mylib_create() };
         if h.is_null() {
             None
@@ -719,7 +719,7 @@ impl MyLib {
         }
     }
 
-    pub fn process(&mut self, data: &[u8]): Result((), Error) {
+    pub fn process(&mut self, data: &[u8]): Result(T: (), E: Error) {
         let result = unsafe {
             mylib_process(self.handle, data.as_ptr(), data.len())
         };
@@ -754,7 +754,7 @@ impl Drop for MyLib {
 | Feature | Syntax/Type |
 |---------|-------------|
 | Declare foreign function | `extern "C" { fn name(...): T; }` |
-| Variadic function | `extern "C" { fn printf(fmt: Ptr(u8), ...): i32; }` |
+| Variadic function | `extern "C" { fn printf(fmt: Ptr(T: u8), ...): i32; }` |
 | Call foreign function | `unsafe { malloc(1024) }` |
 | C-compatible struct | `#[repr(C)] struct Name()` |
 | C-compatible enum | `#[repr(C)] enum Name { }` |

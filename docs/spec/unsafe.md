@@ -54,7 +54,7 @@ block        = "{" statement* expression? "}"
 use std.ptr.Ptr;
 
 let x = 42;
-let p: Ptr(i32) = (&x).as_ptr();
+let p: Ptr(T: i32) = (&x).as_ptr();
 
 // Safe: creating and comparing pointers
 let is_null = p.is_null();
@@ -108,7 +108,7 @@ use std.ptr.Ptr;
 /// - `p` must be valid and properly aligned
 /// - `p` must point to an initialized value of type T
 /// - The memory must not be mutated during this call
-unsafe fn read_from(p: Ptr(T)): T where T {
+unsafe fn read_from(p: Ptr(T: T)): T where T {
     return p.read();
 }
 ```
@@ -118,7 +118,7 @@ unsafe fn read_from(p: Ptr(T)): T where T {
 Calling an unsafe function requires an unsafe context:
 
 ```spl
-let p: Ptr(i32) = get_some_pointer();
+let p: Ptr(T: i32) = get_some_pointer();
 
 // ERROR: call to unsafe function outside unsafe block
 let val = read_from(p);
@@ -139,8 +139,8 @@ SPL provides two raw pointer types in the `std.ptr` module:
 
 | Type | Description |
 |------|-------------|
-| `Ptr(T)` | Read-only pointer to a value of type T |
-| `MutPtr(T)` | Mutable pointer to a value of type T |
+| `Ptr(T: T)` | Read-only pointer to a value of type T |
+| `MutPtr(T: T)` | Mutable pointer to a value of type T |
 
 Raw pointer types are **not in the prelude**. This signals that they are an escape hatch for low-level code, not everyday types. To use them:
 
@@ -165,10 +165,10 @@ From references using `.as_ptr()` method (safe):
 use std.ptr.{Ptr, MutPtr};
 
 let x = 42;
-let p: Ptr(i32) = (&x).as_ptr();           // From immutable reference
+let p: Ptr(T: i32) = (&x).as_ptr();           // From immutable reference
 
 let mut y = 100;
-let mp: MutPtr(i32) = (&mut y).as_mut_ptr();   // From mutable reference
+let mp: MutPtr(T: i32) = (&mut y).as_mut_ptr();   // From mutable reference
 ```
 
 **Note:** References do not implicitly coerce to raw pointers. Use the explicit `.as_ptr()` or `.as_mut_ptr()` methods to convert. This makes the conversion visible and intentional.
@@ -178,8 +178,8 @@ Null pointers:
 ```spl
 use std.ptr;
 
-let p: Ptr(i32) = ptr.null();
-let mp: MutPtr(i32) = ptr.null_mut();
+let p: Ptr(T: i32) = ptr.null();
+let mp: MutPtr(T: i32) = ptr.null_mut();
 ```
 
 From address:
@@ -187,8 +187,8 @@ From address:
 ```spl
 use std.ptr;
 
-let p: Ptr(i32) = ptr.from_addr(0x1000);
-let mp: MutPtr(i32) = ptr.from_addr_mut(0x1000);
+let p: Ptr(T: i32) = ptr.from_addr(0x1000);
+let mp: MutPtr(T: i32) = ptr.from_addr_mut(0x1000);
 ```
 
 ### Reading and Writing
@@ -199,7 +199,7 @@ All memory access through pointers requires unsafe and uses explicit methods:
 use std.ptr.{Ptr, MutPtr};
 
 let x = 42;
-let p: Ptr(i32) = (&x).as_ptr();
+let p: Ptr(T: i32) = (&x).as_ptr();
 
 // Read through Ptr (unsafe)
 let value = unsafe { p.read() };
@@ -208,7 +208,7 @@ let value = unsafe { p.read() };
 // unsafe { p.write(5) };  // ERROR: method not found
 
 let mut y = 100;
-let mp: MutPtr(i32) = (&mut y).as_mut_ptr();
+let mp: MutPtr(T: i32) = (&mut y).as_mut_ptr();
 
 // MutPtr can read AND write
 let value = unsafe { mp.read() };
@@ -226,16 +226,16 @@ There is no `*p` dereference operator for raw pointers. This design:
 use std.ptr.{Ptr, MutPtr};
 
 let mut x = 42;
-let mp: MutPtr(i32) = (&mut x).as_mut_ptr();
+let mp: MutPtr(T: i32) = (&mut x).as_mut_ptr();
 
 // MutPtr -> Ptr (safe, reduces capability)
-let p: Ptr(i32) = mp.as_const();
+let p: Ptr(T: i32) = mp.as_const();
 
 // Ptr -> MutPtr (safe to create, unsafe to use for writing)
-let mp2: MutPtr(i32) = p.as_mut();
+let mp2: MutPtr(T: i32) = p.as_mut();
 ```
 
-### Ptr(T) Methods
+### Ptr(T: T) Methods
 
 | Method | Signature | Unsafe | Description |
 |--------|-----------|--------|-------------|
@@ -243,32 +243,32 @@ let mp2: MutPtr(i32) = p.as_mut();
 | `read_volatile` | `fn read_volatile(&self): T` | Yes | Volatile read |
 | `is_null` | `fn is_null(&self): bool` | No | Check if null |
 | `addr` | `fn addr(&self): usize` | No | Get address as integer |
-| `cast` | `fn cast(U)(&self): Ptr(U)` | No | Cast to different type |
-| `as_mut` | `fn as_mut(&self): MutPtr(T)` | No | Convert to MutPtr |
-| `offset` | `fn offset(&self, count: isize): Ptr(T)` | No | Offset by elements |
-| `add` | `fn add(&self, count: usize): Ptr(T)` | No | Offset forward |
-| `sub` | `fn sub(&self, count: usize): Ptr(T)` | No | Offset backward |
-| `byte_add` | `fn byte_add(&self, bytes: usize): Ptr(T)` | No | Offset by bytes |
-| `byte_sub` | `fn byte_sub(&self, bytes: usize): Ptr(T)` | No | Offset backward by bytes |
+| `cast` | `fn cast(U)(&self): Ptr(T: U)` | No | Cast to different type |
+| `as_mut` | `fn as_mut(&self): MutPtr(T: T)` | No | Convert to MutPtr |
+| `offset` | `fn offset(&self, count: isize): Ptr(T: T)` | No | Offset by elements |
+| `add` | `fn add(&self, count: usize): Ptr(T: T)` | No | Offset forward |
+| `sub` | `fn sub(&self, count: usize): Ptr(T: T)` | No | Offset backward |
+| `byte_add` | `fn byte_add(&self, bytes: usize): Ptr(T: T)` | No | Offset by bytes |
+| `byte_sub` | `fn byte_sub(&self, bytes: usize): Ptr(T: T)` | No | Offset backward by bytes |
 
-### MutPtr(T) Methods
+### MutPtr(T: T) Methods
 
-`MutPtr(T)` has all methods from `Ptr(T)` plus:
+`MutPtr(T: T)` has all methods from `Ptr(T: T)` plus:
 
 | Method | Signature | Unsafe | Description |
 |--------|-----------|--------|-------------|
 | `write` | `fn write(&self, val: T)` | Yes | Write value to pointer |
 | `write_volatile` | `fn write_volatile(&self, val: T)` | Yes | Volatile write |
-| `as_const` | `fn as_const(&self): Ptr(T)` | No | Convert to Ptr |
+| `as_const` | `fn as_const(&self): Ptr(T: T)` | No | Convert to Ptr |
 
-Arithmetic methods on `MutPtr(T)` return `MutPtr(T)`:
+Arithmetic methods on `MutPtr(T: T)` return `MutPtr(T: T)`:
 
 | Method | Signature |
 |--------|-----------|
-| `cast` | `fn cast(U)(&self): MutPtr(U)` |
-| `offset` | `fn offset(&self, count: isize): MutPtr(T)` |
-| `add` | `fn add(&self, count: usize): MutPtr(T)` |
-| `sub` | `fn sub(&self, count: usize): MutPtr(T)` |
+| `cast` | `fn cast(U)(&self): MutPtr(T: U)` |
+| `offset` | `fn offset(&self, count: isize): MutPtr(T: T)` |
+| `add` | `fn add(&self, count: usize): MutPtr(T: T)` |
+| `sub` | `fn sub(&self, count: usize): MutPtr(T: T)` |
 
 ---
 
@@ -280,7 +280,7 @@ Pointer arithmetic is safe (it doesn't access memory) but can produce invalid po
 use std.ptr.Ptr;
 
 let arr = [1, 2, 3, 4, 5];
-let p: Ptr(i32) = arr.as_ptr();  // Get pointer to first element
+let p: Ptr(T: i32) = arr.as_ptr();  // Get pointer to first element
 
 // Offset by element count (not bytes)
 let second = p.add(1);    // Points to arr[1]
@@ -302,8 +302,8 @@ use std.ptr.Ptr;
 
 let x = 1;
 let y = 2;
-let a: Ptr(i32) = (&x).as_ptr();
-let b: Ptr(i32) = (&y).as_ptr();
+let a: Ptr(T: i32) = (&x).as_ptr();
+let b: Ptr(T: i32) = (&y).as_ptr();
 
 if a == b { }      // Equality
 if a != b { }      // Inequality
@@ -321,13 +321,13 @@ Pointers can be converted to and from integers:
 use std.ptr.{Ptr, ptr};
 
 let x = 42;
-let p: Ptr(i32) = (&x).as_ptr();
+let p: Ptr(T: i32) = (&x).as_ptr();
 
 // Pointer to integer
 let addr: usize = p.addr();
 
 // Integer to pointer
-let p2: Ptr(i32) = ptr.from_addr(addr);
+let p2: Ptr(T: i32) = ptr.from_addr(addr);
 ```
 
 ---
@@ -338,22 +338,22 @@ The `std.ptr` module provides the pointer types and helper functions:
 
 ### Types
 
-- `Ptr(T)` - Read-only raw pointer
-- `MutPtr(T)` - Mutable raw pointer
+- `Ptr(T: T)` - Read-only raw pointer
+- `MutPtr(T: T)` - Mutable raw pointer
 
 ### Functions
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `null` | `fn null(T)(): Ptr(T)` | Create null Ptr |
-| `null_mut` | `fn null_mut(T)(): MutPtr(T)` | Create null MutPtr |
-| `from_addr` | `fn from_addr(T)(addr: usize): Ptr(T)` | Ptr from address |
-| `from_addr_mut` | `fn from_addr_mut(T)(addr: usize): MutPtr(T)` | MutPtr from address |
-| `copy` | `unsafe fn copy(T)(src: Ptr(T), dst: MutPtr(T), count: usize)` | Copy (may overlap) |
+| `null` | `fn null(T)(): Ptr(T: T)` | Create null Ptr |
+| `null_mut` | `fn null_mut(T)(): MutPtr(T: T)` | Create null MutPtr |
+| `from_addr` | `fn from_addr(T)(addr: usize): Ptr(T: T)` | Ptr from address |
+| `from_addr_mut` | `fn from_addr_mut(T)(addr: usize): MutPtr(T: T)` | MutPtr from address |
+| `copy` | `unsafe fn copy(T)(src: Ptr(T: T), dst: MutPtr(T: T), count: usize)` | Copy (may overlap) |
 | `copy_nonoverlapping` | `unsafe fn copy_nonoverlapping(T)(...)` | Copy (must not overlap) |
-| `write_bytes` | `unsafe fn write_bytes(T)(dst: MutPtr(T), val: u8, count: usize)` | Fill with byte |
-| `swap` | `unsafe fn swap(T)(a: MutPtr(T), b: MutPtr(T))` | Swap values |
-| `replace` | `unsafe fn replace(T)(dst: MutPtr(T), val: T): T` | Replace, return old |
+| `write_bytes` | `unsafe fn write_bytes(T)(dst: MutPtr(T: T), val: u8, count: usize)` | Fill with byte |
+| `swap` | `unsafe fn swap(T)(a: MutPtr(T: T), b: MutPtr(T: T))` | Swap values |
+| `replace` | `unsafe fn replace(T)(dst: MutPtr(T: T), val: T): T` | Replace, return old |
 
 ---
 
@@ -367,9 +367,9 @@ All extern function calls are implicitly unsafe because the compiler cannot veri
 use std.ptr.MutPtr;
 
 extern "C" {
-    fn malloc(size: usize): MutPtr(u8);
-    fn free(p: MutPtr(u8));
-    fn strlen(s: Ptr(u8)): usize;
+    fn malloc(size: usize): MutPtr(T: u8);
+    fn free(p: MutPtr(T: u8));
+    fn strlen(s: Ptr(T: u8)): usize;
 }
 ```
 
@@ -443,7 +443,7 @@ Closures can be marked unsafe:
 ```spl
 use std.ptr.Ptr;
 
-let p: Ptr(i32) = get_pointer();
+let p: Ptr(T: i32) = get_pointer();
 
 let read_it = unsafe || {
     p.read()
@@ -462,13 +462,13 @@ The purpose of unsafe is to build safe abstractions. A well-designed API uses un
 ```spl
 use std.ptr.{MutPtr, ptr};
 
-struct Vec(T)(
-    ptr: MutPtr(T),
+struct Vec(T: T)(
+    ptr: MutPtr(T: T),
     len: usize,
     capacity: usize,
 ) where T
 
-impl Vec(T) where T {
+impl Vec(T: T) where T {
     // Safe public API
     pub fn push(&mut self, value: T) {
         if self.len == self.capacity {
@@ -507,7 +507,7 @@ When writing unsafe code:
 
 | Feature | Syntax | Requires Unsafe |
 |---------|--------|-----------------|
-| Pointer types | `Ptr(T)`, `MutPtr(T)` | No (just types) |
+| Pointer types | `Ptr(T: T)`, `MutPtr(T: T)` | No (just types) |
 | Import pointers | `use std.ptr.{Ptr, MutPtr}` | No |
 | Create from ref | `(&x).as_ptr()` | No |
 | Pointer arithmetic | `p.add(n)` | No |
@@ -540,7 +540,7 @@ use std.ptr.{Ptr, MutPtr};
 /// - `src` must be valid for reads of `count` elements
 /// - `dst` must be valid for writes of `count` elements
 /// - `src` and `dst` must not overlap
-unsafe fn copy(T)(dst: MutPtr(T), src: Ptr(T), count: usize) where T {
+unsafe fn copy(T)(dst: MutPtr(T: T), src: Ptr(T: T), count: usize) where T {
     let mut i: usize = 0;
     while i < count {
         dst.add(i).write(src.add(i).read());
@@ -555,14 +555,14 @@ unsafe fn copy(T)(dst: MutPtr(T), src: Ptr(T), count: usize) where T {
 use std.ptr.{Ptr, MutPtr};
 
 extern "C" {
-    fn c_create_handle(): MutPtr(Handle);
-    fn c_destroy_handle(h: MutPtr(Handle));
-    fn c_process(h: MutPtr(Handle), data: Ptr(u8), len: usize): i32;
+    fn c_create_handle(): MutPtr(T: Handle);
+    fn c_destroy_handle(h: MutPtr(T: Handle));
+    fn c_process(h: MutPtr(T: Handle), data: Ptr(T: u8), len: usize): i32;
 }
 
 /// Safe wrapper around C handle.
 pub struct SafeHandle(
-    inner: MutPtr(Handle),
+    inner: MutPtr(T: Handle),
 )
 
 impl SafeHandle {
@@ -594,18 +594,18 @@ impl Drop for SafeHandle {
 use std.ptr.{MutPtr, ptr};
 
 extern "C" {
-    fn malloc(size: usize): MutPtr(u8);
-    fn free(p: MutPtr(u8));
+    fn malloc(size: usize): MutPtr(T: u8);
+    fn free(p: MutPtr(T: u8));
 }
 
 /// Heap-allocated value.
-pub struct Box(T)(
-    ptr: MutPtr(T),
+pub struct Box(T: T)(
+    ptr: MutPtr(T: T),
 ) where T
 
-impl Box(T) where T {
-    pub fn new(value: T): Box(T) {
-        let p: MutPtr(T) = unsafe { malloc(size_of(T)) }.cast(T);
+impl Box(T: T) where T {
+    pub fn new(value: T): Box(T: T) {
+        let p: MutPtr(T: T) = unsafe { malloc(size_of(T: T)) }.cast(T: T);
         if p.is_null() {
             panic("allocation failed");
         }
@@ -614,7 +614,7 @@ impl Box(T) where T {
     }
 }
 
-impl Drop for Box(T) where T {
+impl Drop for Box(T: T) where T {
     fn drop(&mut self) {
         unsafe {
             // Read to run destructor, then free

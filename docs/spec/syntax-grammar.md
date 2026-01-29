@@ -7,7 +7,7 @@ This document defines the syntax grammar of SPL using Extended Backus-Naur Form 
 SPL uses a clean, consistent syntax with several key principles:
 
 1. **Unified path separator**: Use `.` for all paths (no `::`).
-2. **Parentheses for application**: Type arguments use `()` not `<>`: `Vec(i32)`.
+2. **Parentheses for application**: Type arguments use `()` not `<>`: `Vec(T: i32)`.
 3. **Named arguments with `:`**: Struct fields and call args use `:`: `Point(x: 1, y: 2)`.
 4. **Return type with `:`**: Functions use `:` for return type: `fn foo(): i32`.
 5. **Where clauses for generics**: `fn id(x: T): T where T`.
@@ -204,19 +204,20 @@ struct Box(value: T) where T
 pub struct Point(pub x: f64, pub y: f64)
 
 // Generic with bounds - `where T: Clone` declares T and requires Clone
-struct Container(items: Vec(T)) where T: Clone
+struct Container(items: Vec(T: T)) where T: Clone
 
 // Multiple type parameters
 struct Pair(first: T, second: U) where T, U
 
 // Multiple type parameters with bounds
-struct Map(keys: Vec(K), values: Vec(V)) where K: Hash + Eq, V
+struct Map(keys: Vec(T: K), values: Vec(T: V)) where K: Hash + Eq, V
 ```
 
 ### Enum Definitions
 
 ```ebnf
 (* Enums use parentheses for variants, consistent with struct syntax *)
+(* Type parameters are used inline in variants and declared in where clause *)
 EnumDef = "enum" IDENTIFIER "(" [ VariantList ] ")" [ WhereClause ] ;
 
 VariantList = Variant { "," Variant } [ "," ] ;
@@ -235,8 +236,8 @@ VariantFields = FieldList           (* named fields: x: i32, y: i32 *)
 // Simple enum
 enum Color(Red, Green, Blue)
 
-// Enum with data
-enum Option(T)(
+// Enum with data (type params used inline, declared in where)
+enum Option(
     Some(T),
     None,
 ) where T
@@ -250,7 +251,7 @@ enum Message(
 )
 
 // Result type
-enum Result(T, E)(
+enum Result(
     Ok(T),
     Err(E),
 ) where T, E
@@ -260,7 +261,10 @@ enum Result(T, E)(
 
 ```ebnf
 (* Traits use braces for their body *)
-TraitDef = "trait" IDENTIFIER [ WhereClause ] "{" { TraitItem } "}" ;
+(* Generic args on trait name for input type parameters, e.g., trait Add(RHS) *)
+(* Supertraits specified with : before where clause, e.g., trait Numeric: Add + Sub *)
+(* Unsafe traits have invariants the compiler cannot verify, e.g., unsafe trait Sync *)
+TraitDef = [ "unsafe" ] "trait" IDENTIFIER [ GenericArgs ] [ ":" TypeBound { "+" TypeBound } ] [ WhereClause ] "{" { TraitItem } "}" ;
 
 TraitItem = [ "pub" ] ( TraitMethod | AssociatedType ) ;
 
@@ -301,7 +305,8 @@ trait Numeric: Add + Sub + Mul + Div {
 (* Impl blocks use parentheses for generic args *)
 (* Inherent impl: impl Type { ... } *)
 (* Trait impl: impl Trait for Type { ... } *)
-ImplBlock = "impl" [ TypePath "for" ] TypePath [ GenericArgs ] [ WhereClause ] "{" { ImplItem } "}" ;
+(* Unsafe impl required for implementing unsafe traits: unsafe impl Sync for MyType *)
+ImplBlock = [ "unsafe" ] "impl" [ TypePath "for" ] TypePath [ GenericArgs ] [ WhereClause ] "{" { ImplItem } "}" ;
 
 ImplItem = [ "pub" ] FunctionDef ;
 ```
@@ -324,7 +329,7 @@ impl Clone for Point {
 }
 
 // Generic trait implementation
-impl Clone for Option(T) where T: Clone {
+impl Clone for Option(T: T) where T: Clone {
     fn clone(&self): Self {
         return match self {
             Some(v) => Some(v.clone()),
@@ -345,15 +350,15 @@ impl Point {
 }
 
 // Generic impl with where clause
-impl Box(T) where T {
+impl Box(T: T) where T {
     pub fn unwrap(self): T {
         return self.value;
     }
 }
 
 // Impl with bounds
-impl Container(T) where T: Clone {
-    pub fn clone_all(&self): Vec(T) {
+impl Container(T: T) where T: Clone {
+    pub fn clone_all(&self): Vec(T: T) {
         return self.items.clone();
     }
 }
@@ -460,7 +465,7 @@ AbiString = "\"C\"" ;
 #[link(name = "mylib")]
 extern "C" {
     fn c_function(x: i32): i32;
-    fn variadic_fn(fmt: Ptr(u8), ...): i32;
+    fn variadic_fn(fmt: Ptr(T: u8), ...): i32;
 }
 
 // Define SPL function callable from C (outside extern block)
@@ -484,7 +489,7 @@ type Callback = extern "C" fn(i32): i32;
 ## 2. Types
 
 ```ebnf
-Type = BaseType [ "?" ] ;              (* Optional postfix: T? = Option(T) *)
+Type = BaseType [ "?" ] ;              (* Optional postfix: T? = Option(T: T) *)
 
 BaseType = ReferenceType
          | ArrayType
@@ -512,11 +517,11 @@ PathType = TypePath [ GenericArgs ]
 (* Paths use dot, not double-colon *)
 TypePath = IDENTIFIER { "." IDENTIFIER } ;
 
-(* Generic args use parentheses, support named args *)
+(* Generic args use parentheses with named type arguments *)
+(* Named args required to distinguish from struct instantiation and function calls *)
 GenericArgs = "(" [ TypeArg { "," TypeArg } [ "," ] ] ")" ;
 
-TypeArg = Type                       (* positional type argument *)
-        | IDENTIFIER "=" Type ;       (* named type argument *)
+TypeArg = IDENTIFIER ":" Type ;       (* named type argument, e.g., T: i32 *)
 ```
 
 ### Type Examples
@@ -524,7 +529,7 @@ TypeArg = Type                       (* positional type argument *)
 | Syntax              | Description                        |
 |---------------------|------------------------------------|
 | `i32`               | Simple type                        |
-| `Point(T)`          | Generic type                       |
+| `Point(T: i32)`     | Generic type with named arg        |
 | `std.vec.Vec`       | Qualified path type                |
 | `Self`              | Self type (in impl blocks)         |
 | `&T`                | Immutable reference                |
@@ -537,9 +542,9 @@ TypeArg = Type                       (* positional type argument *)
 | `fn(T, U): V`       | Generic function pointer           |
 | `fn()`              | Function pointer returning unit    |
 | `!`                 | Never type                         |
-| `HashMap(K, V)`     | Multi-param generic type           |
-| `Result(T, E = Error)` | Named type argument             |
-| `i32?`              | Optional type (sugar for `Option(i32)`) |
+| `HashMap(K: String, V: i32)` | Multi-param generic type   |
+| `Result(T: i32, E: Error)` | Named type arguments         |
+| `i32?`              | Optional type (sugar for `Option(T: i32)`) |
 | `String?`           | Optional String                    |
 | `&T?`               | Reference to optional (rare)       |
 
@@ -677,10 +682,12 @@ Arg = Expression
 PrimaryExpr = LiteralExpr
             | EnumShorthandExpr
             | PathExpr
+            | TypeExpr
             | GroupedExpr
             | TupleExpr
             | ArrayExpr
             | StructExpr
+            | ClosureExpr
             | MatchExpr
             | BlockExpression
             | IfExpr
@@ -691,6 +698,23 @@ PrimaryExpr = LiteralExpr
             | ContinueExpr
             | ReturnExpr
             | YieldExpr ;
+
+(* Type expressions - types used as values for associated function calls *)
+(* Requires GenericArgs to distinguish from PathExpr *)
+TypeExpr = TypePath GenericArgs ;
+
+(* Closures - see closures.md for full semantics *)
+ClosureExpr = [ "clone" | "move" ] ClosureParams ClosureBody ;
+
+ClosureParams = "||"
+              | "|" [ ClosureParamList ] "|" ;
+
+ClosureParamList = ClosureParam { "," ClosureParam } [ "," ] ;
+
+(* ~ modifier clones the capture at closure creation time *)
+ClosureParam = [ "~" ] [ "mut" ] IDENTIFIER [ ":" Type ] ;
+
+ClosureBody = Block | Expression ;
 
 LiteralExpr = INTEGER | FLOAT | STRING | CHAR | "true" | "false" ;
 
@@ -737,7 +761,7 @@ let y = 2
 let p = Point(x, y)  // Same as Point(x: x, y: y)
 
 // Generic type instantiation
-let b = Box(i32)(value: 42)
+let b = Box(T: i32)(value: 42)
 
 // Self in impl blocks
 impl Point {
@@ -785,7 +809,7 @@ let c: Color = .Green
 
 // With variant data
 let msg: Message = .Move(x: 10, y: 20)
-let result: Result(i32, Error) = .Ok(42)
+let result: Result(T: i32, E: Error) = .Ok(42)
 
 // In return statements (type inferred from function signature)
 fn default_color(): Color {
@@ -807,15 +831,19 @@ BlockExpression = Block
 
 IfExpr = "if" Expression Block [ "else" ( IfExpr | Block ) ] ;
 
-WhileExpr = "while" Expression Block ;
+(* Loop labels (future feature) *)
+Label = "'" IDENTIFIER ":" ;
 
-ForExpr = "for" Pattern "in" Expression Block ;
+WhileExpr = [ Label ] "while" Expression Block ;
 
-LoopExpr = "loop" Block ;
+ForExpr = [ Label ] "for" Pattern "in" Expression Block ;
 
-BreakExpr = "break" [ Expression ] ;
+LoopExpr = [ Label ] "loop" Block ;
 
-ContinueExpr = "continue" ;
+(* Break/continue can target a labeled loop (future feature) *)
+BreakExpr = "break" [ "'" IDENTIFIER ] [ Expression ] ;
+
+ContinueExpr = "continue" [ "'" IDENTIFIER ] ;
 
 (* Explicit return required for returning values from functions *)
 ReturnExpr = "return" [ Expression ] ;
@@ -1067,14 +1095,39 @@ greet(to: "Alice")     // Function call (named argument)
 Generic arguments always use parentheses, avoiding the `<`/`>` ambiguity entirely.
 
 ```spl
-let v: Vec(i32) = ...       // Generic type
-let m: HashMap(String, i32) // Multiple type args
-Vec(i32).new()              // Type application then method call
+let v: Vec(T: i32) = ...              // Generic type with named arg
+let m: HashMap(K: String, V: i32)     // Multiple named type args
+Vec(T: i32).new()                     // Type application then method call
 ```
 
 No turbofish needed - parentheses are unambiguous.
 
-### 3. Paths
+### 3. Explicit Type Application in Function Calls
+
+When calling a generic function with explicit type arguments, type args come first using named syntax (`Name: Type`), followed by value args:
+
+```spl
+identity(T: i32, 42)              // Type arg T, then value arg
+convert(From: i32, To: f64, 100)  // Two type args, one value arg
+parse(T: Config, text)            // Type arg, positional value arg
+```
+
+**Distinguishing type args from value args:**
+- Named type arg: `T: i32` (identifier `:` Type) - right side is a type
+- Named value arg: `to: "Alice"` (identifier `:` Expression) - right side is an expression
+- The function signature declares which names are type parameters
+
+**Rule:** Type arguments must precede value arguments. This maintains compatibility with variadic functions and provides a clear boundary between type and value arguments.
+
+Most generic calls don't need explicit type args due to inference:
+
+```spl
+let x = identity(42);     // T inferred as i32
+let v = Vec.new();        // Type inferred from later usage
+v.push(1);                // Now v: Vec(T: i32)
+```
+
+### 4. Paths
 
 All paths use `.` (dot) as the separator. No `::` exists.
 
@@ -1084,7 +1137,7 @@ self.field               // Field access
 Point.new()              // Associated function
 ```
 
-### 4. Tuple vs Grouped Expression
+### 5. Tuple vs Grouped Expression
 
 A parenthesized expression could be a tuple or a grouped expression.
 
@@ -1097,7 +1150,7 @@ A parenthesized expression could be a tuple or a grouped expression.
 ()               // Unit (empty tuple)
 ```
 
-### 5. Struct Field Shorthand
+### 6. Struct Field Shorthand
 
 When a struct field name matches a variable name, the `:` can be omitted.
 
@@ -1108,7 +1161,7 @@ Point(x, y)              // Equivalent to Point(x: x, y: y)
 Point(x, y: y + 1)       // Mixed shorthand and explicit
 ```
 
-### 6. Index vs Slice
+### 7. Index vs Slice
 
 A bracketed expression could be an index or a slice.
 
@@ -1129,7 +1182,57 @@ arr[:]           // Slice: full copy
 
 The `$` symbol represents the array/slice length and is valid in index and slice expressions. It enables Python-style negative indexing: `$-1` is the last element, `$-2` is second to last, etc.
 
-### 7. `is` vs Other Operators
+### 8. Associated Functions on Types
+
+To call associated functions on a type, use either:
+- **Simple path**: `Point.new()` - for non-generic types
+- **Type expression**: `Vec(T: i32).new()` - for generic types
+
+```spl
+Point.new(1.0, 2.0)              // Associated function on simple type
+Vec(T: i32).new()                // Associated function on generic type
+HashMap(K: String, V: i32).new() // Multiple type parameters
+Option(T: T).some(value)         // Generic type with type parameter
+```
+
+**Grammar distinction:**
+- `TypeExpr` requires `GenericArgs`, producing forms like `Vec(T: i32)`
+- `PathExpr` is a simple identifier path like `Point` or `std.vec.Vec`
+
+Named type arguments (`T: i32`) are syntactically distinct from value arguments, making type expressions unambiguous.
+
+### 9. Type Arguments vs Value Arguments
+
+Named type arguments eliminate ambiguity between type application, function calls, and struct instantiation:
+
+| Syntax | Meaning |
+|--------|---------|
+| `Vec(T: i32)` | Type application - `T:` prefix indicates type arg |
+| `print(x)` | Function call - no `:` after identifier |
+| `Point(x: 1, y: 2)` | Struct instantiation - value after `:` |
+| `Point(x, y)` | Struct instantiation - field shorthand |
+
+**The key distinction:**
+- **Type argument**: `Name: Type` where the right side is a type (e.g., `T: i32`, `K: String`)
+- **Value argument**: `name: expr` where the right side is an expression (e.g., `x: 1`, `to: "Alice"`)
+- **Shorthand**: `name` alone (struct field or function arg)
+
+```spl
+// Type applications (named type args required)
+Vec(T: i32)
+HashMap(K: String, V: i32)
+Result(T: Config, E: IoError)
+
+// Function calls (value args)
+print(message)
+greet(to: "Alice")
+
+// Struct instantiation (fields)
+Point(x: 1, y: 2)
+Point(x, y)                    // Shorthand
+```
+
+### 10. `is` vs Other Operators
 
 The `is` keyword binds looser than comparison but tighter than `&&`.
 
@@ -1151,9 +1254,9 @@ pub struct Point(
     pub y: T,
 ) where T
 
-impl Point(T) where T {
+impl Point(T: T) where T {
     // Return type with colon
-    pub fn new(x: T, y: T): Point(T) {
+    pub fn new(x: T, y: T): Point(T: T) {
         return Point(x: x, y: y);
     }
 
@@ -1168,7 +1271,7 @@ impl Point(T) where T {
 type Pair(T) = (T, T)
 
 // Named parameters with labels
-fn distance(from p1: &Point(f64), to p2: &Point(f64)): f64 {
+fn distance(from p1: &Point(T: f64), to p2: &Point(T: f64)): f64 {
     let dx = p1.x - p2.x;
     let dy = p1.y - p2.y;
     return (dx * dx + dy * dy).sqrt();
@@ -1179,6 +1282,10 @@ fn main() {
     let mut origin = Point.new(0.0, 0.0);
     let target = Point(x: 3.0, y: 4.0);
 
+    // Associated functions on generic types
+    let numbers: Vec(T: i32) = Vec(T: i32).new();
+    let map = HashMap(K: String, V: i32).new();
+
     // Named arguments at call site
     let dist = distance(from: &origin, to: &target);
 
@@ -1188,7 +1295,7 @@ fn main() {
     }
 
     // Pattern matching with is
-    let maybe: Option(i32) = Some(42);
+    let maybe: Option(T: i32) = Some(42);
     if maybe is Some(x) {
         // x is bound
     }
@@ -1267,7 +1374,7 @@ fn apply(_ f: fn(i32): i32, _ x: i32): i32 {
 }
 
 // Self type in impl blocks
-impl Point(T) where T {
+impl Point(T: T) where T {
     fn origin(): Self {
         return Self(x: 0, y: 0);
     }
@@ -1288,7 +1395,7 @@ impl Point(T) where T {
 | Modules     | `UseDecl`, `UsePath`, `UseTree`, `ModuleDecl`                       |
 | Types       | `Type`, `ReferenceType`, `ArrayType`, `FnPointerType`, `GenericArgs`|
 | Statements  | `Block`, `Statement`, `LetStatement`                                |
-| Expressions | `Expression`, `IsExpr`, `MatchExpr`, `IfExpr`, `LoopExpr`           |
+| Expressions | `Expression`, `TypeExpr`, `IsExpr`, `MatchExpr`, `IfExpr`, `LoopExpr`|
 | Patterns    | `Pattern`, `EnumPattern`, `StructPattern`, `SlicePattern`           |
 | Literals    | `INTEGER`, `FLOAT`, `STRING`, `CHAR`, `true`, `false`               |
 
@@ -1297,7 +1404,7 @@ impl Point(T) where T {
 | Feature             | Rust                      | SPL                          |
 |---------------------|---------------------------|------------------------------|
 | Path separator      | `::`                      | `.`                          |
-| Generic application | `Vec<T>`                  | `Vec(T)`                     |
+| Generic application | `Vec<T>`                  | `Vec(T: T)` or `Vec(T: i32)` |
 | Return type         | `-> T`                    | `: T`                        |
 | Generic declaration | `fn foo<T>() {}`          | `fn foo() where T {}`        |
 | Where clause        | Constrains only           | Declares AND constrains      |

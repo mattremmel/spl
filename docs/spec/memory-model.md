@@ -102,6 +102,8 @@ Some types are small and trivially copyable. These implement the `Copy` trait an
 | `[T; N]` | If `T: Copy` | Copies element-by-element |
 | `(T, U, ...)` | If all elements `Copy` | Copies each element |
 | `fn(...): T` | Yes | Function pointer |
+| `decimal` | Yes | Fixed-size decimal (128-bit) |
+| `bigint` | No | Heap-allocated, arbitrary precision |
 
 ### Copy Semantics
 
@@ -346,87 +348,46 @@ drop(lock);  // Release lock early
 
 ## 6. Closures and Capture
 
-Closures are anonymous functions that can capture variables from their enclosing scope.
+Closures are anonymous functions that can capture variables from their enclosing scope. SPL's closure design leverages second-class references to eliminate lifetime complexity.
 
-### Capture Modes
+For complete closure specification, see [closures.md](closures.md).
 
-SPL closures capture variables by the most permissive mode needed:
+### Summary
 
-| Capture Mode | When Used | Effect |
-|--------------|-----------|--------|
-| By reference | Closure only reads the variable | Borrows `&T` |
-| By mutable reference | Closure mutates the variable | Borrows `&mut T` |
-| By move | Closure takes ownership or variable is `Copy` | Moves or copies value |
+SPL distinguishes between **escaping** and **non-escaping** closures:
 
-```spl
-let x = 42;
-let y = String.from("hello");
+| Context | Non-Copy Capture Behavior |
+|---------|---------------------------|
+| Non-escaping (e.g., `map`, `filter`) | Borrow by default |
+| Escaping (stored, returned, spawned) | Move by default |
 
-// Capture by reference (x is Copy, y is borrowed)
-let read_both = || {
-    println(x);      // x: Copy, so copied
-    println(&y);     // y: borrowed as &String
-};
-
-// Capture by mutable reference
-let mut count = 0;
-let mut increment = || {
-    count += 1;      // count: borrowed as &mut i32
-};
-
-// Capture by move
-let owned = String.from("moved");
-let take_ownership = || {
-    let s = owned;   // owned is moved into closure
-    println(&s);
-};
-// owned is no longer valid here
-```
-
-### Move Closures
-
-Use the `move` keyword to force all captures to be by value:
+The `~` sigil clones a capture at closure creation time:
 
 ```spl
-let data: Vec(i32) = [1, 2, 3];  // Array coerces to Vec
+let data = Arc.new(vec![1, 2, 3]);
 
-// Without move: data is borrowed
-let borrow_closure = || println(&data);
+// Escaping: data moved (default)
+let f = || process(data);
+// data no longer valid
 
-// With move: data is moved into the closure
-let move_closure = move || {
-    // data is owned by the closure
-    println(&data);
-};
-// data is no longer valid here
-
-// Useful for spawning threads or returning closures
-fn make_adder(n: i32): fn(i32): i32 {
-    return move |x| x + n;  // n is copied into closure
-}
+// Escaping: data cloned
+let f = |~data| process(data);
+// data still valid
 ```
 
-### Closure Types
+### Closure Traits
 
-Each closure has a unique anonymous type. Closures implement traits based on how they use captures:
+Closures implement traits based on how they use captures:
 
-| Trait | Requirement | Call syntax |
-|-------|-------------|-------------|
-| `Fn` | Only reads captures | `closure()` |
-| `FnMut` | May mutate captures | `closure()` |
-| `FnOnce` | May consume captures | `closure()` |
+| Trait | Requirement |
+|-------|-------------|
+| `Fn` | Only reads captures |
+| `FnMut` | May mutate captures |
+| `FnOnce` | May consume captures |
 
-All closures implement `FnOnce`. Closures that don't consume captures also implement `FnMut`. Closures that don't mutate captures also implement `Fn`.
+**Hierarchy:** `Fn` ⊂ `FnMut` ⊂ `FnOnce`
 
-### Closure Limitations
-
-Due to second-class references and implementation constraints, closures cannot:
-- Return references to captured variables
-- Be stored in structs (closures have unique anonymous types with unknown size)
-
-**Note:** Closures *can* capture references temporarily (the reference lives in the closure's implicit environment), but the closure itself cannot be stored or returned. The captured reference's lifetime is bounded by the closure's usage scope.
-
-For cases requiring stored callables, use function pointers (`fn(Args): Return`) which have a known size but cannot capture environment.
+Closures that capture nothing coerce to function pointers (`fn(Args): Return`).
 
 ---
 
@@ -492,13 +453,13 @@ Some patterns require mutation through shared references. SPL will provide contr
 
 ```spl
 // Single-threaded interior mutability
-Cell(T)      // For Copy types, get/set
-RefCell(T)   // Runtime borrow checking
+Cell(T: T)      // For Copy types, get/set
+RefCell(T: T)   // Runtime borrow checking
 
 // Thread-safe interior mutability
-Mutex(T)     // Mutual exclusion
-RwLock(T)    // Reader-writer lock
-Atomic*      // Lock-free atomics
+Mutex(T: T)     // Mutual exclusion
+RwLock(T: T)    // Reader-writer lock
+Atomic*         // Lock-free atomics
 ```
 
 ### Unsafe Blocks (Planned)
@@ -525,7 +486,7 @@ SPL will use generators/coroutines for iteration, avoiding the need for iterator
 
 ```spl
 // Generator-based iteration (future syntax)
-gen fn iterate(vec: &Vec(T)): T where T {
+gen fn iterate(vec: &Vec(T: T)): T where T {
     for i in 0..vec.len() {
         yield vec[i];
     }
@@ -592,7 +553,7 @@ Opt-in GC for specific types or regions:
 @gc
 struct Node(
     value: i32,
-    children: Vec(Node),  // Cycles OK with GC
+    children: Vec(T: Node),  // Cycles OK with GC
 )
 
 // Or region-based GC
@@ -609,7 +570,7 @@ References with generation counts for safe manual memory:
 ```spl
 // Hypothetical syntax
 let x = gen_alloc(Point(x: 1.0, y: 2.0));
-let r: GenRef(Point) = &x;
+let r: GenRef(T: Point) = &x;
 
 gen_free(x);  // Explicitly free
 
@@ -644,7 +605,7 @@ Future SPL may allow choosing memory strategy per-module or per-type:
 // Type-level override
 #[memory(owned)]  // This type uses ownership
 struct Performance(
-    data: Vec(f64),
+    data: Vec(T: f64),
 )
 
 // Function-level arena
@@ -732,7 +693,7 @@ fn ownership_example() {
 
 ```spl
 fn borrowing_example() {
-    let mut data: Vec(i32) = [1, 2, 3];  // Array coerces to Vec
+    let mut data: Vec(T: i32) = [1, 2, 3];  // Array coerces to Vec
 
     // Immutable borrows for reading
     let sum: i32 = data.iter().sum();
@@ -793,7 +754,7 @@ fn first_word(s: &str): String {
 
 // Use interior iteration with callbacks
 struct Container(
-    data: Vec(i32),
+    data: Vec(T: i32),
 )
 
 impl Container {
@@ -805,7 +766,7 @@ impl Container {
     }
 
     // Or return an owned copy
-    fn first(&self): Option(i32) {
+    fn first(&self): Option(T: i32) {
         return self.data.first().copied();
     }
 }

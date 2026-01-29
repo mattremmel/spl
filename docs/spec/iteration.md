@@ -34,7 +34,7 @@ ForExpr = "for" Pattern "in" Expression Block ;
 ### Examples
 
 ```spl
-let vec: Vec(i32) = [1, 2, 3, 4, 5];
+let vec: Vec(T: i32) = [1, 2, 3, 4, 5];
 
 // Iterate by reference (most common)
 for item in &vec {
@@ -43,7 +43,7 @@ for item in &vec {
 // vec still valid here
 
 // Iterate by mutable reference
-let mut vec2: Vec(i32) = [1, 2, 3];
+let mut vec2: Vec(T: i32) = [1, 2, 3];
 for item in &mut vec2 {
     *item *= 2;  // item: &mut i32
 }
@@ -115,16 +115,33 @@ for item in collection {
 }
 ```
 
+### Desugaring: Iterable vs Iterator
+
+The `for` loop uses different mechanisms depending on the type:
+
+| Type implements | Desugaring | Use case |
+|-----------------|------------|----------|
+| `Iterable` | Indexed `while` loop with `len()` and `[i]` | Collections with random access (Vec, arrays) |
+| `Iterator` | `while next() is Some(item)` loop | Generators, consuming iterators, lazy sequences |
+
+**Why two mechanisms?**
+
+- **Iterable (indexed)**: Enables safe reference iteration (`for x in &collection`) via compiler transformation. The reference `&collection[i]` is created fresh each iteration, staying scoped to the loop body. This respects second-class references.
+
+- **Iterator (next-based)**: Used for generators and types without random access. Returns owned values, not references. Also used for consuming iteration (`for x in collection`).
+
+The compiler automatically selects the appropriate desugaring based on the type.
+
 ### Break and Continue
 
 `break` and `continue` work as expected:
 
 ```spl
 for item in &vec {
-    if item == &target {
+    if *item == target {
         break;
     }
-    if item < &0 {
+    if *item < 0 {
         continue;
     }
     process(item);
@@ -136,7 +153,7 @@ for item in &vec {
 ```spl
 'outer: for row in &matrix {
     for cell in row {
-        if cell == &0 {
+        if *cell == 0 {
             break 'outer;
         }
     }
@@ -175,7 +192,7 @@ trait Iterable {
 These implementations illustrate the contract that iterable types satisfy. The compiler uses this information to transform `for` loops.
 
 ```spl
-impl Iterable for Vec(T) where T {
+impl Iterable for Vec(T: T) where T {
     type Item = T;
 
     fn len(&self): usize { self.length }
@@ -208,6 +225,9 @@ Index access via `get()` and `get_mut()` panics if `index >= len()`. Use `get_op
 trait Iterable {
     // ... previous methods ...
 
+    /// Note: Like get(), this is conceptual. The return type Option(&Self.Item)
+    /// appears to violate second-class references, but the compiler transforms
+    /// for-loop usage to avoid actually returning references.
     fn get_opt(&self, index: usize): Option(&Self.Item) {
         if index < self.len() { Some(self.get(index)) } else { None }
     }
@@ -298,7 +318,7 @@ Internal iteration uses closures to process elements. References stay scoped wit
 ### Core Methods
 
 ```spl
-impl Vec(T) where T {
+impl Vec(T: T) where T {
     /// Apply function to each element
     fn each(&self, f: fn(&T)) {
         for item in self {
@@ -325,16 +345,16 @@ impl Vec(T) where T {
 Adapters build a pipeline that executes on terminal operations:
 
 ```spl
-impl Vec(T) where T {
+impl Vec(T: T) where T {
     /// Create lazy iterator adapter
-    fn iter(&self): Iter(&Vec(T)) {
+    fn iter(&self): Iter(S: &Vec(T: T)) {
         Iter(source: self)
     }
 }
 
-struct Iter(S)(source: S)
+struct Iter(S: S)(source: S)
 
-impl Iter(S) where S: Iterable {
+impl Iter(S: S) where S: Iterable {
     /// Transform elements
     fn map(U)(self, f: fn(&S.Item): U): Map(Self, U) where U {
         Map(source: self, func: f)
@@ -361,7 +381,7 @@ impl Iter(S) where S: Iterable {
     }
 
     /// Chain with another iterable
-    fn chain(O)(self, other: O): Chain(Self, O) where O: Iterable(Item = S.Item) {
+    fn chain(O)(self, other: O): Chain(Self, O) where O: Iterable(Item: S.Item) {
         Chain(first: self, second: other)
     }
 
@@ -377,10 +397,10 @@ impl Iter(S) where S: Iterable {
 Terminal operations consume the adapter and produce a result:
 
 ```spl
-impl Iter(S) /* and all adapters */ {
+impl Iter(S: S) /* and all adapters */ {
     /// Collect into a Vec
-    fn collect(self): Vec(T) where T: Clone {
-        let mut result: Vec(T) = Vec.new();
+    fn collect(self): Vec(T: T) where T: Clone {
+        let mut result: Vec(T: T) = Vec.new();
         self.each(|item| result.push(item.clone()));
         result
     }
@@ -403,7 +423,7 @@ impl Iter(S) /* and all adapters */ {
     }
 
     /// Find first matching element
-    fn find(self, pred: fn(&S.Item): bool): Option(S.Item) {
+    fn find(self, pred: fn(&S.Item): bool): Option(T: S.Item) {
         // Returns owned clone of found element
     }
 
@@ -421,29 +441,29 @@ impl Iter(S) /* and all adapters */ {
     fn count(self): usize { ... }
 
     /// Get first element
-    fn first(self): Option(S.Item) { ... }
+    fn first(self): Option(T: S.Item) { ... }
 
     /// Get last element
-    fn last(self): Option(S.Item) { ... }
+    fn last(self): Option(T: S.Item) { ... }
 
     /// Get nth element
-    fn nth(self, n: usize): Option(S.Item) { ... }
+    fn nth(self, n: usize): Option(T: S.Item) { ... }
 
     /// Get min element
-    fn min(self): Option(S.Item) where S.Item: Ord { ... }
+    fn min(self): Option(T: S.Item) where S.Item: Ord { ... }
 
     /// Get max element
-    fn max(self): Option(S.Item) where S.Item: Ord { ... }
+    fn max(self): Option(T: S.Item) where S.Item: Ord { ... }
 }
 ```
 
 ### Usage Examples
 
 ```spl
-let numbers: Vec(i32) = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+let numbers: Vec(T: i32) = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 // Filter and map
-let evens_doubled: Vec(i32) = numbers
+let evens_doubled: Vec(T: i32) = numbers
     .iter()
     .filter(|x| x % 2 == 0)
     .map(|x| x * 2)
@@ -458,14 +478,14 @@ let sum_of_small: i32 = numbers
 // 10
 
 // Find first match
-let first_even: Option(i32) = numbers
+let first_even: Option(T: i32) = numbers
     .iter()
     .find(|x| x % 2 == 0);
 // Some(2)
 
 // Check conditions
-let has_negative = numbers.iter().any(|x| x < &0);  // false
-let all_positive = numbers.iter().all(|x| x > &0);  // true
+let has_negative = numbers.iter().any(|x| *x < 0);  // false
+let all_positive = numbers.iter().all(|x| *x > 0);  // true
 
 // Enumerate
 numbers.enumerate().each(|(i, item)| {
@@ -583,7 +603,7 @@ gen fn fibonacci(): i64 {
 }
 
 // First 10 Fibonacci numbers
-let fibs: Vec(i64) = fibonacci().take(10).collect();
+let fibs: Vec(T: i64) = fibonacci().take(10).collect();
 // [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
 ```
 
@@ -600,7 +620,7 @@ let evens = naturals()
 
 let squares = naturals()
     .map(|n| n * n)
-    .take_while(|n| n < &100)
+    .take_while(|n| *n < 100)
     .collect();
 // [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
 ```
@@ -610,9 +630,9 @@ let squares = naturals()
 `return` in a generator ends iteration:
 
 ```spl
-gen fn until_zero(vec: &Vec(i32)): i32 {
+gen fn until_zero(vec: &Vec(T: i32)): i32 {
     for item in vec {
-        if item == &0 {
+        if *item == 0 {
             return;  // Stop iteration
         }
         yield *item;
@@ -623,7 +643,7 @@ gen fn until_zero(vec: &Vec(i32)): i32 {
 ### Delegation with `yield from` (Future)
 
 ```spl
-gen fn flatten(nested: &Vec(Vec(i32))): i32 {
+gen fn flatten(nested: &Vec(T: Vec(T: i32))): i32 {
     for inner in nested {
         yield from inner.iter();  // Yield all from inner
     }
@@ -643,14 +663,14 @@ gen fn squares(): i32 {
 }
 
 // NOT ALLOWED: cannot yield references
-// gen fn refs(vec: &Vec(i32)): &i32 {
+// gen fn refs(vec: &Vec(T: i32)): &i32 {
 //     for item in vec {
 //         yield item;  // ERROR: cannot yield reference
 //     }
 // }
 
 // WORKAROUND: yield cloned values
-gen fn cloned(vec: &Vec(i32)): i32 {
+gen fn cloned(vec: &Vec(T: i32)): i32 {
     for item in vec {
         yield *item;  // Yield copied value
     }
@@ -685,7 +705,7 @@ For types that cannot be indexed (trees, hash maps), provide consuming iterators
 ```spl
 trait IntoIterator {
     type Item;
-    type Iter: Iterator(Item = Self.Item);
+    type Iter: Iterator(Item: Self.Item);
 
     fn into_iter(self): Self.Iter;
 }
@@ -693,18 +713,18 @@ trait IntoIterator {
 trait Iterator {
     type Item;
 
-    fn next(&mut self): Option(Self.Item);
+    fn next(&mut self): Option(T: Self.Item);
 }
 ```
 
 ### HashMap Example
 
 ```spl
-impl IntoIterator for HashMap(K, V) where K, V {
+impl IntoIterator for HashMap(K: K, V: V) where K, V {
     type Item = (K, V);
-    type Iter = HashMapIter(K, V);
+    type Iter = HashMapIter(K: K, V: V);
 
-    fn into_iter(self): HashMapIter(K, V) {
+    fn into_iter(self): HashMapIter(K: K, V: V) {
         HashMapIter(map: self, index: 0)
     }
 }
@@ -725,10 +745,10 @@ map.each(|key, value| {
 ### Tree Example
 
 ```spl
-impl BinaryTree(T) where T {
+impl BinaryTree(T: T) where T {
     // Internal iteration (non-consuming)
     fn traverse_inorder(&self, f: fn(&T)) {
-        fn visit(node: &Node(T), f: fn(&T)) {
+        fn visit(node: &Node(T: T), f: fn(&T)) {
             if node.left is Some(left) {
                 visit(left, f);
             }
@@ -798,14 +818,14 @@ for value in tree.inorder() {
 ```spl
 fn main() {
     // Basic for loop
-    let numbers: Vec(i32) = [1, 2, 3, 4, 5];
+    let numbers: Vec(T: i32) = [1, 2, 3, 4, 5];
 
     for n in &numbers {
         println(n);
     }
 
     // Functional chain
-    let result: Vec(i32) = numbers
+    let result: Vec(T: i32) = numbers
         .iter()
         .filter(|x| x % 2 == 0)
         .map(|x| x * 10)
@@ -821,7 +841,7 @@ fn main() {
         }
     }
 
-    let powers: Vec(i64) = powers_of_two()
+    let powers: Vec(T: i64) = powers_of_two()
         .take(10)
         .collect();
     println(powers);  // [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
@@ -843,7 +863,7 @@ fn main() {
 ### Custom Iterable Type
 
 ```spl
-struct CircularBuffer(T)(
+struct CircularBuffer(T: T)(
     data: [T; 8],
     head: usize,
     len: usize,

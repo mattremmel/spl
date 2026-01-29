@@ -414,7 +414,7 @@ fn nothing() { }                  // Unit return type can be omitted
 
 ```spl
 let v = Vec.new();       // Vec(?)
-v.push(42);              // Now Vec(i32)
+v.push(42);              // Now Vec(T: i32)
 
 let p = Point(x: 1.0, y: 2.0);  // Point(f64)
 ```
@@ -443,7 +443,7 @@ struct Point(
 
 ```spl
 let x = Vec.new();  // ERROR: cannot infer type
-let x: Vec(i32) = Vec.new();  // OK
+let x: Vec(T: i32) = Vec.new();  // OK
 
 let n = "42".parse();      // ERROR: cannot infer result type
 let n: i32 = "42".parse(); // OK
@@ -493,7 +493,7 @@ SPL supports Swift-style enum variant shorthand (`.Variant`) when the enum type 
 | Return statement | `return .Ok(value)` | Function return type |
 | Binary comparison | `if color == .Red` | Other operand type |
 | Assignment | `color = .Blue` | Left-hand side type |
-| Array/collection literals | `let colors: Vec(Color) = [.Red, .Blue]` | Collection element type |
+| Array/collection literals | `let colors: Vec(T: Color) = [.Red, .Blue]` | Collection element type |
 
 **Examples:**
 
@@ -524,9 +524,9 @@ fn is_done(s: Status): bool {
 }
 
 // With variant data
-enum Result(T, E)(Ok(T), Err(E)) where T, E
+enum Result(Ok(T), Err(E)) where T, E
 
-fn parse(input: &str): Result(i32, ParseError) {
+fn parse(input: &str): Result(T: i32, E: ParseError) {
     if input.is_empty() {
         return .Err(ParseError.Empty)
     }
@@ -595,9 +595,9 @@ fn convert(input: T): U where T: Into(U), U {
 }
 
 // Bounds on struct type parameters
-struct SortedVec(items: Vec(T)) where T: Ord
+struct SortedVec(items: Vec(T: T)) where T: Ord
 
-impl SortedVec(T) where T: Ord {
+impl SortedVec(T: T) where T: Ord {
     fn insert(&mut self, item: T) {
         // Can use comparison because T: Ord
         // ...
@@ -627,14 +627,14 @@ Traits can declare associated types—type placeholders that implementors define
 trait Iterator {
     type Item;  // Associated type
 
-    fn next(&mut self): Option(Self.Item);
+    fn next(&mut self): Option(T: Self.Item);
 }
 
 // Implementor specifies the associated type
 impl Iterator for Counter {
     type Item = i32;
 
-    fn next(&mut self): Option(i32) {
+    fn next(&mut self): Option(T: i32) {
         // ...
     }
 }
@@ -644,7 +644,7 @@ impl Iterator for Counter {
 
 ```spl
 // Constrain the associated type
-fn sum_all(iter: &mut I): i32 where I: Iterator(Item = i32) {
+fn sum_all(iter: &mut I): i32 where I: Iterator(Item: i32) {
     let mut total = 0;
     while iter.next() is Some(n) {
         total += n;
@@ -694,8 +694,8 @@ let p: Point(i32) = Point(x: 1, y: 2);
 // Inferred instantiation
 let q = Point(x: 1.0, y: 2.0);  // Point(f64)
 
-// Explicit type application
-let id = identity(i32)(42);
+// Explicit type application (type args first, then value args)
+let id = identity(T: i32, 42);
 ```
 
 ### Monomorphization
@@ -730,6 +730,26 @@ impl Point(T) where T {
 
 `Self` is equivalent to the full type path with its type parameters (`Point(T)` in the example above).
 
+### Trait Objects (Future)
+
+SPL currently uses monomorphization exclusively for generics. **Trait objects** (`dyn Trait`) for dynamic dispatch are planned for a future version.
+
+Trait objects would enable:
+- Heterogeneous collections: `Vec(dyn Draw)` containing different types implementing `Draw`
+- Runtime polymorphism without generics
+- Reduced code size (at the cost of indirect calls)
+
+Until then, use enums for heterogeneous collections:
+
+```spl
+enum Shape(
+    Circle(Circle),
+    Rectangle(Rectangle),
+)
+
+let shapes: Vec(T: Shape) = [Shape.Circle(c), Shape.Rectangle(r)];
+```
+
 ---
 
 ## 7. Type Coercions
@@ -744,7 +764,7 @@ SPL performs very few implicit coercions to maintain type safety.
 |------|----|-------------|
 | `&mut T` | `&T` | Mutable to immutable reference |
 | `!` | Any type | Never type to any type |
-| `[T; N]` | `Vec(T)` | Array to Vec (when target type is known) |
+| `[T; N]` | `Vec(T: T)` | Array to Vec (when target type is known) |
 
 ```spl
 fn take_ref(r: &i32) { }
@@ -756,12 +776,25 @@ take_ref(r);  // &mut i32 coerces to &i32
 let y: i32 = if true { 1 } else { panic("!") };  // ! coerces to i32
 
 // Array to Vec coercion
-let v: Vec(i32) = [1, 2, 3];  // Array literal coerces to Vec
-fn take_vec(v: Vec(i32)) { }
-take_vec([1, 2, 3]);          // Coerced at call site
+let v: Vec(T: i32) = [1, 2, 3];  // Array literal coerces to Vec
+fn take_vec(v: Vec(T: i32)) { }
+take_vec([1, 2, 3]);             // Coerced at call site
 
 let arr = [1, 2, 3];          // No coercion: arr is [i32; 3]
 ```
+
+**Array to Vec coercion rules:**
+
+1. **Array literals are always arrays**: `[1, 2, 3]` creates a `[i32; 3]`, not a `Vec`
+2. **Coercion requires known target type**: Only happens when the expected type is explicitly `Vec(T: T)`
+3. **No coercion without context**: `let x = [1, 2, 3]` creates an array, never a Vec
+
+| Expression | Type | Reason |
+|------------|------|--------|
+| `let x = [1, 2, 3]` | `[i32; 3]` | No target type, stays as array |
+| `let x: Vec(T: i32) = [1, 2, 3]` | `Vec(T: i32)` | Target type triggers coercion |
+| `foo([1, 2, 3])` where `foo(v: Vec(T: i32))` | `Vec(T: i32)` | Parameter type triggers coercion |
+| `let x: [i32; 3] = [1, 2, 3]` | `[i32; 3]` | Target type is array, no coercion |
 
 **No implicit numeric coercions**: Unlike C, SPL never implicitly converts between numeric types.
 
@@ -790,7 +823,7 @@ let a: i32 = 1000;
 let b: i64 = a.widen();           // Sign extension: 1000
 let c: i8 = a.truncate();         // Explicit truncation: -24
 let d: i8 = a.saturate();         // Clamped to 127
-let e: Result(i8, TryFromIntError) = a.try_into(); // Err (out of range)
+let e: Result(T: i8, E: TryFromIntError) = a.try_into(); // Err (out of range)
 let f: f64 = a.widen();           // 1000.0
 
 let g: f64 = 3.7;
@@ -832,10 +865,10 @@ Two types are equal if and only if they have the same name (and same type argume
 Generic types are equal only when their type arguments are equal.
 
 ```spl
-Point(i32) == Point(i32)   // Equal
-Point(i32) != Point(i64)   // Not equal
-Point(i32) != Point(u32)   // Not equal
-Vec(String) != Vec(&str)   // Not equal
+Point(T: i32) == Point(T: i32)   // Equal
+Point(T: i32) != Point(T: i64)   // Not equal
+Point(T: i32) != Point(T: u32)   // Not equal
+Vec(T: String) != Vec(T: &str)   // Not equal
 ```
 
 ### Type Aliases
@@ -849,25 +882,25 @@ type Pair(T) = (T, T) where T;
 let x: Int = 42;
 let y: i32 = x;           // OK: Int and i32 are the same type
 
-let p: Pair(i32) = (1, 2);
-let q: (i32, i32) = p;    // OK: Pair(i32) is (i32, i32)
+let p: Pair(T: i32) = (1, 2);
+let q: (i32, i32) = p;    // OK: Pair(T: i32) is (i32, i32)
 ```
 
 ### Optional Type Syntax
 
-The postfix `?` on a type is syntactic sugar for `Option(T)`:
+The postfix `?` on a type is syntactic sugar for `Option(T: T)`:
 
 | Syntax | Equivalent |
 |--------|------------|
-| `T?` | `Option(T)` |
-| `i32?` | `Option(i32)` |
-| `String?` | `Option(String)` |
-| `Vec(i32)?` | `Option(Vec(i32))` |
+| `T?` | `Option(T: T)` |
+| `i32?` | `Option(T: i32)` |
+| `String?` | `Option(T: String)` |
+| `Vec(T: i32)?` | `Option(T: Vec(T: i32))` |
 
 ```spl
 // These are equivalent:
 fn find_user(id: UserId): User? { ... }
-fn find_user(id: UserId): Option(User) { ... }
+fn find_user(id: UserId): Option(T: User) { ... }
 
 // In struct fields:
 struct Person(
@@ -885,9 +918,9 @@ fn greet(name: String, title: String?): () {
 }
 ```
 
-**Nesting:** `T??` is `Option(Option(T))`, though this is rarely useful.
+**Nesting:** `T??` is `Option(T: Option(T: T))`, though this is rarely useful.
 
-**Note:** The `?` postfix on types (optional type) is distinct from the `?` postfix operator on expressions (try/early-return). They appear in different syntactic positions and do not conflict.
+**Note:** The `?` postfix on types (optional type) is distinct from the `?` postfix operator on expressions (try/early-return). They appear in different syntactic positions and do not conflict. See [error-handling.md](error-handling.md) for full `?` operator semantics.
 
 ### Type Compatibility Rules
 
@@ -897,7 +930,7 @@ fn greet(name: String, title: String?): () {
 | `i32` and `i64` | No | Different types |
 | `&T` and `&mut T` | One-way | `&mut T` coerces to `&T` |
 | `[T; 3]` and `[T; 4]` | No | Different sizes |
-| `Point(i32)` and `Point(i64)` | No | Different type arguments |
+| `Point(T: i32)` and `Point(T: i64)` | No | Different type arguments |
 | `type A = i32` and `i32` | Yes | Alias is transparent |
 
 ---
@@ -1043,6 +1076,6 @@ fn example_inference() {
 
     // Generic inference from usage
     let mut v = Vec.new();
-    v.push(42);         // Now v: Vec(i32)
+    v.push(42);         // Now v: Vec(T: i32)
 }
 ```

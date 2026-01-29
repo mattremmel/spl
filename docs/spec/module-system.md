@@ -227,7 +227,7 @@ Each platform file implements the same interface:
 
 ```spl
 // fs_linux.spl
-pub fn read_file(path: &str): Result(Vec(u8), IoError) {
+pub fn read_file(path: &str): Result(T: Vec(T: u8), E: IoError) {
     // Linux-specific implementation using syscalls
 }
 
@@ -340,7 +340,7 @@ use std.prelude.*;
 use std.{vec.Vec, io.{Read, Write}};
 
 // Full qualified path (no import needed)
-let v = std.vec.Vec(i32).new();
+let v = std.vec.Vec(T: i32).new();
 ```
 
 ---
@@ -476,7 +476,7 @@ Imports can shadow prelude items:
 use custom_types.Option;  // Now 'Option' refers to custom_types.Option
 
 // Original still accessible via full path
-let x: std.option.Option(i32) = Some(42);
+let x: std.option.Option(T: i32) = Some(42);
 ```
 
 ---
@@ -509,8 +509,8 @@ println                 // Print with newline
 
 ```spl
 // No imports needed for prelude items
-fn example(): Option(i32) {
-    let v: Vec(i32) = Vec.new();
+fn example(): Option(T: i32) {
+    let v: Vec(T: i32) = Vec.new();
     let s: String = String.from("hello");
 
     if v.is_empty() {

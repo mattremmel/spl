@@ -113,8 +113,9 @@ Both uses share the concept of "yield a value from this block without returning 
 | `..=`    | Inclusive range (end included)    |
 | `$`      | Package root (paths) / array length (indexing/slices) |
 | `?`      | Error propagation (Try operator)  |
+| `~`      | Clone capture (in closures)       |
 
-**Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses: `Vec(i32)` instead of `Vec<i32>`. Package-root paths use `$`: `$.utils.helper`. The `as` keyword is used only for import renaming, not type casting (use methods like `.widen()`, `.truncate()` for conversions).
+**Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses with named args: `Vec(T: i32)` instead of `Vec<i32>`. Package-root paths use `$`: `$.utils.helper`. The `as` keyword is used only for import renaming, not type casting (use methods like `.widen()`, `.truncate()` for conversions).
 
 **Range operators:** `..` creates an exclusive range (like Python's `range()`), `..=` creates an inclusive range.
 ```spl
@@ -481,7 +482,7 @@ fn main() {
     }
 
     // Pattern matching with 'is'
-    let maybe_value: Option(i32) = Some(42)
+    let maybe_value: Option(T: i32) = Some(42)
     if maybe_value is Some(v) {
         // Use v here
     }
