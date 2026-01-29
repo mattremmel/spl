@@ -527,7 +527,10 @@ ReferenceType = "&" [ "mut" ] BaseType ;
 
 ArrayType = "[" Type [ ";" Expression ] "]" ;
 
-TupleType = "(" [ Type { "," Type } [ "," ] ] ")" ;
+(* Tuple types support optional named fields *)
+TupleType = "(" [ TupleTypeElement { "," TupleTypeElement } [ "," ] ] ")" ;
+
+TupleTypeElement = [ IDENTIFIER ":" ] Type ;
 
 (* Function pointer return type uses colon *)
 FnPointerType = "fn" "(" [ TypeList ] ")" [ ":" Type ] ;
@@ -562,7 +565,9 @@ TypeArg = [ "^" ] IDENTIFIER ":" Type ;       (* named type argument, e.g., T: i
 | `&mut T`            | Mutable reference                  |
 | `[T]`               | Slice type                         |
 | `[T; 10]`           | Fixed-size array                   |
-| `(T, U)`            | Tuple type                         |
+| `(T, U)`            | Tuple type (positional)            |
+| `(x: T, y: U)`      | Tuple type (named fields)          |
+| `(T, name: U)`      | Tuple type (mixed)                 |
 | `()`                | Unit type                          |
 | `fn(i32): bool`     | Function pointer                   |
 | `fn(T, U): V`       | Generic function pointer           |
@@ -573,6 +578,39 @@ TypeArg = [ "^" ] IDENTIFIER ":" Type ;       (* named type argument, e.g., T: i
 | `i32?`              | Optional type (sugar for `Option(T: i32)`) |
 | `String?`           | Optional String                    |
 | `&T?`               | Reference to optional (rare)       |
+
+### Named Tuples
+
+Tuples can have optional named fields, enabling anonymous record types without defining a struct:
+
+```spl
+// Named tuple type as return type
+fn get_coords(x: f64): (identity: f64, square: f64) {
+    return (identity: x, square: x * x);
+}
+
+// Named tuple in variable binding
+let point: (x: i32, y: i32) = (x: 1, y: 2);
+
+// Access by name
+let x_val = point.x;
+
+// Positional access also works
+let y_val = point.1;
+
+// Mixed positional and named (allowed)
+let mixed: (i32, name: String) = (42, name: "hello");
+```
+
+**Use Cases:**
+- Return multiple values with self-documenting field names
+- Ad-hoc data grouping without struct definitions
+- API boundaries where named fields improve clarity
+
+**Field Access:**
+- Named fields: `tuple.field_name`
+- Positional fields: `tuple.0`, `tuple.1`, etc.
+- Both access styles work regardless of whether fields were declared with names
 
 ---
 
@@ -757,7 +795,10 @@ PathExpr = IDENTIFIER { "." IDENTIFIER } ;
 
 GroupedExpr = "(" Expression ")" ;
 
-TupleExpr = "(" [ Expression "," [ Expression { "," Expression } ] [ "," ] ] ")" ;
+(* Tuple expressions support optional named fields *)
+TupleExpr = "(" [ TupleExprElement { "," TupleExprElement } [ "," ] ] ")" ;
+
+TupleExprElement = [ IDENTIFIER ":" ] Expression ;
 
 ArrayExpr = "[" [ Expression { "," Expression } [ "," ] ] "]"
           | "[" Expression ";" Expression "]" ;
@@ -1174,14 +1215,19 @@ Point.new()              // Associated function
 
 A parenthesized expression could be a tuple or a grouped expression.
 
-**Rule:** A single expression in parentheses without a trailing comma is a grouped expression. With a trailing comma (or multiple elements), it is a tuple.
+**Rule:** A single expression in parentheses without a trailing comma is a grouped expression. With a trailing comma, multiple elements, or named fields, it is a tuple.
 
 ```spl
 (1 + 2)          // Grouped expression, evaluates to 3
-(1,)             // Single-element tuple
-(1, 2)           // Two-element tuple
+(1,)             // Single-element tuple (positional)
+(1, 2)           // Two-element tuple (positional)
+(x: 1)           // Single-element tuple (named) - NOT grouped!
+(x: 1, y: 2)     // Two-element tuple (named)
+(1, name: 2)     // Two-element tuple (mixed positional and named)
 ()               // Unit (empty tuple)
 ```
+
+**Named tuples** are always tuples, never grouped expressions, because the `name:` syntax is unambiguous.
 
 ### 6. Struct Field Shorthand
 
@@ -1418,6 +1464,19 @@ fn main() {
     let middle = arr[1:$-1];            // [2, 3, 4] (exclude first and last)
     let copy = arr[:];                  // full copy
 
+    // Named tuples
+    let coords = (x: 3.0, y: 4.0);      // Named tuple expression
+    let x_coord = coords.x;              // Named field access
+    let y_coord = coords.1;              // Positional access also works
+
+    // Named tuple as return type
+    fn divide(a: i32, b: i32): (quotient: i32, remainder: i32) {
+        return (quotient: a / b, remainder: a % b);
+    }
+    let result = divide(17, 5);
+    let q = result.quotient;             // Named access: 3
+    let r = result.remainder;            // Named access: 2
+
     // Patterns
     let (a, b) = (1, 2);                // Tuple destructuring
     let Point(x, y) = target;           // Struct destructuring
@@ -1487,3 +1546,4 @@ impl Point(T: T) where T {
 | Block value         | `expr` (implicit tail)    | `expr` (single) or `yield` (multi-stmt)  |
 | Semicolons          | Semantic (tail vs stmt)   | Required for statements      |
 | Named parameters    | Not built-in              | `fn foo(to name: T)`         |
+| Named tuples        | Not supported             | `(x: i32, y: i32)` type and expr |
