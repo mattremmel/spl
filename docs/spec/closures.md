@@ -272,7 +272,7 @@ This unified model (like Go and Swift) simplifies the type system at the cost of
 
 ## 5. Interaction with Second-Class References
 
-SPL's second-class references (refs can only be function parameters) simplifies closure design:
+SPL's second-class references (refs cannot be stored in structs) simplifies closure design:
 
 **Closures cannot store references.** Captured variables can only be owned values or copies.
 
@@ -296,13 +296,22 @@ let get_first = || {
 };
 ```
 
-### Cannot Return References
+### Cannot Return References to Captured Data
 
 ```spl
 let data = vec![1, 2, 3];
-// ERROR: Cannot return reference
+// ERROR: Cannot return reference to captured data
 let bad = || {
     return &data[0];  // Compile error
+};
+```
+
+This constraint applies to returning references to **captured** data. Closures receiving reference parameters CAN return references borrowing from those parameters (intersection semantics), same as regular functions:
+
+```spl
+// OK: parameter, not capture
+let get_first = |data: &Vec(T: i32)| {
+    return &data[0];  // Borrows from parameter
 };
 ```
 

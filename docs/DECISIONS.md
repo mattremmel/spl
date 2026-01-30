@@ -168,17 +168,39 @@ Rust-style: `#[outer]` for items, `#![inner]` for module-level
 
 ## 4. Memory Model
 
-### 4.1 Second-Class References
-References can only be function parameters - never stored in structs or returned from functions. This eliminates lifetime annotations entirely.
+### 4.1 Intersection Semantics with Optional Lifetime Markers
+References can be function parameters and can be returned from functions. References cannot be stored in structs. By default, returned references are conservatively assumed to borrow from **all** input references (intersection). Optional `'name` markers can specify exact provenance.
 
 ```spl
 // OK: reference as parameter
 fn process(data: &str) { }
 
-// NOT ALLOWED:
-// fn get_ref(s: &str): &str { }
+// OK: single input ref, can return ref (borrows from input)
+fn first(&self): &T { return &self.data[0]; }
+fn trim(s: &str): &str { ... }
+
+// OK: multiple input refs - default intersection (borrows from ALL)
+fn longer(a: &str, b: &str): &str {
+    if a.len() > b.len() { return a; }
+    return b;
+}
+// Usage: result valid only while BOTH a AND b are valid
+
+// OK: optional lifetime markers for precision
+fn first_only(a: &'x str, b: &str): &'x str {
+    return a;  // Compiler enforces: cannot return b
+}
+// Usage: result valid while 'x (a) is valid, regardless of b
+
+// NOT ALLOWED: store in struct
 // struct Parser(input: &str)
 ```
+
+**Key simplifications vs Rust:**
+- Markers are optional (intersection default)
+- No lifetime relationships (`'a: 'b`)
+- No lifetimes in struct types
+- No higher-rank bounds
 
 ### 4.2 Integer Overflow
 Always trap - no silent wrapping. Use explicit methods for wrapping/saturating:
@@ -239,17 +261,26 @@ SPL uses `!` for try/propagate (early return on error) and `?.` for optional cha
 ## 6. Advanced Features
 
 ### 6.1 Iteration
-Interior iteration with coroutines/generators. `for` loops desugar to generator-based iteration. See [ADR-011](designs/011-iteration-and-generators.md) for full design.
+Interior iteration with coroutines/generators. `for` loops desugar to `Iterable` trait calls or `Iterator.next()`. See [ADR-011](designs/011-iteration-and-generators.md) for full design.
 
-**Phase 1 (Initial):** Generator methods that consume `self` for ergonomic chaining:
+The `Iterable` trait's `get(&self): &T` method is enabled by intersection semantics:
+```spl
+// for item in &collection desugars to:
+let mut __i: usize = 0;
+while __i < collection.len() {
+    let item: &T = collection.get(__i);  // Borrows from collection
+    body
+    __i += 1;
+}
+```
+
+Functional-style iteration with chaining:
 ```spl
 vec.iter()
     .filter(|n| n > 0)
     .map(|n| n * 2)
     .for_each(|n| println(n));
 ```
-
-**Phase 2 (Future):** First-class references for `&self` receivers, enabling zero-copy borrowing iteration.
 
 ### 6.2 Tail Call Optimization
 Guaranteed for all tail calls.
@@ -287,8 +318,8 @@ Look like regular function calls - no `!` required.
 | Return | Implicit tail | Explicit `return` |
 | Block value | Implicit tail | Explicit `break` |
 | Semicolons | Semantic | Syntactic only |
-| References | First-class | Second-class (params only) |
-| Lifetimes | `'a` annotations | None needed |
+| References | First-class | Second-class (no struct storage) |
+| Lifetimes | `'a` required | `'a` optional (intersection default) |
 | Overflow | Debug trap, release wrap | Always trap |
 | Type casting | `as` | Methods |
 | Panic | Unwind or abort | Unwind (abort at FFI) |

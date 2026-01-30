@@ -9,7 +9,8 @@ SPL's memory model provides:
 - **Ownership**: Every value has a single owner
 - **Move semantics**: Values are moved by default on assignment
 - **Copy types**: Small, trivially-copyable types are copied implicitly
-- **Second-class references**: References can only be function parameters, never stored or returned
+- **Second-class references with intersection semantics**: References can be parameters or returned, but never stored in structs. Returned references are assumed to borrow from all input references
+- **Place expressions**: Compile-time representation of memory locations
 - **No garbage collector** (v1): Memory is managed through ownership and scoping
 - **Panic = unwind**: Panics unwind the stack, running destructors for cleanup. Aborts at FFI boundaries.
 
@@ -18,7 +19,7 @@ SPL's memory model provides:
 SPL's memory model is designed to be:
 
 1. **Safe by default**: Prevent use-after-free, double-free, and data races at compile time
-2. **Simple**: Second-class references eliminate lifetime complexity
+2. **Simple**: Intersection semantics eliminate lifetime annotation complexity
 3. **Zero-cost abstractions**: No runtime overhead for ownership tracking
 4. **Predictable**: Clear rules for when memory is allocated and freed
 
@@ -151,31 +152,190 @@ let s2 = s1.clone();  // Explicit deep copy
 
 ---
 
-## 3. Second-Class References
+## 3. References and Intersection Semantics
 
-SPL uses **second-class references**: references can only be function parameters, never stored in structs or returned from functions. This dramatically simplifies the borrow checker and eliminates the need for lifetime annotations.
+SPL uses **second-class references** with **intersection semantics**: references can be function parameters or returned from functions, but cannot be stored in structs. When a function returns a reference, it is assumed to borrow from **all** input references. The returned reference is valid only while all inputs remain valid.
 
-### The Second-Class Rule
+### The Intersection Rule
+
+A function may return `&T` or `&mut T` if it has at least one reference parameter (including `&self` or `&mut self`). The returned reference is conservatively assumed to borrow from all input references.
 
 ```spl
-// OK: Reference as function parameter
+// OK: single input ref (&self)
+fn first(&self): &T {
+    return &self.data[0];
+}
+
+// OK: single input ref (s: &str)
+fn trim(s: &str): &str {
+    // return borrows from s
+}
+
+// OK: multiple input refs - output borrows from BOTH
+fn longer(a: &str, b: &str): &str {
+    if a.len() > b.len() { return a; }
+    return b;
+}
+
+// ERROR: no input refs - cannot return ref to local
+fn make_ref(): &i32 {
+    let x = 42;
+    return &x;  // compile error: no input ref to borrow from
+}
+
+// OK: Reference as function parameter (no return)
 fn process(data: &str) {
     println(data);
 }
 
-// NOT ALLOWED: Cannot return a reference
-// fn get_ref(s: &str): &str { return s; }
-
 // NOT ALLOWED: Cannot store a reference in a struct
-// struct Parser { input: &str }
+// struct Parser(input: &str)
 ```
 
-### Why Second-Class References?
+### Why Intersection Semantics Work
 
-1. **No lifetime annotations**: Lifetimes are always local to a function
-2. **Simpler borrow checker**: No inference across function boundaries
-3. **Easier to learn**: References are just a calling convention
-4. **Interior iteration**: Use generators/coroutines instead of iterators holding references
+Without references in structs, the conservative assumption (output borrows from all inputs) is sound and practical:
+
+1. **Sound**: The output cannot outlive any input it might borrow from
+2. **No annotations needed**: The compiler assumes the most restrictive case
+3. **Practical**: Most use cases work naturally; the restriction only affects edge cases
+
+```spl
+// The output is valid as long as BOTH inputs are valid
+let s1 = "hello";
+let result: &str;
+{
+    let s2 = "world!";
+    result = longer(s1, s2);  // Borrows from both s1 AND s2
+    println(result);          // OK: both s1 and s2 still valid
+}
+// result is now invalid (s2 dropped), even if it actually pointed to s1
+```
+
+| Property | How It's Satisfied |
+|----------|-------------------|
+| "Can't escape" | Output ref is tied to all input refs—it cannot outlive any of them |
+| "Known lifetimes" | Intersection of all input lifetimes (most restrictive) |
+| "No annotations" | The compiler infers the relationship automatically |
+
+### Optional Lifetime Markers
+
+When intersection semantics are too conservative, you can use **lifetime markers** to specify exactly which inputs the output borrows from. This uses Rust-style `'name` syntax:
+
+```spl
+// Default (no markers): output borrows from BOTH a and b
+fn longer(a: &str, b: &str): &str {
+    if a.len() > b.len() { return a; }
+    return b;
+}
+
+// With markers: output borrows ONLY from 'a
+fn first_if_longer(a: &'a str, b: &str): &'a str {
+    if a.len() > b.len() { return a; }
+    return "";  // Return static string, not b
+}
+```
+
+**Lifetime markers are optional precision, not required annotation.** Most code uses the default intersection behavior.
+
+### Lifetime Marker Rules
+
+1. **Markers are function-local**: They only exist at function signatures, not in types
+2. **Same marker = same lifetime group**: Multiple parameters can share a marker
+3. **Unmarked inputs use intersection**: If no markers, all inputs are grouped together
+4. **Output must specify its source**: A marked return type must use a declared marker
+
+```spl
+// Multiple inputs in same lifetime group
+fn either(a: &'x str, b: &'x str, default: &str): &'x str {
+    // Can return a OR b (both are 'x)
+    // Cannot return default (not in 'x group)
+    if a.is_empty() { return b; }
+    return a;
+}
+
+// Mixed: some marked, some not
+fn get_or_default(primary: &'a str, fallback: &str): &'a str {
+    // Can only return primary or static strings
+    // Cannot return fallback
+    if primary.is_empty() {
+        return "default";  // OK: static string outlives everything
+    }
+    return primary;
+}
+```
+
+### Provenance Tracking
+
+The compiler tracks the **provenance** (origin) of each reference through the function body:
+
+```spl
+fn example(a: &'x str, b: &str): &'x str {
+    // Direct returns
+    return a;              // OK: a is 'x
+    return b;              // ERROR: b is not 'x
+
+    // Derived references
+    let slice = &a[0..5];  // slice inherits 'x from a
+    return slice;          // OK
+
+    // Conditionals
+    let x = if cond { a } else { b };
+    return x;              // ERROR: x might be from b
+
+    // Function calls
+    let r = some_fn(a, b); // r has provenance of both (intersection)
+    return r;              // ERROR: r might be from b
+}
+```
+
+**Provenance propagates through calls:**
+
+```spl
+// Inner function with markers
+fn inner(x: &'a str, y: &str): &'a str { ... }
+
+fn outer(a: &'x str, b: &str): &'x str {
+    let r = inner(a, b);   // r has 'x provenance (from a via 'a)
+    return r;              // OK: r is 'x
+}
+
+// Inner function without markers (intersection)
+fn inner_default(x: &str, y: &str): &str { ... }
+
+fn outer2(a: &'x str, b: &str): &'x str {
+    let r = inner_default(a, b);  // r has provenance of both
+    return r;                      // ERROR: r might be from b
+}
+```
+
+### What Lifetime Markers Are NOT
+
+SPL's lifetime markers are simpler than Rust's full lifetime system:
+
+| Feature | Rust | SPL |
+|---------|------|-----|
+| Lifetime parameters on functions | Yes | Yes (optional) |
+| Default behavior | Must annotate | Intersection |
+| Lifetime relationships (`'a: 'b`) | Yes | **No** |
+| Lifetimes in struct types | Yes | **No** |
+| Lifetimes in type aliases | Yes | **No** |
+| Higher-rank bounds (`for<'a>`) | Yes | **No** |
+
+```spl
+// NOT ALLOWED in SPL:
+
+// No lifetime bounds/relationships
+// fn foo(a: &'a str, b: &'b str): &'a str where 'b: 'a
+
+// No lifetimes in structs
+// struct Parser(input: &'a str)
+
+// No lifetimes in type aliases
+// type StrRef('a) = &'a str
+```
+
+The markers exist purely to **narrow the intersection default** at function boundaries. They don't create a lifetime polymorphism system.
 
 ### Reference Types
 
@@ -223,14 +383,94 @@ println(r);       // while immutable borrow is active
 
 ### Reference Validity
 
-References must not outlive their referent:
+References must not outlive their referent. The intersection rule ensures this at compile time:
 
 ```spl
+// ERROR: no input reference, so cannot return a reference
 fn dangling(): &i32 {
     let x = 42;
-    &x  // ERROR: x does not live long enough
-}  // x dropped here, reference would be invalid
+    return &x;  // compile error: no input ref to borrow from
+}
 ```
+
+### References as Generic Type Parameters
+
+References cannot be stored in struct fields, but they **can** be used as generic type parameters. This distinction is important:
+
+```spl
+// NOT ALLOWED: reference as struct field
+// struct Parser(input: &str)  // compile error
+
+// ALLOWED: reference as generic type parameter
+fn get_opt(&self, i: usize): Option(&T) {
+    if i < self.len() {
+        return Some(&self.data[i]);
+    }
+    return None;
+}
+```
+
+When `T = &SomeType`, the `Option` variant holds a reference. This is permitted because:
+1. The `Option(&T)` is a return value, not stored in a struct field
+2. The reference inside still follows the intersection rule (borrows from all input refs)
+3. The `Option` wrapper doesn't extend the reference's lifetime
+
+### Tuple Returns with References
+
+Multiple references can be returned in a tuple. They are all assumed to borrow from all input references:
+
+```spl
+// OK: both references borrow from &self
+fn first_and_last(&self): (&T, &T) {
+    return (&self.data[0], &self.data[self.data.len() - 1]);
+}
+
+// OK: both &str borrow from input s
+fn split_at(s: &str, mid: usize): (&str, &str) {
+    return (&s[..mid], &s[mid..]);
+}
+
+// OK: multiple inputs - all outputs borrow from all inputs
+fn get_both(a: &Container, b: &Container, idx: usize): (&T, &T) {
+    return (a.get(idx), b.get(idx));  // Both refs valid while both a AND b valid
+}
+```
+
+### Nested References (`&&T`)
+
+Nested references (references to references) are **not permitted** in SPL. This keeps the borrowing model simple and avoids complex lifetime interactions:
+
+```spl
+// NOT ALLOWED
+// fn get_ref_to_ref(&self): &&T { ... }  // compile error
+
+// Instead, return the inner reference directly
+fn get(&self): &T { ... }
+```
+
+### Element Aliasing
+
+The standard borrowing rules apply to collection elements. You cannot have multiple mutable references to the same collection, even if they target different indices:
+
+```spl
+let mut vec = [1, 2, 3];
+
+// ERROR: cannot have two mutable borrows of vec
+let x: &mut i32 = &mut vec[0];
+let y: &mut i32 = &mut vec[1];  // compile error: vec already mutably borrowed
+
+// OK: use separate scopes
+{
+    let x: &mut i32 = &mut vec[0];
+    *x = 10;
+}
+{
+    let y: &mut i32 = &mut vec[1];
+    *y = 20;
+}
+```
+
+For simultaneous access to multiple elements, use methods like `split_at_mut` that return disjoint slices, or iterator-based approaches.
 
 ### Reborrowing
 
@@ -269,7 +509,78 @@ println(y);            // 200
 
 ---
 
-## 4. Scopes and Lifetimes
+## 4. Place Expressions
+
+A **place expression** represents a location in memory (similar to Rust's place expressions / C++'s lvalues). Unlike value expressions which produce values, place expressions identify where values are stored.
+
+### Syntax
+
+```ebnf
+PlaceExpr = IDENTIFIER
+          | PlaceExpr "." IDENTIFIER
+          | PlaceExpr "[" Expression "]"
+          | "*" Expression
+          ;
+```
+
+### Place Expression Forms
+
+| Form | Description |
+|------|-------------|
+| `x` | Variable |
+| `obj.field` | Field access |
+| `collection[i]` | Index operation |
+| `*ptr` | Dereference |
+| `matrix[i][j].field` | Compound place |
+
+### Evaluation
+
+Place expressions are not evaluated to values. Instead, they are used contextually:
+
+| Context | Behavior |
+|---------|----------|
+| `&place` | Creates immutable reference to location |
+| `&mut place` | Creates mutable reference to location |
+| `place = expr` | Stores value at location |
+| Value context | Reads from location (copy or move) |
+
+### Examples
+
+```spl
+let mut vec: Vec(T: i32) = [1, 2, 3];
+
+// Places in different contexts
+let r: &i32 = &vec[0];      // &place -> creates reference
+vec[1] = 42;                 // place = expr -> assigns to location
+let x: i32 = vec[2];         // value context -> reads (copy)
+
+// Compound places
+let mut matrix: [[i32; 3]; 3] = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+matrix[1][2] = 100;          // nested index
+let cell: &i32 = &matrix[0][1];
+
+struct Point(x: i32, y: i32)
+let mut p = Point(x: 1, y: 2);
+p.x = 10;                    // field place
+let px: &i32 = &p.x;
+```
+
+### Places and the Index Trait
+
+The `collection[i]` syntax is desugared using the `Index` and `IndexMut` traits (see [traits.md](traits.md)):
+
+| Syntax | Desugaring |
+|--------|------------|
+| `collection[i]` (value context) | `*collection.index(i)` |
+| `&collection[i]` | `collection.index(i)` |
+| `&mut collection[i]` | `collection.index_mut(i)` |
+| `collection[i] = v` | `*collection.index_mut(i) = v` |
+
+The `Index` trait's `index(&self): &T` method is legal because there is an input reference (`&self`) for the output to borrow from.
+
+---
+
+## 5. Scopes and Lifetimes
 
 ### Lexical Scopes
 
@@ -298,27 +609,44 @@ let mr = &mut x;  // OK: no conflict with r
 *mr = 100;
 ```
 
-### No Lifetime Annotations
+### Lifetime Annotations Are Optional
 
-Because references are second-class (parameter-only), SPL does not need lifetime annotations. The borrow checker only needs to verify that:
+Unlike Rust, SPL does not require lifetime annotations. The borrow checker uses intersection semantics by default, with optional markers for precision:
 
-1. References don't escape the function (can't return or store them)
-2. Borrowing rules are followed within the function body
+1. References cannot be stored in structs
+2. Returned references must have at least one input reference to borrow from
+3. **Default**: Returned references borrow from all input references (intersection)
+4. **Optional**: Use `'name` markers to specify exact provenance
+5. Borrowing rules are followed within function bodies
 
 ```spl
-// This is the only valid pattern for references:
+// No annotations needed - intersection semantics
 fn process(data: &[i32]) {
-    // Use data within function body
     for item in data {
         println(item);
     }
 }
-// Reference 'data' is gone after function returns
+
+// Single input - no ambiguity
+fn first(data: &[i32]): &i32 {
+    return &data[0];
+}
+
+// Multiple inputs - default intersection (output borrows from both)
+fn longer(a: &str, b: &str): &str {
+    if a.len() > b.len() { return a; }
+    return b;
+}
+
+// Optional: explicit markers when you need precision
+fn first_only(a: &'x str, b: &str): &'x str {
+    return a;  // Compiler enforces: cannot return b
+}
 ```
 
 ---
 
-## 5. Drop and Destructors
+## 6. Drop and Destructors
 
 ### The Drop Trait
 
@@ -368,7 +696,7 @@ drop(lock);  // Release lock early
 
 ---
 
-## 6. Closures and Capture
+## 7. Closures and Capture
 
 Closures are anonymous functions that can capture variables from their enclosing scope. SPL's closure design leverages second-class references to eliminate lifetime complexity.
 
@@ -413,7 +741,7 @@ The `fn(Args): Return` type represents any callable with matching signature, inc
 
 ---
 
-## 7. Memory Layout
+## 8. Memory Layout
 
 ### Stack vs Heap
 
@@ -467,7 +795,7 @@ Fat pointers contain (pointer, length):
 
 ---
 
-## 8. Interior Mutability (Future)
+## 9. Interior Mutability (Future)
 
 Some patterns require mutation through shared references. SPL will provide controlled escape hatches:
 
@@ -498,11 +826,11 @@ unsafe {
 
 ---
 
-## 9. Future Extensions
+## 10. Future Extensions
 
 SPL's memory model is designed to support multiple memory management strategies in future versions.
 
-### 8.1 Interior Iteration with Generators
+### 10.1 Interior Iteration with Generators
 
 SPL will use generators/coroutines for iteration, avoiding the need for iterator objects that hold references:
 
@@ -525,7 +853,7 @@ my_vec.each(|item| {
 });
 ```
 
-### 8.2 Region-Based Memory
+### 10.2 Region-Based Memory
 
 Inspired by Cyclone and Vale, regions provide arena-style allocation:
 
@@ -543,7 +871,7 @@ Benefits:
 - No fragmentation within region
 - Simplified lifetime reasoning
 
-### 8.3 Allocator-Aware Types (Zig-style)
+### 10.3 Allocator-Aware Types (Zig-style)
 
 Types that accept custom allocators:
 
@@ -566,7 +894,7 @@ process(stack_alloc);
 process(heap_allocator);
 ```
 
-### 8.4 Optional Garbage Collection (D-style)
+### 10.4 Optional Garbage Collection (D-style)
 
 Opt-in GC for specific types or regions:
 
@@ -585,7 +913,7 @@ gc_region {
 }
 ```
 
-### 8.5 Generational References (Vale-style)
+### 10.5 Generational References (Vale-style)
 
 References with generation counts for safe manual memory:
 
@@ -600,7 +928,7 @@ gen_free(x);  // Explicitly free
 // instead of use-after-free
 ```
 
-### 8.6 Linear Types
+### 10.6 Linear Types
 
 Types that must be used exactly once:
 
@@ -616,7 +944,7 @@ fn example() {
 }
 ```
 
-### 8.7 Strategy Selection
+### 10.7 Strategy Selection
 
 Future SPL may allow choosing memory strategy per-module or per-type:
 
@@ -639,21 +967,21 @@ fn batch_process(items: &[Item]) {
 
 ---
 
-## 10. Comparison with Other Languages
+## 11. Comparison with Other Languages
 
 | Feature | SPL v1 | Rust | Go | Zig | D |
 |---------|--------|------|----|----|---|
 | Ownership | Yes | Yes | No | Optional | No |
 | Move semantics | Default | Default | No | No | No |
 | Borrow checker | Yes (simple) | Yes (full) | No | No | No |
-| Lifetime annotations | Inferred | Required | N/A | N/A | N/A |
+| Lifetime annotations | Optional (intersection default) | Required | N/A | N/A | N/A |
 | GC | No | No | Yes | No | Optional |
 | Manual memory | Via unsafe | Via unsafe | No | Yes | Yes |
 | Custom allocators | Planned | Yes | No | Yes | Yes |
 
 ---
 
-## 11. Summary
+## 12. Summary
 
 ### V1 Memory Model
 
@@ -661,9 +989,10 @@ fn batch_process(items: &[Item]) {
 |--------|----------|
 | Default semantics | Move |
 | Copy types | Primitives, opt-in for structs |
-| References | Second-class (parameters only) |
+| References | Second-class with intersection semantics |
 | Borrowing | `&T` (shared) and `&mut T` (exclusive) |
-| Lifetimes | No annotations needed |
+| Lifetimes | Optional markers, intersection default |
+| Place expressions | Compile-time memory locations |
 | Drop | Automatic at scope end |
 | Panic | Unwind (abort at FFI boundary) |
 | Overflow | Always trap |
@@ -676,7 +1005,7 @@ fn batch_process(items: &[Item]) {
 3. **No data races**: Borrowing rules prevent concurrent mutation
 4. **No null pointers**: References are always valid (Option for nullable)
 5. **No uninitialized memory**: All values must be initialized
-6. **No reference escapes**: References cannot outlive their scope
+6. **No reference escapes**: Provenance tracking ties outputs to inputs
 7. **No silent overflow**: Integer operations trap on overflow
 
 ### Extension Path
@@ -758,39 +1087,137 @@ fn example() {
 }
 ```
 
-### Working Without Returned References
+### Intersection Semantics Patterns
 
-Since references cannot be returned, use these patterns instead:
+Intersection semantics enable returning references from functions with one or more input references:
 
 ```spl
-// Instead of returning a reference, return an owned value
-fn first_word(s: &str): String {
+// Single input ref - return substring
+fn first_word(s: &str): &str {
     let bytes = s.as_bytes();
     for (i, byte) in bytes.enumerate() {
         if byte == b' ' {
-            return s[0..i].to_string();
+            return &s[0..i];
         }
     }
-    return s.to_string();
+    return s;
 }
 
-// Use interior iteration with callbacks
+// Multiple input refs - output borrows from all inputs
+fn longer(a: &str, b: &str): &str {
+    if a.len() > b.len() { return a; }
+    return b;
+}
+
+// Single input ref (&self) - return element reference
 struct Container(
     data: Vec(T: i32),
 )
 
 impl Container {
-    // Instead of returning &i32, use a callback
-    fn with_first(&self, f: fn(&i32)) {
-        if self.data.len() > 0 {
-            f(&self.data[0]);
-        }
+    // Direct reference return
+    fn first(&self): &i32 {
+        return &self.data[0];
     }
 
-    // Or return an owned copy
-    fn first(&self): i32? {
-        return self.data.first().copied();
+    // Optional reference for safe access
+    fn get(&self, idx: usize): Option(&i32) {
+        if idx < self.data.len() {
+            return Some(&self.data[idx]);
+        }
+        return None;
     }
+
+    // Tuple of references (both borrow from &self)
+    fn first_and_last(&self): (&i32, &i32) {
+        return (&self.data[0], &self.data[self.data.len() - 1]);
+    }
+}
+```
+
+### Intersection Semantics in Practice
+
+```spl
+// The output is valid while ALL inputs are valid
+let s1 = "hello";
+{
+    let s2 = "world!";
+    let result = longer(s1, s2);  // Borrows from BOTH s1 and s2
+    println(result);              // OK: both still valid
+}
+// result would be invalid here (s2 dropped)
+
+// This is conservative: even if result actually points to s1,
+// the compiler assumes it might point to s2
+```
+
+### Using Lifetime Markers for Precision
+
+When intersection is too conservative, use markers:
+
+```spl
+// Without markers: result borrows from both, invalid after s2 drops
+fn longer(a: &str, b: &str): &str { ... }
+
+// With markers: result borrows only from 'a
+fn first_if_longer(a: &'a str, b: &str): &'a str {
+    if a.len() > b.len() { return a; }
+    return "";  // Static string, not b
+}
+
+let s1 = "hello";
+let result: &str;
+{
+    let s2 = "hi";
+    result = first_if_longer(s1, s2);  // Only borrows from s1
+}
+println(result);  // OK: s1 still valid, s2 doesn't matter
+
+// Compiler enforces the contract
+fn bad_first_if_longer(a: &'a str, b: &str): &'a str {
+    return b;  // ERROR: b is not 'a
+}
+```
+
+### Multiple Inputs in Same Lifetime Group
+
+```spl
+// Both a and b are in the 'x group
+fn pick_one(a: &'x str, b: &'x str, prefer_first: bool): &'x str {
+    if prefer_first { return a; }
+    return b;  // OK: b is also 'x
+}
+
+// Caller: result valid while both inputs valid
+let result = pick_one(s1, s2, true);
+// result borrows from 'x group (both s1 and s2)
+```
+
+### When Owned Values Are Still Needed
+
+Use owned values when the result must outlive an input:
+
+```spl
+// When you need the value to outlive one of the borrows
+fn to_uppercase(s: &str): String {
+    return s.to_uppercase();  // Owned String, not a borrow
+}
+
+// Cross-thread scenarios (data must be owned or Arc-wrapped)
+fn spawn_with_data(data: String) {
+    spawn(|| {
+        process(data);  // data moved into thread
+    });
+}
+
+// When you need to store the result longer than the inputs
+fn save_longer(a: &str, b: &str): String {
+    // If you needed to store the result in a struct or return
+    // it from a scope where inputs are dropped, use owned:
+    if a.len() > b.len() {
+        return a.to_string();
+    }
+    return b.to_string();
 }
 ```
 

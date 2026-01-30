@@ -4,12 +4,12 @@ This document specifies iteration mechanisms in SPL, including `for` loops, the 
 
 ## Overview
 
-SPL's iteration model is designed around **second-class references**—references cannot be returned from functions or stored in structs. This constraint shapes the iteration design:
+SPL's iteration model is built on **intersection semantics**: functions can return references that are assumed to borrow from all input references. This enables traits like `Iterable` to have methods that return references to collection elements.
 
-- **`for` loops** use compiler magic to keep references scoped to the loop body
-- **Internal iteration** (`.each()`, `.map()`) uses closures to scope references
-- **Generators** yield owned values only, not references
-- **External iterators** are limited to owned/consumed values
+- **`for` loops** use the `Iterable` trait for reference iteration
+- **Internal iteration** (`.each()`, `.map()`) uses closures for functional-style processing
+- **Generators** yield owned values only
+- **External iterators** (`Iterator` trait) work with owned/consumed values
 
 ---
 
@@ -58,7 +58,7 @@ for item in vec {
 
 ### Desugaring
 
-The compiler transforms `for` loops into indexed `while` loops for types implementing `Iterable`:
+The compiler transforms `for` loops into method calls on the `Iterable` trait:
 
 ```spl
 // Source
@@ -71,12 +71,14 @@ for item in &collection {
     let mut __i: usize = 0;
     let __len: usize = collection.len();
     while __i < __len {
-        let item: &T = &collection[__i];
+        let item: &T = collection.get(__i);
         body
         __i += 1;
     }
 }
 ```
+
+The `get(&self): &T` method is legal because there is an input reference (`&self`) for the output to borrow from.
 
 For mutable iteration:
 
@@ -91,7 +93,7 @@ for item in &mut collection {
     let mut __i: usize = 0;
     let __len: usize = collection.len();
     while __i < __len {
-        let item: &mut T = &mut collection[__i];
+        let item: &mut T = collection.get_mut(__i);
         body
         __i += 1;
     }
@@ -121,12 +123,12 @@ The `for` loop uses different mechanisms depending on the type:
 
 | Type implements | Desugaring | Use case |
 |-----------------|------------|----------|
-| `Iterable` | Indexed `while` loop with `len()` and `[i]` | Collections with random access (Vec, arrays) |
+| `Iterable` | Indexed `while` loop with `len()` and `get()`/`get_mut()` | Collections with random access (Vec, arrays) |
 | `Iterator` | `while next() is Some(item)` loop | Generators, consuming iterators, lazy sequences |
 
 **Why two mechanisms?**
 
-- **Iterable (indexed)**: Enables safe reference iteration (`for x in &collection`) via compiler transformation. The reference `&collection[i]` is created fresh each iteration, staying scoped to the loop body. This respects second-class references.
+- **Iterable (indexed)**: Enables reference iteration (`for x in &collection`) using the `get(&self): &T` method. Intersection semantics make this safe—each `get()` call returns a reference tied to the collection's lifetime.
 
 - **Iterator (next-based)**: Used for generators and types without random access. Returns owned values, not references. Also used for consuming iteration (`for x in collection`).
 
@@ -168,9 +170,7 @@ outer: for row in &matrix {
 
 Types that support `for` loop iteration implement `Iterable`.
 
-> **Note:** The trait definition below is *conceptual*. The `for` loop is implemented via compiler magic that transforms the loop into indexed access without literally calling these methods. This avoids violating the second-class reference rule (references cannot be returned from functions). A future version of this specification will provide more detailed semantics.
-
-### Definition (Conceptual)
+### Definition
 
 ```spl
 trait Iterable {
@@ -179,19 +179,21 @@ trait Iterable {
     /// Number of elements
     fn len(&self): usize;
 
-    /// Access element by index (immutable)
-    /// Note: Conceptual - actual for-loop uses compiler transformation
+    /// Returns reference to element at index.
+    /// The returned reference borrows from &self.
+    /// Panics if index >= len().
     fn get(&self, index: usize): &Self.Item;
 
-    /// Access element by index (mutable)
-    /// Note: Conceptual - actual for-loop uses compiler transformation
+    /// Returns mutable reference to element at index.
+    /// The returned reference borrows from &mut self.
+    /// Panics if index >= len().
     fn get_mut(&mut self, index: usize): &mut Self.Item;
 }
 ```
 
-### Standard Implementations (Conceptual)
+The `get` and `get_mut` methods return references. With intersection semantics, the output reference is tied to the input's lifetime (`&self` or `&mut self`).
 
-These implementations illustrate the contract that iterable types satisfy. The compiler uses this information to transform `for` loops.
+### Standard Implementations
 
 ```spl
 impl Iterable for Vec(T: T) where T {
@@ -227,14 +229,15 @@ Index access via `get()` and `get_mut()` panics if `index >= len()`. Use `get_op
 trait Iterable {
     // ... previous methods ...
 
-    /// Note: Like get(), this is conceptual. The return type Option(&Self.Item)
-    /// appears to violate second-class references, but the compiler transforms
-    /// for-loop usage to avoid actually returning references.
+    /// Returns Some(&element) if index is valid, None otherwise.
+    /// The Option contains a reference that borrows from &self.
     fn get_opt(&self, index: usize): Option(&Self.Item) {
         if index < self.len() { Some(self.get(index)) } else { None }
     }
 }
 ```
+
+The `Option(&Self.Item)` return type is legal because there is an input reference (`&self`) for the contained reference to borrow from.
 
 ---
 
@@ -843,18 +846,18 @@ for value in tree.inorder() {
 
 | Trait | Purpose |
 |-------|---------|
-| `Iterable` | Indexable collections (conceptual; enables `for` loop via compiler magic) |
+| `Iterable` | Indexable collections with `get(&self): &T` for reference iteration |
 | `Iterator` | External iterator (owned values only) |
 | `IntoIterator` | Converting to consuming iterator |
 | `Step` | Types that can form ranges |
 
 ### Design Principles
 
-1. **Second-class references respected**: References never escape their scope
-2. **`for` loops use compiler magic**: Transformed to safe indexed access without calling methods that return references
-3. **Internal iteration for references**: Closures scope the borrows
+1. **Intersection semantics**: `get(&self): &T` is safe because the output borrows from the input
+2. **`for` loops use Iterable**: Desugars to `get()`/`get_mut()` calls for reference iteration
+3. **Internal iteration for closures**: `.each()`, `.map()` etc. scope references via closures
 4. **Generators yield owned values**: No reference lifetime issues
-5. **Consuming iteration when necessary**: For non-indexable types
+5. **Consuming iteration when necessary**: `Iterator` trait for non-indexable types
 
 ---
 

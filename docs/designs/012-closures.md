@@ -42,7 +42,7 @@ This granularity is useful but verbose for common cases.
 
 ### SPL's Advantage: Second-Class References
 
-SPL's second-class references (refs can only be function parameters) dramatically simplifies closure design:
+SPL's second-class references (refs cannot be stored in structs) dramatically simplifies closure design:
 
 **Closures cannot store references.** Period.
 
@@ -490,13 +490,18 @@ let get_first = |data| {
 };
 ```
 
-Closures **cannot return references** (second-class rule):
+Closures **cannot return references to captured data**:
 
 ```spl
+// Closures CANNOT return references to CAPTURED data:
 let data = vec![1, 2, 3];
-// ERROR: Cannot return reference
-let bad = |data| {
-    return &data[0];  // Compile error
+let bad = || {
+    return &data[0];  // ERROR: data is captured, not a parameter
+};
+
+// Closures CAN return references to PARAMETER data (intersection semantics):
+let good = |data: &Vec(T: i32)| {
+    return &data[0];  // OK: borrows from parameter
 };
 ```
 

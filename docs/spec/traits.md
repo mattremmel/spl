@@ -632,7 +632,110 @@ struct Config(
 
 ---
 
-## 11. Trait Aliases (Future)
+## 11. Index Traits
+
+The `Index` and `IndexMut` traits enable the `collection[i]` subscript syntax.
+
+### 11.1 Index Trait
+
+```spl
+trait Index(Idx) where Idx {
+    type Output;
+
+    /// Returns a reference to the element at `idx`.
+    /// Panics if `idx` is out of bounds.
+    fn index(&self, idx: Idx): &Self.Output;
+}
+```
+
+The `index` method returns `&Self.Output` and is legal because there is an input reference (`&self`) for the output to borrow from.
+
+### 11.2 IndexMut Trait
+
+```spl
+trait IndexMut(Idx): Index(Idx) where Idx {
+    /// Returns a mutable reference to the element at `idx`.
+    /// Panics if `idx` is out of bounds.
+    fn index_mut(&mut self, idx: Idx): &mut Self.Output;
+}
+```
+
+### 11.3 Desugaring
+
+The subscript syntax desugars to method calls:
+
+| Syntax | Desugaring |
+|--------|------------|
+| `collection[i]` (value context) | `*collection.index(i)` |
+| `&collection[i]` | `collection.index(i)` |
+| `&mut collection[i]` | `collection.index_mut(i)` |
+| `collection[i] = v` | `*collection.index_mut(i) = v` |
+
+### 11.4 Standard Implementations
+
+```spl
+impl Index(Idx: usize) for Vec(T: T) where T {
+    type Output = T;
+
+    fn index(&self, idx: usize): &T {
+        if idx >= self.len() {
+            panic("index out of bounds");
+        }
+        // Return reference to internal storage
+    }
+}
+
+impl IndexMut(Idx: usize) for Vec(T: T) where T {
+    fn index_mut(&mut self, idx: usize): &mut T {
+        if idx >= self.len() {
+            panic("index out of bounds");
+        }
+        // Return mutable reference to internal storage
+    }
+}
+
+impl Index(Idx: usize) for [T; N] where T {
+    type Output = T;
+
+    fn index(&self, idx: usize): &T {
+        if idx >= N {
+            panic("index out of bounds");
+        }
+        // Return reference to element
+    }
+}
+
+impl IndexMut(Idx: usize) for [T; N] where T {
+    fn index_mut(&mut self, idx: usize): &mut T {
+        if idx >= N {
+            panic("index out of bounds");
+        }
+        // Return mutable reference to element
+    }
+}
+```
+
+### 11.5 Range Indexing
+
+Collections can also implement `Index` for range types to support slicing:
+
+```spl
+impl Index(Idx: Range(T: usize)) for Vec(T: T) where T {
+    type Output = [T];
+
+    fn index(&self, idx: Range(T: usize)): &[T] {
+        // Return slice reference
+    }
+}
+
+// Usage
+let vec: Vec(T: i32) = [1, 2, 3, 4, 5];
+let slice: &[i32] = &vec[1..4];  // [2, 3, 4]
+```
+
+---
+
+## 12. Trait Aliases (Future)
 
 Trait aliases for combining common bounds:
 
@@ -649,7 +752,7 @@ fn process(x: T) where T: DebugCloneSend { }
 
 ---
 
-## 12. Summary
+## 13. Summary
 
 | Feature | Syntax | Description |
 |---------|--------|-------------|

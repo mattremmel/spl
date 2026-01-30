@@ -384,7 +384,7 @@ let r: &mut i32 = &mut x;
 | `&T`           | Many allowed | Read-only |
 | `&mut T`       | Exclusive | Read-write |
 
-**Second-Class References:** SPL uses second-class references—references can only be function parameters, never stored in structs or returned from functions. This eliminates the need for lifetime annotations. See [memory-model.md](memory-model.md) for full details.
+**Second-Class References:** SPL uses second-class references with intersection semantics—references can be function parameters or returned from functions (borrowing from input refs), but cannot be stored in structs. By default, returned references borrow from all inputs. Optional lifetime markers (`'a`) provide precision. See [memory-model.md](memory-model.md) for full details.
 
 ---
 
