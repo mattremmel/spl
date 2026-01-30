@@ -226,7 +226,7 @@ Available options:
 ```spl
 impl JoinHandle(T) {
     fn await(self): T;                    // Wait for result (may panic if task panicked)
-    fn try_await(self): Result(T, TaskError);  // Wait, get error on panic/cancel
+    fn try_await(self): Result(T: T, E: TaskError);  // Wait, get error on panic/cancel
     fn cancel(&self);                     // Request cancellation
     fn is_finished(&self): bool;          // Poll completion
     fn detach(self);                      // Fire-and-forget (task continues)
