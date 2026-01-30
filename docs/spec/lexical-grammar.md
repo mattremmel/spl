@@ -10,7 +10,7 @@ The lexer transforms source text into a stream of tokens. Whitespace and comment
 
 ## Keywords
 
-SPL reserves 39 keywords that cannot be used as identifiers:
+SPL reserves 37 keywords that cannot be used as identifiers:
 
 | Keyword    | Description                          |
 |------------|--------------------------------------|
@@ -51,8 +51,6 @@ SPL reserves 39 keywords that cannot be used as identifiers:
 | `const`    | Compile-time constant                |
 | `static`   | Static variable                      |
 | `unsafe`   | Unsafe block/function                |
-| `async`    | Async function declaration           |
-| `await`    | Await async expression               |
 
 **Note on `yield`:** The `yield` keyword serves two related purposes:
 1. **Block expressions**: Provides the value of a multi-statement block (`let x = { let a = 1; yield a + 1; };`)
