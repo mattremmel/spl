@@ -13,7 +13,7 @@ SPL uses a clean, consistent syntax with several key principles:
 5. **Return type with `:`**: Functions use `:` for return type: `fn foo(): i32`.
 6. **Where clauses for generics**: `fn id(x: T): T where T`.
 7. **Pattern matching with `is`**: `if value is Some(x)` instead of `if let`.
-8. **Explicit return/yield**: `return` for functions, `yield` for block values. Both require semicolons.
+8. **Explicit return/break**: `return` for functions, `break` for block values. Both require semicolons.
 9. **Uniform semicolons**: Semicolons are statement terminators with no semantic significance.
 
 ## EBNF Notation
@@ -712,31 +712,32 @@ Unlike Rust, semicolons in SPL are purely syntactic terminators with no semantic
 | Regular statements | Semicolon required: `let x = 1;` |
 | Block expressions as statements | Semicolon optional: `if x { ... }` or `if x { ... };` |
 | `return` statement | Semicolon required: `return 42;` |
-| `yield` statement | Semicolon required: `yield value;` |
-| Expression in block (not yield) | Semicolon required, value discarded |
+| `break` statement | Semicolon required: `break value;` |
+| `yield` statement (generators) | Semicolon required: `yield value;` |
+| Expression in block (not break) | Semicolon required, value discarded |
 
 The semicolon does NOT determine whether an expression's value is used (unlike Rust). Instead, `return` and `yield` explicitly indicate intent.
 
 **Block Values:**
 
-Blocks containing multiple statements require explicit `yield` to produce a value:
+Blocks containing multiple statements require explicit `break` to produce a value:
 
 ```spl
 let result = {
     let a = compute();
     let b = transform(a);
-    yield a + b;
+    break a + b;
 };
 ```
 
-However, blocks containing a **single expression** have an implicit value—no `yield` is needed:
+However, blocks containing a **single expression** have an implicit value—no `break` is needed:
 
 ```spl
 let doubled = if x > 0 { x * 2 } else { 0 };  // Single expression per branch
 let value = { compute() };                     // Single expression block
 ```
 
-Without `yield` or a single expression, a block's type is `()` (unit).
+Without `break` or a single expression, a block's type is `()` (unit).
 
 ---
 
@@ -981,7 +982,7 @@ if color == .Blue { ... }
 ### Control Flow Expressions
 
 ```ebnf
-BlockExpression = Block
+BlockExpression = [ Label ] Block
                 | IfExpr
                 | WhileExpr
                 | ForExpr
@@ -989,8 +990,10 @@ BlockExpression = Block
 
 IfExpr = "if" Expression Block [ "else" ( IfExpr | Block ) ] ;
 
-(* Loop labels (future feature) *)
-Label = "'" IDENTIFIER ":" ;
+(* Labels use postfix colon for definition, prefix colon for reference *)
+(* Definition: `label: { ... }` or `label: for x in ...` *)
+(* Reference: `break :label` or `continue :label` *)
+Label = IDENTIFIER ":" ;
 
 WhileExpr = [ Label ] "while" Expression Block ;
 
@@ -998,18 +1001,19 @@ ForExpr = [ Label ] "for" Pattern "in" Expression Block ;
 
 LoopExpr = [ Label ] "loop" Block ;
 
-(* Break/continue can target a labeled loop (future feature) *)
-BreakExpr = "break" [ "'" IDENTIFIER ] [ Expression ] ;
+(* Break exits blocks/loops with optional value *)
+(* - `break;` exits immediately enclosing block/loop *)
+(* - `break value;` exits with value *)
+(* - `break :label;` exits labeled block/loop *)
+(* - `break :label value;` exits labeled block/loop with value *)
+BreakExpr = "break" [ ":" IDENTIFIER ] [ Expression ] ;
 
-ContinueExpr = "continue" [ "'" IDENTIFIER ] ;
+ContinueExpr = "continue" [ ":" IDENTIFIER ] ;
 
 (* Explicit return required for returning values from functions *)
 ReturnExpr = "return" [ Expression ] ;
 
-(* Yield has two meanings depending on context:
-   - In generator functions (gen fn): yields the next value to the caller
-   - In block expressions: provides the final value of the block
-   The compiler distinguishes based on whether the enclosing function is a generator. *)
+(* Yield is exclusively for generator functions - suspends and produces a value *)
 YieldExpr = "yield" Expression ;
 
 (* Throw an error in a throws function - desugars to return Err(expr) *)
@@ -1042,9 +1046,9 @@ while queue.pop() is Some(item) {
 }
 ```
 
-**Explicit Return and Yield:**
+**Explicit Return and Break:**
 
-Functions must use `return` to return values, and block expressions must use `yield` to provide a value—**unless the block contains only a single expression**, in which case the value is implicit.
+Functions must use `return` to return values, and block expressions must use `break` to provide a value—**unless the block contains only a single expression**, in which case the value is implicit.
 
 ```spl
 // Single-expression function: implicit return
@@ -1059,10 +1063,10 @@ fn compute(x: i32): i32 {
 // Single-expression block: implicit value
 let result = if condition { x * 2 } else { 0 };
 
-// Multi-statement block: yield required
+// Multi-statement block: break required
 let result = {
     let temp = compute();
-    yield temp * 2;
+    break temp * 2;
 };
 
 // Error: multi-statement without return
@@ -1071,7 +1075,7 @@ fn bad(x: i32): i32 {
     temp * 2;  // ERROR: missing return
 }
 
-// Error: multi-statement without yield
+// Error: multi-statement without break
 let bad = {
     let x = 1;
     x + 1;  // Block has type (), not i32
@@ -1080,20 +1084,61 @@ let bad = {
 
 **Why this design?**
 
-Single-expression blocks are concise and unambiguous. Multi-statement blocks require explicit `return`/`yield` to avoid the subtle semantics where semicolon presence changes program behavior.
+Single-expression blocks are concise and unambiguous. Multi-statement blocks require explicit `return`/`break` to avoid the subtle semantics where semicolon presence changes program behavior.
 
-**`yield` Disambiguation:**
+**Labeled Blocks and Break:**
 
-The `yield` keyword has two distinct meanings based on context:
+Blocks, loops, and other control flow constructs can be labeled for targeted `break` or `continue`:
 
-| Context | Meaning | Example |
-|---------|---------|---------|
-| Generator function (`gen fn`) | Produces the next value to the caller | `gen fn count(): i32 { yield 1; yield 2; }` |
-| Block expression | Provides the final value of the block | `let x = { let a = 1; yield a + 1; };` |
+| Syntax | Meaning |
+|--------|---------|
+| `break;` | Exit immediately enclosing block/loop |
+| `break value;` | Exit immediately enclosing with value |
+| `break :label;` | Exit specific labeled scope |
+| `break :label value;` | Exit specific labeled scope with value |
+| `continue;` | Continue immediately enclosing loop |
+| `continue :label;` | Continue specific labeled loop |
 
-The compiler determines which interpretation applies based on whether the enclosing function is declared with `gen fn`. This is unambiguous because:
-- In a generator, `yield` suspends execution and produces a value
-- In a regular block, `yield` provides the block's result value (analogous to Rust's implicit tail expression)
+Labels use postfix colon for definition and prefix colon for reference—the colon "points toward" what it refers to:
+
+```spl
+// Labeled block with value
+let result = computed: {
+    let a = expensive();
+    let b = transform(a);
+    break :computed a + b;
+};
+
+// Unlabeled block with value
+let result = {
+    let a = expensive();
+    break a * 2;
+};
+
+// Nested loops with labels
+outer: for x in items {
+    inner: for y in other {
+        if done {
+            break :outer;  // exit outer loop
+        }
+    }
+}
+```
+
+**`yield` in Generators:**
+
+The `yield` keyword is exclusively for generator functions—it suspends the generator and produces a value to the caller:
+
+```spl
+gen fn count(): i32 {
+    let computed = {
+        let a = 1;
+        break a + 1;  // block value via break
+    };
+    yield computed;       // generator yield
+    yield computed * 2;   // generator yield
+}
+```
 
 See [iteration.md](iteration.md) for generator semantics.
 
@@ -1766,11 +1811,11 @@ fn main() {
     let [first, ..rest] = [1, 2, 3, 4]; // Slice pattern with rest
     let [head, .., tail] = [1, 2, 3];   // First and last
 
-    // Block with yield
+    // Block with break
     let computed = {
         let a = 10;
         let b = 20;
-        yield a + b;
+        break a + b;
     };
 }
 
@@ -1828,7 +1873,7 @@ impl Point(T: T) where T {
 | Struct literal      | `Point { x: 1 }`          | `Point(x: 1)` (instantiation) |
 | Pattern matching    | `if let Some(x) = v {}`   | `if v is Some(x) {}`         |
 | Function return     | `expr` (implicit tail)    | `expr` (single) or `return` (multi-stmt) |
-| Block value         | `expr` (implicit tail)    | `expr` (single) or `yield` (multi-stmt)  |
+| Block value         | `expr` (implicit tail)    | `expr` (single) or `break` (multi-stmt)  |
 | Semicolons          | Semantic (tail vs stmt)   | Required for statements      |
 | Named parameters    | Not built-in              | `fn foo(to name: T)`         |
 | Named tuples        | Not supported             | `(x: i32, y: i32)` type and expr |

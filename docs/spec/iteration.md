@@ -148,13 +148,15 @@ for item in &vec {
 }
 ```
 
-### Loop Labels (Future)
+### Loop Labels
+
+Labels use postfix colon for definition and prefix colon for reference:
 
 ```spl
-'outer: for row in &matrix {
+outer: for row in &matrix {
     for cell in row {
         if *cell == 0 {
-            break 'outer;
+            break :outer;
         }
     }
 }
