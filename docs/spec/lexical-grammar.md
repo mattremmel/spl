@@ -10,7 +10,7 @@ The lexer transforms source text into a stream of tokens. Whitespace and comment
 
 ## Keywords
 
-SPL reserves 38 keywords that cannot be used as identifiers:
+SPL reserves 40 keywords that cannot be used as identifiers:
 
 | Keyword    | Description                          |
 |------------|--------------------------------------|
@@ -94,6 +94,19 @@ Both uses share the concept of "yield a value from this block without returning 
 | `\|\|`   | Logical OR   |
 | `!`      | Logical NOT  |
 
+### Bitwise Operators
+
+| Operator | Description      |
+|----------|------------------|
+| `&`      | Bitwise AND      |
+| `\|`     | Bitwise OR       |
+| `^`      | Bitwise XOR      |
+| `~`      | Bitwise NOT      |
+| `<<`     | Left shift       |
+| `>>`     | Right shift      |
+
+**Note:** `&` and `^` serve dual purposes: as prefix operators (reference and force-type-argument respectively) and as binary bitwise operators. Context disambiguates.
+
 ### Assignment Operators
 
 | Operator | Description              |
@@ -104,6 +117,11 @@ Both uses share the concept of "yield a value from this block without returning 
 | `*=`     | Multiply and assign      |
 | `/=`     | Divide and assign        |
 | `%=`     | Modulo and assign        |
+| `&=`     | Bitwise AND and assign   |
+| `\|=`    | Bitwise OR and assign    |
+| `^=`     | Bitwise XOR and assign   |
+| `<<=`    | Left shift and assign    |
+| `>>=`    | Right shift and assign   |
 
 ### Other Operators
 
@@ -117,10 +135,12 @@ Both uses share the concept of "yield a value from this block without returning 
 | `!`      | Try/propagate (postfix)           |
 | `?.`     | Optional chaining                 |
 | `??`     | Nullish coalescing                |
-| `~`      | Clone capture (in closures)       |
+| `~`      | ~~Clone capture (in closures)~~ **TODO**: conflicts with bitwise NOT, needs alternative |
 | `@`      | Force value argument (for uppercase identifiers) |
 | `^`      | Force type argument (for lowercase identifiers) |
 | `*`      | Dereference (for references)      |
+| `=>`     | Match arm separator               |
+| `?`      | Optional type (suffix for `Option(T)`) |
 
 **Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses with named args: `Vec(T: i32)` instead of `Vec<i32>`. Package-root paths use `$`: `$.utils.helper`. The `as` keyword is used only for import renaming, not type casting (use methods like `.widen()`, `.truncate()` for conversions).
 
@@ -149,20 +169,23 @@ arr[1:$-1]   // All elements except first and last
 
 | Precedence | Operators                    | Associativity | Description |
 |------------|------------------------------|---------------|-------------|
-| 1 (lowest) | `=` `+=` `-=` `*=` `/=` `%=` | Right         | Assignment |
-| 2          | `??`                         | Right         | Nullish coalescing |
-| 3          | `\|\|`                       | Left          | Logical OR |
-| 4          | `&&`                         | Left          | Logical AND |
-| 5          | `is`                         | Left          | Pattern match |
-| 6          | `==` `!=`                    | Left          | Equality |
-| 7          | `<` `>` `<=` `>=`            | Left          | Comparison |
-| 8          | `..` `..=`                   | Left          | Range |
-| 9          | `+` `-`                      | Left          | Additive |
-| 10         | `*` `/` `%`                  | Left          | Multiplicative |
-| 11         | `!` `-` `&` `*` (unary)      | Right         | Unary |
-| 12 (highest) | `.` `?.` `()` `[]` `!`     | Left          | Postfix |
+| 1 (lowest) | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | Right | Assignment |
+| 2          | `..` `..=`                   | Left          | Range |
+| 3          | `??`                         | Right         | Nullish coalescing |
+| 4          | `\|\|`                       | Left          | Logical OR |
+| 5          | `&&`                         | Left          | Logical AND |
+| 6          | `==` `!=` `<` `>` `<=` `>=`  | Left          | Comparison |
+| 7          | `is`                         | Left          | Pattern match |
+| 8          | `\|`                         | Left          | Bitwise OR |
+| 9          | `^`                          | Left          | Bitwise XOR |
+| 10         | `&`                          | Left          | Bitwise AND |
+| 11         | `<<` `>>`                    | Left          | Shift |
+| 12         | `+` `-`                      | Left          | Additive |
+| 13         | `*` `/` `%`                  | Left          | Multiplicative |
+| 14         | `!` `-` `&` `*` `~` (unary)  | Right         | Unary |
+| 15 (highest) | `.` `?.` `()` `[]` `!`     | Left          | Postfix |
 
-Note: `as` is not in the precedence table as it is not used for type casting. Type conversions use methods like `.widen()`, `.truncate()`, `.saturate()`. The `!` operator appears twice: as unary logical NOT and as postfix try/propagate. The `?.` operator is for optional chaining. The `??` operator provides a default value for `None`. This table matches the precedence in `syntax-grammar.md`.
+Note: `as` is not in the precedence table as it is not used for type casting. Type conversions use methods like `.widen()`, `.truncate()`, `.saturate()`. The `!` operator appears twice: as unary logical NOT and as postfix try/propagate. The `?.` operator is for optional chaining. The `??` operator provides a default value for `None`. The `&`, `^`, and `~` operators appear in both unary and binary contexts; the unary forms have higher precedence. This table follows Rust's precedence ordering.
 
 ---
 
@@ -177,7 +200,7 @@ Note: `as` is not in the precedence table as it is not used for type casting. Ty
 | `[`   | Left bracket         |
 | `]`   | Right bracket        |
 | `;`   | Semicolon            |
-| `:`   | Colon                |
+| `:`   | Colon (types, slices) |
 | `,`   | Comma                |
 
 ---
@@ -191,9 +214,9 @@ Integers can be written in decimal, hexadecimal, binary, or octal:
 | Format      | Pattern                     | Example       |
 |-------------|-----------------------------|---------------|
 | Decimal     | `[0-9][0-9_]*`              | `42`, `1_000` |
-| Hexadecimal | `0x[0-9a-fA-F][0-9a-fA-F_]*`| `0x2A`, `0xFF`|
-| Binary      | `0b[01][01_]*`              | `0b101010`    |
-| Octal       | `0o[0-7][0-7_]*`            | `0o52`        |
+| Hexadecimal | `0[xX][0-9a-fA-F][0-9a-fA-F_]*`| `0x2A`, `0XFF`|
+| Binary      | `0[bB][01][01_]*`              | `0b101010`, `0B11`|
+| Octal       | `0[oO][0-7][0-7_]*`            | `0o52`, `0O77`|
 
 **Rules:**
 - Underscores (`_`) may appear between digits for readability
@@ -213,9 +236,9 @@ Integer literals may have a type suffix: `i8`, `i16`, `i32`, `i64`, `i128`, `u8`
 
 **Regex:**
 ```
-INTEGER = 0x[0-9a-fA-F][0-9a-fA-F_]*
-        | 0b[01][01_]*
-        | 0o[0-7][0-7_]*
+INTEGER = 0[xX][0-9a-fA-F][0-9a-fA-F_]*
+        | 0[bB][01][01_]*
+        | 0[oO][0-7][0-7_]*
         | [0-9][0-9_]*
 ```
 
@@ -224,12 +247,12 @@ INTEGER = 0x[0-9a-fA-F][0-9a-fA-F_]*
 | Format       | Pattern                              | Example         |
 |--------------|--------------------------------------|-----------------|
 | Basic        | `[0-9]+\.[0-9]+`                     | `3.14`          |
-| Exponent     | `[0-9]+e[+-]?[0-9]+`                 | `1e10`, `2e-3`  |
-| Full         | `[0-9]+\.[0-9]+e[+-]?[0-9]+`         | `2.5e-3`        |
+| Exponent     | `[0-9]+[eE][+-]?[0-9]+`              | `1e10`, `2E-3`  |
+| Full         | `[0-9]+\.[0-9]+[eE][+-]?[0-9]+`      | `2.5e-3`        |
 
 **Rules:**
 - Must have digits on both sides of the decimal point (`.5` and `5.` are invalid)
-- Exponent indicator is lowercase `e`
+- Exponent indicator is `e` or `E`
 - Underscores allowed between digits: `1_000.000_001`
 - Type suffixes: `f32`, `f64`, `decimal` (e.g., `3.14_f32`, `2.718f64`, `0.10decimal`)
 
@@ -243,8 +266,8 @@ The `decimal` suffix creates an exact decimal floating-point value, avoiding bin
 
 **Regex:**
 ```
-FLOAT = [0-9][0-9_]*\.[0-9][0-9_]*(e[+-]?[0-9][0-9_]*)?
-      | [0-9][0-9_]*e[+-]?[0-9][0-9_]*
+FLOAT = [0-9][0-9_]*\.[0-9][0-9_]*([eE][+-]?[0-9][0-9_]*)?
+      | [0-9][0-9_]*[eE][+-]?[0-9][0-9_]*
 ```
 
 ### String Literals
@@ -304,7 +327,7 @@ BYTE_STRING = 'b"' [^\x80-\xff"\\]* '"'
 
 **Rules:**
 - Prefixed with `b`
-- Contains only ASCII characters (0x00-0x7F)
+- Source text contains only ASCII characters (escape sequences can produce any byte 0x00-0xFF)
 - Same escape sequences as regular strings
 - Type is `&[u8]`, not `&str`
 
@@ -537,5 +560,5 @@ fn main() {
 
 1. **Longest match:** The lexer always takes the longest valid token (e.g., `==` not `=` `=`)
 2. **Keyword priority:** Reserved words take precedence over identifiers (e.g., `let` is a keyword, not an identifier)
-3. **Numeric prefix:** `0x`, `0b`, `0o` determine integer radix; digits must follow immediately
+3. **Numeric prefix:** `0x`/`0X`, `0b`/`0B`, `0o`/`0O` determine integer radix; digits must follow immediately
 4. **Range vs float:** `1..2` is integer-range-integer, not a malformed float
