@@ -484,3 +484,13 @@ println(data.len());  // OK - data was cloned
 | Escaping | Move (default) |
 | Escaping + `~` | Clone |
 | Escaping + `clone` | Clone all |
+
+---
+
+## References
+
+- [ADR-012: Closures and Capture Semantics](../designs/012-closures.md) - Design rationale
+- [memory-model.md](memory-model.md) - Ownership and second-class references
+- [iteration.md](iteration.md) - Closures in iterator chains
+- [concurrency.md](concurrency.md) - Task closure captures
+- [syntax-grammar.md](syntax-grammar.md) - Closure syntax

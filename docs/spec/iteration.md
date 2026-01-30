@@ -943,3 +943,13 @@ fn example(buf: &CircularBuffer(T: i32)) {
     }
 }
 ```
+
+---
+
+## References
+
+- [ADR-011: Iteration and Generators](../designs/011-iteration-and-generators.md) - Design rationale
+- [traits.md](traits.md) - Iterable and Iterator traits
+- [closures.md](closures.md) - Closures in iterator chains
+- [memory-model.md](memory-model.md) - Second-class references and iteration
+- [syntax-grammar.md](syntax-grammar.md) - For loop and generator syntax

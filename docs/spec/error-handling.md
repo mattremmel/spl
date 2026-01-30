@@ -720,3 +720,12 @@ fn process(input: &str): Output throws ProcessError {
     return transform(parsed);
 }
 ```
+
+---
+
+## References
+
+- [ADR-014: Try Trait and Error Propagation](../designs/014-try-trait.md) - Design rationale
+- [traits.md](traits.md) - Try and FromResidual traits
+- [syntax-grammar.md](syntax-grammar.md) - Operator precedence
+- [standard-library.md](standard-library.md) - Option and Result types

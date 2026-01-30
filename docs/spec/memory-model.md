@@ -771,3 +771,13 @@ impl Container {
     }
 }
 ```
+
+---
+
+## References
+
+- [closures.md](closures.md) - Closure capture and second-class references
+- [iteration.md](iteration.md) - Interior iteration design
+- [unsafe.md](unsafe.md) - Raw pointers and unsafe operations
+- [concurrency.md](concurrency.md) - Ownership across tasks
+- [ffi.md](ffi.md) - Memory safety at FFI boundaries

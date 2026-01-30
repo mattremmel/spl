@@ -398,7 +398,7 @@ This positions SPL to have:
 ## References
 
 ### Project Documentation
-- [SPL Module System](./module-system.md)
+- [SPL Module System](./spec/module-system.md)
 - [Rust Design Lessons](./rust-design-lessons.md)
 
 ### Rust Compilation

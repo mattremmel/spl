@@ -1183,3 +1183,13 @@ fn example_inference() {
     v.push(42);         // Now v: Vec(T: i32)
 }
 ```
+
+---
+
+## References
+
+- [traits.md](traits.md) - Trait definition and implementation
+- [syntax-grammar.md](syntax-grammar.md) - Type syntax and generics
+- [memory-model.md](memory-model.md) - Ownership and borrowing
+- [standard-library.md](standard-library.md) - Standard types and traits
+- [ADR-010: Type Interning](../designs/010-type-interning.md) - Type equality implementation
