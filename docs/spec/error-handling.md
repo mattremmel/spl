@@ -93,6 +93,19 @@ let value = match Try.branch(expr) {
 };
 ```
 
+### Precedence
+
+The `!` operator is a **postfix** operator at the same precedence level as `.`, `?.`, `()`, and `[]`. It binds tighter than all binary operators:
+
+```spl
+foo.bar()!.baz()     // ((foo.bar())!).baz() - try, then method call
+result! + 1          // (result!) + 1 - try binds to result
+a && b!              // a && (b!) - try binds to b
+items.get(0)!        // (items.get(0))! - try the result of get
+```
+
+See [syntax-grammar.md](syntax-grammar.md) for the full precedence table.
+
 ---
 
 ## 3. Optional Chaining (`?.`)

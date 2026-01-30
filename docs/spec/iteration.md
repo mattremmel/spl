@@ -708,6 +708,37 @@ gen.next();  // None (stays exhausted)
 
 Generators cannot be restarted. Create a new generator to iterate again.
 
+### Generator Completion and Panic Behavior
+
+**Completion semantics:**
+- After a generator returns (reaches end of function or explicit `return`), it enters the "completed" state
+- Subsequent calls to `next()` always return `None`
+- A completed generator cannot be resumed or restarted
+
+**Panic behavior:**
+- If a generator panics during execution, the panic propagates to the caller
+- The generator enters a "poisoned" state and cannot be resumed
+- Subsequent calls to `next()` on a poisoned generator will panic with "generator panicked previously"
+- Destructors for captured state run during unwinding (if `panic=unwind`)
+
+```spl
+gen fn might_panic(): i32 {
+    yield 1;
+    panic("oops");  // Panic during iteration
+    yield 2;        // Never reached
+}
+
+let gen = might_panic();
+gen.next();  // Some(1)
+gen.next();  // PANIC: "oops" - propagates to caller
+// gen is now poisoned
+```
+
+**Memory layout:**
+- Generator state is stored inline (no heap allocation for the state machine itself)
+- Captured variables are stored in the generator struct
+- Generator size depends on captured state, similar to closures
+
 ---
 
 ## 6. Consuming Iteration
