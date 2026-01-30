@@ -231,7 +231,7 @@ pub fn read_file(path: &str): Result(T: Vec(T: u8), E: IoError) {
     // Linux-specific implementation using syscalls
 }
 
-pub fn write_file(path: &str, data: &[u8]): Result((), IoError) {
+pub fn write_file(path: &str, data: &[u8]): Result(T: (), E: IoError) {
     // Linux-specific implementation
 }
 

@@ -1,6 +1,6 @@
 # ADR-013: Concurrency Model and Runtime
 
-**Status:** Draft
+**Status:** Accepted
 **Date:** 2026-01-28
 
 ## Context

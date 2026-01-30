@@ -8,7 +8,7 @@ This document summarizes key design decisions made for SPL, based on systematic 
 Added: `enum`, `trait`, `const`, `static`, `unsafe`, `async`, `await`, `yield`
 
 ### 1.2 Operators
-- Added `?` for error propagation (Try operator)
+- Added `!` for error propagation (Try operator)
 - `as` is reserved for import renaming only, not type casting
 
 ### 1.3 Comments
@@ -230,11 +230,9 @@ let result = catch_panic(|| risky_operation());
 ## 5. Error Handling
 
 ### 5.1 Try Operator
-`?` works with any type implementing `Try` trait (includes Option and Result).
+`!` works with any type implementing `Try` trait (includes Option and Result).
 
-Follows Rust semantics: `expr?.field` means early-return then field access (parses as `(expr?).field`).
-
-**Future consideration:** Optional chaining (`?.` as single operator) for expressions like `user?.address?.city` that return `Option(T: String)` without early return. Would need distinct syntax to avoid confusion with early-return `?` (e.g., `&.` like Ruby).
+SPL uses `!` for try/propagate (early return on error) and `?.` for optional chaining (short-circuit to None without early return). See [error-handling.md](spec/error-handling.md) for full details.
 
 ---
 

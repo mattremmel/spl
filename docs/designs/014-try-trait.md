@@ -1,25 +1,25 @@
 # ADR-014: Try Trait and Error Propagation
 
-**Status:** Draft
+**Status:** Accepted
 **Date:** 2026-01-28
 
 ## Context
 
-SPL's `?` operator enables concise error propagation. DECISIONS.md states "`?` works with any type implementing `Try` trait (includes Option and Result)." This ADR specifies the Try trait and its semantics.
+SPL's `!` operator enables concise error propagation. DECISIONS.md states "`!` works with any type implementing `Try` trait (includes Option and Result)." This ADR specifies the Try trait and its semantics.
 
 ### Goals
 
-1. **Unified error propagation** - `?` works with Option, Result, and custom types
-2. **Cross-type conversion** - Option can be used with `?` in Result-returning functions
+1. **Unified error propagation** - `!` works with Option, Result, and custom types
+2. **Cross-type conversion** - Option can be used with `!` in Result-returning functions
 3. **Simplicity** - Simpler than Rust's Try/FromResidual split
-4. **Explicit semantics** - Clear mental model for what `?` does
+4. **Explicit semantics** - Clear mental model for what `!` does
 
 ### Current State
 
 - `enum Option{Some(T), None} where T`
 - `enum Result{Ok(T), Err(E)} where T, E`
 - Both types are in the prelude
-- `?` operator is lexically defined but behavior unspecified
+- `!` operator is lexically defined but behavior unspecified
 
 ---
 
@@ -77,13 +77,13 @@ Usage:
 
 ```spl
 fn read_config(path: &str): Result(T: Config, E: IoError) {
-    let contents = fs.read_to_string(path)?;  // Early return on Err
-    let config = parse_config(contents)?;     // Early return on Err
+    let contents = fs.read_to_string(path)!;  // Early return on Err
+    let config = parse_config(contents)!;     // Early return on Err
     return Ok(config);
 }
 ```
 
-The `?` operator on `Result(T: T, E: E)`:
+The `!` operator on `Result(T: T, E: E)`:
 1. Calls `branch()` on the value
 2. If `Continue(v)`, evaluates to `v`
 3. If `Break(e)`, returns `Err(e)` from the enclosing function
@@ -114,8 +114,8 @@ Usage in Option-returning functions:
 
 ```spl
 fn find_user_email(users: &[User], id: UserId): String? {
-    let user = users.iter().find(|u| u.id == id)?;  // Early return None
-    let email = user.email.clone()?;                 // Early return None
+    let user = users.iter().find(|u| u.id == id)!;  // Early return None
+    let email = user.email.clone()!;                 // Early return None
     return Some(email);
 }
 ```
@@ -124,7 +124,7 @@ fn find_user_email(users: &[User], id: UserId): String? {
 
 ### 4. Cross-Type Conversion with FromResidual
 
-When using `?` in a function returning a different Try type, conversion must occur. This is handled by `FromResidual`:
+When using `!` in a function returning a different Try type, conversion must occur. This is handled by `FromResidual`:
 
 ```spl
 trait FromResidual(R) {
@@ -147,7 +147,7 @@ This allows:
 ```spl
 fn process(): Result(T: i32, E: Error) {
     let x: i32? = get_optional();
-    let value = x?;  // None becomes Err(Error.default())
+    let value = x!;  // None becomes Err(Error.default())
     return Ok(value * 2);
 }
 ```
@@ -159,7 +159,7 @@ For clarity and control over the error value, explicit conversion is preferred:
 ```spl
 fn process(): Result(T: i32, E: Error) {
     let x: i32? = get_optional();
-    let value = x.ok_or(Error.NotFound)?;  // Explicit error
+    let value = x.ok_or(Error.NotFound)!;  // Explicit error
     return Ok(value * 2);
 }
 ```
@@ -203,9 +203,9 @@ This enables:
 ```spl
 fn read_and_parse(path: &str): Result(T: Config, E: AppError) {
     // IoError automatically converts to AppError via From trait
-    let contents = fs.read_to_string(path)?;
+    let contents = fs.read_to_string(path)!;
     // ParseError automatically converts to AppError via From trait
-    let config = parse(contents)?;
+    let config = parse(contents)!;
     return Ok(config);
 }
 ```
@@ -214,11 +214,11 @@ fn read_and_parse(path: &str): Result(T: Config, E: AppError) {
 
 ### 5. Early Return Semantics
 
-The `?` operator is syntactic sugar for a match expression with early return:
+The `!` operator is syntactic sugar for a match expression with early return:
 
 ```spl
 // This:
-let value = expr?;
+let value = expr!;
 
 // Desugars to:
 let value = match Try.branch(expr) {
@@ -228,7 +228,7 @@ let value = match Try.branch(expr) {
 ```
 
 Key points:
-- `?` always triggers an **early return** from the enclosing function
+- `!` always triggers an **early return** from the enclosing function
 - The return type must implement `FromResidual` for the residual type
 - Type inference determines which `FromResidual` impl to use
 
@@ -242,7 +242,7 @@ For returning from a block rather than the function:
 
 ```spl
 let result = 'block: {
-    let x = operation()?'block;  // Returns from block, not function
+    let x = operation()!'block;  // Returns from block, not function
     yield process(x);
 };
 ```
@@ -251,17 +251,17 @@ This is **not in the initial design** but reserved for future consideration.
 
 #### Closures
 
-`?` in closures returns from the closure, not the enclosing function:
+`!` in closures returns from the closure, not the enclosing function:
 
 ```spl
 fn process_items(items: Vec(T: Item)): Result(T: Vec(T: Output), E: Error) {
-    // ? returns from the closure, which is correct here
+    // ! returns from the closure, which is correct here
     let outputs = items.iter()
         .map(|item| {
-            let processed = transform(item)?;
+            let processed = transform(item)!;
             return Ok(processed);
         })
-        .collect()?;  // collect handles the Result from each iteration
+        .collect()!;  // collect handles the Result from each iteration
     return Ok(outputs);
 }
 ```
@@ -270,14 +270,14 @@ fn process_items(items: Vec(T: Item)): Result(T: Vec(T: Output), E: Error) {
 
 ### 7. Interaction with Async (No Function Coloring)
 
-Since SPL has no function coloring (see ADR-013), `?` works identically in all contexts:
+Since SPL has no function coloring (see ADR-013), `!` works identically in all contexts:
 
 ```spl
 use std.task.spawn;
 
 fn fetch_data(url: String): Result(T: Data, E: Error) {
-    let response = http.get(url)?;  // May yield, ? works normally
-    let data = parse(response.body())?;
+    let response = http.get(url)!;  // May yield, ! works normally
+    let data = parse(response.body())!;
     return Ok(data);
 }
 
@@ -290,10 +290,10 @@ fn main(): () {
 }
 ```
 
-No special `?` handling is needed for async code because:
+No special `!` handling is needed for async code because:
 - Any function can yield (no async/await keywords)
-- `?` semantics are purely about control flow, not execution model
-- Task boundaries are explicit via `spawn()`, not implicit in `?`
+- `!` semantics are purely about control flow, not execution model
+- Task boundaries are explicit via `spawn()`, not implicit in `!`
 
 ---
 
@@ -402,15 +402,15 @@ Try, FromResidual
 
 Rust's design insight: the type you're *coming from* (`Try::branch`) is different from the type you're *converting to* (`FromResidual::from_residual`). This separation enables:
 
-- Option `?` in Result functions (converts `()` residual to error)
-- Result `?` with different error types (converts via `From`)
+- Option `!` in Result functions (converts `()` residual to error)
+- Result `!` with different error types (converts via `From`)
 - Custom types mixing with standard types
 
 ### Why ControlFlow Instead of Either?
 
 `ControlFlow` with `Continue`/`Break` naming is more intuitive for control flow operations than generic `Left`/`Right`. The same type works for:
 
-- `?` operator (Try trait)
+- `!` operator (Try trait)
 - `try_fold` and similar iteration methods
 - Early exit from any computation
 
@@ -420,17 +420,17 @@ Implicit Option-to-Result conversion via `FromResidual` requires a `Default` err
 
 ```spl
 // Implicit: What went wrong?
-let value = maybe_value?;  // Error is generic "default"
+let value = maybe_value!;  // Error is generic "default"
 
 // Explicit: Clear about the failure
-let value = maybe_value.ok_or(Error.ConfigNotFound)?;
+let value = maybe_value.ok_or(Error.ConfigNotFound)!;
 ```
 
 SPL provides both options but documentation should encourage explicit conversion.
 
 ### Why No Labeled Block Returns Initially?
 
-Labeled blocks for `?` (`expr?'label`) add complexity. The common case (early function return) is well-served by the simple design. Labeled blocks can be added later if there's demonstrated need.
+Labeled blocks for `!` (`expr!'label`) add complexity. The common case (early function return) is well-served by the simple design. Labeled blocks can be added later if there's demonstrated need.
 
 ---
 
@@ -438,7 +438,7 @@ Labeled blocks for `?` (`expr?'label`) add complexity. The common case (early fu
 
 ### Positive
 
-- Unified `?` for Option and Result
+- Unified `!` for Option and Result
 - Type-safe error conversion via `From` trait
 - Custom types can participate in error propagation
 - No async-specific handling needed
@@ -448,14 +448,14 @@ Labeled blocks for `?` (`expr?'label`) add complexity. The common case (early fu
 
 - Two traits (Try, FromResidual) instead of one
 - Implicit conversions can hide error sources
-- More complex type inference for cross-type `?`
+- More complex type inference for cross-type `!`
 
 ### Migration from Rust
 
 Rust developers will find the model familiar but simpler:
 - No `#![feature(try_trait_v2)]` needed
 - SPL's Try is close to Rust's stabilized design
-- Same patterns (`?`, `ok_or`, `From` for errors) work
+- Same patterns (`!`, `ok_or`, `From` for errors) work
 
 ---
 
@@ -465,9 +465,9 @@ Rust developers will find the model familiar but simpler:
 
 ```spl
 fn load_config(): Result(T: Config, E: Error) {
-    let path = env.var("CONFIG_PATH").ok_or(Error.MissingEnv("CONFIG_PATH"))?;
-    let contents = fs.read_to_string(path)?;
-    let config = toml.parse(contents)?;
+    let path = env.var("CONFIG_PATH").ok_or(Error.MissingEnv("CONFIG_PATH"))!;
+    let contents = fs.read_to_string(path)!;
+    let config = toml.parse(contents)!;
     return Ok(config);
 }
 ```
@@ -494,8 +494,8 @@ impl From(T: ParseError) for AppError {
 }
 
 fn process_file(path: &str): Result(T: Data, E: AppError) {
-    let contents = fs.read_to_string(path)?;  // IoError -> AppError
-    let parsed = json.parse(contents)?;       // ParseError -> AppError
+    let contents = fs.read_to_string(path)!;  // IoError -> AppError
+    let parsed = json.parse(contents)!;       // ParseError -> AppError
 
     if !validate(parsed) {
         return Err(AppError.Validation("invalid data"));
@@ -509,9 +509,9 @@ fn process_file(path: &str): Result(T: Data, E: AppError) {
 
 ```spl
 fn get_user_city(db: &Database, user_id: UserId): String? {
-    let user = db.find_user(user_id)?;
-    let address = user.address?;
-    let city = address.city.clone()?;
+    let user = db.find_user(user_id)!;
+    let address = user.address!;
+    let city = address.city.clone()!;
     return Some(city);
 }
 ```
@@ -521,8 +521,8 @@ fn get_user_city(db: &Database, user_id: UserId): String? {
 ```spl
 fn fetch_optional_config(): Result(T: Config, E: Error) {
     // Explicit conversion preferred
-    let path = env.var("OPTIONAL_CONFIG").ok_or(Error.NoConfig)?;
-    let contents = fs.read_to_string(path)?;
+    let path = env.var("OPTIONAL_CONFIG").ok_or(Error.NoConfig)!;
+    let contents = fs.read_to_string(path)!;
     return toml.parse(contents);
 }
 ```
@@ -531,14 +531,11 @@ fn fetch_optional_config(): Result(T: Config, E: Error) {
 
 ## Open Questions
 
-1. **NeverShortCircuit** - Should there be a "never fails" wrapper for infallible operations in `?` chains?
-2. **try blocks** - Should SPL support `try { }` blocks that collect `?` results?
+1. **NeverShortCircuit** - Should there be a "never fails" wrapper for infallible operations in `!` chains?
+2. **try blocks** - Should SPL support `try { }` blocks that collect `!` results?
 3. **Error context** - Should there be built-in support for error context/wrapping (like anyhow's `.context()`)?
-4. **Optional chaining** - Should SPL add a separate optional chaining operator (like Kotlin/Swift/TypeScript `?.`) that short-circuits to `None` without early return? This would be distinct from the early-return `?` operator:
-   - `get_user()?.address` — early return if None, then access field (current Rust-style behavior)
-   - `user&.address&.city` — optional chain returning `Option(T: String)`, no early return (hypothetical)
 
-   These serve different use cases: `?` requires the enclosing function to return `Option`/`Result`, while optional chaining works anywhere and keeps the result wrapped.
+Note: Optional chaining (`?.`) and nullish coalescing (`??`) have been added to SPL. See [error-handling.md](../spec/error-handling.md) for details. The `!` operator is for try/propagate (early return), while `?.` chains through `None` without early return.
 
 ---
 

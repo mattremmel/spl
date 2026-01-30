@@ -237,7 +237,7 @@ impl CStr {
     pub fn as_bytes(&self): &[u8];
 
     /// Try to interpret as UTF-8
-    pub fn to_str(&self): Result(&str, Utf8Error);
+    pub fn to_str(&self): Result(T: &str, E: Utf8Error);
 
     /// Interpret as UTF-8, replacing invalid sequences with U+FFFD
     pub fn to_str_lossy(&self): String;
