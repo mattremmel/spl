@@ -1439,6 +1439,168 @@ x > 0 && y is Some(v)     // (x > 0) && (y is Some(v))
 value is Some(x) && x > 0 // (value is Some(x)) && (x > 0)
 ```
 
+### 11. Additional Disambiguation Examples
+
+This section provides comprehensive examples for tricky cases.
+
+#### Type vs Expression in Generic Context
+
+When a name could be either a type or a value:
+
+```spl
+// 'String' is a type (uppercase), parsed as Type
+let v: Vec(T: String) = Vec.new();
+
+// 'string' is a value (lowercase), parsed as Expression
+let s = string;              // Variable reference
+let p = Point(x: string);    // Value passed to field
+
+// What if you have a type alias with lowercase? Use ^
+type myint = i32;
+let v: Vec(^myint: myint) = Vec.new();  // ^ forces type arg
+```
+
+#### Distinguishing Calls from Instantiation
+
+```spl
+// These look similar but are different:
+Result(T: Data, E: Error)      // Type instantiation (both uppercase)
+Result(ok: data, err: error)   // Would be struct fields if Result were a struct
+
+// Function returning generic:
+fn make_result(): Result(T: i32, E: String) { ... }
+
+// Calling with type args:
+parse(T: Config, "input")      // T is type arg (uppercase)
+parse(config: cfg, "input")    // config is value arg (lowercase)
+```
+
+#### Enum Variant vs Type
+
+```spl
+// Option.Some is a path to variant, not a type
+let x = Option.Some(42);       // Variant constructor
+
+// Option(T: i32) is a type
+let y: Option(T: i32) = Some(42);
+
+// Vec(T: i32).new() - type then method
+let v = Vec(T: i32).new();
+
+// Vec.new() - path to associated function (type inferred)
+let v = Vec.new();
+v.push(42);  // Now Vec(T: i32)
+```
+
+#### Nested Generic Types
+
+```spl
+// Nested generics - each level uses its own type args
+let nested: Vec(T: Option(T: i32)) = Vec.new();
+
+// HashMap with complex value type
+let map: HashMap(K: String, V: Vec(T: i32)) = HashMap.new();
+
+// Result containing Option
+let r: Result(T: Option(T: User), E: Error) = Ok(Some(user));
+```
+
+#### Method Chains with Types
+
+```spl
+// Type application, then method chain
+Vec(T: i32).new().push(42)     // Create, then push
+
+// Parentheses for clarity
+(Vec(T: i32).new()).push(42)   // Same as above
+
+// Multiple method calls
+Vec(T: String).with_capacity(10).push("hello".to_string())
+```
+
+#### Ambiguous-Looking but Unambiguous
+
+```spl
+// This is ALWAYS a struct instantiation (named fields)
+Point(x: 1, y: 2)
+
+// This is ALWAYS a function call (positional args)
+add(1, 2)
+
+// This is ALWAYS type instantiation (uppercase = type args)
+Vec(T: i32)
+
+// Mixed: type arg + value arg (unambiguous due to case)
+Container(T: i32, value: 42)   // T: type, value: value
+```
+
+#### The `@` and `^` Sigils in Practice
+
+```spl
+// JSON-like API with uppercase field names
+struct JsonObject(
+    @Type: String,      // Field named "Type"
+    @ID: i64,           // Field named "ID"
+    data: Vec(T: u8),   // Normal field
+)
+
+// Creating instance (@ prevents treating as type arg)
+let obj = JsonObject(
+    @Type: "user",      // Value arg (forced by @)
+    @ID: 12345,         // Value arg (forced by @)
+    data: bytes,        // Value arg (lowercase default)
+);
+
+// Haskell-style type parameters (rare)
+trait Functor where ^f {
+    fn map(self, func: fn(A): B): ^f(^b: B) where A, B, ^a, ^b;
+}
+```
+
+#### Common Patterns
+
+```spl
+// 1. Generic function with inferred type
+let items = vec![1, 2, 3];
+let doubled = items.map(|x| x * 2);  // Types inferred
+
+// 2. Generic function with explicit type
+let parsed = parse(T: Config, input);  // Explicit T
+
+// 3. Type annotation on binding
+let config: Config = parse(input);     // Type on let, not call
+
+// 4. Turbofish not needed - use type annotation instead
+// Rust: let v = Vec::<i32>::new();
+// SPL:  let v: Vec(T: i32) = Vec.new();  // Or...
+// SPL:  let v = Vec(T: i32).new();       // Type application
+
+// 5. Return type provides context
+fn load(): Result(T: Config, E: Error) {
+    let data = read_file(path)!;    // Result types inferred
+    return parse(data);              // Return type known
+}
+```
+
+#### Edge Cases with Imports
+
+```spl
+// Imported type - still uppercase
+use other.module.Config;
+let c: Config = Config.default();
+
+// Imported value - still lowercase
+use other.module.default_config;
+let c = default_config();
+
+// Aliased import - case preserved
+use other.module.Config as Cfg;    // Type alias
+let c: Cfg = Cfg.default();
+
+use other.module.helper as h;      // Value alias
+let result = h();
+```
+
 ---
 
 ## Complete Example
