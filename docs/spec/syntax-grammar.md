@@ -855,15 +855,15 @@ PrimaryExpr = LiteralExpr
 TypeExpr = TypePath GenericArgs ;
 
 (* Closures - see closures.md for full semantics *)
-ClosureExpr = [ "clone" | "move" ] ClosureParams ClosureBody ;
+ClosureExpr = [ "@" CaptureList ] ClosureParams ClosureBody ;
+
+CaptureList = "[" [ Capture { "," Capture } [ "," ] ] "]" ;
+
+Capture = IDENTIFIER                       (* shorthand: x means x: x *)
+        | IDENTIFIER ":" Expression ;      (* explicit: name: expr *)
 
 ClosureParams = "||"
-              | "|" [ ClosureParamList ] "|" ;
-
-ClosureParamList = ClosureParam { "," ClosureParam } [ "," ] ;
-
-(* ~ modifier clones the capture at closure creation time *)
-ClosureParam = [ "~" ] [ "mut" ] IDENTIFIER [ ":" Type ] ;
+              | "|" [ ParamList ] "|" ;
 
 ClosureBody = Block | Expression ;
 

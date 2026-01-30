@@ -135,8 +135,7 @@ Both uses share the concept of "yield a value from this block without returning 
 | `!`      | Try/propagate (postfix)           |
 | `?.`     | Optional chaining                 |
 | `??`     | Nullish coalescing                |
-| `~`      | ~~Clone capture (in closures)~~ **TODO**: conflicts with bitwise NOT, needs alternative |
-| `@`      | Force value argument (for uppercase identifiers) |
+| `@`      | Force value argument (for uppercase identifiers), or capture list prefix in closures (`@[...]`) |
 | `^`      | Force type argument (for lowercase identifiers) |
 | `*`      | Dereference (for references)      |
 | `=>`     | Match arm separator               |

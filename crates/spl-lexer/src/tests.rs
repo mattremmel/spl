@@ -24,6 +24,14 @@ fn lex_spanned(source: &str) -> Vec<SpannedToken<'_>> {
     Lexer::new(source).collect()
 }
 
+/*
+ * || something() // implicit capture no args
+ * |x| something() // implicit capture single arg
+ * @[] || something() // no captures allowed no args
+ * @[y, z] |x| something(x, y, z) // capture only y and z
+ * @[y: y.clone(), z: z.some_op()] |x| something(x, y, z) // capture result of evlauted expression and bind. x as argument
+ */
+
 /// Helper to check that source lexes to expected tokens (ignoring trivia)
 fn check(source: &str, expected: &[(Token, &str)]) {
     assert_eq!(lex_no_trivia(source), expected);
