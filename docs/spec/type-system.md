@@ -704,6 +704,22 @@ let q = Point(x: 1.0, y: 2.0);  // Point(T: f64)
 let id = identity(T: i32, 42);
 ```
 
+**Future consideration: Type parameter shorthand**
+
+Similar to struct field shorthand (`Point(x, y)` instead of `Point(x: x, y: y)`), SPL could support shorthand for type parameters when the parameter name matches the type name:
+
+```spl
+// Current syntax
+let result: Result(T: T, E: E) = compute();
+let points: Vec(T: Point) = load();
+
+// Potential shorthand (if name matches type)
+let result: Result(T, E) = compute();
+let points: Vec(Point) = load();
+```
+
+This mirrors JavaScript's object property shorthand (`{value}` instead of `{value: value}`). The shorthand would only apply when the type parameter name exactly matches the type being passed. This is a potential future enhancement and not currently part of the language.
+
 ### Monomorphization
 
 SPL uses monomorphization: each unique instantiation of a generic generates specialized code at compile time.
