@@ -706,19 +706,21 @@ let id = identity(T: i32, 42);
 
 **Future consideration: Type parameter shorthand**
 
-Similar to struct field shorthand (`Point(x, y)` instead of `Point(x: x, y: y)`), SPL could support shorthand for type parameters when the parameter name matches the type name:
+Similar to struct field shorthand (`Point(x, y)` instead of `Point(x: x, y: y)`), SPL could support shorthand for type parameters when the parameter name matches the type being passed:
 
 ```spl
-// Current syntax
-let result: Result(T: T, E: E) = compute();
-let points: Vec(T: Point) = load();
+fn process(items: Vec(T: T)): Result(T: T, E: E) where T, E {
+    // Current syntax
+    let result: Result(T: T, E: E) = compute(items);
 
-// Potential shorthand (if name matches type)
-let result: Result(T, E) = compute();
-let points: Vec(Point) = load();
+    // Potential shorthand (parameter name matches type variable)
+    let result: Result(T, E) = compute(items);
+
+    return result;
+}
 ```
 
-This mirrors JavaScript's object property shorthand (`{value}` instead of `{value: value}`). The shorthand would only apply when the type parameter name exactly matches the type being passed. This is a potential future enhancement and not currently part of the language.
+This mirrors JavaScript's object property shorthand (`{value}` instead of `{value: value}`). The shorthand would only apply when the type parameter name exactly matches the type being passed—typically when forwarding type variables. For concrete types like `Vec(T: Point)`, no shorthand applies since `T` ≠ `Point`. This is a potential future enhancement and not currently part of the language.
 
 ### Monomorphization
 
