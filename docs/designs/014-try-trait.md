@@ -62,8 +62,8 @@ impl Try for Result(T: T, E: E) where T, E {
 
     fn branch(self): ControlFlow(C: T, B: E) {
         match self {
-            Ok(v) => ControlFlow.Continue(v),
-            Err(e) => ControlFlow.Break(e),
+            Ok(v) => .Continue(v),
+            Err(e) => .Break(e),
         }
     }
 
@@ -99,8 +99,8 @@ impl Try for Option(T: T) where T {
 
     fn branch(self): ControlFlow(C: T, B: ()) {
         match self {
-            Some(v) => ControlFlow.Continue(v),
-            None => ControlFlow.Break(()),
+            Some(v) => .Continue(v),
+            None => .Break(()),
         }
     }
 
@@ -222,8 +222,8 @@ let value = expr!;
 
 // Desugars to:
 let value = match Try.branch(expr) {
-    ControlFlow.Continue(v) => v,
-    ControlFlow.Break(r) => return FromResidual.from_residual(r),
+    .Continue(v) => v,
+    .Break(r) => return FromResidual.from_residual(r),
 };
 ```
 
@@ -314,9 +314,9 @@ impl Try for Response(T: T) where T {
 
     fn branch(self): ControlFlow(C: T, B: Self.Residual) {
         match self {
-            Success(v) => ControlFlow.Continue(v),
-            ClientError(code, msg) => ControlFlow.Break((code, msg, false)),
-            ServerError(code, msg) => ControlFlow.Break((code, msg, true)),
+            Success(v) => .Continue(v),
+            ClientError(code, msg) => .Break((code, msg, false)),
+            ServerError(code, msg) => .Break((code, msg, true)),
         }
     }
 
