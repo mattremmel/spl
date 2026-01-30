@@ -261,9 +261,9 @@ SPL uses `!` for try/propagate (early return on error) and `?.` for optional cha
 ## 6. Advanced Features
 
 ### 6.1 Iteration
-Interior iteration with coroutines/generators. `for` loops desugar to `Iterable` trait calls or `Iterator.next()`. See [ADR-011](designs/011-iteration-and-generators.md) for full design.
+Interior iteration with coroutines/generators. `for` loops desugar to `Indexed` trait calls or `Iterator.next()`. See [ADR-011](designs/011-iteration-and-generators.md) for full design.
 
-The `Iterable` trait's `get(&self): &T` method is enabled by intersection semantics:
+The `Indexed` trait's `get(&self, i): &T` method is enabled by intersection semantics:
 ```spl
 // for item in &collection desugars to:
 let mut __i: usize = 0;
