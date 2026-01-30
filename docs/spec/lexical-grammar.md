@@ -10,7 +10,7 @@ The lexer transforms source text into a stream of tokens. Whitespace and comment
 
 ## Keywords
 
-SPL reserves 40 keywords that cannot be used as identifiers:
+SPL reserves 39 keywords that cannot be used as identifiers:
 
 | Keyword    | Description                          |
 |------------|--------------------------------------|
@@ -39,7 +39,6 @@ SPL reserves 40 keywords that cannot be used as identifiers:
 | `true`     | Boolean literal true                 |
 | `false`    | Boolean literal false                |
 | `pub`      | Public visibility modifier           |
-| `package`  | Package scope in `pub(package)`      |
 | `self`     | Self value in methods                |
 | `Self`     | Self type in impl blocks             |
 | `use`      | Import declaration                   |

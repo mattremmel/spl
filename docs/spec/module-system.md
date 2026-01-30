@@ -29,7 +29,7 @@ SPL's module system provides:
 - **Directory-based modules**: All `.spl` files in a directory form one module (Go-style)
 - **Explicit control**: Optional `_module.spl` files for fine-grained structure
 - **Unified imports**: `use` declarations for all symbols (internal and external)
-- **Visibility**: Public (`pub`), package-private (`pub(package)`), and private (default) items
+- **Visibility**: Public (`pub`), package-private (`pub($)`), and private (default) items
 - **Prelude**: Common types available without explicit import
 
 ### Design Philosophy
@@ -353,7 +353,7 @@ let v = std.vec.Vec(T: i32).new();
 |----------|------------|
 | (none) | Private to current module |
 | `pub` | Public to all |
-| `pub(package)` | Visible within current package only |
+| `pub($)` | Visible within current package only |
 
 ```spl
 // Private function (only accessible within this module)
@@ -362,7 +362,7 @@ fn internal_helper(): i32 {
 }
 
 // Package-private function (accessible within this package, not external)
-pub(package) fn package_internal(): i32 {
+pub($) fn package_internal(): i32 {
     internal_helper()
 }
 
@@ -374,7 +374,7 @@ pub fn public_api(): i32 {
 // Public struct with mixed field visibility
 pub struct Config(
     pub name: String,          // Public field
-    pub(package) id: u64,      // Package-private field
+    pub($) id: u64,            // Package-private field
     secret_key: String,        // Private field (module only)
 )
 ```
@@ -384,12 +384,12 @@ pub struct Config(
 - Private items are visible within their module and all submodules
 - Child modules can access parent's private items
 - Sibling modules cannot access each other's private items
-- `pub(package)` items are visible anywhere within the same package
+- `pub($)` items are visible anywhere within the same package
 
 ```spl
 // In parent/helpers.spl
 fn private_helper() { }
-pub(package) fn package_fn() { }
+pub($) fn package_fn() { }
 pub fn public_fn() { }
 
 // In parent/child/impl.spl (child is a subdirectory)
@@ -402,25 +402,34 @@ fn child_fn() {
 // In a different package
 fn external_fn() {
     other_pkg.private_helper();  // ERROR: private
-    other_pkg.package_fn();      // ERROR: pub(package) not visible
+    other_pkg.package_fn();      // ERROR: pub($) not visible
     other_pkg.public_fn();       // OK: pub is visible
 }
 ```
 
-### Future Extensions (v2)
+### Path-Based Visibility
 
 Additional visibility modifiers for finer control:
 
 | Modifier | Visibility |
 |----------|------------|
 | `pub(super)` | Visible to parent module only |
-| `pub(in path)` | Visible to specific module |
+| `pub($.path)` | Visible to specific module from package root |
+| `pub(in path)` | Visible to specific module (relative path) |
 
 ```spl
-// Future syntax
+// Visible to parent module only
 pub(super) fn parent_accessible() { }
-pub(in $.api) fn api_only() { }
+
+// Visible to specific module from package root
+pub($.api) fn api_only() { }
+pub($.api.internal) fn api_internal_only() { }
+
+// Visible to specific module (relative path)
+pub(in super.sibling) fn sibling_only() { }
 ```
+
+The `pub($.path)` syntax aligns with package-root imports (`use $.utils`) and package visibility (`pub($)`), providing a consistent use of `$` for package-relative references.
 
 ---
 
@@ -579,7 +588,7 @@ Item = [ Visibility ] ( FunctionDef | StructDef | ImplBlock | TypeAlias | UseDec
 
 Visibility = "pub" [ "(" VisibilityScope ")" ] ;
 
-VisibilityScope = "package" | "super" | "in" Path ;
+VisibilityScope = "$" [ "." Path ] | "super" | "in" Path ;
 ```
 
 All item types can appear in any `.spl` file, including `_module.spl`.
@@ -704,7 +713,7 @@ pub use details.Config;
 | Package root | `$` | `crate` | N/A | N/A |
 | Glob import | `use path.*` | `use path::*` | `.` import | `from x import *` |
 | Visibility default | Private | Private | Capitalization | Public |
-| Package-private | `pub(package)` | `pub(crate)` | N/A | `_prefix` |
+| Package-private | `pub($)` | `pub(crate)` | N/A | `_prefix` |
 | Re-exports | `pub use` | `pub use` | No | `__all__` |
 | Prelude | Yes | Yes | No | builtins |
 
@@ -720,7 +729,7 @@ pub use details.Config;
 | Module | A directory of source files within a package |
 | Item | Named entity: function, struct, type, etc. |
 | Path | Route to an item: `$.mod.item` |
-| Visibility | Who can access an item: `pub`, `pub(package)`, or private |
+| Visibility | Who can access an item: `pub`, `pub($)`, or private |
 
 ### Quick Reference
 

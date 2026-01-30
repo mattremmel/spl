@@ -56,7 +56,7 @@ ItemKind = FunctionDef
 
 Visibility = "pub" [ "(" VisibilityScope ")" ] ;
 
-VisibilityScope = "package" | "super" | "in" Path ;
+VisibilityScope = "$" [ "." Path ] | "super" | "in" Path ;
 ```
 
 ### Attributes
