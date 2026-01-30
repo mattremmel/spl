@@ -563,7 +563,7 @@ fn parse_number(s: &str): Result(T: i32, E: ParseError) {
 - `return value;` in a `throws` function desugars to `return Ok(value);`
 - `return;` in a `throws` function (unit return) desugars to `return Ok(());`
 - Single-expression function bodies are wrapped: `fn foo(): i32 throws E { 42 }` returns `Ok(42)`
-- This follows SPL's general rule: single-expression blocks have implicit values, multi-statement blocks require explicit `return`/`yield`
+- This follows SPL's general rule: single-expression blocks have implicit values, multi-statement blocks require explicit `return`/`break`
 
 ---
 

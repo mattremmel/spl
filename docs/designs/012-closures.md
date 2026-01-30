@@ -423,7 +423,7 @@ fn demonstrate_errors() {
 
 SPL's design philosophy emphasizes explicitness about costs:
 - **Explicit `return`** - no hidden control flow
-- **Explicit `yield`** - no hidden block values
+- **Explicit `break`** - no hidden block values
 - **Overflow traps** - no hidden wrapping
 - **No implicit numeric coercions** - no hidden conversions
 - **Methods for type conversion** - explicit about conversion type

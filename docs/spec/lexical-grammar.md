@@ -32,7 +32,7 @@ SPL reserves 37 keywords that cannot be used as identifiers:
 | `break`    | Exit loop                            |
 | `continue` | Skip to next iteration               |
 | `return`   | Return from function                 |
-| `yield`    | Yield value from block (see note)    |
+| `yield`    | Yield value in generator function    |
 | `throw`    | Return an error in throws function   |
 | `throws`   | Function may return an error         |
 | `as`       | Import renaming                      |
@@ -52,11 +52,7 @@ SPL reserves 37 keywords that cannot be used as identifiers:
 | `static`   | Static variable                      |
 | `unsafe`   | Unsafe block/function                |
 
-**Note on `yield`:** The `yield` keyword serves two related purposes:
-1. **Block expressions**: Provides the value of a multi-statement block (`let x = { let a = 1; yield a + 1; };`)
-2. **Generators**: Yields values from a generator function (`gen fn` context)
-
-Both uses share the concept of "yield a value from this block without returning from the function." The context (`gen fn` vs regular block) disambiguates which semantics apply.
+**Note on `yield`:** The `yield` keyword is used exclusively in generator functions (`gen fn`). It suspends the generator and produces a value to the caller. For block expressions that need to produce a value, use `break value;` instead.
 
 ---
 

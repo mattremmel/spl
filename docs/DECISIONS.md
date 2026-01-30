@@ -22,8 +22,8 @@ Block comments nest (like Rust), allowing code with comments to be commented out
 
 ## 2. Syntax Grammar
 
-### 2.1 Explicit Return/Yield
-No implicit tail expressions. All returns must use `return`, all block values must use `yield`. Semicolons have no semantic significance.
+### 2.1 Explicit Return/Break
+No implicit tail expressions. All returns must use `return`, all block values must use `break`. Semicolons have no semantic significance.
 
 ```spl
 fn double(x: i32): i32 {
@@ -32,7 +32,7 @@ fn double(x: i32): i32 {
 
 let result = {
     let temp = compute();
-    yield temp * 2;
+    break temp * 2;
 };
 ```
 
@@ -285,7 +285,7 @@ Look like regular function calls - no `!` required.
 | Struct literal | `Point { x: 1 }` | `Point(x: 1)` |
 | Pattern matching | `if let Some(x) = v` | `if v is Some(x)` |
 | Return | Implicit tail | Explicit `return` |
-| Block value | Implicit tail | Explicit `yield` |
+| Block value | Implicit tail | Explicit `break` |
 | Semicolons | Semantic | Syntactic only |
 | References | First-class | Second-class (params only) |
 | Lifetimes | `'a` annotations | None needed |

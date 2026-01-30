@@ -606,7 +606,7 @@ FnType = "fn" "(" [ TypeList ] ")" [ ":" Type ] ;
 
 TypeList = Type { "," Type } [ "," ] ;
 
-NeverType = "!" ;
+NeverType = "Never" ;
 
 PathType = TypePath [ GenericArgs ]
          | SelfType ;
@@ -645,7 +645,7 @@ TypeArg = IDENTIFIER ":" Type ;       (* named type argument, e.g., T: i32 *)
 | `fn(i32): bool`     | Function type                      |
 | `fn(T, U): V`       | Generic function type              |
 | `fn()`              | Function type returning unit       |
-| `!`                 | Never type                         |
+| `Never`             | Never type                         |
 | `HashMap(K: String, V: i32)` | Multi-param generic type   |
 | `Result(T: i32, E: Error)` | Named type arguments         |
 | `i32?`              | Optional type (sugar for `Option(T: i32)`) |

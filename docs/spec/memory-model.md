@@ -96,7 +96,7 @@ Some types are small and trivially copyable. These implement the `Copy` trait an
 | `bool` | Yes | Single byte |
 | `char` | Yes | Four bytes |
 | `()` | Yes | Zero-size |
-| `!` | Yes | Zero-size (never instantiated) |
+| `Never` | Yes | Zero-size (never instantiated) |
 | `&T` | Yes | Pointer-sized |
 | `&mut T` | No | Exclusive access semantics |
 | `[T; N]` | If `T: Copy` | Copies element-by-element |

@@ -170,22 +170,21 @@ fn explicit_unit(): () {
 
 ### Never Type
 
-The never type `!` represents computations that never complete. This type has no values and is used for diverging functions.
+The never type `Never` represents computations that never complete. This type has no values and is used for diverging functions.
 
 | Type | Size | Values |
 |------|------|--------|
-| `!`  | N/A  | none   |
+| `Never`  | N/A  | none   |
 
-A function returning `!` never returns normally (it panics, loops forever, or exits the program).
+A function returning `Never` never returns normally (it panics, loops forever, or exits the program).
 
 ```spl
-fn panic(msg: &str): ! {
+fn panic(msg: &str): Never {
     // Terminates the program
 }
 
-fn infinite(): ! {
+fn infinite(): Never {
     loop { }
-}
 ```
 
 The never type coerces to any other type, enabling code like:
@@ -194,7 +193,7 @@ The never type coerces to any other type, enabling code like:
 let x: i32 = if condition { 42 } else { panic("unreachable") };
 ```
 
-When a block contains a single expression, the value is implicit. Multi-statement blocks require explicit `yield` (or `return` in functions).
+When a block contains a single expression, the value is implicit. Multi-statement blocks require explicit `break` (or `return` in functions).
 
 ---
 
@@ -885,7 +884,7 @@ SPL performs very few implicit coercions to maintain type safety.
 | From | To | Description |
 |------|----|-------------|
 | `&mut T` | `&T` | Mutable to immutable reference |
-| `!` | Any type | Never type to any type |
+| `Never` | Any type | Never type to any type |
 | `[T; N]` | `Vec(T: T)` | Array to Vec (when target type is known) |
 
 ```spl
@@ -1120,7 +1119,7 @@ fn bar(x: &T) where T: ?Sized { }     // T may be unsized
 | Boolean | `bool` | Yes | `true` or `false` |
 | Character | `char` | Yes | Unicode scalar |
 | Unit | `()` | Yes | Zero-size |
-| Never | `!` | Yes | No values |
+| Never | `Never` | Yes | No values |
 | String slice | `str` | No | UTF-8, behind reference |
 | Owned string | `String` | Yes | Heap-allocated |
 | Array | `[T; N]` | Yes | Fixed size |
