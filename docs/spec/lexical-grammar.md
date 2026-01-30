@@ -105,7 +105,7 @@ Both uses share the concept of "yield a value from this block without returning 
 | `<<`     | Left shift       |
 | `>>`     | Right shift      |
 
-**Note:** `&` and `^` serve dual purposes: as prefix operators (reference and force-type-argument respectively) and as binary bitwise operators. Context disambiguates.
+**Note:** `&` serves dual purposes: as a prefix operator (reference) and as a binary bitwise operator. Context disambiguates.
 
 ### Assignment Operators
 
@@ -135,20 +135,19 @@ Both uses share the concept of "yield a value from this block without returning 
 | `!`      | Try/propagate (postfix)           |
 | `?.`     | Optional chaining                 |
 | `??`     | Nullish coalescing                |
-| `@`      | Force value argument (for uppercase identifiers), or capture list prefix in closures (`@[...]`) |
-| `^`      | Force type argument (for lowercase identifiers) |
+| `@`      | Capture list prefix in closures (`@[...]`) |
 | `*`      | Dereference (for references)      |
 | `=>`     | Match arm separator               |
 | `?`      | Optional type (suffix for `Option(T)`) |
 
 **Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses with named args: `Vec(T: i32)` instead of `Vec<i32>`. Package-root paths use `$`: `$.utils.helper`. The `as` keyword is used only for import renaming, not type casting (use methods like `.widen()`, `.truncate()` for conversions).
 
-**Case-based argument disambiguation:** In argument lists, uppercase identifiers (e.g., `T:`) indicate type arguments while lowercase identifiers (e.g., `x:`) indicate value arguments. The `@` and `^` sigils override this default:
+**Case-based argument disambiguation:** In argument lists, uppercase identifiers (e.g., `T:`) indicate type arguments while lowercase identifiers (e.g., `x:`) indicate value arguments. The parser uses case to choose the initial parse path and backtracks if parsing fails. Semantic analysis can reinterpret nodes when name resolution reveals the opposite was intended:
 ```spl
 HashMap(K: String, V: i32)     // K, V uppercase → type arguments
 Point(x: 1, y: 2)              // x, y lowercase → value arguments
-Config(@URL: "...", @ID: 123)  // @ forces value arg with uppercase
-Functor(^f: Option)            // ^ forces type arg with lowercase
+Config(URL: url, ID: id)       // Uppercase but values - literals/vars force value parse
+functor(f: Option)             // Lowercase but type - semantic reinterpretation
 ```
 
 **Range operators:** `..` creates an exclusive range (like Python's `range()`), `..=` creates an inclusive range.

@@ -618,10 +618,11 @@ TypePath = IDENTIFIER { "." IDENTIFIER } ;
 
 (* Generic args use parentheses with named type arguments *)
 (* Case-based disambiguation: uppercase identifier = type arg, lowercase = value arg *)
-(* Use ^ sigil to force type arg with lowercase, @ sigil to force value arg with uppercase *)
+(* Parser uses case to choose initial parse path, backtracks on failure *)
+(* Semantic analysis can reinterpret nodes when resolution reveals the opposite was intended *)
 GenericArgs = "(" [ TypeArg { "," TypeArg } [ "," ] ] ")" ;
 
-TypeArg = [ "^" ] IDENTIFIER ":" Type ;       (* named type argument, e.g., T: i32 or ^t: i32 *)
+TypeArg = IDENTIFIER ":" Type ;       (* named type argument, e.g., T: i32 *)
 ```
 
 ### Type Examples
@@ -816,14 +817,13 @@ IndexExpr = Expression
 
 (* Arguments can be named with : *)
 (* Case-based disambiguation: uppercase identifier = type arg, lowercase = value arg *)
-(* Use ^ sigil to force type arg with lowercase, @ sigil to force value arg with uppercase *)
+(* Parser backtracks if initial parse (based on case) fails *)
 ArgList = Arg { "," Arg } [ "," ] ;
 
-Arg = TypeArg                               (* type argument: T: Type or ^t: Type *)
-    | ValueArg                              (* value argument: name: expr or @NAME: expr *)
+Arg = NamedArg                              (* named argument: case determines type vs value *)
     | Expression ;                          (* positional argument *)
 
-ValueArg = [ "@" ] IDENTIFIER ":" Expression ;  (* named value argument *)
+NamedArg = IDENTIFIER ":" TypeOrExpr ;      (* case disambiguates, parser backtracks if needed *)
 ```
 
 ### Primary Expressions
@@ -1292,10 +1292,12 @@ convert(From: i32, To: f64, value: 100)  // From, To = type args, value = value 
 parse(T: Config, input: text)     // T = type arg, input = value arg
 ```
 
-**Case-based disambiguation:**
-- Uppercase identifier: type argument, RHS parsed as Type
-- Lowercase identifier: value argument, RHS parsed as Expression
-- Use `^` to force lowercase as type arg, `@` to force uppercase as value arg
+**Case-based disambiguation with backtracking:**
+- Uppercase identifier: parser first tries Type grammar for RHS
+- Lowercase identifier: parser first tries Expression grammar for RHS
+- On parse failure, parser backtracks and tries the alternate grammar
+- If both succeed, case determines which AST to use
+- Semantic analysis may reinterpret if resolution reveals the opposite was intended
 
 Most generic calls don't need explicit type args due to inference:
 
@@ -1386,51 +1388,56 @@ Named type arguments (`T: i32`) are syntactically distinct from value arguments,
 
 ### 9. Type Arguments vs Value Arguments
 
-SPL uses **case-based disambiguation** to distinguish type arguments from value arguments:
+SPL uses **case-based disambiguation with backtracking** to distinguish type arguments from value arguments:
 
-| Identifier Case | Interpretation | RHS Parsed As |
-|-----------------|----------------|---------------|
-| **Uppercase** (e.g., `T`, `Key`) | Type argument | Type |
-| **Lowercase** (e.g., `x`, `name`) | Value argument | Expression |
+| Identifier Case | Initial Parse | Fallback |
+|-----------------|---------------|----------|
+| **Uppercase** (e.g., `T`, `Key`) | Type grammar | Expression grammar |
+| **Lowercase** (e.g., `x`, `name`) | Expression grammar | Type grammar |
 
-This allows the parser to determine at parse time whether to invoke the Type or Expression grammar for the right-hand side of `Name: ...`.
+The parser uses the identifier's case to choose which grammar to try first. If parsing fails, it backtracks and tries the alternate grammar. When both grammars would succeed (ambiguous cases), the case determines the AST node type.
 
-**Default rule:**
+**Default behavior:**
 ```spl
-// Uppercase identifier → type argument → RHS is a Type
+// Uppercase identifier → try Type grammar first
 Vec(T: i32)                    // T is uppercase, i32 parsed as Type
 HashMap(K: String, V: i32)     // K, V uppercase → type args
 
-// Lowercase identifier → value argument → RHS is an Expression
+// Lowercase identifier → try Expression grammar first
 Point(x: 1, y: 2)              // x, y lowercase → value args
 greet(to: "Alice")             // to lowercase → value arg
 ```
 
-**Escape sigils for exceptions:**
+**Backtracking examples:**
 
-Use `@` to force a value argument with an uppercase identifier:
+When the default parse fails, the parser automatically backtracks:
 ```spl
-// Uppercase field names (e.g., from external APIs)
-Config(@URL: "https://example.com", @ID: 123, timeout: 30)
-HttpRequest(@Method: "GET", @URI: path)
+// T is uppercase, but if `Config` is a value (not a type), parser backtracks
+// and reparses as Expression
+parse(T: Config, data: input)  // If Config resolves to value, T becomes value arg
+
+// x is lowercase, but if it's followed by something only valid as Type,
+// parser backtracks and parses as Type
+some_call(x: &SomeType)        // Backtrack if & indicates reference type
 ```
 
-Use `^` to force a type argument with a lowercase identifier:
+**Semantic reinterpretation:**
+
+When both Type and Expression grammars succeed (common for simple paths), the parser uses case to build the AST. If semantic analysis later determines the opposite was intended, it reinterprets the node:
+
+| Parsed As | Resolved To | Reinterpreted As |
+|-----------|-------------|------------------|
+| `PathType("Foo")` | value | `PathExpr("Foo")` |
+| `PathExpr("foo")` | type | `PathType("foo")` |
+| `ReferenceType(&Foo)` | value | `AddressOf(Foo)` |
+| `AddressOf(&x)` | type | `ReferenceType(x)` |
+
+This allows natural usage without forcing sigils:
 ```spl
-// Lowercase type parameters (rare, Haskell-style)
-Functor(^f: Option, ^a: Int)
-Monad(^m: Result)
+// Works even if naming conventions differ from SPL defaults
+Config(URL: url_value)         // URL uppercase but refers to value field
+functor(f: Option)             // f lowercase but refers to type parameter
 ```
-
-**Summary table:**
-
-| Syntax | Meaning |
-|--------|---------|
-| `T: i32` | Type arg (uppercase default) |
-| `^t: i32` | Type arg (lowercase with `^` sigil) |
-| `x: 1` | Value arg (lowercase default) |
-| `@X: 1` | Value arg (uppercase with `@` sigil) |
-| `x` | Positional arg or field shorthand |
 
 **Mixed type and value arguments:**
 ```spl
@@ -1476,9 +1483,11 @@ let v: Vec(T: String) = Vec.new();
 let s = string;              // Variable reference
 let p = Point(x: string);    // Value passed to field
 
-// What if you have a type alias with lowercase? Use ^
+// Lowercase type alias - case suggests value, but semantic analysis
+// reinterprets when `myint` resolves to a type
 type myint = i32;
-let v: Vec(^myint: myint) = Vec.new();  // ^ forces type arg
+let v: Vec(t: myint) = Vec.new();  // t lowercase, but myint is a type
+                                    // Semantic analysis reinterprets as type arg
 ```
 
 #### Distinguishing Calls from Instantiation
@@ -1555,27 +1564,35 @@ Vec(T: i32)
 Container(T: i32, value: 42)   // T: type, value: value
 ```
 
-#### The `@` and `^` Sigils in Practice
+#### Uppercase Value Fields and Lowercase Type Parameters
+
+The backtracking and semantic reinterpretation approach handles edge cases naturally:
 
 ```spl
 // JSON-like API with uppercase field names
+// Parser initially tries Type grammar due to uppercase, but backtracks
+// when it can't parse the string literal as a type
 struct JsonObject(
-    @Type: String,      // Field named "Type"
-    @ID: i64,           // Field named "ID"
+    Type: String,       // Field named "Type" - value field
+    ID: i64,            // Field named "ID" - value field
     data: Vec(T: u8),   // Normal field
 )
 
-// Creating instance (@ prevents treating as type arg)
+// Creating instance - uppercase but semantic analysis knows these are value fields
 let obj = JsonObject(
-    @Type: "user",      // Value arg (forced by @)
-    @ID: 12345,         // Value arg (forced by @)
+    Type: "user",       // Uppercase, but string literal forces value interpretation
+    ID: 12345,          // Uppercase, but integer literal forces value interpretation
     data: bytes,        // Value arg (lowercase default)
 );
 
-// Haskell-style type parameters (rare)
-trait Functor where ^f {
-    fn map(self, func: fn(A): B): ^f(^b: B) where A, B, ^a, ^b;
+// Haskell-style lowercase type parameters
+// Parser initially tries Expression grammar due to lowercase, but backtracks
+// when semantic analysis can't find a value named `f`
+trait Functor where f {
+    fn map(self, func: fn(A): B): f(b: B) where A, B, a, b;
 }
+// Semantic analysis reinterprets f, a, b as type parameters when they
+// resolve to types rather than values
 ```
 
 #### Common Patterns
