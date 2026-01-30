@@ -518,30 +518,7 @@ match value {
 
 ## 7. Special Patterns
 
-### 7.1 At-Patterns (@)
-
-Bind a name to the entire matched value while also destructuring:
-
-```spl
-match value {
-    opt @ Some(x) => {
-        // opt: Option(T: T), x: T
-        log("matched: {}", opt);
-        use(x);
-    },
-    None => {},
-}
-
-match message {
-    msg @ Message(id, payload @ Payload(..)) => {
-        log_message(msg);
-        process_id(id);
-        forward_payload(payload);
-    },
-}
-```
-
-### 7.2 Const Patterns
+### 7.1 Const Patterns
 
 Named constants can be used as patterns:
 
@@ -555,7 +532,7 @@ match size {
 }
 ```
 
-### 7.3 Path Patterns
+### 7.2 Path Patterns
 
 Qualified paths for enum variants:
 
@@ -674,7 +651,6 @@ let Point(x: i32, y) = point;  // Only x annotated
 | Slice | `[a, b]`, `[first, ..]` | Yes (length) |
 | Reference | `&x`, `&mut x` | No |
 | Or | `A \| B` | Depends |
-| At | `x @ pattern` | Depends |
 
 ---
 

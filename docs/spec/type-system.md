@@ -932,8 +932,27 @@ let f: f64 = a.widen();           // 1000.0
 
 let g: f64 = 3.7;
 let h: i32 = g.truncate();        // 3 (truncation toward zero)
-let i: u32 = a.reinterpret();     // Bit reinterpretation
+let i: u32 = a.reinterpret();     // Bit reinterpretation (same bit pattern)
 ```
+
+**`.reinterpret()` Details:**
+
+The `.reinterpret()` method performs a bitwise reinterpretation without changing the underlying bits. Both source and target types must have the same size.
+
+```spl
+// Integer sign reinterpretation
+let signed: i32 = -1;
+let unsigned: u32 = signed.reinterpret();  // 4294967295 (0xFFFFFFFF)
+
+// Float to integer bit pattern
+let pi: f32 = 3.14159;
+let bits: u32 = pi.reinterpret();          // 0x40490FD0 (IEEE 754 representation)
+
+// Integer to float (restore from bits)
+let restored: f32 = bits.reinterpret();    // 3.14159
+```
+
+**Size restrictions:** `.reinterpret()` requires source and target to have identical sizes. `i32.reinterpret()` can produce `u32` or `f32`, but not `i64` or `f64`.
 
 **Integer Overflow:**
 All integer operations trap on overflow by default. Use explicit methods for wrapping or saturating arithmetic:

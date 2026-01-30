@@ -609,7 +609,9 @@ TypeList = Type { "," Type } [ "," ] ;
 NeverType = "!" ;
 
 PathType = TypePath [ GenericArgs ]
-         | "Self" ;
+         | SelfType ;
+
+SelfType = "Self" [ "." IDENTIFIER ] ;  (* Self or Self.AssociatedType *)
 
 (* Paths use dot, not double-colon *)
 TypePath = IDENTIFIER { "." IDENTIFIER } ;
@@ -630,6 +632,7 @@ TypeArg = [ "^" ] IDENTIFIER ":" Type ;       (* named type argument, e.g., T: i
 | `Point(T: i32)`     | Generic type with named arg        |
 | `std.vec.Vec`       | Qualified path type                |
 | `Self`              | Self type (in impl blocks)         |
+| `Self.Item`         | Associated type on Self             |
 | `&T`                | Immutable reference                |
 | `&mut T`            | Mutable reference                  |
 | `[T]`               | Slice type                         |
@@ -1003,7 +1006,10 @@ ContinueExpr = "continue" [ "'" IDENTIFIER ] ;
 (* Explicit return required for returning values from functions *)
 ReturnExpr = "return" [ Expression ] ;
 
-(* Yield provides a value for block expressions *)
+(* Yield has two meanings depending on context:
+   - In generator functions (gen fn): yields the next value to the caller
+   - In block expressions: provides the final value of the block
+   The compiler distinguishes based on whether the enclosing function is a generator. *)
 YieldExpr = "yield" Expression ;
 
 (* Throw an error in a throws function - desugars to return Err(expr) *)
@@ -1075,6 +1081,21 @@ let bad = {
 **Why this design?**
 
 Single-expression blocks are concise and unambiguous. Multi-statement blocks require explicit `return`/`yield` to avoid the subtle semantics where semicolon presence changes program behavior.
+
+**`yield` Disambiguation:**
+
+The `yield` keyword has two distinct meanings based on context:
+
+| Context | Meaning | Example |
+|---------|---------|---------|
+| Generator function (`gen fn`) | Produces the next value to the caller | `gen fn count(): i32 { yield 1; yield 2; }` |
+| Block expression | Provides the final value of the block | `let x = { let a = 1; yield a + 1; };` |
+
+The compiler determines which interpretation applies based on whether the enclosing function is declared with `gen fn`. This is unambiguous because:
+- In a generator, `yield` suspends execution and produces a value
+- In a regular block, `yield` provides the block's result value (analogous to Rust's implicit tail expression)
+
+See [iteration.md](iteration.md) for generator semantics.
 
 ---
 

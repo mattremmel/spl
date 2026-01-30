@@ -536,7 +536,7 @@ fn process_data(input: &str): Data throws {
 }
 ```
 
-**Note:** Untyped `throws` requires trait objects. See [trait objects specification] for details on the `Error` trait and `dyn Error` type.
+**Note:** Untyped `throws` uses a boxed error type that can hold any error implementing the `Error` trait. The `Error` trait is defined in the standard library (see [standard-library.md](standard-library.md)) and provides common error interface methods like `message()` and `source()`.
 
 ### Implicit `Ok` Wrapping
 
@@ -562,7 +562,8 @@ fn parse_number(s: &str): Result(T: i32, E: ParseError) {
 **Rules:**
 - `return value;` in a `throws` function desugars to `return Ok(value);`
 - `return;` in a `throws` function (unit return) desugars to `return Ok(());`
-- Implicit block returns also get wrapped: `fn foo(): i32 throws E { 42 }` returns `Ok(42)`
+- Single-expression function bodies are wrapped: `fn foo(): i32 throws E { 42 }` returns `Ok(42)`
+- This follows SPL's general rule: single-expression blocks have implicit values, multi-statement blocks require explicit `return`/`yield`
 
 ---
 

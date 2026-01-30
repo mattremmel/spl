@@ -245,6 +245,28 @@ take_ref(mr);   // Implicit reborrow as &i32
 *mr = 100;      // mr still valid after reborrow ends
 ```
 
+### Dereferencing References
+
+The `*` (dereference) operator accesses the value pointed to by a reference:
+
+```spl
+let x = 42;
+let r: &i32 = &x;
+let value = *r;        // Read through reference: value = 42
+
+let mut y = 100;
+let mr: &mut i32 = &mut y;
+*mr = 200;             // Write through mutable reference
+println(y);            // 200
+```
+
+**Dereference rules:**
+- `*r` where `r: &T` produces a value of type `T` (read)
+- `*mr = value` where `mr: &mut T` assigns to the referent (write)
+- The compiler auto-dereferences in many contexts (method calls, field access)
+
+**Note:** Raw pointers (`Ptr(T: T)` and `MutPtr(T: T)`) do NOT use `*` for dereferencing. Instead, they use explicit `.read()` and `.write()` methods within `unsafe` blocks. See [unsafe.md](unsafe.md) for details.
+
 ---
 
 ## 4. Scopes and Lifetimes

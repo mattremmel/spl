@@ -181,13 +181,31 @@ spawn(clone |config, logger, metrics| {
 
 ### Move-All (Explicit)
 
-The `move` keyword makes move semantics explicit (same as default for escaping):
+The `move` keyword makes move semantics explicit:
 
 ```spl
 // Explicit move (same as escaping default, for clarity)
 let f = move |data, config| {
     process(data, config);
 };
+```
+
+**When is `move` useful?**
+
+For escaping closures, `move` is redundant since move is already the default. However, `move` is useful for:
+
+1. **Documentation**: Making capture behavior explicit for readers
+2. **Non-escaping closures**: Forcing move semantics when the closure would otherwise borrow
+3. **Future-proofing**: If a closure's escaping status changes, explicit `move` preserves the intended behavior
+
+```spl
+// Without move: items.each() takes non-escaping closure, so data is borrowed
+items.each(|item| use_with(data, item));
+// data still valid
+
+// With move: force move even though closure is non-escaping
+items.each(move |item| use_with(data, item));
+// data no longer valid (was moved)
 ```
 
 ---

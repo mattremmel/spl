@@ -571,6 +571,57 @@ trait AsMut(T) where T {
 
 ---
 
+## 13. Error Handling
+
+**TODO:** Specify error types in detail
+
+```spl
+// std.error
+
+/// The `Error` trait provides a common interface for error types.
+/// Used by untyped `throws` functions and for error introspection.
+trait Error {
+    /// A short description of the error.
+    fn message(&self): &str;
+
+    /// The underlying cause of this error, if any.
+    fn source(&self): Option(T: &dyn Error) { return None; }
+}
+
+/// Standard I/O error type
+struct IoError {
+    kind: IoErrorKind,
+    message: String,
+}
+
+enum IoErrorKind {
+    NotFound,
+    PermissionDenied,
+    ConnectionRefused,
+    ConnectionReset,
+    ConnectionAborted,
+    NotConnected,
+    AddrInUse,
+    AddrNotAvailable,
+    BrokenPipe,
+    AlreadyExists,
+    WouldBlock,
+    InvalidInput,
+    InvalidData,
+    TimedOut,
+    WriteZero,
+    Interrupted,
+    UnexpectedEof,
+    Other,
+}
+
+impl Error for IoError {
+    fn message(&self): &str { return &self.message; }
+}
+```
+
+---
+
 ## References
 
 - [type-system.md](type-system.md) - Type system and traits
