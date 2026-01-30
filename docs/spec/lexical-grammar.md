@@ -179,10 +179,10 @@ arr[1:$-1]   // All elements except first and last
 | 11         | `<<` `>>`                    | Left          | Shift |
 | 12         | `+` `-`                      | Left          | Additive |
 | 13         | `*` `/` `%`                  | Left          | Multiplicative |
-| 14         | `!` `-` `&` `*` `~` (unary)  | Right         | Unary |
-| 15 (highest) | `.` `?.` `()` `[]` `!`     | Left          | Postfix |
+| 14         | `!` `-` `&` `*` `~` (prefix) | Right         | Unary prefix |
+| 15 (highest) | `.` `?.` `()` `[]` `!` (postfix) | Left     | Postfix |
 
-Note: `as` is not in the precedence table as it is not used for type casting. Type conversions use methods like `.widen()`, `.truncate()`, `.saturate()`. The `!` operator appears twice: as unary logical NOT and as postfix try/propagate. The `?.` operator is for optional chaining. The `??` operator provides a default value for `None`. The `&`, `^`, and `~` operators appear in both unary and binary contexts; the unary forms have higher precedence. This table follows Rust's precedence ordering.
+Note: `as` is not in the precedence table as it is not used for type casting. Type conversions use methods like `.widen()`, `.truncate()`, `.saturate()`. The `!` operator appears twice: as prefix logical NOT (precedence 14) and as postfix try/propagate (precedence 15). The `?.` operator is for optional chaining. The `??` operator provides a default value for `None`. The `&` operator appears in both unary (reference) and binary (bitwise AND) contexts; the unary form has higher precedence. This table follows Rust's precedence ordering.
 
 ---
 
@@ -357,7 +357,10 @@ C_STRING = 'c"' [^"]* '"'
 Single characters enclosed in single quotes:
 
 ```
-CHAR = '[^'\\]' | '\\[ntr\\'0]' | '\\x[0-9a-fA-F]{2}' | '\\u{[0-9a-fA-F]+}'
+CHAR = "'" [^'\\] "'"
+     | "'\\" [ntr\\'\"0] "'"
+     | "'\\x" [0-9a-fA-F]{2} "'"
+     | "'\\u{" [0-9a-fA-F]{1,6} "}'"
 ```
 
 **Examples:** `'a'`, `'\n'`, `'\\'`, `'\0'`, `'\x7F'`, `'\u{1F600}'`
@@ -367,7 +370,9 @@ CHAR = '[^'\\]' | '\\[ntr\\'0]' | '\\x[0-9a-fA-F]{2}' | '\\u{[0-9a-fA-F]+}'
 Single byte values:
 
 ```
-BYTE_CHAR = "b'" [^\x80-\xff'\\] "'" | "b'\\" ...
+BYTE_CHAR = "b'" [^\x80-\xff'\\] "'"
+          | "b'\\" [ntr\\'0] "'"
+          | "b'\\x" [0-9a-fA-F]{2} "'"
 ```
 
 **Examples:** `b'A'`, `b'\x00'`, `b'\xFF'`
@@ -492,7 +497,7 @@ impl Point {
 }
 
 // Generic function with where clause
-fn identity(x: T): T where T {
+fn identity(x: T): T where T: Clone {
     return x;
 }
 
