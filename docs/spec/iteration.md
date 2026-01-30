@@ -856,16 +856,310 @@ for value in tree.inorder() {
 
 ---
 
-## 7. Summary
+## 7. Reference Iteration with RefIterator
+
+For non-indexed collections (HashMap, LinkedList, BTreeMap, Tree, etc.) that cannot provide O(1) random access, SPL uses the `RefIterator` trait combined with **scoped types** to enable `for x in &collection` syntax.
+
+### The Problem
+
+Non-indexed collections cannot implement `Indexed` because:
+- `Indexed` requires O(1) random access via `get(&self, i): &T`
+- HashMap, LinkedList, Tree etc. only support sequential traversal
+
+A traditional external iterator would need to store a reference to the collection:
+
+```spl
+// NOT ALLOWED: References cannot be stored in structs
+struct HashMapIter(
+    source: &HashMap(K, V),  // ERROR: second-class reference rule
+    position: BucketPos,
+)
+```
+
+### The Solution: Scoped Types
+
+Scoped types are a special category of types that **can** hold references but are compiler-enforced to never escape their creation scope:
+
+```spl
+#[scoped]  // Marks this type as non-escaping
+struct HashMapIter(
+    source: &HashMap(K, V),  // ALLOWED: struct is scoped
+    position: BucketPos,
+) where K, V
+```
+
+### Scoped Type Rules
+
+A `#[scoped]` type has these restrictions:
+
+| Rule | Example |
+|------|---------|
+| Cannot be stored in non-scoped structs | `struct Foo(iter: HashMapIter)` - ERROR |
+| Cannot be returned from non-scoped functions | `fn make_iter(): HashMapIter` - ERROR |
+| Cannot be sent to other threads | `spawn(\|\| use(iter))` - ERROR |
+| Must be used within lexical scope of creation | See examples below |
+
+### The RefIterator Trait
+
+```spl
+trait RefIterator {
+    type Item;
+
+    /// Returns Some(&item) while items remain, None when exhausted.
+    /// The returned reference borrows from &mut self (intersection semantics).
+    fn next(&mut self): Option(&Self.Item);
+
+    /// Number of remaining items, if known.
+    fn size_hint(&self): (usize, Option(usize)) {
+        return (0, None);
+    }
+}
+```
+
+### For-Loop Desugaring with RefIterator
+
+```spl
+// Source
+for (k, v) in &hashmap {
+    process(k, v);
+}
+
+// Desugars to
+{
+    let mut __iter = hashmap.ref_iter();  // scoped type
+    while __iter.next() is Some((k, v)) {
+        process(k, v);
+    }
+}  // __iter dropped, borrow of hashmap ends
+```
+
+### Standard Adapters
+
+Adapters are also scoped types that wrap other RefIterators:
+
+```spl
+#[scoped]
+struct Filter(
+    inner: I,
+    predicate: fn(&I.Item): bool,
+) where I: RefIterator
+
+impl RefIterator for Filter(I: I) where I: RefIterator {
+    type Item = I.Item;
+
+    fn next(&mut self): Option(&Self.Item) {
+        while self.inner.next() is Some(item) {
+            if (self.predicate)(item) {
+                return Some(item);
+            }
+        }
+        return None;
+    }
+}
+
+#[scoped]
+struct Take(
+    inner: I,
+    remaining: usize,
+) where I: RefIterator
+
+#[scoped]
+struct Skip(
+    inner: I,
+    remaining: usize,
+) where I: RefIterator
+
+#[scoped]
+struct Map(
+    inner: I,
+    transform: fn(&I.Item): U,
+) where I: RefIterator, U
+```
+
+### Chaining Example
+
+```spl
+let map: HashMap(K: String, V: i32) = /* ... */;
+
+// Full chaining works because all intermediate types are scoped
+let result: Vec(T: i32) = map.ref_iter()      // HashMapIter (scoped)
+    .filter(|kv| kv.1 > 10)                    // Filter (scoped)
+    .take(5)                                   // Take (scoped)
+    .map(|kv| kv.1.clone())                    // Map yields owned values
+    .collect();                                // Collects owned values
+```
+
+### Terminal Operations
+
+Terminal operations consume the iterator and produce owned values:
+
+```spl
+impl RefIterator {
+    /// Collect clones into a Vec
+    fn collect(&mut self): Vec(T: Self.Item) where Self.Item: Clone {
+        let mut result = Vec.new();
+        while self.next() is Some(item) {
+            result.push(item.clone());
+        }
+        return result;
+    }
+
+    /// Count items
+    fn count(&mut self): usize {
+        let mut n = 0;
+        while self.next() is Some(_) {
+            n += 1;
+        }
+        return n;
+    }
+
+    /// Find first matching item (cloned)
+    fn find(&mut self, pred: fn(&Self.Item): bool): Option(Self.Item)
+    where Self.Item: Clone {
+        while self.next() is Some(item) {
+            if pred(item) {
+                return Some(item.clone());
+            }
+        }
+        return None;
+    }
+
+    /// Apply function to each element
+    fn for_each(&mut self, f: fn(&Self.Item)) {
+        while self.next() is Some(item) {
+            f(item);
+        }
+    }
+
+    /// Check if any element satisfies predicate
+    fn any(&mut self, pred: fn(&Self.Item): bool): bool {
+        while self.next() is Some(item) {
+            if pred(item) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Check if all elements satisfy predicate
+    fn all(&mut self, pred: fn(&Self.Item): bool): bool {
+        while self.next() is Some(item) {
+            if !pred(item) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+```
+
+### HashMap RefIterator Example
+
+```spl
+impl HashMap(K: K, V: V) where K, V {
+    /// Returns a scoped reference iterator over key-value pairs.
+    fn ref_iter(&self): HashMapIter(K: K, V: V) {
+        return HashMapIter(source: self, position: BucketPos.start());
+    }
+}
+
+#[scoped]
+struct HashMapIter(
+    source: &HashMap(K, V),
+    position: BucketPos,
+) where K, V
+
+impl RefIterator for HashMapIter(K: K, V: V) where K, V {
+    type Item = (K, V);
+
+    fn next(&mut self): Option(&(K, V)) {
+        while self.position.is_valid() {
+            if self.source.bucket_occupied(self.position) {
+                let entry = self.source.get_entry(self.position);
+                self.position.advance();
+                return Some(entry);
+            }
+            self.position.advance();
+        }
+        return None;
+    }
+
+    fn size_hint(&self): (usize, Option(usize)) {
+        let remaining = self.source.len() - self.position.count_before();
+        return (0, Some(remaining));
+    }
+}
+```
+
+### Mutable Reference Iteration
+
+For mutable iteration, use `RefIteratorMut`:
+
+```spl
+trait RefIteratorMut {
+    type Item;
+
+    fn next(&mut self): Option(&mut Self.Item);
+}
+
+// Usage
+for (k, v) in &mut hashmap {
+    *v += 1;  // Mutate values in place
+}
+```
+
+### What Cannot Be Done with RefIterator
+
+Scoped types have restrictions that prevent certain patterns:
+
+```spl
+// ERROR: Cannot return scoped type from non-scoped function
+fn make_iter(map: &HashMap): HashMapIter {
+    return map.ref_iter();  // compile error
+}
+
+// ERROR: Cannot store scoped type in non-scoped struct
+struct IterHolder(
+    iter: HashMapIter,  // compile error
+)
+
+// ERROR: Cannot send scoped type to another thread
+let iter = map.ref_iter();
+spawn(|| {
+    for item in iter { ... }  // compile error
+});
+
+// CORRECT: Use within lexical scope
+{
+    let iter = map.ref_iter();
+    for item in iter {
+        process(item);
+    }
+}  // iter dropped here, all borrows end
+```
+
+### Trait Comparison
+
+| Trait | For | Yields | Storage | Use Case |
+|-------|-----|--------|---------|----------|
+| `Indexed` | Random-access collections | `&T` / `&mut T` | N/A (uses indexing) | Vec, arrays, strings |
+| `RefIterator` | Sequential collections | `&T` | Scoped types | HashMap, LinkedList, Tree |
+| `Iterator` | Value sequences | `T` (owned) | Regular structs | Generators, ranges, consuming |
+
+---
+
+## 8. Summary
 
 ### Iteration Mechanisms
 
 | Mechanism | Reference Safe | Composable | Use Case |
 |-----------|---------------|------------|----------|
-| `for x in &coll` | Yes (scoped) | No | Simple iteration by reference |
+| `for x in &coll` (Indexed) | Yes (scoped) | No | Random-access iteration by reference |
+| `for x in &coll` (RefIterator) | Yes (scoped) | Yes | Sequential iteration by reference |
 | `for x in &mut coll` | Yes (scoped) | No | Mutating iteration |
 | `for x in coll` | N/A (owned) | No | Consuming iteration |
 | `.iter().map().filter()` | Yes (closures) | Yes | Functional chains |
+| `.ref_iter().filter().take()` | Yes (scoped) | Yes | RefIterator chains |
 | `.each(\|x\| ...)` | Yes (closure) | No | Side effects |
 | `gen fn` | N/A (owned) | Yes | Custom sequences |
 | `.into_iter()` | N/A (owned) | Limited | Consuming non-indexable types |
@@ -875,6 +1169,7 @@ for value in tree.inorder() {
 | Trait | Purpose |
 |-------|---------|
 | `Indexed` | Random-access collections with `get(&self, i): &T` for reference iteration |
+| `RefIterator` | Sequential reference iteration via scoped types (hashmaps, trees, linked lists) |
 | `Iterator` | Sequential value iteration (owned values only) |
 | `IntoIterator` | Converting to consuming iterator |
 | `Step` | Types that can form ranges |
@@ -888,23 +1183,30 @@ IntoIterator     - Conversion to consuming iterator
     ↓ produces
 Iterator         - Sequential value iteration (generators, ranges)
 
-RefIterator      - Scoped reference iteration (Future: hashmaps, trees)
+RefIterator      - Scoped reference iteration (hashmaps, trees, linked lists)
+    ↓ uses
+#[scoped] types  - Can hold refs but cannot escape scope
 ```
 
-### Non-Indexed Types
+### Collection → Trait Mapping
 
-Types without random access (hashmaps, linked lists, trees):
-- Use `.each(fn(&T))` for reference iteration
-- Implement `IntoIterator` for consuming iteration
-- **Future:** `RefIterator` will enable `for x in &collection` syntax
+| Collection Type | Reference Iteration | Consuming Iteration |
+|-----------------|---------------------|---------------------|
+| Vec, Array, String | `Indexed` | `IntoIterator` → `Iterator` |
+| Range | N/A | `Iterator` (yields owned) |
+| HashMap, BTreeMap | `RefIterator` | `IntoIterator` → `Iterator` |
+| LinkedList, Tree | `RefIterator` | `IntoIterator` → `Iterator` |
+| Generator | N/A | `Iterator` (yields owned) |
 
 ### Design Principles
 
 1. **Intersection semantics**: `get(&self, i): &T` is safe because the output borrows from the input
-2. **`for` loops use Indexed**: Desugars to `get()`/`get_mut()` calls for reference iteration
-3. **Internal iteration for closures**: `.each()`, `.map()` etc. scope references via closures
-4. **Generators yield owned values**: No reference lifetime issues
-5. **Consuming iteration when necessary**: `Iterator` trait for non-indexed types
+2. **`for` loops use Indexed for random-access**: Desugars to `get()`/`get_mut()` calls
+3. **`for` loops use RefIterator for sequential-access**: Desugars to `next()` calls on scoped types
+4. **Scoped types enable reference iteration**: Types marked `#[scoped]` can hold refs but cannot escape
+5. **Internal iteration for closures**: `.each()`, `.map()` etc. scope references via closures
+6. **Generators yield owned values**: No reference lifetime issues
+7. **Consuming iteration when necessary**: `Iterator` trait for owned value sequences
 
 ---
 
@@ -1001,7 +1303,9 @@ fn example(buf: &CircularBuffer(T: i32)) {
 ## References
 
 - [ADR-011: Iteration and Generators](../designs/011-iteration-and-generators.md) - Design rationale
-- [traits.md](traits.md) - Indexed and Iterator traits
+- [ADR-015: Scoped Types and RefIterator](../designs/015-scoped-types-refiterator.md) - Scoped types design
+- [traits.md](traits.md) - Indexed, Iterator, and RefIterator traits
 - [closures.md](closures.md) - Closures in iterator chains
-- [memory-model.md](memory-model.md) - Second-class references and iteration
+- [memory-model.md](memory-model.md) - Second-class references, scoped types, and iteration
+- [attributes.md](attributes.md) - The `#[scoped]` attribute
 - [syntax-grammar.md](syntax-grammar.md) - For loop and generator syntax

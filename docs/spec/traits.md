@@ -735,7 +735,160 @@ let slice: &[i32] = &vec[1..4];  // [2, 3, 4]
 
 ---
 
-## 12. Trait Aliases (Future)
+## 12. RefIterator Trait
+
+The `RefIterator` trait enables reference iteration over non-indexed collections (HashMap, LinkedList, Tree, etc.) using scoped types.
+
+### 12.1 Trait Definition
+
+```spl
+trait RefIterator {
+    type Item;
+
+    /// Returns Some(&item) while items remain, None when exhausted.
+    /// The returned reference borrows from &mut self (intersection semantics).
+    fn next(&mut self): Option(&Self.Item);
+
+    /// Number of remaining items, if known.
+    fn size_hint(&self): (usize, Option(usize)) {
+        return (0, None);
+    }
+}
+```
+
+### 12.2 How It Works with Scoped Types
+
+Unlike `Iterator` (which yields owned values) or `Indexed` (which uses random access), `RefIterator` implementations are **scoped types** that can hold references to their source collection:
+
+```spl
+#[scoped]
+struct HashMapIter(
+    source: &HashMap(K, V),  // Allowed: struct is scoped
+    position: BucketPos,
+) where K, V
+
+impl RefIterator for HashMapIter(K: K, V: V) where K, V {
+    type Item = (K, V);
+
+    fn next(&mut self): Option(&(K, V)) {
+        while self.position.is_valid() {
+            if self.source.bucket_occupied(self.position) {
+                let entry = self.source.get_entry(self.position);
+                self.position.advance();
+                return Some(entry);
+            }
+            self.position.advance();
+        }
+        return None;
+    }
+}
+```
+
+### 12.3 For-Loop Desugaring
+
+```spl
+// Source
+for (k, v) in &hashmap {
+    process(k, v);
+}
+
+// Desugars to
+{
+    let mut __iter = hashmap.ref_iter();
+    while __iter.next() is Some((k, v)) {
+        process(k, v);
+    }
+}
+```
+
+### 12.4 Standard Adapters
+
+Adapters are also scoped types that implement `RefIterator`:
+
+```spl
+#[scoped]
+struct Filter(
+    inner: I,
+    predicate: fn(&I.Item): bool,
+) where I: RefIterator
+
+impl RefIterator for Filter(I: I) where I: RefIterator {
+    type Item = I.Item;
+
+    fn next(&mut self): Option(&Self.Item) {
+        while self.inner.next() is Some(item) {
+            if (self.predicate)(item) {
+                return Some(item);
+            }
+        }
+        return None;
+    }
+}
+
+#[scoped]
+struct Take(inner: I, remaining: usize) where I: RefIterator
+
+#[scoped]
+struct Skip(inner: I, remaining: usize) where I: RefIterator
+
+#[scoped]
+struct Map(inner: I, transform: fn(&I.Item): U) where I: RefIterator, U
+```
+
+### 12.5 Chaining Example
+
+```spl
+let map: HashMap(K: String, V: i32) = /* ... */;
+
+// Full chaining support
+let result: Vec(T: i32) = map.ref_iter()
+    .filter(|kv| kv.1 > 10)
+    .take(5)
+    .map(|kv| kv.1.clone())
+    .collect();
+```
+
+### 12.6 Terminal Operations
+
+```spl
+impl RefIterator {
+    fn collect(&mut self): Vec(T: Self.Item) where Self.Item: Clone;
+    fn count(&mut self): usize;
+    fn find(&mut self, pred: fn(&Self.Item): bool): Option(Self.Item) where Self.Item: Clone;
+    fn for_each(&mut self, f: fn(&Self.Item));
+    fn any(&mut self, pred: fn(&Self.Item): bool): bool;
+    fn all(&mut self, pred: fn(&Self.Item): bool): bool;
+}
+```
+
+### 12.7 RefIteratorMut for Mutable Iteration
+
+```spl
+trait RefIteratorMut {
+    type Item;
+
+    fn next(&mut self): Option(&mut Self.Item);
+}
+
+// Usage
+for (k, v) in &mut hashmap {
+    *v += 1;
+}
+```
+
+### 12.8 Comparison with Other Traits
+
+| Trait | Yields | Storage | Use Case |
+|-------|--------|---------|----------|
+| `Indexed` | `&T` / `&mut T` | N/A (indexing) | Random-access: Vec, arrays |
+| `RefIterator` | `&T` | Scoped types | Sequential: HashMap, LinkedList |
+| `Iterator` | `T` (owned) | Regular structs | Generators, ranges, consuming |
+
+See [iteration.md](iteration.md) for complete iteration documentation.
+
+---
+
+## 13. Trait Aliases (Future)
 
 Trait aliases for combining common bounds:
 
@@ -752,7 +905,7 @@ fn process(x: T) where T: DebugCloneSend { }
 
 ---
 
-## 13. Summary
+## 14. Summary
 
 | Feature | Syntax | Description |
 |---------|--------|-------------|
@@ -767,6 +920,7 @@ fn process(x: T) where T: DebugCloneSend { }
 | Marker trait | `trait Copy: Clone { }` | No methods, signals property |
 | Blanket impl | `impl Foo for T where T: Bar` | Implement for all matching types |
 | Negative impl | `impl !Send for Foo` | Opt out of auto trait |
+| RefIterator | `trait RefIterator { ... }` | Reference iteration via scoped types |
 
 ---
 
@@ -775,4 +929,7 @@ fn process(x: T) where T: DebugCloneSend { }
 - [type-system.md](type-system.md) - Generics and bounds
 - [syntax-grammar.md](syntax-grammar.md) - Trait syntax
 - [standard-library.md](standard-library.md) - Standard traits
-- [attributes.md](attributes.md) - Derive macros
+- [attributes.md](attributes.md) - Derive macros and `#[scoped]` attribute
+- [iteration.md](iteration.md) - Complete iteration documentation
+- [memory-model.md](memory-model.md) - Scoped types and second-class references
+- [ADR-015: Scoped Types and RefIterator](../designs/015-scoped-types-refiterator.md) - Design rationale

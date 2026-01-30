@@ -101,7 +101,62 @@ pub fn internal_name(): () {
 }
 ```
 
-### 2.2 Memory Layout
+### 2.2 Scoped Types
+
+| Attribute | Target | Description |
+|-----------|--------|-------------|
+| `#[scoped]` | Structs, Functions | Mark as non-escaping (can hold refs) |
+
+The `#[scoped]` attribute marks a type as **scoped** (non-escaping). Scoped types can hold references in their fields but are compiler-enforced to never escape their creation scope.
+
+```spl
+#[scoped]
+struct HashMapIter(
+    source: &HashMap(K, V),  // Allowed: struct is scoped
+    position: BucketPos,
+) where K, V
+```
+
+**Scoped type restrictions:**
+
+| Rule | Description |
+|------|-------------|
+| Cannot be stored in non-scoped structs | `struct Holder(iter: HashMapIter)` - ERROR |
+| Cannot be returned from non-scoped functions | `fn make(): HashMapIter` - ERROR |
+| Cannot be sent to other threads | `spawn(\|\| use(iter))` - ERROR |
+| Must be used within lexical scope | Value cannot outlive creating scope |
+
+**Scoped functions:**
+
+Functions can be marked `#[scoped]` to indicate they return scoped types:
+
+```spl
+#[scoped]
+fn filtered_iter(map: &HashMap): Filter(I: HashMapIter) {
+    return map.ref_iter().filter(|x| x.1 > 0);
+}
+```
+
+**Primary use case:** Reference iteration via `RefIterator` trait.
+
+```spl
+#[scoped]
+struct Filter(
+    inner: I,
+    predicate: fn(&I.Item): bool,
+) where I: RefIterator
+
+// Enables:
+for (k, v) in &hashmap {
+    process(k, v);
+}
+```
+
+See [memory-model.md](memory-model.md) and [iteration.md](iteration.md) for complete documentation.
+
+---
+
+### 2.3 Memory Layout
 
 | Attribute | Target | Description |
 |-----------|--------|-------------|
@@ -136,7 +191,7 @@ enum Status {
 }
 ```
 
-### 2.3 FFI and Linking
+### 2.4 FFI and Linking
 
 | Attribute | Target | Description |
 |-----------|--------|-------------|
@@ -167,7 +222,7 @@ extern "C" {
 }
 ```
 
-### 2.4 Testing
+### 2.5 Testing
 
 | Attribute | Target | Description |
 |-----------|--------|-------------|
@@ -202,7 +257,7 @@ fn test_specific_panic(): () {
 }
 ```
 
-### 2.5 Documentation
+### 2.6 Documentation
 
 | Attribute | Target | Description |
 |-----------|--------|-------------|
@@ -556,6 +611,7 @@ The implementation of procedural macros is beyond the scope of this specificatio
 | Category | Examples |
 |----------|----------|
 | Code generation | `#[inline]`, `#[cold]`, `#[no_mangle]` |
+| Scoped types | `#[scoped]` |
 | Memory layout | `#[repr(C)]`, `#[repr(packed)]`, `#[repr(align(N))]` |
 | FFI | `#[link(name = "...")]`, `#[link_name = "..."]` |
 | Testing | `#[test]`, `#[ignore]`, `#[should_panic]` |
@@ -571,3 +627,6 @@ The implementation of procedural macros is beyond the scope of this specificatio
 - [syntax-grammar.md](syntax-grammar.md) - Attribute grammar
 - [ffi.md](ffi.md) - FFI-related attributes
 - [module-system.md](module-system.md) - Conditional compilation with modules
+- [memory-model.md](memory-model.md) - Scoped types documentation
+- [iteration.md](iteration.md) - RefIterator and scoped types for iteration
+- [ADR-015: Scoped Types and RefIterator](../designs/015-scoped-types-refiterator.md) - Design rationale

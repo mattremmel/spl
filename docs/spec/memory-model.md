@@ -741,7 +741,153 @@ The `fn(Args): Return` type represents any callable with matching signature, inc
 
 ---
 
-## 8. Memory Layout
+## 8. Scoped Types
+
+**Scoped types** are a special category of types that can hold references but are compiler-enforced to never escape their creation scope. This enables patterns like reference iterators while maintaining memory safety without lifetime annotations.
+
+### The `#[scoped]` Attribute
+
+```spl
+#[scoped]
+struct HashMapIter(
+    source: &HashMap(K, V),  // Allowed: struct is scoped
+    position: BucketPos,
+) where K, V
+```
+
+The `#[scoped]` attribute marks a struct as non-escaping. Unlike regular structs (which cannot hold references), scoped structs can store references because the compiler guarantees they cannot outlive those references.
+
+### Scoped Type Rules
+
+| Rule | Rationale |
+|------|-----------|
+| Cannot be stored in non-scoped structs | Prevents ref escape via embedding |
+| Cannot be returned from non-scoped functions | Prevents ref escape via return |
+| Cannot be sent to other threads | Thread-safety (no dangling refs) |
+| Must be used within lexical scope of creation | Prevents ref outliving source |
+| Can only be passed to functions expecting scoped types | Callee must respect scope |
+
+### Valid Uses
+
+```spl
+// Creating and using within scope - OK
+{
+    let map: HashMap(K: String, V: i32) = /* ... */;
+    let iter = map.ref_iter();  // Creates scoped HashMapIter
+
+    while iter.next() is Some((k, v)) {
+        println(k, v);
+    }
+}  // iter dropped, borrow of map ends
+
+// Passing to functions that consume scoped types - OK
+fn process_all(iter: I) where I: RefIterator {
+    while iter.next() is Some(item) {
+        process(item);
+    }
+}
+
+let iter = map.ref_iter();
+process_all(iter);  // iter moved into function, consumed there
+```
+
+### Invalid Uses
+
+```spl
+// ERROR: Returning scoped type from non-scoped function
+fn make_iter(map: &HashMap): HashMapIter {
+    return map.ref_iter();
+}
+// Error: cannot return scoped type `HashMapIter` from non-scoped function
+
+// ERROR: Storing scoped type in non-scoped struct
+struct IterHolder(
+    iter: HashMapIter,
+)
+// Error: cannot store scoped type `HashMapIter` in non-scoped struct
+
+// ERROR: Sending scoped type to another thread
+let iter = map.ref_iter();
+spawn(|| {
+    for item in iter { ... }
+});
+// Error: scoped type `HashMapIter` cannot be sent to another thread
+```
+
+### Scoped Functions
+
+Functions can also be marked `#[scoped]` to indicate they return scoped types:
+
+```spl
+#[scoped]
+fn filtered_iter(map: &HashMap): Filter(I: HashMapIter) {
+    return map.ref_iter().filter(|x| x.1 > 0);
+}
+```
+
+A scoped function can only be called from within a scope that will contain the result - essentially, the result cannot escape the calling scope.
+
+### Relationship to Second-Class References
+
+Scoped types are an extension of the second-class reference model:
+
+| Type Category | Can Hold Refs? | Can Escape Scope? |
+|---------------|----------------|-------------------|
+| Regular structs | No | Yes |
+| Scoped structs | Yes | No |
+| Function parameters | Yes (as refs) | N/A |
+| Function returns | Yes (with input ref) | Follows intersection |
+
+### Relationship to Non-Escaping Closures
+
+Scoped types use the same mental model as non-escaping closures:
+
+| Non-Escaping Closures | Scoped Types |
+|-----------------------|--------------|
+| Can borrow from enclosing scope | Can hold references |
+| Cannot be stored or returned | Cannot escape creation scope |
+| Used by `map`, `filter`, `each` | Used by `RefIterator` chain |
+| Compiler tracks escaping | Compiler tracks scope |
+
+From ADR-012 (Closures):
+> "Non-escaping closures can temporarily borrow from the enclosing scope because the borrow doesn't outlive the function call"
+
+The same reasoning applies to scoped structs.
+
+### Primary Use Case: RefIterator
+
+The primary use case for scoped types is the `RefIterator` trait, which enables reference iteration over non-indexed collections:
+
+```spl
+trait RefIterator {
+    type Item;
+    fn next(&mut self): Option(&Self.Item);
+}
+
+// Usage
+for (k, v) in &hashmap {
+    process(k, v);
+}
+
+// Chaining
+let result = map.ref_iter()
+    .filter(|kv| kv.1 > 0)
+    .take(10)
+    .collect();
+```
+
+See [iteration.md](iteration.md) for complete RefIterator documentation.
+
+### Implementation Notes
+
+- **No runtime cost**: Scoped-ness is purely a compile-time property
+- **Same memory layout**: Scoped structs have identical layout to non-scoped equivalents
+- **Propagates through generics**: `where I: RefIterator` implies `I` is scoped
+- **Error messages**: Compiler provides clear messages about escape attempts
+
+---
+
+## 9. Memory Layout
 
 ### Stack vs Heap
 
@@ -795,7 +941,7 @@ Fat pointers contain (pointer, length):
 
 ---
 
-## 9. Interior Mutability (Future)
+## 10. Interior Mutability (Future)
 
 Some patterns require mutation through shared references. SPL will provide controlled escape hatches:
 
@@ -826,11 +972,11 @@ unsafe {
 
 ---
 
-## 10. Future Extensions
+## 11. Future Extensions
 
 SPL's memory model is designed to support multiple memory management strategies in future versions.
 
-### 10.1 Interior Iteration with Generators
+### 11.1 Interior Iteration with Generators
 
 SPL will use generators/coroutines for iteration, avoiding the need for iterator objects that hold references:
 
@@ -853,7 +999,7 @@ my_vec.each(|item| {
 });
 ```
 
-### 10.2 Region-Based Memory
+### 11.2 Region-Based Memory
 
 Inspired by Cyclone and Vale, regions provide arena-style allocation:
 
@@ -871,7 +1017,7 @@ Benefits:
 - No fragmentation within region
 - Simplified lifetime reasoning
 
-### 10.3 Allocator-Aware Types (Zig-style)
+### 11.3 Allocator-Aware Types (Zig-style)
 
 Types that accept custom allocators:
 
@@ -894,7 +1040,7 @@ process(stack_alloc);
 process(heap_allocator);
 ```
 
-### 10.4 Optional Garbage Collection (D-style)
+### 11.4 Optional Garbage Collection (D-style)
 
 Opt-in GC for specific types or regions:
 
@@ -913,7 +1059,7 @@ gc_region {
 }
 ```
 
-### 10.5 Generational References (Vale-style)
+### 11.5 Generational References (Vale-style)
 
 References with generation counts for safe manual memory:
 
@@ -928,7 +1074,7 @@ gen_free(x);  // Explicitly free
 // instead of use-after-free
 ```
 
-### 10.6 Linear Types
+### 11.6 Linear Types
 
 Types that must be used exactly once:
 
@@ -944,7 +1090,7 @@ fn example() {
 }
 ```
 
-### 10.7 Strategy Selection
+### 11.7 Strategy Selection
 
 Future SPL may allow choosing memory strategy per-module or per-type:
 
@@ -967,7 +1113,7 @@ fn batch_process(items: &[Item]) {
 
 ---
 
-## 11. Comparison with Other Languages
+## 12. Comparison with Other Languages
 
 | Feature | SPL v1 | Rust | Go | Zig | D |
 |---------|--------|------|----|----|---|
@@ -981,7 +1127,7 @@ fn batch_process(items: &[Item]) {
 
 ---
 
-## 12. Summary
+## 13. Summary
 
 ### V1 Memory Model
 
@@ -990,6 +1136,7 @@ fn batch_process(items: &[Item]) {
 | Default semantics | Move |
 | Copy types | Primitives, opt-in for structs |
 | References | Second-class with intersection semantics |
+| Scoped types | Can hold refs but cannot escape scope |
 | Borrowing | `&T` (shared) and `&mut T` (exclusive) |
 | Lifetimes | Optional markers, intersection default |
 | Place expressions | Compile-time memory locations |
@@ -1226,7 +1373,10 @@ fn save_longer(a: &str, b: &str): String {
 ## References
 
 - [closures.md](closures.md) - Closure capture and second-class references
-- [iteration.md](iteration.md) - Interior iteration design
+- [iteration.md](iteration.md) - Iteration design including RefIterator
+- [attributes.md](attributes.md) - The `#[scoped]` attribute
+- [traits.md](traits.md) - RefIterator trait definition
 - [unsafe.md](unsafe.md) - Raw pointers and unsafe operations
 - [concurrency.md](concurrency.md) - Ownership across tasks
 - [ffi.md](ffi.md) - Memory safety at FFI boundaries
+- [ADR-015: Scoped Types and RefIterator](../designs/015-scoped-types-refiterator.md) - Design rationale
