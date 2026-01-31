@@ -153,14 +153,12 @@ let tax = price * 0.0825;          // Precise decimal arithmetic
 
 | Method | Description |
 |--------|-------------|
-| `round()` | Round to nearest integer (banker's rounding) |
-| `round_dp(places)` | Round to N decimal places (banker's rounding) |
-| `round_dp_with_mode(places, mode)` | Round with specified rounding mode |
+| `round(places?, mode?)` | Round to N decimal places (default 0) with rounding mode (default `HalfEven`) |
 | `truncate()` | Round toward zero (remove fractional part) |
 | `ceil()` | Round toward positive infinity |
 | `floor()` | Round toward negative infinity |
 
-**Rounding Modes** (for `round_dp_with_mode`):
+**Rounding Modes** (for `round`):
 
 | Mode | Description |
 |------|-------------|
