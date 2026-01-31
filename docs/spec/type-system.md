@@ -38,10 +38,16 @@ SPL provides signed and unsigned integers of various sizes. All integers use two
 **Default integer type**: Integer literals without a suffix default to `i32`.
 
 ```spl
-let x = 42;       // x: i32
-let y = 42i64;    // y: i64
-let z = 255u8;    // z: u8
+let x = 42;          // x: i32 (decimal)
+let y = 42i64;       // y: i64 (with suffix)
+let z = 255u8;       // z: u8 (with suffix)
+let hex = 0xFF;      // hex: i32 (hexadecimal)
+let bin = 0b1010;    // bin: i32 (binary)
+let oct = 0o77;      // oct: i32 (octal)
+let big = 1_000_000; // big: i32 (underscores for readability)
 ```
+
+See [lexical-grammar.md](lexical-grammar.md) for complete literal syntax.
 
 ### Floating-Point Types
 
@@ -93,7 +99,7 @@ let tax = price * 0.0825;          // Precise decimal arithmetic
 
 ### Arbitrary Precision Integer
 
-The `bigint` type provides arbitrary precision integers that never overflow.
+The `bigint` type provides arbitrary precision integers that never overflow. Unlike `decimal`, `bigint` is not included in the prelude and must be imported from `std.num.bigint`.
 
 | Type     | Description |
 |----------|-------------|
@@ -351,6 +357,8 @@ type Predicate = fn(i32): bool;
 type BinaryOp = fn(i32, i32): i32;
 ```
 
+**Note:** Unlike Rust, where `fn` types only represent non-capturing function pointers and `Fn`/`FnMut`/`FnOnce` traits handle closures with captures, SPL's `fn` type covers all callables including capturing closures. See [closures.md](closures.md) for closure semantics and capture behavior.
+
 ---
 
 ## 4. Reference Types
@@ -384,7 +392,9 @@ let r: &mut i32 = &mut x;
 | `&T`           | Many allowed | Read-only |
 | `&mut T`       | Exclusive | Read-write |
 
-**Second-Class References:** SPL uses second-class references with intersection semantics—references can be function parameters or returned from functions (borrowing from input refs), but cannot be stored in structs. By default, returned references borrow from all inputs. Optional lifetime markers (`'a`) provide precision. See [memory-model.md](memory-model.md) for full details.
+**Second-Class References:** SPL uses second-class references with intersection semantics—references can be function parameters or returned from functions (borrowing from input refs), but cannot be stored in regular structs. By default, returned references borrow from all inputs. Optional lifetime markers (`'a`) provide precision. See [memory-model.md](memory-model.md) for full details.
+
+**Scoped Types Exception:** Structs marked with `#[scoped]` can hold references, but are compiler-enforced to never escape their creation scope. This enables patterns like reference iterators while maintaining memory safety. See [memory-model.md](memory-model.md) section 8 for scoped types specification.
 
 ---
 
@@ -615,14 +625,16 @@ impl SortedVec(T: T) where T: Ord {
 | Bound | Meaning |
 |-------|---------|
 | `T: Clone` | T can be explicitly cloned |
-| `T: Copy` | T can be implicitly copied |
+| `T: Copy` | T can be implicitly copied (implies `Clone`) |
 | `T: Debug` | T can be formatted for debugging |
 | `T: Default` | T has a default value |
-| `T: Eq` | T supports equality comparison |
-| `T: Ord` | T supports ordering comparison |
+| `T: Eq` | T supports equality comparison (implies `PartialEq`) |
+| `T: Ord` | T supports ordering comparison (implies `Eq` + `PartialOrd`) |
 | `T: Hash` | T can be hashed |
 | `T: Send` | T can be sent between threads |
 | `T: Sync` | T can be shared between threads |
+
+**Note:** `Copy` is a supertrait of `Clone`, meaning any type implementing `Copy` must also implement `Clone`. This reflects that all copyable types can be cloned (bitwise copy is a trivial clone). Similarly, `Eq` implies `PartialEq`, and `Ord` implies `Eq` and `PartialOrd`. See [traits.md](traits.md) for supertrait definitions.
 
 ### Associated Types
 
@@ -702,24 +714,6 @@ let q = Point(x: 1.0, y: 2.0);  // Point(T: f64)
 // Explicit type application (type args first, then value args)
 let id = identity(T: i32, 42);
 ```
-
-**Future consideration: Type parameter shorthand**
-
-Similar to struct field shorthand (`Point(x, y)` instead of `Point(x: x, y: y)`), SPL could support shorthand for type parameters when the parameter name matches the type being passed:
-
-```spl
-fn process(items: Vec(T: T)): Result(T: T, E: E) where T, E {
-    // Current syntax
-    let result: Result(T: T, E: E) = compute(items);
-
-    // Potential shorthand (parameter name matches type variable)
-    let result: Result(T, E) = compute(items);
-
-    return result;
-}
-```
-
-This mirrors JavaScript's object property shorthand (`{value}` instead of `{value: value}`). The shorthand would only apply when the type parameter name exactly matches the type being passed—typically when forwarding type variables. For concrete types like `Vec(T: Point)`, no shorthand applies since `T` ≠ `Point`. This is a potential future enhancement and not currently part of the language.
 
 ### Monomorphization
 
@@ -851,16 +845,37 @@ impl Point(T: T) where T {
 
 `Self` is equivalent to the full type path with its type parameters (`Point(T: T)` in the example above).
 
-### Trait Objects (Future)
+### Trait Objects
 
-SPL currently uses monomorphization exclusively for generics. **Trait objects** (`dyn Trait`) for dynamic dispatch are planned for a future version.
+SPL supports **trait objects** (`dyn Trait`) for dynamic dispatch alongside monomorphization.
 
-Trait objects would enable:
-- Heterogeneous collections: `Vec(dyn Draw)` containing different types implementing `Draw`
+Trait objects enable:
+- Heterogeneous collections: `Vec(T: Box(dyn Draw))` containing different types implementing `Draw`
 - Runtime polymorphism without generics
 - Reduced code size (at the cost of indirect calls)
 
-Until then, use enums for heterogeneous collections:
+```spl
+trait Draw {
+    fn draw(&self): ();
+}
+
+// Trait object reference
+fn draw_shape(shape: &dyn Draw): () {
+    shape.draw();  // Dynamic dispatch
+}
+
+// Heterogeneous collection with boxed trait objects
+let shapes: Vec(T: Box(dyn Draw)) = [
+    Box.new(Circle(radius: 5.0)),
+    Box.new(Square(side: 10.0)),
+];
+```
+
+**Object Safety:** Not all traits can be used as trait objects. A trait is object-safe if all methods have a receiver (`self`, `&self`, or `&mut self`), no methods return `Self`, and no methods are generic.
+
+For complete trait object specification including object safety rules and workarounds, see [traits.md](traits.md) section 7.
+
+Alternatively, use enums for heterogeneous collections when the variants are known at compile time:
 
 ```spl
 enum Shape{
@@ -1060,7 +1075,14 @@ fn greet(name: String, title: String?): () {
 
 **Nesting:** `T??` is `Option(T: Option(T: T))`, though this is rarely useful.
 
-**Note:** The `?` postfix on types (optional type) is distinct from the `!` postfix operator on expressions (try/propagate). They appear in different syntactic positions and do not conflict. See [error-handling.md](error-handling.md) for full `!` operator semantics.
+**Note:** The `?` postfix on types (optional type) is distinct from the `!` postfix operator on expressions (try/propagate). They appear in different syntactic positions and do not conflict.
+
+**Related error handling features:** See [error-handling.md](error-handling.md) for:
+- The `!` operator (try/propagate) for error propagation
+- The `?.` operator (optional chaining) for safe navigation: `user?.email`
+- The `??` operator (nullish coalescing) for defaults: `value ?? default`
+- The `throws` keyword for functions returning `Result`
+- The `Try` and `FromResidual` traits for custom error types
 
 ### Type Compatibility Rules
 
@@ -1099,14 +1121,55 @@ let arr: [i32] = [1,2,3];  // ERROR: slice is unsized
 let arr: &[i32] = &[1,2,3]; // OK: reference to slice
 ```
 
-### Sized Bound (Future)
+### Sized Bound
 
-When trait bounds are added, a `Sized` bound will constrain type parameters to sized types:
+The `Sized` marker trait indicates that a type has a known size at compile time. Most types are `Sized` by default.
 
 ```spl
 fn foo(x: T) where T { }              // T: Sized implicitly
-fn bar(x: &T) where T: ?Sized { }     // T may be unsized
+fn bar(x: &T) where T: ?Sized { }     // T may be unsized (accepts &str, &[T])
 ```
+
+**Rules:**
+- Type parameters are implicitly `Sized` unless `?Sized` is specified
+- Use `?Sized` to relax the bound when you only need the type behind a reference
+- Unsized types (`str`, `[T]`) can only appear behind references or in trait objects
+
+```spl
+// Accepts sized and unsized types
+fn print_it(value: &T) where T: ?Sized + Debug {
+    println("{:?}", value);
+}
+
+print_it(&42);       // &i32 (sized)
+print_it("hello");   // &str (unsized)
+```
+
+See [traits.md](traits.md) section 5.2 for the `Sized` trait definition.
+
+---
+
+## 10. Future Extensions
+
+This section documents potential language extensions that are under consideration but not currently part of SPL.
+
+### Type Parameter Shorthand
+
+Similar to struct field shorthand (`Point(x, y)` instead of `Point(x: x, y: y)`), SPL could support shorthand for type parameters when the parameter name matches the type being passed:
+
+```spl
+fn process(items: Vec(T: T)): Result(T: T, E: E) where T, E {
+    // Current syntax
+    let result: Result(T: T, E: E) = compute(items);
+
+    // Potential shorthand (parameter name matches type variable)
+    let result: Result(T, E) = compute(items);
+
+    return result;
+}
+```
+
+This mirrors JavaScript's object property shorthand (`{value}` instead of `{value: value}`). The shorthand would only apply when the type parameter name exactly matches the type being passed—typically when forwarding type variables. For concrete types like `Vec(T: Point)`, no shorthand applies since `T` ≠ `Point`.
 
 ---
 

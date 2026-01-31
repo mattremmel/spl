@@ -36,7 +36,7 @@ trait Shape {
 trait Iterator {
     type Item;
 
-    fn next(&mut self): Option(T: Self.Item);
+    fn next(&mut self): Self.Item?;
 }
 
 trait Container {
@@ -162,7 +162,7 @@ trait Iterator {
     type Item;
 
     // Required method (no body)
-    fn next(&mut self): Option(T: Self.Item);
+    fn next(&mut self): Self.Item?;
 
     // Default implementations (can be overridden)
     fn count(&mut self): usize {
@@ -173,7 +173,7 @@ trait Iterator {
         return n;
     }
 
-    fn last(&mut self): Option(T: Self.Item) {
+    fn last(&mut self): Self.Item? {
         let mut last = None;
         while self.next() is Some(x) {
             last = Some(x);
@@ -181,7 +181,7 @@ trait Iterator {
         return last;
     }
 
-    fn nth(&mut self, n: usize): Option(T: Self.Item) {
+    fn nth(&mut self, n: usize): Self.Item? {
         for _ in 0..n {
             self.next();
         }
@@ -198,7 +198,7 @@ struct Range(start: i32, end: i32)
 impl Iterator for Range {
     type Item = i32;
 
-    fn next(&mut self): Option(T: i32) {
+    fn next(&mut self): i32? {
         if self.start < self.end {
             let n = self.start;
             self.start += 1;

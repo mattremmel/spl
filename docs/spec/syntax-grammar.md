@@ -749,20 +749,24 @@ Expressions are defined using layered production rules that encode operator prec
 
 | Precedence | Operators                    | Associativity | Production         |
 |------------|------------------------------|---------------|--------------------|
-| 1 (lowest) | `=` `+=` `-=` `*=` `/=` `%=` | Right         | AssignmentExpr     |
+| 1 (lowest) | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | Right | AssignmentExpr |
 | 2          | `??`                         | Right         | CoalesceExpr       |
 | 3          | `\|\|`                       | Left          | OrExpr             |
 | 4          | `&&`                         | Left          | AndExpr            |
 | 5          | `is`                         | Left          | IsExpr             |
 | 6          | `==` `!=`                    | Left          | EqualityExpr       |
 | 7          | `<` `>` `<=` `>=`            | Left          | ComparisonExpr     |
-| 8          | `..` `..=`                   | Left          | RangeExpr          |
-| 9          | `+` `-`                      | Left          | AdditiveExpr       |
-| 10         | `*` `/` `%`                  | Left          | MultiplicativeExpr |
-| 11         | `!` `-` `&` (unary)          | Right         | UnaryExpr          |
-| 12 (highest)| `.` `?.` `()` `[]` `[:]` `!` | Left          | PostfixExpr        |
+| 8          | `\|`                         | Left          | BitwiseOrExpr      |
+| 9          | `^`                          | Left          | BitwiseXorExpr     |
+| 10         | `&`                          | Left          | BitwiseAndExpr     |
+| 11         | `<<` `>>`                    | Left          | ShiftExpr          |
+| 12         | `..` `..=`                   | Left          | RangeExpr          |
+| 13         | `+` `-`                      | Left          | AdditiveExpr       |
+| 14         | `*` `/` `%`                  | Left          | MultiplicativeExpr |
+| 15         | `!` `-` `&` `~` (unary)      | Right         | UnaryExpr          |
+| 16 (highest)| `.` `?.` `()` `[]` `[:]` `!` | Left          | PostfixExpr        |
 
-Note: Type conversions use methods (`.widen()`, `.truncate()`, `.try_into()`) rather than a cast operator.
+Note: `&` serves as both a unary reference operator (prefix) and a binary bitwise AND operator; context disambiguates. Type conversions use methods (`.widen()`, `.truncate()`, `.try_into()`) rather than a cast operator.
 
 ### Expression Grammar
 
@@ -771,7 +775,7 @@ Expression = AssignmentExpr ;
 
 AssignmentExpr = CoalesceExpr [ AssignOp AssignmentExpr ] ;
 
-AssignOp = "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
+AssignOp = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" ;
 
 CoalesceExpr = OrExpr { "??" OrExpr } ;
 
@@ -784,7 +788,15 @@ IsExpr = EqualityExpr [ "is" Pattern ] ;
 
 EqualityExpr = ComparisonExpr { ( "==" | "!=" ) ComparisonExpr } ;
 
-ComparisonExpr = RangeExpr { ( "<" | ">" | "<=" | ">=" ) RangeExpr } ;
+ComparisonExpr = BitwiseOrExpr { ( "<" | ">" | "<=" | ">=" ) BitwiseOrExpr } ;
+
+BitwiseOrExpr = BitwiseXorExpr { "|" BitwiseXorExpr } ;
+
+BitwiseXorExpr = BitwiseAndExpr { "^" BitwiseAndExpr } ;
+
+BitwiseAndExpr = ShiftExpr { "&" ShiftExpr } ;
+
+ShiftExpr = RangeExpr { ( "<<" | ">>" ) RangeExpr } ;
 
 RangeExpr = AdditiveExpr [ ( ".." | "..=" ) [ AdditiveExpr ] ] ;
 
@@ -792,7 +804,7 @@ AdditiveExpr = MultiplicativeExpr { ( "+" | "-" ) MultiplicativeExpr } ;
 
 MultiplicativeExpr = UnaryExpr { ( "*" | "/" | "%" ) UnaryExpr } ;
 
-UnaryExpr = ( "!" | "-" | "&" [ "mut" ] | "*" ) UnaryExpr
+UnaryExpr = ( "!" | "-" | "&" [ "mut" ] | "*" | "~" ) UnaryExpr
           | PostfixExpr ;
 
 (* Note: The `*` operator dereferences references (`*r = 10`). Raw pointers
@@ -1283,18 +1295,22 @@ From lowest to highest precedence:
 
 | Prec | Category       | Operators                       | Assoc | Example                   |
 |------|----------------|--------------------------------|-------|---------------------------|
-| 1    | Assignment     | `=` `+=` `-=` `*=` `/=` `%=`   | Right | `x = y = 1`               |
+| 1    | Assignment     | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | Right | `x = y = 1` |
 | 2    | Coalesce       | `??`                           | Right | `a ?? b ?? c`             |
 | 3    | Logical OR     | `\|\|`                         | Left  | `a \|\| b \|\| c`         |
 | 4    | Logical AND    | `&&`                           | Left  | `a && b && c`             |
 | 5    | Pattern Match  | `is`                           | Left  | `x is Some(v)`            |
 | 6    | Equality       | `==` `!=`                      | Left  | `a == b != c`             |
 | 7    | Comparison     | `<` `>` `<=` `>=`              | Left  | `a < b`                   |
-| 8    | Range          | `..` `..=`                     | Left  | `0..10`, `0..=10`         |
-| 9    | Additive       | `+` `-`                        | Left  | `a + b - c`               |
-| 10   | Multiplicative | `*` `/` `%`                    | Left  | `a * b / c`               |
-| 11   | Unary          | `!` `-` `&` `&mut`             | Right | `!&mut x`                 |
-| 12   | Postfix        | `.` `?.` `()` `[]` `[:]` `!`   | Left  | `a.b()!.c[0]`             |
+| 8    | Bitwise OR     | `\|`                           | Left  | `a \| b \| c`             |
+| 9    | Bitwise XOR    | `^`                            | Left  | `a ^ b`                   |
+| 10   | Bitwise AND    | `&`                            | Left  | `a & b`                   |
+| 11   | Shift          | `<<` `>>`                      | Left  | `a << 2`                  |
+| 12   | Range          | `..` `..=`                     | Left  | `0..10`, `0..=10`         |
+| 13   | Additive       | `+` `-`                        | Left  | `a + b - c`               |
+| 14   | Multiplicative | `*` `/` `%`                    | Left  | `a * b / c`               |
+| 15   | Unary          | `!` `-` `&` `&mut` `~`         | Right | `!&mut x`, `~bits`        |
+| 16   | Postfix        | `.` `?.` `()` `[]` `[:]` `!`   | Left  | `a.b()!.c[0]`             |
 
 ---
 
