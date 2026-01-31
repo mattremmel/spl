@@ -101,6 +101,101 @@ let tax = price * 0.0825;          // Precise decimal arithmetic
 - From float types: `let d: decimal = 3.14.to_decimal();` (may lose precision)
 - To float types: `let f: f64 = d.to_f64();` (may lose precision)
 
+#### Precision and Overflow
+
+**Precision:**
+- All operations maintain up to 34 significant digits (IEEE 754 decimal128)
+- When exact representation requires more than 34 digits, banker's rounding is applied
+- Intermediate calculations use full precision; no premature rounding occurs
+
+**Overflow Behavior:**
+- Arithmetic operations that exceed the representable range panic
+- Use `checked_*` methods for fallible operations that return `decimal?`
+
+#### Special Values
+
+**No Special Values:**
+- `decimal` cannot represent NaN or Infinity
+- Operations that would produce infinity (such as overflow) panic
+- Division by zero panics
+- This prioritizes correctness for financial calculations
+
+#### Remainder Operator
+
+**Remainder Operator (`%`):**
+- Uses truncated division semantics: `a % b = a - (a / b).truncate() * b`
+- Sign of result matches the dividend (truncation toward zero)
+- Examples: `-7.0 % 3.0 == -1.0`, `7.0 % -3.0 == 1.0`
+- Remainder by zero panics
+
+#### Scale and Equality
+
+**Scale Handling:**
+- `decimal` uses coefficient + exponent representation; trailing zeros are significant for display
+- `1.00decimal` and `1.0decimal` are **equal** for comparison but may format differently
+- Equality compares numeric value, not representation
+
+**Hash Contract:**
+- Values that compare equal have identical hash codes
+- `1.0.hash() == 1.00.hash()` is guaranteed
+
+**Scale Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `normalize()` | Remove trailing zeros: `1.00` → `1` |
+| `quantize(scale)` | Set specific scale with banker's rounding: `1.005.quantize(2)` → `1.00` |
+| `scale()` | Return current scale (decimal places) |
+
+#### Rounding Methods
+
+**Rounding Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `round()` | Round to nearest integer (banker's rounding) |
+| `round_dp(places)` | Round to N decimal places (banker's rounding) |
+| `round_dp_with_mode(places, mode)` | Round with specified rounding mode |
+| `truncate()` | Round toward zero (remove fractional part) |
+| `ceil()` | Round toward positive infinity |
+| `floor()` | Round toward negative infinity |
+
+**Rounding Modes** (for `round_dp_with_mode`):
+
+| Mode | Description |
+|------|-------------|
+| `HalfEven` | Banker's rounding (default) - round half to nearest even |
+| `HalfUp` | Standard rounding - round half away from zero |
+| `HalfDown` | Round half toward zero |
+| `Up` | Always round away from zero |
+| `Down` | Always round toward zero |
+| `Ceiling` | Always round toward +∞ |
+| `Floor` | Always round toward -∞ |
+
+#### Checked Arithmetic
+
+**Checked Arithmetic Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `checked_add(other)` | Returns `decimal?`, `None` on overflow |
+| `checked_sub(other)` | Returns `decimal?`, `None` on overflow |
+| `checked_mul(other)` | Returns `decimal?`, `None` on overflow |
+| `checked_div(other)` | Returns `decimal?`, `None` on overflow or div by zero |
+| `checked_rem(other)` | Returns `decimal?`, `None` on div by zero |
+
+#### Constants
+
+**Constants:**
+
+| Constant | Description |
+|----------|-------------|
+| `decimal.MAX` | Maximum finite value (~9.999... × 10^6144) |
+| `decimal.MIN` | Minimum finite value (~-9.999... × 10^6144) |
+| `decimal.MIN_POSITIVE` | Smallest positive value (~1 × 10^-6143) |
+| `decimal.ZERO` | Zero (0) |
+| `decimal.ONE` | One (1) |
+
 ### Arbitrary Precision Integer
 
 The `bigint` type provides arbitrary precision integers that never overflow. Unlike `decimal`, `bigint` is not included in the prelude and must be imported from `std.num.bigint`.
