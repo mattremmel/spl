@@ -12,7 +12,7 @@ This directory contains the formal specification documents for the SPL (Simple P
 | [traits.md](traits.md) | Trait definition, implementation, and object safety |
 | [pattern-matching.md](pattern-matching.md) | Patterns, exhaustiveness, and binding modes |
 | [memory-model.md](memory-model.md) | Ownership, borrowing, and lifetimes |
-| [iteration.md](iteration.md) | Iteration, generators, and the Indexed trait |
+| [iteration.md](iteration.md) | Iteration, generators, and the IndexIter trait |
 | [closures.md](closures.md) | Closure syntax and capture semantics |
 | [error-handling.md](error-handling.md) | Error propagation, Try trait, and `!` operator |
 | [concurrency.md](concurrency.md) | Tasks, channels, and synchronization primitives |

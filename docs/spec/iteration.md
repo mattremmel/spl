@@ -1,12 +1,12 @@
 # SPL Iteration and Generators
 
-This document specifies iteration mechanisms in SPL, including `for` loops, the `Indexed` trait, internal iteration methods, and generators.
+This document specifies iteration mechanisms in SPL, including `for` loops, the `IndexIter` trait, internal iteration methods, and generators.
 
 ## Overview
 
-SPL's iteration model is built on **intersection semantics**: functions can return references that are assumed to borrow from all input references. This enables traits like `Indexed` to have methods that return references to collection elements.
+SPL's iteration model is built on **intersection semantics**: functions can return references that are assumed to borrow from all input references. This enables traits like `IndexIter` to have methods that return references to collection elements.
 
-- **`for` loops** use the `Indexed` trait for reference iteration over indexed collections
+- **`for` loops** use the `IndexIter` trait for reference iteration over indexed collections
 - **Internal iteration** (`.each()`, `.map()`) uses closures for functional-style processing
 - **Generators** yield owned values only
 - **External iterators** (`Iterator` trait) work with owned/consumed values
@@ -17,7 +17,7 @@ SPL has second-class references, which creates a fundamental design constraint:
 
 | Trait | Purpose | Why It Works |
 |-------|---------|--------------|
-| `Indexed` | Reference iteration over indexed collections | `get(&self, i): &T` creates fresh borrow each call |
+| `IndexIter` | Reference iteration over indexed collections | `get(&self, i): &T` creates fresh borrow each call |
 | `Iterator` | Value iteration (generators, ranges) | Yields owned values, no reference storage needed |
 
 **Non-indexed types** (hashmaps, linked lists, trees):
@@ -72,7 +72,7 @@ for item in vec {
 
 ### Desugaring
 
-The compiler transforms `for` loops into method calls on the `Indexed` trait:
+The compiler transforms `for` loops into method calls on the `IndexIter` trait:
 
 ```spl
 // Source
@@ -131,19 +131,19 @@ for item in collection {
 }
 ```
 
-### Desugaring: Indexed vs Iterator
+### Desugaring: IndexIter vs Iterator
 
 The `for` loop uses different mechanisms depending on the type:
 
 | Syntax | Trait | Desugaring | Notes |
 |--------|-------|------------|-------|
-| `for x in &coll` | `Indexed` | Indexed while loop with `get(i)` | Random-access collections |
-| `for x in &mut coll` | `Indexed` | Indexed while loop with `get_mut(i)` | Random-access collections |
+| `for x in &coll` | `IndexIter` | IndexIter while loop with `get(i)` | Random-access collections |
+| `for x in &mut coll` | `IndexIter` | IndexIter while loop with `get_mut(i)` | Random-access collections |
 | `for x in coll` | `Iterator` / `IntoIterator` | While loop with `next()` | Generators, ranges, consuming |
 
 **Why two mechanisms?**
 
-- **Indexed (random-access)**: Enables reference iteration (`for x in &collection`) using the `get(&self, i): &T` method. Intersection semantics make this safe—each `get()` call returns a reference tied to the collection's lifetime. Requires O(1) indexed access.
+- **IndexIter (random-access)**: Enables reference iteration (`for x in &collection`) using the `get(&self, i): &T` method. Intersection semantics make this safe—each `get()` call returns a reference tied to the collection's lifetime. Requires O(1) indexed access.
 
 - **Iterator (next-based)**: Used for generators, ranges, and types without random access. Returns owned values, not references. Also used for consuming iteration (`for x in collection`).
 
@@ -186,14 +186,14 @@ outer: for row in &matrix {
 
 ---
 
-## 2. The Indexed Trait
+## 2. The IndexIter Trait
 
-Types that support reference iteration via `for x in &collection` implement `Indexed`. This trait requires random/indexed access (O(1) element retrieval by index).
+Types that support reference iteration via `for x in &collection` implement `IndexIter`. This trait requires random/indexed access (O(1) element retrieval by index).
 
 ### Definition
 
 ```spl
-trait Indexed {
+trait IndexIter {
     type Item;
 
     /// Number of elements
@@ -213,18 +213,18 @@ trait Indexed {
 
 The `get` and `get_mut` methods return references. With intersection semantics, the output reference is tied to the input's lifetime (`&self` or `&mut self`).
 
-### Why "Indexed"?
+### Why "IndexIter"?
 
-The name reflects the trait's requirement: **O(1) indexed access**. Types implementing `Indexed` must support efficient random access by index. This enables the for-loop desugaring to use `get(i)` calls in a while loop.
+The name emphasizes both **indexed access** and **iteration**: types implementing `IndexIter` support efficient O(1) random access by index, enabling index-based iteration via `get(i)` calls. This distinguishes it from the `Index` trait (which provides the `[]` subscript operator) and from `Iterator` (which yields owned values via `next()`).
 
-Types without indexed access (hashmaps, linked lists, trees) should not implement `Indexed`. Instead, they use:
+Types without indexed access (hashmaps, linked lists, trees) should not implement `IndexIter`. Instead, they use:
 - `.each(fn(&T))` for reference iteration
 - `IntoIterator` for consuming iteration
 
 ### Standard Implementations
 
 ```spl
-impl Indexed for Vec(T: T) where T {
+impl IndexIter for Vec(T: T) where T {
     type Item = T;
 
     fn len(&self): usize { self.length }
@@ -232,7 +232,7 @@ impl Indexed for Vec(T: T) where T {
     fn get_mut(&mut self, index: usize): &mut T { &mut self.data[index] }
 }
 
-impl Indexed for [T; N] where T {
+impl IndexIter for [T; N] where T {
     type Item = T;
 
     fn len(&self): usize { N }
@@ -240,7 +240,7 @@ impl Indexed for [T; N] where T {
     fn get_mut(&mut self, index: usize): &mut T { &mut self[index] }
 }
 
-impl Indexed for String {
+impl IndexIter for String {
     type Item = char;
 
     fn len(&self): usize { self.char_count() }
@@ -254,7 +254,7 @@ impl Indexed for String {
 Index access via `get()` and `get_mut()` panics if `index >= len()`. Use `get_opt()` for checked access:
 
 ```spl
-trait Indexed {
+trait IndexIter {
     // ... previous methods ...
 
     /// Returns Some(&element) if index is valid, None otherwise.
@@ -310,7 +310,7 @@ let count = r.len();            // 10
 
 ### Range Implementation
 
-Ranges implement `Iterator` rather than `Indexed` because they produce computed values rather than references to stored data:
+Ranges implement `Iterator` rather than `IndexIter` because they produce computed values rather than references to stored data:
 
 ```spl
 struct Range(
@@ -399,7 +399,7 @@ impl Vec(T: T) where T {
 
 struct Iter(source: S) where S
 
-impl Iter(S: S) where S: Indexed {
+impl Iter(S: S) where S: IndexIter {
     /// Transform elements
     fn map(self, f: fn(&S.Item): U): Map(S: Self, U: U) where U {
         Map(source: self, func: f)
@@ -421,17 +421,17 @@ impl Iter(S: S) where S: Indexed {
     }
 
     /// Flatten nested iterables
-    fn flatten(self): Flatten(S: Self) where S.Item: Indexed {
+    fn flatten(self): Flatten(S: Self) where S.Item: IndexIter {
         Flatten(source: self)
     }
 
     /// Chain with another iterable
-    fn chain(self, other: O): Chain(A: Self, B: O) where O: Indexed(Item: S.Item) {
+    fn chain(self, other: O): Chain(A: Self, B: O) where O: IndexIter(Item: S.Item) {
         Chain(first: self, second: other)
     }
 
     /// Zip with another iterable
-    fn zip(self, other: O): Zip(A: Self, B: O) where O: Indexed {
+    fn zip(self, other: O): Zip(A: Self, B: O) where O: IndexIter {
         Zip(first: self, second: other)
     }
 }
@@ -598,7 +598,7 @@ struct Generator(
 ) where T
 ```
 
-> **Note:** Generators are consumed during iteration. Unlike indexable collections, generators maintain internal state and produce values on-demand. The `for` loop over a generator uses the `Iterator` trait (with `next()` returning owned values), not `Indexed`. See "Consuming Iteration" below for the `Iterator` trait.
+> **Note:** Generators are consumed during iteration. Unlike indexable collections, generators maintain internal state and produce values on-demand. The `for` loop over a generator uses the `Iterator` trait (with `next()` returning owned values), not `IndexIter`. See "Consuming Iteration" below for the `Iterator` trait.
 
 ### Infinite Generators
 
@@ -862,8 +862,8 @@ For non-indexed collections (HashMap, LinkedList, BTreeMap, Tree, etc.) that can
 
 ### The Problem
 
-Non-indexed collections cannot implement `Indexed` because:
-- `Indexed` requires O(1) random access via `get(&self, i): &T`
+Non-indexed collections cannot implement `IndexIter` because:
+- `IndexIter` requires O(1) random access via `get(&self, i): &T`
 - HashMap, LinkedList, Tree etc. only support sequential traversal
 
 A traditional external iterator would need to store a reference to the collection:
@@ -1142,7 +1142,7 @@ spawn(|| {
 
 | Trait | For | Yields | Storage | Use Case |
 |-------|-----|--------|---------|----------|
-| `Indexed` | Random-access collections | `&T` / `&mut T` | N/A (uses indexing) | Vec, arrays, strings |
+| `IndexIter` | Random-access collections | `&T` / `&mut T` | N/A (uses indexing) | Vec, arrays, strings |
 | `RefIterator` | Sequential collections | `&T` | Scoped types | HashMap, LinkedList, Tree |
 | `Iterator` | Value sequences | `T` (owned) | Regular structs | Generators, ranges, consuming |
 
@@ -1154,7 +1154,7 @@ spawn(|| {
 
 | Mechanism | Reference Safe | Composable | Use Case |
 |-----------|---------------|------------|----------|
-| `for x in &coll` (Indexed) | Yes (scoped) | No | Random-access iteration by reference |
+| `for x in &coll` (IndexIter) | Yes (scoped) | No | Random-access iteration by reference |
 | `for x in &coll` (RefIterator) | Yes (scoped) | Yes | Sequential iteration by reference |
 | `for x in &mut coll` | Yes (scoped) | No | Mutating iteration |
 | `for x in coll` | N/A (owned) | No | Consuming iteration |
@@ -1168,7 +1168,7 @@ spawn(|| {
 
 | Trait | Purpose |
 |-------|---------|
-| `Indexed` | Random-access collections with `get(&self, i): &T` for reference iteration |
+| `IndexIter` | Random-access collections with `get(&self, i): &T` for reference iteration |
 | `RefIterator` | Sequential reference iteration via scoped types (hashmaps, trees, linked lists) |
 | `Iterator` | Sequential value iteration (owned values only) |
 | `IntoIterator` | Converting to consuming iterator |
@@ -1177,7 +1177,7 @@ spawn(|| {
 ### Trait Hierarchy
 
 ```
-Indexed          - Random-access reference iteration (Vec, arrays)
+IndexIter          - Random-access reference iteration (Vec, arrays)
     ↓ provides
 IntoIterator     - Conversion to consuming iterator
     ↓ produces
@@ -1192,7 +1192,7 @@ RefIterator      - Scoped reference iteration (hashmaps, trees, linked lists)
 
 | Collection Type | Reference Iteration | Consuming Iteration |
 |-----------------|---------------------|---------------------|
-| Vec, Array, String | `Indexed` | `IntoIterator` → `Iterator` |
+| Vec, Array, String | `IndexIter` | `IntoIterator` → `Iterator` |
 | Range | N/A | `Iterator` (yields owned) |
 | HashMap, BTreeMap | `RefIterator` | `IntoIterator` → `Iterator` |
 | LinkedList, Tree | `RefIterator` | `IntoIterator` → `Iterator` |
@@ -1201,7 +1201,7 @@ RefIterator      - Scoped reference iteration (hashmaps, trees, linked lists)
 ### Design Principles
 
 1. **Intersection semantics**: `get(&self, i): &T` is safe because the output borrows from the input
-2. **`for` loops use Indexed for random-access**: Desugars to `get()`/`get_mut()` calls
+2. **`for` loops use IndexIter for random-access**: Desugars to `get()`/`get_mut()` calls
 3. **`for` loops use RefIterator for sequential-access**: Desugars to `next()` calls on scoped types
 4. **Scoped types enable reference iteration**: Types marked `#[scoped]` can hold refs but cannot escape
 5. **Internal iteration for closures**: `.each()`, `.map()` etc. scope references via closures
@@ -1259,7 +1259,7 @@ fn main() {
 }
 ```
 
-### Custom Indexed Type
+### Custom IndexIter Type
 
 ```spl
 struct CircularBuffer(
@@ -1268,7 +1268,7 @@ struct CircularBuffer(
     len: usize,
 ) where T
 
-impl Indexed for CircularBuffer(T: T) where T {
+impl IndexIter for CircularBuffer(T: T) where T {
     type Item = T;
 
     fn len(&self): usize { self.len }
@@ -1304,7 +1304,7 @@ fn example(buf: &CircularBuffer(T: i32)) {
 
 - [ADR-011: Iteration and Generators](../designs/011-iteration-and-generators.md) - Design rationale
 - [ADR-015: Scoped Types and RefIterator](../designs/015-scoped-types-refiterator.md) - Scoped types design
-- [traits.md](traits.md) - Indexed, Iterator, and RefIterator traits
+- [traits.md](traits.md) - IndexIter, Iterator, and RefIterator traits
 - [closures.md](closures.md) - Closures in iterator chains
 - [memory-model.md](memory-model.md) - Second-class references, scoped types, and iteration
 - [attributes.md](attributes.md) - The `#[scoped]` attribute

@@ -86,11 +86,15 @@ let tax = price * 0.0825;          // Precise decimal arithmetic
 | `+` | Addition |
 | `-` | Subtraction |
 | `*` | Multiplication |
-| `/` | Division |
+| `/` | Division (see below) |
 | `%` | Remainder |
 | `-` (unary) | Negation |
 
+**Division Semantics:** Division of `decimal` values uses banker's rounding (round half to even) when the result cannot be represented exactly. Division by zero panics. The precision is sufficient for financial calculations (at least 34 significant digits per IEEE 754 decimal128).
+
 **Comparison:** All comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) are supported.
+
+**Traits:** `decimal` implements `Eq`, `Ord`, `Clone`, `Copy`, `Debug`, `Default`, and `Hash`.
 
 **Conversions:**
 - From integer types: `let d: decimal = 42.widen();`
@@ -122,6 +126,8 @@ let result = huge * huge;  // No overflow
 | `-` (unary) | Negation |
 
 **Comparison:** All comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) are supported.
+
+**Traits:** `bigint` implements `Eq`, `Ord`, `Clone`, `Debug`, `Default`, and `Hash`. Note that `bigint` does not implement `Copy` since it uses heap allocation.
 
 **Conversions:**
 - From fixed-size integers: `let b: bigint = 42.to_bigint();`
@@ -193,11 +199,13 @@ fn infinite(): Never {
     loop { }
 ```
 
-The never type coerces to any other type, enabling code like:
+The never type coerces to any other type in expression position, enabling code like:
 
 ```spl
 let x: i32 = if condition { 42 } else { panic("unreachable") };
 ```
+
+**Note:** The `Never` type coerces to any type only in expression position. `Never` as a type argument (e.g., `Option(T: Never)`) remains distinct and represents an impossible instantiation—a type that can never be constructed.
 
 When a block contains a single expression, the value is implicit. Multi-statement blocks require explicit `break` (or `return` in functions).
 
@@ -357,7 +365,7 @@ type Predicate = fn(i32): bool;
 type BinaryOp = fn(i32, i32): i32;
 ```
 
-**Note:** Unlike Rust, where `fn` types only represent non-capturing function pointers and `Fn`/`FnMut`/`FnOnce` traits handle closures with captures, SPL's `fn` type covers all callables including capturing closures. See [closures.md](closures.md) for closure semantics and capture behavior.
+**Note:** The `fn(Args): Return` syntax represents callable types. Unlike Rust, SPL's `fn` type covers all callables including capturing closures. The compiler internally tracks whether closures implement `Fn`, `FnMut`, or `FnOnce` based on how they use their captures (see [closures.md](closures.md)), but at the type level, `fn(Args): Return` is the unified surface syntax for all callable types.
 
 ---
 
@@ -634,7 +642,7 @@ impl SortedVec(T: T) where T: Ord {
 | `T: Send` | T can be sent between threads |
 | `T: Sync` | T can be shared between threads |
 
-**Note:** `Copy` is a supertrait of `Clone`, meaning any type implementing `Copy` must also implement `Clone`. This reflects that all copyable types can be cloned (bitwise copy is a trivial clone). Similarly, `Eq` implies `PartialEq`, and `Ord` implies `Eq` and `PartialOrd`. See [traits.md](traits.md) for supertrait definitions.
+**Note:** `Clone` is a supertrait of `Copy`, meaning any type implementing `Copy` must also implement `Clone`. This reflects that all copyable types can be cloned (bitwise copy is a trivial clone). Similarly, `Eq` implies `PartialEq`, and `Ord` implies `Eq` and `PartialOrd`. See [traits.md](traits.md) for supertrait definitions.
 
 ### Associated Types
 
@@ -769,7 +777,7 @@ impl Box(T: String) {
 }
 ```
 
-**Different parameter names** - The impl can use different names than the struct definition to emphasize the distinction between parameter name and type variable:
+**Different parameter names** - The impl can use different names than the struct definition:
 
 ```spl
 struct Foo(val: T) where T
@@ -780,7 +788,7 @@ impl Foo(T: R) where R {
 }
 ```
 
-Here `T` is the **parameter name** (from the struct definition), and `R` is the **type variable** declared by `where R`. The syntax `Foo(T: R)` means "Foo with its T parameter set to type R".
+Here `T` is the **struct's type parameter name** (from the struct definition), and `R` is the **impl block's type variable** that instantiates it (declared by `where R`). The syntax `Foo(T: R)` means "Foo with its T parameter set to type R".
 
 **Method-level generics** - Methods can introduce additional type parameters beyond the impl block:
 
@@ -875,6 +883,17 @@ let shapes: Vec(T: Box(dyn Draw)) = [
 
 For complete trait object specification including object safety rules and workarounds, see [traits.md](traits.md) section 7.
 
+### Type Variance
+
+SPL uses invariant function types. Function type `fn(A): R` is only assignable to another function type `fn(B): S` if `A` equals `B` and `R` equals `S` exactly. This simplifies the type system at the cost of some flexibility:
+
+```spl
+fn takes_i32(x: &i32) { }
+let f: fn(&i64): () = takes_i32;  // ERROR: &i32 != &i64
+```
+
+Reference types have standard variance: `&T` is covariant in `T` (can widen), `&mut T` is invariant in `T` (must match exactly).
+
 Alternatively, use enums for heterogeneous collections when the variants are known at compile time:
 
 ```spl
@@ -899,7 +918,11 @@ SPL performs very few implicit coercions to maintain type safety.
 | From | To | Description |
 |------|----|-------------|
 | `&mut T` | `&T` | Mutable to immutable reference |
-| `Never` | Any type | Never type to any type |
+| `&mut [T; N]` | `&mut [T]` | Mutable array reference to mutable slice |
+| `&[T; N]` | `&[T]` | Array reference to slice |
+| `String` | `&str` | String to string slice (deref coercion) |
+| `Box(T: T)` | `&T` | Box to reference (deref coercion) |
+| `Never` | Any type | Never type to any type (expression position only) |
 | `[T; N]` | `Vec(T: T)` | Array to Vec (when target type is known) |
 
 ```spl
@@ -932,7 +955,7 @@ let arr = [1, 2, 3];          // No coercion: arr is [i32; 3]
 | `foo([1, 2, 3])` where `foo(v: Vec(T: i32))` | `Vec(T: i32)` | Parameter type triggers coercion |
 | `let x: [i32; 3] = [1, 2, 3]` | `[i32; 3]` | Target type is array, no coercion |
 
-**No implicit numeric coercions**: Unlike C, SPL never implicitly converts between numeric types.
+**No implicit numeric coercions**: Unlike C, SPL never implicitly converts between numeric types. See the Integer Overflow section below for wrapping/saturating arithmetic variants.
 
 ```spl
 let x: i32 = 42;
@@ -948,7 +971,7 @@ SPL uses methods for explicit type conversions instead of a cast operator. This 
 
 | Method | Behavior |
 |--------|----------|
-| `.widen()` | Safe widening (infers target type) |
+| `.widen()` | Safe widening; target type inferred from context (assignment, parameter, etc.) |
 | `.truncate()` | Explicit lossy truncation |
 | `.saturate()` | Clamp to target type's range |
 | `.try_into()` | Fallible conversion returning `Result` |

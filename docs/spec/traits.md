@@ -758,7 +758,7 @@ trait RefIterator {
 
 ### 12.2 How It Works with Scoped Types
 
-Unlike `Iterator` (which yields owned values) or `Indexed` (which uses random access), `RefIterator` implementations are **scoped types** that can hold references to their source collection:
+Unlike `Iterator` (which yields owned values) or `IndexIter` (which uses random access), `RefIterator` implementations are **scoped types** that can hold references to their source collection:
 
 ```spl
 #[scoped]
@@ -880,7 +880,7 @@ for (k, v) in &mut hashmap {
 
 | Trait | Yields | Storage | Use Case |
 |-------|--------|---------|----------|
-| `Indexed` | `&T` / `&mut T` | N/A (indexing) | Random-access: Vec, arrays |
+| `IndexIter` | `&T` / `&mut T` | N/A (indexing) | Random-access: Vec, arrays |
 | `RefIterator` | `&T` | Scoped types | Sequential: HashMap, LinkedList |
 | `Iterator` | `T` (owned) | Regular structs | Generators, ranges, consuming |
 
