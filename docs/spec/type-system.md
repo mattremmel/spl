@@ -153,7 +153,7 @@ let tax = price * 0.0825;          // Precise decimal arithmetic
 
 | Method | Description |
 |--------|-------------|
-| `round(places?, mode?)` | Round to N decimal places (default 0) with rounding mode (default `HalfEven`) |
+| `round(places, mode)` | Round to N decimal places with rounding mode; both parameters optional (default: 0 places, `HalfEven` mode) |
 | `truncate()` | Round toward zero (remove fractional part) |
 | `ceil()` | Round toward positive infinity |
 | `floor()` | Round toward negative infinity |
@@ -290,6 +290,7 @@ fn panic(msg: &str): Never {
 
 fn infinite(): Never {
     loop { }
+}
 ```
 
 The never type coerces to any other type in expression position, enabling code like:
@@ -458,7 +459,7 @@ type Predicate = fn(i32): bool;
 type BinaryOp = fn(i32, i32): i32;
 ```
 
-**Note:** The `fn(Args): Return` syntax represents callable types. Unlike Rust, SPL's `fn` type covers all callables including capturing closures. The compiler internally tracks whether closures implement `Fn`, `FnMut`, or `FnOnce` based on how they use their captures (see [closures.md](closures.md)), but at the type level, `fn(Args): Return` is the unified surface syntax for all callable types.
+**Note:** The `fn(Args): Return` syntax represents callable types. Unlike Rust, SPL's `fn` type covers all callables including capturing closures. The compiler internally tracks whether closures implement `Fn`, `FnMut`, or `FnOnce` based on how they use their captures, but at the type level, `fn(Args): Return` is the unified surface syntax for all callable types. See [closures.md](closures.md) Section 4 for the Fn/FnMut/FnOnce trait hierarchy and inference rules.
 
 ---
 
@@ -493,7 +494,7 @@ let r: &mut i32 = &mut x;
 | `&T`           | Many allowed | Read-only |
 | `&mut T`       | Exclusive | Read-write |
 
-**Second-Class References:** SPL uses second-class references with intersection semantics—references can be function parameters or returned from functions (borrowing from input refs), but cannot be stored in regular structs. By default, returned references borrow from all inputs. Optional lifetime markers (`'a`) provide precision. See [memory-model.md](memory-model.md) for full details.
+**Second-Class References:** SPL uses second-class references with intersection semantics—references can be function parameters or returned from functions (borrowing from input refs), but cannot be stored in regular structs. This restriction enables intersection semantics: without references in structs, the compiler can conservatively assume returned references borrow from all inputs, eliminating lifetime annotation complexity in most cases. By default, returned references borrow from all inputs. Optional lifetime markers (`'a`) provide precision when needed. See [memory-model.md](memory-model.md) for full details.
 
 **Scoped Types Exception:** Structs marked with `#[scoped]` can hold references, but are compiler-enforced to never escape their creation scope. This enables patterns like reference iterators while maintaining memory safety. See [memory-model.md](memory-model.md) section 8 for scoped types specification.
 
@@ -555,10 +556,10 @@ struct Point(
 )
 ```
 
-**Ambiguous contexts**: When inference cannot determine a unique type.
+**Ambiguous contexts**: When inference cannot determine a unique type and no subsequent usage provides type information.
 
 ```spl
-let x = Vec.new();  // ERROR: cannot infer type
+let x = Vec.new();  // ERROR: cannot infer type (if never used with a concrete element type)
 let x: Vec(T: i32) = Vec.new();  // OK
 
 let n = "42".parse();      // ERROR: cannot infer result type
@@ -933,18 +934,20 @@ impl Cost for Price(T: EUR) {
 Within an `impl` block, `Self` refers to the implementing type.
 
 ```spl
-impl Point(T: T) where T {
+impl Point(T: f64) {
     fn origin(): Self {
-        return Self(x: 0, y: 0);  // Self = Point(T: T)
+        return Self(x: 0.0, y: 0.0);  // Self = Point(T: f64)
     }
+}
 
+impl Point(T: T) where T {
     fn clone(&self): Self {
         return Self(x: self.x, y: self.y);
     }
 }
 ```
 
-`Self` is equivalent to the full type path with its type parameters (`Point(T: T)` in the example above).
+`Self` is equivalent to the full type path with its type parameters (`Point(T: f64)` and `Point(T: T)` in the examples above).
 
 ### Trait Objects
 
@@ -972,7 +975,7 @@ let shapes: Vec(T: Box(dyn Draw)) = [
 ];
 ```
 
-**Object Safety:** Not all traits can be used as trait objects. A trait is object-safe if all methods have a receiver (`self`, `&self`, or `&mut self`), no methods return `Self`, and no methods are generic.
+**Object Safety:** Not all traits can be used as trait objects. A trait is object-safe if: (1) all methods have a receiver (`self`, `&self`, or `&mut self`), (2) there are no associated functions (methods without `self`), (3) no methods return `Self`, and (4) no methods are generic.
 
 For complete trait object specification including object safety rules and workarounds, see [traits.md](traits.md) section 7.
 
@@ -1064,7 +1067,8 @@ SPL uses methods for explicit type conversions instead of a cast operator. This 
 
 | Method | Behavior |
 |--------|----------|
-| `.widen()` | Safe widening; target type inferred from context (assignment, parameter, etc.) |
+| `.widen()` | Safe widening between integer types, or integer to decimal; target type inferred from context |
+| `.to_f32()` / `.to_f64()` | Explicit integer-to-float conversion (may lose precision for large integers) |
 | `.truncate()` | Explicit lossy truncation |
 | `.saturate()` | Clamp to target type's range |
 | `.try_into()` | Fallible conversion returning `Result` |
@@ -1076,7 +1080,7 @@ let b: i64 = a.widen();           // Sign extension: 1000
 let c: i8 = a.truncate();         // Explicit truncation: -24
 let d: i8 = a.saturate();         // Clamped to 127
 let e: Result(T: i8, E: TryFromIntError) = a.try_into(); // Err (out of range)
-let f: f64 = a.widen();           // 1000.0
+let f: f64 = a.to_f64();          // 1000.0
 
 let g: f64 = 3.7;
 let h: i32 = g.truncate();        // 3 (truncation toward zero)
@@ -1199,6 +1203,7 @@ fn greet(name: String, title: String?): () {
 - The `??` operator (nullish coalescing) for defaults: `value ?? default`
 - The `throws` keyword for functions returning `Result`
 - The `Try` and `FromResidual` traits for custom error types
+- The `ControlFlow(C, B)` enum used by the `Try` trait
 
 ### Type Compatibility Rules
 
@@ -1333,9 +1338,9 @@ fn example_numerics() {
     let y: f64 = 2.0;
     let result = x * y;     // 6.28318
 
-    // Int to float
+    // Int to float (explicit conversion)
     let n: i32 = 42;
-    let f: f64 = n.widen();  // 42.0
+    let f: f64 = n.to_f64();  // 42.0
 }
 ```
 
