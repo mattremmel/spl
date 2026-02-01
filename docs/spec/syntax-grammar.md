@@ -999,10 +999,10 @@ BlockExpression = [ Label ] Block
 
 IfExpr = "if" Expression Block [ "else" ( IfExpr | Block ) ] ;
 
-(* Labels use postfix colon for definition, prefix colon for reference *)
-(* Definition: `label: { ... }` or `label: for x in ...` *)
-(* Reference: `break :label` or `continue :label` *)
-Label = IDENTIFIER ":" ;
+(* Labels use tick prefix and colon suffix for definition, tick prefix for reference *)
+(* Definition: `'label: { ... }` or `'label: for x in ...` *)
+(* Reference: `break 'label` or `continue 'label` *)
+Label = "'" IDENTIFIER ":" ;
 
 WhileExpr = [ Label ] "while" Expression Block ;
 
@@ -1011,13 +1011,13 @@ ForExpr = [ Label ] "for" Pattern "in" Expression Block ;
 LoopExpr = [ Label ] "loop" Block ;
 
 (* Break exits blocks/loops with optional value *)
-(* - `break;` exits immediately enclosing block/loop *)
-(* - `break value;` exits with value *)
-(* - `break :label;` exits labeled block/loop *)
-(* - `break :label value;` exits labeled block/loop with value *)
-BreakExpr = "break" [ ":" IDENTIFIER ] [ Expression ] ;
+(* - `break` exits immediately enclosing block/loop *)
+(* - `break value` exits with value *)
+(* - `break 'label` exits labeled block/loop *)
+(* - `break 'label value` exits labeled block/loop with value *)
+BreakExpr = "break" [ "'" IDENTIFIER ] [ Expression ] ;
 
-ContinueExpr = "continue" [ ":" IDENTIFIER ] ;
+ContinueExpr = "continue" [ "'" IDENTIFIER ] ;
 
 (* Explicit return required for returning values from functions *)
 ReturnExpr = "return" [ Expression ] ;
@@ -1103,19 +1103,19 @@ Blocks, loops, and other control flow constructs can be labeled for targeted `br
 |--------|---------|
 | `break` | Exit immediately enclosing block/loop |
 | `break value` | Exit immediately enclosing with value |
-| `break :label` | Exit specific labeled scope |
-| `break :label value` | Exit specific labeled scope with value |
+| `break 'label` | Exit specific labeled scope |
+| `break 'label value` | Exit specific labeled scope with value |
 | `continue` | Continue immediately enclosing loop |
-| `continue :label` | Continue specific labeled loop |
+| `continue 'label` | Continue specific labeled loop |
 
-Labels use postfix colon for definition and prefix colon for reference—the colon "points toward" what it refers to:
+Labels use tick prefix for both definition and reference, with a trailing colon for definitions (like Rust):
 
 ```spl
 // Labeled block with value
-let result = computed: {
+let result = 'computed: {
     let a = expensive()
     let b = transform(a)
-    break :computed a + b
+    break 'computed a + b
 }
 
 // Unlabeled block with value
@@ -1125,10 +1125,10 @@ let result = {
 }
 
 // Nested loops with labels
-outer: for x in items {
-    inner: for y in other {
+'outer: for x in items {
+    'inner: for y in other {
         if done {
-            break :outer  // exit outer loop
+            break 'outer  // exit outer loop
         }
     }
 }
@@ -1140,9 +1140,9 @@ The `yield` keyword is exclusively for generator functions—it suspends the gen
 
 ```spl
 gen fn count(): i32 {
-    let computed = {
+    let computed = 'block: {
         let a = 1
-        break a + 1  // block value via break
+        break 'block a + 1  // block value via break
     }
     yield computed       // generator yield
     yield computed * 2   // generator yield
@@ -1825,10 +1825,10 @@ fn main() {
     let [head, .., tail] = [1, 2, 3]   // First and last
 
     // Block with break
-    let computed = {
+    let computed = 'calc: {
         let a = 10
         let b = 20
-        break a + b
+        break 'calc a + b
     }
 }
 
