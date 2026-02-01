@@ -13,8 +13,8 @@ SPL uses a clean, consistent syntax with several key principles:
 5. **Return type with `:`**: Functions use `:` for return type: `fn foo(): i32`.
 6. **Where clauses for generics**: `fn id(x: T): T where T`.
 7. **Pattern matching with `is`**: `if value is Some(x)` instead of `if let`.
-8. **Explicit return/break**: `return` for functions, `break` for block values. Both require semicolons.
-9. **Uniform semicolons**: Semicolons are statement terminators with no semantic significance.
+8. **Explicit return/break**: `return` for functions, `break` for block values.
+9. **Optional semicolons**: Statement terminators are inferred from newlines, but can be explicitly terminated with a semicolon. Semicolons are only required when writing multiple statements on the same line.
 
 ## EBNF Notation
 
@@ -29,7 +29,7 @@ SPL uses a clean, consistent syntax with several key principles:
 | `UPPERCASE`    | Terminal token from lexer                    |
 | `PascalCase`   | Non-terminal (grammar rule)                  |
 
-Trailing commas are allowed in all comma-separated lists (Rust-style).
+Trailing commas are allowed in all comma-separated lists.
 
 ---
 
@@ -100,20 +100,20 @@ AttrArg = IDENTIFIER [ "=" Expression ]  (* key or key = value *)
 
 ```ebnf
 (* Compile-time constant *)
-ConstDef = "const" IDENTIFIER ":" Type "=" Expression ";" ;
+ConstDef = "const" IDENTIFIER ":" Type "=" Expression [ ";" ] ;
 
 (* Static variable (module-level mutable state) *)
-StaticDef = "static" [ "mut" ] IDENTIFIER ":" Type "=" Expression ";" ;
+StaticDef = "static" [ "mut" ] IDENTIFIER ":" Type "=" Expression [ ";" ] ;
 ```
 
 **Examples:**
 
 ```spl
-const MAX_SIZE: usize = 1024;
-const PI: f64 = 3.14159265359;
+const MAX_SIZE: usize = 1024
+const PI: f64 = 3.14159265359
 
-static COUNTER: i32 = 0;
-static mut GLOBAL_STATE: i32 = 0;  // Requires unsafe to access
+static COUNTER: i32 = 0
+static mut GLOBAL_STATE: i32 = 0  // Requires unsafe to access
 ```
 
 ### Function Definitions
@@ -156,12 +156,12 @@ TypeBound = TypePath [ GenericArgs ] ;
 ```spl
 // Simple function with return type
 fn add(a: i32, b: i32): i32 {
-    return a + b;
+    return a + b
 }
 
 // Generic function - `where T` declares the type parameter T
 fn identity(x: T): T where T {
-    return x;
+    return x
 }
 
 // Named parameters (external label differs from internal name)
@@ -172,26 +172,26 @@ fn greet(to person: String) {
 // Omit label with underscore
 fn add(_ a: i32, _ b: i32): i32 {
     // Called as: add(1, 2) instead of add(a: 1, b: 2)
-    return a + b;
+    return a + b
 }
 
 // Generic with bounds
 fn clone_it(x: &T): T where T: Clone {
-    return x.clone();
+    return x.clone()
 }
 
 // Function with typed throws (returns Result(T: String, E: IoError))
 fn read_file(path: &str): String throws IoError {
     if !path.exists() {
-        throw .NotFound(path);
+        throw .NotFound(path)
     }
-    return fs.read_to_string(path);
+    return fs.read_to_string(path)
 }
 
 // Function with untyped throws (returns Result(T: Data, E: Error))
 fn process(input: &str): Data throws {
-    let parsed = parse(input)!;
-    return transform(parsed);
+    let parsed = parse(input)!
+    return transform(parsed)
 }
 ```
 
@@ -312,7 +312,7 @@ TraitItem = [ "pub" ] ( TraitMethod | AssociatedType ) ;
 
 TraitMethod = "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ WhereClause ] ( ";" | Block ) ;
 
-AssociatedType = "type" IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] ";" ;
+AssociatedType = "type" IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] [ ";" ] ;
 ```
 
 **Examples:**
@@ -320,24 +320,24 @@ AssociatedType = "type" IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] ";" ;
 ```spl
 // Simple trait
 trait Clone {
-    fn clone(&self): Self;
+    fn clone(&self): Self
 }
 
 // Trait with associated type
 trait Iterator {
-    type Item;
-    fn next(&mut self): Self.Item?;
+    type Item
+    fn next(&mut self): Self.Item?
 }
 
 // Trait with default implementation
 trait Default {
-    fn default(): Self;
+    fn default(): Self
 }
 
 // Trait with bounds
 trait Numeric: Add + Sub + Mul + Div {
-    fn zero(): Self;
-    fn one(): Self;
+    fn zero(): Self
+    fn one(): Self
 }
 ```
 
@@ -359,14 +359,14 @@ ImplItem = [ "pub" ] FunctionDef ;
 // Inherent implementation
 impl Point {
     pub fn new(x: f64, y: f64): Point {
-        return Point(x: x, y: y);
+        return Point(x: x, y: y)
     }
 }
 
 // Trait implementation
 impl Clone for Point {
     fn clone(&self): Self {
-        return Self(x: self.x, y: self.y);
+        return Self(x: self.x, y: self.y)
     }
 }
 
@@ -376,7 +376,7 @@ impl Clone for Option(T: T) where T: Clone {
         return match self {
             Some(v) => Some(v.clone()),
             None => None,
-        };
+        }
     }
 }
 ```
@@ -389,34 +389,34 @@ SPL's `where` clause both **declares** and optionally **constrains** type parame
 // Simple impl (non-generic type)
 impl Point {
     pub fn new(x: f64, y: f64): Point {
-        return Point(x: x, y: y);
+        return Point(x: x, y: y)
     }
 }
 
 // Generic impl - `where T` declares the type parameter
 impl Box(T: T) where T {
     pub fn unwrap(self): T {
-        return self.value;
+        return self.value
     }
 }
 
 // Conditional impl - bounds restrict which types this impl applies to
 impl Container(T: T) where T: Clone {
     pub fn clone_all(&self): Vec(T: T) {
-        return self.items.clone();
+        return self.items.clone()
     }
 }
 
 // Concrete impl - no where clause, implements for specific type
 impl Box(T: u32) {
     pub fn special_u32_method(&self): u32 {
-        return self.value * 2;
+        return self.value * 2
     }
 }
 
 impl Box(T: String) {
     pub fn special_string_method(&self): usize {
-        return self.value.len();
+        return self.value.len()
     }
 }
 
@@ -424,7 +424,7 @@ impl Box(T: String) {
 // Emphasizes that T is the parameter NAME and R is the TYPE
 struct Wrapper(val: T) where T
 impl Wrapper(T: R) where R {
-    fn get(&self): &R { return &self.val; }
+    fn get(&self): &R { return &self.val }
 }
 
 // Method-level generics - methods can have additional type parameters
@@ -436,20 +436,20 @@ impl Vec(T: T) where T {
 
 // Multiple concrete trait implementations
 trait Format {
-    fn display(&self): String;
+    fn display(&self): String
 }
 
 struct Amount(value: T) where T
 
 impl Format for Amount(T: USD) {
     fn display(&self): String {
-        return format("${}", self.value.cents);
+        return format("${}", self.value.cents)
     }
 }
 
 impl Format for Amount(T: EUR) {
     fn display(&self): String {
-        return format("{}€", self.value.cents);
+        return format("{}€", self.value.cents)
     }
 }
 ```
@@ -457,7 +457,7 @@ impl Format for Amount(T: EUR) {
 ### Type Aliases
 
 ```ebnf
-TypeAlias = "type" IDENTIFIER [ GenericParams ] "=" Type [ WhereClause ] ";" ;
+TypeAlias = "type" IDENTIFIER [ GenericParams ] "=" Type [ WhereClause ] [ ";" ] ;
 
 GenericParams = "(" TypeParamList ")" ;
 
@@ -469,7 +469,7 @@ TypeParamList = IDENTIFIER { "," IDENTIFIER } [ "," ] ;
 Import items or modules into scope. See `module-system.md` for full details.
 
 ```ebnf
-UseDecl = "use" UsePath ";" ;
+UseDecl = "use" UsePath [ ";" ] ;
 
 UsePath = PathPrefix [ "." UseTree ] ;
 
@@ -487,13 +487,13 @@ UseTreeList = UseTree { "," UseTree } [ "," ] ;
 
 | Syntax | Description |
 |--------|-------------|
-| `use std.vec.Vec;` | Import single item |
-| `use std.io;` | Import module |
-| `use std.collections.HashMap as Map;` | Import with rename |
-| `use std.collections.{HashMap, HashSet};` | Grouped import |
-| `use std.prelude.*;` | Glob import |
-| `use $.utils.helper;` | Package-root import |
-| `use super.common;` | Parent module import |
+| `use std.vec.Vec` | Import single item |
+| `use std.io` | Import module |
+| `use std.collections.HashMap as Map` | Import with rename |
+| `use std.collections.{HashMap, HashSet}` | Grouped import |
+| `use std.prelude.*` | Glob import |
+| `use $.utils.helper` | Package-root import |
+| `use super.common` | Parent module import |
 
 ### Module Declarations
 
@@ -507,8 +507,8 @@ ModuleDecl = "module" IDENTIFIER ( ";" | "{" { Item } "}" ) ;
 
 | Syntax | Description |
 |--------|-------------|
-| `module network;` | Reference submodule in directory |
-| `pub module api;` | Public submodule reference |
+| `module network` | Reference submodule in directory |
+| `pub module api` | Public submodule reference |
 | `module internal { ... }` | Inline module for namespacing |
 
 **Inline Module Example:**
@@ -517,16 +517,16 @@ ModuleDecl = "module" IDENTIFIER ( ";" | "{" { Item } "}" ) ;
 // Inline module for namespacing
 module internal {
     fn helper(): i32 {
-        return 42;
+        return 42
     }
 
     pub fn public_helper(): i32 {
-        return helper();
+        return helper()
     }
 }
 
 fn main() {
-    let x = internal.public_helper();
+    let x = internal.public_helper()
 }
 ```
 
@@ -540,7 +540,7 @@ Extern blocks declare foreign functions. Extern function definitions create SPL 
 (* Declare foreign functions *)
 ExternBlock = "extern" AbiString "{" { ExternFnDecl } "}" ;
 
-ExternFnDecl = "fn" IDENTIFIER "(" [ ExternParamList ] [ "," "..." ] ")" [ ":" Type ] ";" ;
+ExternFnDecl = "fn" IDENTIFIER "(" [ ExternParamList ] [ "," "..." ] ")" [ ":" Type ] [ ";" ] ;
 
 ExternParamList = ExternParam { "," ExternParam } ;
 
@@ -558,18 +558,18 @@ AbiString = "\"C\"" ;
 // Declare foreign functions (in extern block)
 #[link(name = "mylib")]
 extern "C" {
-    fn c_function(x: i32): i32;
-    fn variadic_fn(fmt: Ptr(T: u8), ...): i32;
+    fn c_function(x: i32): i32
+    fn variadic_fn(fmt: Ptr(T: u8), ...): i32
 }
 
 // Define SPL function callable from C (outside extern block)
 #[no_mangle]
 extern "C" fn my_callback(value: i32): i32 {
-    return value * 2;
+    return value * 2
 }
 
 // Function pointer type for callbacks
-type Callback = extern "C" fn(i32): i32;
+type Callback = extern "C" fn(i32): i32
 ```
 
 **Notes:**
@@ -659,20 +659,20 @@ Tuples can have optional named fields, enabling anonymous record types without d
 ```spl
 // Named tuple type as return type
 fn get_coords(x: f64): (identity: f64, square: f64) {
-    return (identity: x, square: x * x);
+    return (identity: x, square: x * x)
 }
 
 // Named tuple in variable binding
-let point: (x: i32, y: i32) = (x: 1, y: 2);
+let point: (x: i32, y: i32) = (x: 1, y: 2)
 
 // Access by name
-let x_val = point.x;
+let x_val = point.x
 
 // Positional access also works
-let y_val = point.1;
+let y_val = point.1
 
 // Mixed positional and named (allowed)
-let mixed: (i32, name: String) = (42, name: "hello");
+let mixed: (i32, name: String) = (42, name: "hello")
 ```
 
 **Use Cases:**
@@ -695,9 +695,9 @@ Block = "{" { Statement } "}" ;
 Statement = LetStatement
           | ExpressionStatement ;
 
-LetStatement = "let" [ "mut" ] Pattern [ ":" Type ] [ "=" Expression ] ";" ;
+LetStatement = "let" [ "mut" ] Pattern [ ":" Type ] [ "=" Expression ] [ ";" ] ;
 
-ExpressionStatement = Expression ";"
+ExpressionStatement = Expression [ ";" ]
                     | BlockExpression [ ";" ] ;
 ```
 
@@ -705,18 +705,15 @@ Block expressions (`if`, `while`, `for`, `loop`, and bare blocks) may omit the t
 
 **Semicolon Rules:**
 
-Unlike Rust, semicolons in SPL are purely syntactic terminators with no semantic significance:
+SPL uses Swift-style optional semicolons:
 
-| Context | Rule |
-|---------|------|
-| Regular statements | Semicolon required: `let x = 1;` |
-| Block expressions as statements | Semicolon optional: `if x { ... }` or `if x { ... };` |
-| `return` statement | Semicolon required: `return 42;` |
-| `break` statement | Semicolon required: `break value;` |
-| `yield` statement (generators) | Semicolon required: `yield value;` |
-| Expression in block (not break) | Semicolon required, value discarded |
+| Rule | Description |
+|------|-------------|
+| Newline termination | Newlines act as statement terminators |
+| Optional explicit | Semicolons can be added explicitly but are never required at end of line |
+| Multiple statements | Required only when writing multiple statements on a single line: `let x = 1; let y = 2` |
 
-The semicolon does NOT determine whether an expression's value is used (unlike Rust). Instead, `return` and `yield` explicitly indicate intent.
+Unlike Rust, semicolons have no semantic significance—they don't determine whether an expression's value is used.
 
 **Block Values:**
 
@@ -724,17 +721,17 @@ Blocks containing multiple statements require explicit `break` to produce a valu
 
 ```spl
 let result = {
-    let a = compute();
-    let b = transform(a);
-    break a + b;
-};
+    let a = compute()
+    let b = transform(a)
+    break a + b
+}
 ```
 
 However, blocks containing a **single expression** have an implicit value—no `break` is needed:
 
 ```spl
-let doubled = if x > 0 { x * 2 } else { 0 };  // Single expression per branch
-let value = { compute() };                     // Single expression block
+let doubled = if x > 0 { x * 2 } else { 0 }  // Single expression per branch
+let value = { compute() }                     // Single expression block
 ```
 
 Without `break` or a single expression, a block's type is `()` (unit).
@@ -937,7 +934,7 @@ let b = Box(T: i32, value: 42)
 // Self in impl blocks
 impl Point {
     fn origin(): Self {
-        return Self(x: 0, y: 0);
+        return Self(x: 0, y: 0)
     }
 }
 ```
@@ -979,12 +976,12 @@ set_color(.Blue)
 let c: Color = .Green
 
 // With variant data
-let msg: Message = .Move(x: 10, y: 20);
-let result: Result(T: i32, E: Error) = .Ok(42);
+let msg: Message = .Move(x: 10, y: 20)
+let result: Result(T: i32, E: Error) = .Ok(42)
 
 // In return statements (type inferred from function signature)
 fn default_color(): Color {
-    return .Red;
+    return .Red
 }
 
 // Comparison with known enum type
@@ -1068,30 +1065,30 @@ fn double(x: i32): i32 { x * 2 }
 
 // Multi-statement function: explicit return required
 fn compute(x: i32): i32 {
-    let temp = x * 2;
-    return temp + 1;
+    let temp = x * 2
+    return temp + 1
 }
 
 // Single-expression block: implicit value
-let result = if condition { x * 2 } else { 0 };
+let result = if condition { x * 2 } else { 0 }
 
 // Multi-statement block: break required
 let result = {
-    let temp = compute();
-    break temp * 2;
-};
+    let temp = compute()
+    break temp * 2
+}
 
 // Error: multi-statement without return
 fn bad(x: i32): i32 {
-    let temp = x;
-    temp * 2;  // ERROR: missing return
+    let temp = x
+    temp * 2  // ERROR: missing return
 }
 
 // Error: multi-statement without break
 let bad = {
-    let x = 1;
-    x + 1;  // Block has type (), not i32
-};
+    let x = 1
+    x + 1  // Block has type (), not i32
+}
 ```
 
 **Why this design?**
@@ -1104,34 +1101,34 @@ Blocks, loops, and other control flow constructs can be labeled for targeted `br
 
 | Syntax | Meaning |
 |--------|---------|
-| `break;` | Exit immediately enclosing block/loop |
-| `break value;` | Exit immediately enclosing with value |
-| `break :label;` | Exit specific labeled scope |
-| `break :label value;` | Exit specific labeled scope with value |
-| `continue;` | Continue immediately enclosing loop |
-| `continue :label;` | Continue specific labeled loop |
+| `break` | Exit immediately enclosing block/loop |
+| `break value` | Exit immediately enclosing with value |
+| `break :label` | Exit specific labeled scope |
+| `break :label value` | Exit specific labeled scope with value |
+| `continue` | Continue immediately enclosing loop |
+| `continue :label` | Continue specific labeled loop |
 
 Labels use postfix colon for definition and prefix colon for reference—the colon "points toward" what it refers to:
 
 ```spl
 // Labeled block with value
 let result = computed: {
-    let a = expensive();
-    let b = transform(a);
-    break :computed a + b;
-};
+    let a = expensive()
+    let b = transform(a)
+    break :computed a + b
+}
 
 // Unlabeled block with value
 let result = {
-    let a = expensive();
-    break a * 2;
-};
+    let a = expensive()
+    break a * 2
+}
 
 // Nested loops with labels
 outer: for x in items {
     inner: for y in other {
         if done {
-            break :outer;  // exit outer loop
+            break :outer  // exit outer loop
         }
     }
 }
@@ -1144,11 +1141,11 @@ The `yield` keyword is exclusively for generator functions—it suspends the gen
 ```spl
 gen fn count(): i32 {
     let computed = {
-        let a = 1;
-        break a + 1;  // block value via break
-    };
-    yield computed;       // generator yield
-    yield computed * 2;   // generator yield
+        let a = 1
+        break a + 1  // block value via break
+    }
+    yield computed       // generator yield
+    yield computed * 2   // generator yield
 }
 ```
 
@@ -1538,17 +1535,17 @@ When a name could be either a type or a value:
 
 ```spl
 // 'String' is a type (uppercase), parsed as Type
-let v: Vec(T: String) = Vec.new();
+let v: Vec(T: String) = Vec.new()
 
 // 'string' is a value (lowercase), parsed as Expression
-let s = string;              // Variable reference
-let p = Point(x: string);    // Value passed to field
+let s = string              // Variable reference
+let p = Point(x: string)    // Value passed to field
 
 // Lowercase type alias - case suggests value, but semantic analysis
 // reinterprets when `myint` resolves to a type
-type myint = i32;
-let v: Vec(t: myint) = Vec.new();  // t lowercase, but myint is a type
-                                    // Semantic analysis reinterprets as type arg
+type myint = i32
+let v: Vec(t: myint) = Vec.new()  // t lowercase, but myint is a type
+                                   // Semantic analysis reinterprets as type arg
 ```
 
 #### Distinguishing Calls from Instantiation
@@ -1570,30 +1567,30 @@ parse(config: cfg, "input")    // config is value arg (lowercase)
 
 ```spl
 // Option.Some is a path to variant, not a type
-let x = Option.Some(42);       // Variant constructor
+let x = Option.Some(42)       // Variant constructor
 
 // Option(T: i32) is a type
-let y: Option(T: i32) = Some(42);
+let y: Option(T: i32) = Some(42)
 
 // Vec(T: i32).new() - type then method
-let v = Vec(T: i32).new();
+let v = Vec(T: i32).new()
 
 // Vec.new() - path to associated function (type inferred)
-let v = Vec.new();
-v.push(42);  // Now Vec(T: i32)
+let v = Vec.new()
+v.push(42)  // Now Vec(T: i32)
 ```
 
 #### Nested Generic Types
 
 ```spl
 // Nested generics - each level uses its own type args
-let nested: Vec(T: Option(T: i32)) = Vec.new();
+let nested: Vec(T: Option(T: i32)) = Vec.new()
 
 // HashMap with complex value type
-let map: HashMap(K: String, V: Vec(T: i32)) = HashMap.new();
+let map: HashMap(K: String, V: Vec(T: i32)) = HashMap.new()
 
 // Result containing Option
-let r: Result(T: Option(T: User), E: Error) = Ok(Some(user));
+let r: Result(T: Option(T: User), E: Error) = Ok(Some(user))
 ```
 
 #### Method Chains with Types
@@ -1644,13 +1641,13 @@ let obj = JsonObject(
     Type: "user",       // Uppercase, but string literal forces value interpretation
     ID: 12345,          // Uppercase, but integer literal forces value interpretation
     data: bytes,        // Value arg (lowercase default)
-);
+)
 
 // Haskell-style lowercase type parameters
 // Parser initially tries Expression grammar due to lowercase, but backtracks
 // when semantic analysis can't find a value named `f`
 trait Functor where f {
-    fn map(self, func: fn(A): B): f(b: B) where A, B, a, b;
+    fn map(self, func: fn(A): B): f(b: B) where A, B, a, b
 }
 // Semantic analysis reinterprets f, a, b as type parameters when they
 // resolve to types rather than values
@@ -1660,24 +1657,24 @@ trait Functor where f {
 
 ```spl
 // 1. Generic function with inferred type
-let items = vec![1, 2, 3];
-let doubled = items.map(|x| x * 2);  // Types inferred
+let items = vec![1, 2, 3]
+let doubled = items.map(|x| x * 2)  // Types inferred
 
 // 2. Generic function with explicit type
-let parsed = parse(T: Config, input);  // Explicit T
+let parsed = parse(T: Config, input)  // Explicit T
 
 // 3. Type annotation on binding
-let config: Config = parse(input);     // Type on let, not call
+let config: Config = parse(input)     // Type on let, not call
 
 // 4. Turbofish not needed - use type annotation instead
-// Rust: let v = Vec::<i32>::new();
-// SPL:  let v: Vec(T: i32) = Vec.new();  // Or...
-// SPL:  let v = Vec(T: i32).new();       // Type application
+// Rust: let v = Vec::<i32>::new()
+// SPL:  let v: Vec(T: i32) = Vec.new()  // Or...
+// SPL:  let v = Vec(T: i32).new()       // Type application
 
 // 5. Return type provides context
 fn load(): Result(T: Config, E: Error) {
-    let data = read_file(path)!;    // Result types inferred
-    return parse(data);              // Return type known
+    let data = read_file(path)!    // Result types inferred
+    return parse(data)              // Return type known
 }
 ```
 
@@ -1685,19 +1682,19 @@ fn load(): Result(T: Config, E: Error) {
 
 ```spl
 // Imported type - still uppercase
-use other.module.Config;
-let c: Config = Config.default();
+use other.module.Config
+let c: Config = Config.default()
 
 // Imported value - still lowercase
-use other.module.default_config;
-let c = default_config();
+use other.module.default_config
+let c = default_config()
 
 // Aliased import - case preserved
-use other.module.Config as Cfg;    // Type alias
-let c: Cfg = Cfg.default();
+use other.module.Config as Cfg    // Type alias
+let c: Cfg = Cfg.default()
 
-use other.module.helper as h;      // Value alias
-let result = h();
+use other.module.helper as h      // Value alias
+let result = h()
 ```
 
 ---
@@ -1716,45 +1713,45 @@ pub struct Point(
 impl Point(T: T) where T {
     // Return type with colon
     pub fn new(x: T, y: T): Point(T: T) {
-        return Point(x: x, y: y);
+        return Point(x: x, y: y)
     }
 
     pub fn swap(&mut self) {
-        let temp = self.x;
-        self.x = self.y;
-        self.y = temp;
+        let temp = self.x
+        self.x = self.y
+        self.y = temp
     }
 }
 
 // Type alias with generic
-type Pair(T) = (T, T);
+type Pair(T) = (T, T)
 
 // Named parameters with labels
 fn distance(from p1: &Point(T: f64), to p2: &Point(T: f64)): f64 {
-    let dx = p1.x - p2.x;
-    let dy = p1.y - p2.y;
-    return (dx * dx + dy * dy).sqrt();
+    let dx = p1.x - p2.x
+    let dy = p1.y - p2.y
+    return (dx * dx + dy * dy).sqrt()
 }
 
 fn main() {
     // Struct instantiation with parentheses
-    let mut origin = Point.new(0.0, 0.0);
-    let target = Point(x: 3.0, y: 4.0);
+    let mut origin = Point.new(0.0, 0.0)
+    let target = Point(x: 3.0, y: 4.0)
 
     // Associated functions on generic types
-    let numbers: Vec(T: i32) = Vec(T: i32).new();
-    let map = HashMap(K: String, V: i32).new();
+    let numbers: Vec(T: i32) = Vec(T: i32).new()
+    let map = HashMap(K: String, V: i32).new()
 
     // Named arguments at call site
-    let dist = distance(from: &origin, to: &target);
+    let dist = distance(from: &origin, to: &target)
 
     // Control flow
     if dist > 5.0 {
-        return;
+        return
     }
 
     // Pattern matching with is
-    let maybe: i32? = Some(42);
+    let maybe: i32? = Some(42)
     if maybe is Some(x) {
         // x is bound
     }
@@ -1767,92 +1764,92 @@ fn main() {
     let doubled = match maybe {
         Some(n) => n * 2,
         None => 0,
-    };
+    }
 
     // Loops
     for i in 0..10 {
         if i % 2 == 0 {
-            continue;
+            continue
         }
         // Process odd numbers
     }
 
-    let mut count = 0;
+    let mut count = 0
     while count < 3 {
-        count += 1;
+        count += 1
     }
 
     loop {
         if count >= 10 {
-            break;
+            break
         }
-        count += 1;
+        count += 1
     }
 
     // Expressions and operators
-    let value = 10 + 5 * 2;             // 20 (multiplicative binds tighter)
-    let widened = 65.widen();           // Type conversion via method
-    let reference = &mut origin;        // Mutable reference
-    let indexed = [1, 2, 3][0];         // Array indexing
-    let range = 0..100;                 // Exclusive range (0 to 99)
-    let inclusive = 0..=100;            // Inclusive range (0 to 100)
+    let value = 10 + 5 * 2             // 20 (multiplicative binds tighter)
+    let widened = 65.widen()           // Type conversion via method
+    let reference = &mut origin        // Mutable reference
+    let indexed = [1, 2, 3][0]         // Array indexing
+    let range = 0..100                 // Exclusive range (0 to 99)
+    let inclusive = 0..=100            // Inclusive range (0 to 100)
 
     // Slicing and indexing with $
-    let arr = [1, 2, 3, 4, 5];
-    let last = arr[$-1];                // 5 (last element)
-    let second_last = arr[$-2];         // 4 (second to last)
-    let slice1 = arr[1:3];              // [2, 3]
-    let slice2 = arr[:3];               // [1, 2, 3]
-    let slice3 = arr[2:];               // [3, 4, 5]
-    let slice4 = arr[2:$];              // [3, 4, 5] (explicit end)
-    let middle = arr[1:$-1];            // [2, 3, 4] (exclude first and last)
-    let copy = arr[:];                  // full copy
+    let arr = [1, 2, 3, 4, 5]
+    let last = arr[$-1]                // 5 (last element)
+    let second_last = arr[$-2]         // 4 (second to last)
+    let slice1 = arr[1:3]              // [2, 3]
+    let slice2 = arr[:3]               // [1, 2, 3]
+    let slice3 = arr[2:]               // [3, 4, 5]
+    let slice4 = arr[2:$]              // [3, 4, 5] (explicit end)
+    let middle = arr[1:$-1]            // [2, 3, 4] (exclude first and last)
+    let copy = arr[:]                  // full copy
 
     // Named tuples
-    let coords = (x: 3.0, y: 4.0);      // Named tuple expression
-    let x_coord = coords.x;              // Named field access
-    let y_coord = coords.1;              // Positional access also works
+    let coords = (x: 3.0, y: 4.0)      // Named tuple expression
+    let x_coord = coords.x              // Named field access
+    let y_coord = coords.1              // Positional access also works
 
     // Named tuple as return type
     fn divide(a: i32, b: i32): (quotient: i32, remainder: i32) {
-        return (quotient: a / b, remainder: a % b);
+        return (quotient: a / b, remainder: a % b)
     }
-    let result = divide(17, 5);
-    let q = result.quotient;             // Named access: 3
-    let r = result.remainder;            // Named access: 2
+    let result = divide(17, 5)
+    let q = result.quotient             // Named access: 3
+    let r = result.remainder            // Named access: 2
 
     // Patterns
-    let (a, b) = (1, 2);                // Tuple destructuring
-    let Point(x, y) = target;           // Struct destructuring
-    let [first, ..rest] = [1, 2, 3, 4]; // Slice pattern with rest
-    let [head, .., tail] = [1, 2, 3];   // First and last
+    let (a, b) = (1, 2)                // Tuple destructuring
+    let Point(x, y) = target           // Struct destructuring
+    let [first, ..rest] = [1, 2, 3, 4] // Slice pattern with rest
+    let [head, .., tail] = [1, 2, 3]   // First and last
 
     // Block with break
     let computed = {
-        let a = 10;
-        let b = 20;
-        break a + b;
-    };
+        let a = 10
+        let b = 20
+        break a + b
+    }
 }
 
 // Function types (colon for return)
-type Predicate = fn(i32): bool;
-type BinaryOp = fn(i32, i32): i32;
-type Action = fn();
+type Predicate = fn(i32): bool
+type BinaryOp = fn(i32, i32): i32
+type Action = fn()
 
 // Omit labels with underscore
 fn apply(_ f: fn(i32): i32, _ x: i32): i32 {
-    return f(x);
+    return f(x)
 }
 
 // Self type in impl blocks
 impl Point(T: T) where T {
     fn origin(): Self {
-        return Self(x: 0, y: 0);
+        return Self(x: 0, y: 0)
     }
 
     fn clone(&self): Self {
-        return Self(x: self.x, y: self.y);
+        return Self(x: self.x, y: self.y)
     }
 }
 ```
@@ -1890,6 +1887,6 @@ impl Point(T: T) where T {
 | Pattern matching    | `if let Some(x) = v {}`   | `if v is Some(x) {}`         |
 | Function return     | `expr` (implicit tail)    | `expr` (single) or `return` (multi-stmt) |
 | Block value         | `expr` (implicit tail)    | `expr` (single) or `break` (multi-stmt)  |
-| Semicolons          | Semantic (tail vs stmt)   | Required for statements      |
+| Semicolons          | Semantic (tail vs stmt)   | Optional (newline-terminated) |
 | Named parameters    | Not built-in              | `fn foo(to name: T)`         |
 | Named tuples        | Not supported             | `(x: i32, y: i32)` type and expr |
