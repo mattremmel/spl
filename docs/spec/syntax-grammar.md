@@ -133,8 +133,8 @@ Param = SelfParam | TypedParam ;
 
 SelfParam = [ "&" [ "mut" ] ] "self" ;
 
-(* Parameters with optional labels *)
-TypedParam = [ LabelSpec ] [ "mut" ] IDENTIFIER ":" Type ;
+(* Parameters with optional labels and optional default values *)
+TypedParam = [ LabelSpec ] [ "mut" ] IDENTIFIER ":" Type [ "=" Expression ] ;
 
 (* Label before parameter name: "to name" means call with "to: value" *)
 (* "_" means no label required at call site *)
@@ -147,6 +147,54 @@ WhereClause = "where" TypeParam { "," TypeParam } [ "," ] ;
 TypeParam = IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] ;
 
 TypeBound = TypePath [ GenericArgs ] ;
+```
+
+**Default Parameters:**
+
+Parameters can have default values that are used when the argument is omitted at the call site. Default values are expressions evaluated at call time (not definition time).
+
+| Rule | Description |
+|------|-------------|
+| Syntax | `param: Type = expr` |
+| Evaluation | Expression evaluated fresh each call when argument omitted |
+| Position | Allowed on any parameter |
+| Calling | After first default, remaining args must use names (unless also defaulted) |
+| Restriction | Default expressions cannot reference other parameters |
+
+**Examples:**
+
+```spl
+// Simple default
+fn greet(name: String = "World") {
+    print("Hello, " + name)
+}
+greet()           // "Hello, World"
+greet("Alice")    // "Hello, Alice"
+
+// Multiple defaults
+fn connect(host: String, port: i32 = 8080, timeout: i32 = 30) {
+    // ...
+}
+connect("localhost")                      // port=8080, timeout=30
+connect("localhost", 9000)                // port=9000, timeout=30
+connect("localhost", timeout: 60)         // port=8080, timeout=60
+
+// With named labels
+fn send(to recipient: String, message: String = "Hello") {
+    // Called as: send(to: "Alice") or send(to: "Alice", message: "Hi")
+}
+
+// Expression defaults (evaluated at call time)
+fn log(message: String, timestamp: DateTime = DateTime.now()) {
+    // timestamp is evaluated fresh each call, not when function is defined
+}
+
+// Non-default after default requires named argument
+fn example(a: i32 = 1, b: i32) {
+    // b has no default, so must be named when a is omitted
+}
+example(b: 5)           // a=1, b=5
+example(10, 20)         // a=10, b=20
 ```
 
 **Note:** Generator functions require a return type annotation (the yielded type). See [iteration.md](iteration.md) for full generator semantics.
@@ -1726,6 +1774,11 @@ impl Point(T: T) where T {
 // Type alias with generic
 type Pair(T) = (T, T)
 
+// Function with default parameters
+fn create_point(x: f64 = 0.0, y: f64 = 0.0): Point(T: f64) {
+    return Point(x, y)
+}
+
 // Named parameters with labels
 fn distance(from p1: &Point(T: f64), to p2: &Point(T: f64)): f64 {
     let dx = p1.x - p2.x
@@ -1889,4 +1942,5 @@ impl Point(T: T) where T {
 | Block value         | `expr` (implicit tail)    | `expr` (single) or `break` (multi-stmt)  |
 | Semicolons          | Semantic (tail vs stmt)   | Optional (newline-terminated) |
 | Named parameters    | Not built-in              | `fn foo(to name: T)`         |
+| Default parameters  | Not supported             | `fn foo(x: i32 = 0)`         |
 | Named tuples        | Not supported             | `(x: i32, y: i32)` type and expr |
