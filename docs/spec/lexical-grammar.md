@@ -97,8 +97,6 @@ SPL reserves 37 keywords that cannot be used as identifiers:
 | `<<`     | Left shift       |
 | `>>`     | Right shift      |
 
-**Note:** `&` serves dual purposes: as a prefix operator (reference) and as a binary bitwise operator. Context disambiguates.
-
 ### Assignment Operators
 
 | Operator | Description             |
@@ -132,53 +130,6 @@ SPL reserves 37 keywords that cannot be used as identifiers:
 | `*`      | Dereference (for references)      |
 | `=>`     | Match arm separator               |
 | `?`      | Optional type (suffix for `Option(T)`) |
-
-**Note:** Return types use `:` (colon) instead of `->`. Paths use `.` (dot) as the only separator (no `::`). Type application uses parentheses with named args: `Vec(T: i32)` instead of `Vec<i32>`. Package-root paths use `$`: `$.utils.helper`. The `as` keyword is used only for import renaming, not type casting (use methods like `.widen()`, `.truncate()` for conversions).
-
-**Case-based argument disambiguation:** In argument lists, uppercase identifiers (e.g., `T:`) indicate type arguments while lowercase identifiers (e.g., `x:`) indicate value arguments. The parser uses case to choose the initial parse path and backtracks if parsing fails. Semantic analysis can reinterpret nodes when name resolution reveals the opposite was intended:
-```spl
-HashMap(K: String, V: i32)     // K, V uppercase → type arguments
-Point(x: 1, y: 2)              // x, y lowercase → value arguments
-Config(URL: url, ID: id)       // Uppercase but values - literals/vars force value parse
-functor(f: Option)             // Lowercase but type - semantic reinterpretation
-```
-
-**Range operators:** `..` creates an exclusive range (like Python's `range()`), `..=` creates an inclusive range.
-
-```spl
-0..5     // 0, 1, 2, 3, 4 (excludes 5)
-0..=5    // 0, 1, 2, 3, 4, 5 (includes 5)
-```
-
-**The `$` operator in indexing:** In index and slice expressions, `$` represents the array/slice length, enabling Python-style negative indexing:
-```spl
-arr[$-1]     // Last element (like Python's arr[-1])
-arr[$-2]     // Second to last element
-arr[1:$-1]   // All elements except first and last
-```
-
-### Operator Precedence (lowest to highest)
-
-| Precedence | Operators                    | Associativity | Description |
-|------------|------------------------------|---------------|-------------|
-| 1 (lowest) | `=` `+=` `-=` `*=` `**=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | Right | Assignment |
-| 2          | `..` `..=`                   | Left          | Range |
-| 3          | `??`                         | Right         | Nullish coalescing |
-| 4          | `\|\|`                       | Left          | Logical OR |
-| 5          | `&&`                         | Left          | Logical AND |
-| 6          | `==` `!=` `<` `>` `<=` `>=`  | Left          | Comparison |
-| 7          | `is`                         | Left          | Pattern match |
-| 8          | `\|`                         | Left          | Bitwise OR |
-| 9          | `^`                          | Left          | Bitwise XOR |
-| 10         | `&`                          | Left          | Bitwise AND |
-| 11         | `<<` `>>`                    | Left          | Shift |
-| 12         | `+` `-`                      | Left          | Additive |
-| 13         | `*` `/` `%`                  | Left          | Multiplicative |
-| 14         | `**`                         | Right         | Exponentiation |
-| 15         | `!` `-` `&` `*` `~` (prefix) | Right         | Unary prefix |
-| 16 (highest) | `.` `?.` `()` `[]` `!` (postfix) | Left     | Postfix |
-
-Note: `as` is not in the precedence table as it is not used for type casting. Type conversions use methods like `.widen()`, `.truncate()`, `.saturate()`. The `!` operator appears twice: as prefix logical NOT (precedence 15) and as postfix try/propagate (precedence 16). The `?.` operator is for optional chaining. The `??` operator provides a default value for `None`. The `&` operator appears in both unary (reference) and binary (bitwise AND) contexts; the unary form has higher precedence. This table follows Rust's precedence ordering.
 
 ---
 
@@ -464,93 +415,6 @@ Whitespace is not significant except to separate tokens that would otherwise mer
 | Operator    | `+`, `**`, `==`, `&&`, `.`, `is`            |
 | Delimiter   | `(`, `)`, `{`, `}`, `;`, `,`                |
 | Comment     | `// ...`, `/* ... */`                       |
-
----
-
-## Example Program
-
-The following example demonstrates all token categories:
-
-```spl
-// Point struct with public fields
-pub struct Point(
-    pub x: f64,
-    pub y: f64,
-)
-
-impl Point {
-    // Return type uses colon, not arrow
-    pub fn new(x: f64, y: f64): Point {
-        return Point(x: x, y: y);
-    }
-
-    // Named parameters with 'from' label
-    pub fn distance(&self, from other: &Point): f64 {
-        let dx = self.x - other.x;
-        let dy = self.y - other.y;
-        return (dx * dx + dy * dy).sqrt();
-    }
-}
-
-// Generic function with where clause
-fn identity(x: T): T where T: Clone {
-    return x;
-}
-
-fn main() {
-    // Struct instantiation with named fields
-    let mut p1 = Point.new(0.0, 0.0);
-    let p2 = Point(x: 3.0, y: 4.0);
-
-    // Calculate distance using named argument
-    let dist = p1.distance(from: &p2);
-
-    /* Update p1 position
-       using compound assignment */
-    p1.x += 1.5e1;
-    p1.y += 0x0A.widen();
-
-    // Loop with range
-    for i in 0..10 {
-        if i % 2 == 0 {
-            continue;
-        }
-        // Process odd numbers
-    }
-
-    // Pattern matching with 'is'
-    let maybe_value: i32? = Some(42);
-    if maybe_value is Some(v) {
-        // Use v here
-    }
-
-    if maybe_value.is_some() {
-        // Value exists
-    }
-
-    // Match expression
-    let result = match maybe_value {
-        Some(x) => x * 2,
-        None => 0,
-    };
-
-    // Boolean and character literals
-    let flag: bool = true;
-    let ch: char = '\n';
-    let msg: &str = "Hello, SPL!\n";
-
-    // Control flow
-    while flag && dist > 0.0 {
-        if dist <= 5.0 {
-            break;
-        }
-    }
-
-    loop {
-        return;
-    }
-}
-```
 
 ---
 
