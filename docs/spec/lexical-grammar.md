@@ -52,8 +52,6 @@ SPL reserves 37 keywords that cannot be used as identifiers:
 | `static`   | Static variable                      |
 | `unsafe`   | Unsafe block/function                |
 
-**Note on `yield`:** The `yield` keyword is used exclusively in generator functions (`gen fn`). It suspends the generator and produces a value to the caller. For block expressions that need to produce a value, use `break value;` instead.
-
 ---
 
 ## Operators
@@ -61,12 +59,13 @@ SPL reserves 37 keywords that cannot be used as identifiers:
 ### Arithmetic Operators
 
 | Operator | Description    |
-|----------|----------------|
+| -------- | -------------- |
 | `+`      | Addition       |
 | `-`      | Subtraction    |
 | `*`      | Multiplication |
 | `/`      | Division       |
 | `%`      | Modulo         |
+| `**`     | Exponentiation |
 
 ### Comparison Operators
 
@@ -102,19 +101,20 @@ SPL reserves 37 keywords that cannot be used as identifiers:
 
 ### Assignment Operators
 
-| Operator | Description              |
-|----------|--------------------------|
-| `=`      | Assignment               |
-| `+=`     | Add and assign           |
-| `-=`     | Subtract and assign      |
-| `*=`     | Multiply and assign      |
-| `/=`     | Divide and assign        |
-| `%=`     | Modulo and assign        |
-| `&=`     | Bitwise AND and assign   |
-| `\|=`    | Bitwise OR and assign    |
-| `^=`     | Bitwise XOR and assign   |
-| `<<=`    | Left shift and assign    |
-| `>>=`    | Right shift and assign   |
+| Operator | Description             |
+| -------- | ----------------------- |
+| `=`      | Assignment              |
+| `+=`     | Add and assign          |
+| `-=`     | Subtract and assign     |
+| `*=`     | Multiply and assign     |
+| `/=`     | Divide and assign       |
+| `%=`     | Modulo and assign       |
+| `**=`    | Exponentiate and assign |
+| `&=`     | Bitwise AND and assign  |
+| `\|=`    | Bitwise OR and assign   |
+| `^=`     | Bitwise XOR and assign  |
+| `<<=`    | Left shift and assign   |
+| `>>=`    | Right shift and assign  |
 
 ### Other Operators
 
@@ -144,6 +144,7 @@ functor(f: Option)             // Lowercase but type - semantic reinterpretation
 ```
 
 **Range operators:** `..` creates an exclusive range (like Python's `range()`), `..=` creates an inclusive range.
+
 ```spl
 0..5     // 0, 1, 2, 3, 4 (excludes 5)
 0..=5    // 0, 1, 2, 3, 4, 5 (includes 5)
@@ -160,7 +161,7 @@ arr[1:$-1]   // All elements except first and last
 
 | Precedence | Operators                    | Associativity | Description |
 |------------|------------------------------|---------------|-------------|
-| 1 (lowest) | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | Right | Assignment |
+| 1 (lowest) | `=` `+=` `-=` `*=` `**=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | Right | Assignment |
 | 2          | `..` `..=`                   | Left          | Range |
 | 3          | `??`                         | Right         | Nullish coalescing |
 | 4          | `\|\|`                       | Left          | Logical OR |
@@ -173,10 +174,11 @@ arr[1:$-1]   // All elements except first and last
 | 11         | `<<` `>>`                    | Left          | Shift |
 | 12         | `+` `-`                      | Left          | Additive |
 | 13         | `*` `/` `%`                  | Left          | Multiplicative |
-| 14         | `!` `-` `&` `*` `~` (prefix) | Right         | Unary prefix |
-| 15 (highest) | `.` `?.` `()` `[]` `!` (postfix) | Left     | Postfix |
+| 14         | `**`                         | Right         | Exponentiation |
+| 15         | `!` `-` `&` `*` `~` (prefix) | Right         | Unary prefix |
+| 16 (highest) | `.` `?.` `()` `[]` `!` (postfix) | Left     | Postfix |
 
-Note: `as` is not in the precedence table as it is not used for type casting. Type conversions use methods like `.widen()`, `.truncate()`, `.saturate()`. The `!` operator appears twice: as prefix logical NOT (precedence 14) and as postfix try/propagate (precedence 15). The `?.` operator is for optional chaining. The `??` operator provides a default value for `None`. The `&` operator appears in both unary (reference) and binary (bitwise AND) contexts; the unary form has higher precedence. This table follows Rust's precedence ordering.
+Note: `as` is not in the precedence table as it is not used for type casting. Type conversions use methods like `.widen()`, `.truncate()`, `.saturate()`. The `!` operator appears twice: as prefix logical NOT (precedence 15) and as postfix try/propagate (precedence 16). The `?.` operator is for optional chaining. The `??` operator provides a default value for `None`. The `&` operator appears in both unary (reference) and binary (bitwise AND) contexts; the unary form has higher precedence. This table follows Rust's precedence ordering.
 
 ---
 
@@ -459,7 +461,7 @@ Whitespace is not significant except to separate tokens that would otherwise mer
 | Float       | `3.14`, `1e10`, `2.5e-3`                    |
 | String      | `"hello"`, `"line\nbreak"`                  |
 | Char        | `'a'`, `'\n'`                               |
-| Operator    | `+`, `==`, `&&`, `.`, `is`                  |
+| Operator    | `+`, `**`, `==`, `&&`, `.`, `is`            |
 | Delimiter   | `(`, `)`, `{`, `}`, `;`, `,`                |
 | Comment     | `// ...`, `/* ... */`                       |
 
@@ -554,7 +556,7 @@ fn main() {
 
 ## Lexical Ambiguity Resolution
 
-1. **Longest match:** The lexer always takes the longest valid token (e.g., `==` not `=` `=`)
+1. **Longest match:** The lexer always takes the longest valid token (e.g., `**` not `*` `*`, `==` not `=` `=`)
 2. **Keyword priority:** Reserved words take precedence over identifiers (e.g., `let` is a keyword, not an identifier)
 3. **Numeric prefix:** `0x`/`0X`, `0b`/`0B`, `0o`/`0O` determine integer radix; digits must follow immediately
 4. **Range vs float:** `1..2` is integer-range-integer, not a malformed float
