@@ -124,7 +124,9 @@ FunctionDef = "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ ThrowsClause 
 (* Generator functions yield multiple values lazily *)
 GeneratorDef = "gen" "fn" IDENTIFIER "(" [ ParamList ] ")" ":" Type [ WhereClause ] Block ;
 
-(* Throws clause for functions returning Result *)
+(* Throws clause for functions returning Result.
+   Note: `throws` intentionally precedes `where` in SPL's syntax order,
+   keeping error handling adjacent to the return type it modifies. *)
 ThrowsClause = "throws" [ Type ] ;
 
 ParamList = Param { "," Param } [ "," ] ;
@@ -316,6 +318,9 @@ VariantList = Variant { "," Variant } [ "," ] ;
 Variant = IDENTIFIER [ "(" VariantFields ")" ] ;
 
 (* Type-only = tuple variant, with : = named fields *)
+(* Note: FieldList allows `pub` on fields syntactically, but visibility on
+   enum variant fields is a semantic error — all variant fields are implicitly
+   public with the variant's visibility. *)
 VariantFields = FieldList           (* named fields: x: i32, y: i32 *)
               | TypeList ;          (* tuple fields: i32, String *)
 ```
@@ -502,6 +507,8 @@ impl Format for Amount(T: EUR) {
 }
 ```
 
+**Note:** `format()` is a standard library function that performs string formatting with placeholders (`{}`). String interpolation syntax (e.g., `f"value: {x}"`) may be added in a future version of SPL.
+
 ### Type Aliases
 
 ```ebnf
@@ -511,6 +518,15 @@ GenericParams = "(" TypeParamList ")" ;
 
 TypeParamList = IDENTIFIER { "," IDENTIFIER } [ "," ] ;
 ```
+
+**GenericParams vs GenericArgs:**
+
+| Context | Syntax | Example | Purpose |
+|---------|--------|---------|---------|
+| `GenericParams` | Bare identifiers | `type Pair(T, U) = ...` | Declare type parameters |
+| `GenericArgs` | Named type args | `Pair(T: i32, U: String)` | Instantiate with concrete types |
+
+`GenericParams` appears in type alias declarations to introduce type parameter names. `GenericArgs` appears in type instantiation to bind those parameters to concrete types.
 
 ### Use Declarations
 
@@ -661,6 +677,9 @@ PathType = TypePath [ GenericArgs ]
 
 SelfType = "Self" [ "." IDENTIFIER ] ;  (* Self or Self.AssociatedType *)
 
+(* Note: `Self.Item?` parses as `(Self.Item)?` — the optional `?` postfix
+   applies to the entire path type, not just the final identifier. *)
+
 (* Paths use dot, not double-colon *)
 TypePath = IDENTIFIER { "." IDENTIFIER } ;
 
@@ -808,8 +827,9 @@ Expressions are defined using layered production rules that encode operator prec
 | 12         | `..` `..=`                   | Left          | RangeExpr          |
 | 13         | `+` `-`                      | Left          | AdditiveExpr       |
 | 14         | `*` `/` `%`                  | Left          | MultiplicativeExpr |
-| 15         | `!` `-` `&` `~` (unary)      | Right         | UnaryExpr          |
-| 16 (highest)| `.` `?.` `()` `[]` `[:]` `!` | Left          | PostfixExpr        |
+| 15         | `**`                         | Right         | ExponentiationExpr |
+| 16         | `!` `-` `&` `~` (unary)      | Right         | UnaryExpr          |
+| 17 (highest)| `.` `?.` `()` `[]` `[:]` `!` | Left          | PostfixExpr        |
 
 Note: `&` serves as both a unary reference operator (prefix) and a binary bitwise AND operator; context disambiguates. Type conversions use methods (`.widen()`, `.truncate()`, `.try_into()`) rather than a cast operator.
 
@@ -847,14 +867,23 @@ RangeExpr = AdditiveExpr [ ( ".." | "..=" ) [ AdditiveExpr ] ] ;
 
 AdditiveExpr = MultiplicativeExpr { ( "+" | "-" ) MultiplicativeExpr } ;
 
-MultiplicativeExpr = UnaryExpr { ( "*" | "/" | "%" ) UnaryExpr } ;
+MultiplicativeExpr = ExponentiationExpr { ( "*" | "/" | "%" ) ExponentiationExpr } ;
+
+(* Exponentiation is right-associative: 2 ** 3 ** 2 = 2 ** (3 ** 2) = 512 *)
+ExponentiationExpr = UnaryExpr [ "**" ExponentiationExpr ] ;
 
 UnaryExpr = ( "!" | "-" | "&" [ "mut" ] | "*" | "~" ) UnaryExpr
           | PostfixExpr ;
 
-(* Note: The `*` operator dereferences references (`*r = 10`). Raw pointers
-   (`Ptr`, `MutPtr`) use explicit `.read()` and `.write()` methods instead—
-   see unsafe.md. *)
+(* Dereference operator `*`:
+   - Dereferences safe references: `&T` → `T`, `&mut T` → `T`
+   - Example: `let x = *ref_to_int` or `*mut_ref = 10`
+   - Does NOT apply to raw pointers (`Ptr`, `MutPtr`)
+
+   Raw pointers use explicit methods instead (requires unsafe block):
+   - `ptr.read()` — read value from pointer
+   - `ptr.write(value)` — write value to pointer
+   See unsafe.md for details. *)
 
 (* No :: for paths - use . only *)
 PostfixExpr = PrimaryExpr { PostfixOp } ;
@@ -923,12 +952,14 @@ Capture = IDENTIFIER                       (* shorthand: x means x: x *)
 ClosureParams = "||"
               | "|" [ ParamList ] "|" ;
 
+(* Closure return types are always inferred from the body — no explicit
+   return type annotation syntax is provided, matching Rust's behavior. *)
 ClosureBody = Block | Expression ;
 
 LiteralExpr = INTEGER | FLOAT | STRING | CHAR | "true" | "false" ;
 
 (* Enum variant shorthand - type inferred from context *)
-EnumShorthandExpr = "." IDENTIFIER [ "(" [ ExpressionList ] ")" ] ;
+EnumShorthandExpr = "." IDENTIFIER [ "(" [ ArgList ] ")" ] ;
 
 (* Paths use dot separator *)
 PathExpr = IDENTIFIER { "." IDENTIFIER } ;
@@ -1354,8 +1385,9 @@ From lowest to highest precedence:
 | 12   | Range          | `..` `..=`                     | Left  | `0..10`, `0..=10`         |
 | 13   | Additive       | `+` `-`                        | Left  | `a + b - c`               |
 | 14   | Multiplicative | `*` `/` `%`                    | Left  | `a * b / c`               |
-| 15   | Unary          | `!` `-` `&` `&mut` `~`         | Right | `!&mut x`, `~bits`        |
-| 16   | Postfix        | `.` `?.` `()` `[]` `[:]` `!`   | Left  | `a.b()!.c[0]`             |
+| 15   | Exponentiation | `**`                           | Right | `2 ** 3 ** 2` (= 512)     |
+| 16   | Unary          | `!` `-` `&` `&mut` `~` (bitwise NOT) | Right | `!&mut x`, `~bits`   |
+| 17   | Postfix        | `.` `?.` `()` `[]` `[:]` `!`   | Left  | `a.b()!.c[0]`             |
 
 ---
 
@@ -1386,8 +1418,6 @@ let m: HashMap(K: String, V: i32)     // Multiple named type args
 Vec(T: i32).new()                     // Type application then method call
 ```
 
-No turbofish needed - parentheses are unambiguous.
-
 ### 3. Explicit Type Application in Function Calls
 
 When calling a generic function with explicit type arguments, type args use uppercase identifiers and value args use lowercase identifiers (see section 9 for details):
@@ -1408,9 +1438,9 @@ parse(T: Config, input: text)     // T = type arg, input = value arg
 Most generic calls don't need explicit type args due to inference:
 
 ```spl
-let x = identity(42);     // T inferred as i32
-let v = Vec.new();        // Type inferred from later usage
-v.push(1);                // Now v: Vec(T: i32)
+let x = identity(42)      // T inferred as i32
+let v = Vec.new()         // Type inferred from later usage
+v.push(1)                 // Now v: Vec(T: i32)
 ```
 
 ### 4. Paths
@@ -1544,6 +1574,8 @@ This allows natural usage without forcing sigils:
 Config(URL: url_value)         // URL uppercase but refers to value field
 functor(f: Option)             // f lowercase but refers to type parameter
 ```
+
+**Implementation note:** The exact backtracking semantics (when to backtrack, how far, and error recovery) require further specification. The distinction between syntactic backtracking during parsing versus semantic reinterpretation during analysis should be clarified in the parser specification.
 
 **Mixed type and value arguments:**
 ```spl
@@ -1705,7 +1737,7 @@ trait Functor where f {
 
 ```spl
 // 1. Generic function with inferred type
-let items = vec![1, 2, 3]
+let items = [1, 2, 3]
 let doubled = items.map(|x| x * 2)  // Types inferred
 
 // 2. Generic function with explicit type
@@ -1714,10 +1746,9 @@ let parsed = parse(T: Config, input)  // Explicit T
 // 3. Type annotation on binding
 let config: Config = parse(input)     // Type on let, not call
 
-// 4. Turbofish not needed - use type annotation instead
-// Rust: let v = Vec::<i32>::new()
-// SPL:  let v: Vec(T: i32) = Vec.new()  // Or...
-// SPL:  let v = Vec(T: i32).new()       // Type application
+// 4. Explicit type — use type annotation or type application
+let v: Vec(T: i32) = Vec.new()    // Type annotation on binding
+let v = Vec(T: i32).new()         // Type application on call
 
 // 5. Return type provides context
 fn load(): Result(T: Config, E: Error) {
@@ -1933,7 +1964,6 @@ impl Point(T: T) where T {
 | Where clause        | Constrains only           | Declares AND constrains      |
 | Impl block generics | `impl<T> Vec<T>`          | `impl Vec(T: T) where T`     |
 | Concrete impl       | `impl Vec<u32>`           | `impl Vec(T: u32)`           |
-| Turbofish           | `::<T>`                   | Not needed (use parentheses) |
 | Named struct decl   | `struct Point { x: i32 }` | `struct Point(x: i32)`       |
 | Positional struct   | `struct Pair(i32, i32);`  | `struct Pair(i32, i32)`      |
 | Struct literal      | `Point { x: 1 }`          | `Point(x: 1)` (instantiation) |
