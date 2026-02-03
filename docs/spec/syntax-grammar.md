@@ -56,7 +56,7 @@ ItemKind = FunctionDef
 
 Visibility = "pub" [ "(" VisibilityScope ")" ] ;
 
-VisibilityScope = "$" [ "." Path ] | "super" | "in" Path ;
+VisibilityScope = "$" [ "." TypePath ] | "super" ;
 ```
 
 ### Attributes
@@ -401,7 +401,7 @@ trait Numeric: Add + Sub + Mul + Div {
 (* Inherent impl: impl Type { ... } *)
 (* Trait impl: impl Trait for Type { ... } *)
 (* Unsafe impl required for implementing unsafe traits: unsafe impl Sync for MyType *)
-ImplBlock = [ "unsafe" ] "impl" [ TypePath "for" ] TypePath [ GenericArgs ] [ WhereClause ] "{" { ImplItem } "}" ;
+ImplBlock = [ "unsafe" ] "impl" [ TypePath [ GenericArgs ] "for" ] TypePath [ GenericArgs ] [ WhereClause ] "{" { ImplItem } "}" ;
 
 ImplItem = [ "pub" ] FunctionDef ;
 ```
@@ -1251,6 +1251,7 @@ SinglePattern = IdentifierPattern
               | TuplePattern
               | SlicePattern
               | StructPattern
+              | EnumShorthandPattern
               | EnumPattern
               | ReferencePattern
               | GroupedPattern ;
@@ -1289,6 +1290,9 @@ StructPatternField = IDENTIFIER [ ":" Pattern ] ;
 
 (* Enum variant patterns *)
 EnumPattern = TypePath [ "(" [ Pattern { "," Pattern } [ "," ] ] ")" ] ;
+
+(* Enum variant shorthand pattern - type inferred from context *)
+EnumShorthandPattern = "." IDENTIFIER [ "(" [ Pattern { "," Pattern } [ "," ] ] ")" ] ;
 
 ReferencePattern = "&" [ "mut" ] Pattern ;
 ```
