@@ -31,6 +31,8 @@ SPL uses a clean, consistent syntax with several key principles:
 
 Trailing commas are allowed in all comma-separated lists.
 
+**Semicolons in the Grammar:** Per the optional semicolons design principle, semicolons are inferred from newlines and only required when multiple statements appear on the same line. Productions that include `[ ";" ]` indicate where an explicit semicolon is syntactically permitted, not where it is required. Productions ending with clear delimiters (blocks `{}`, parenthesized fields `()`) omit `[ ";" ]` since the delimiter itself terminates the construct.
+
 ---
 
 ## 1. Program Structure
@@ -321,6 +323,10 @@ Variant = IDENTIFIER [ "(" VariantFields ")" ] ;
 (* Note: FieldList allows `pub` on fields syntactically, but visibility on
    enum variant fields is a semantic error — all variant fields are implicitly
    public with the variant's visibility. *)
+(* IMPORTANT: A variant's fields must be consistently ALL named or ALL positional.
+   The parser attempts FieldList first; if no `:` separators are found, it falls
+   back to TypeList. Mixing named and positional fields in a single variant is
+   a semantic error. *)
 VariantFields = FieldList           (* named fields: x: i32, y: i32 *)
               | TypeList ;          (* tuple fields: i32, String *)
 ```
@@ -1326,6 +1332,10 @@ EnumShorthandPattern = "." IDENTIFIER [ "(" [ EnumPatternFields ] ")" ] ;
 EnumPatternFields = EnumPatternField { "," EnumPatternField } [ "," ] [ ".." ] ;
 
 (* Named field (struct-style variant) or plain pattern (tuple-style or shorthand) *)
+(* SEMANTIC NOTE: When the Pattern alternative is an IdentifierPattern (e.g., `x`),
+   semantic analysis checks if the enum variant has a field with that name. If so,
+   the pattern is interpreted as shorthand for `x: x` (bind field x to variable x).
+   Otherwise, it's a positional match. This mirrors struct field shorthand. *)
 EnumPatternField = IDENTIFIER ":" Pattern       (* explicit: field name with pattern *)
                  | Pattern ;                     (* positional or shorthand *)
 
@@ -1823,6 +1833,22 @@ trait Functor where F {  // OK: F is uppercase
 ```
 
 This design trades flexibility for simplicity—the parser never needs to backtrack or defer disambiguation to semantic analysis.
+
+#### Grammar vs Semantic Disambiguation
+
+SPL's grammar is designed to minimize ambiguity at the syntactic level, but some constructs require semantic analysis for full interpretation:
+
+| Construct | Syntactic Rule | Semantic Interpretation |
+|-----------|----------------|------------------------|
+| Type vs value args | Case of identifier (uppercase/lowercase) | Purely syntactic—no semantic check needed |
+| Struct field shorthand | `IDENTIFIER` without `:` in StructExpr | Resolved to `name: name` during type checking |
+| Enum pattern shorthand | `Pattern` in EnumPatternField | If variant has matching field name, interpreted as `field: binding` |
+| Tuple pattern on struct | TuplePattern matched against struct type | Positional matching by field declaration order |
+| Variant field style | FieldList vs TypeList in VariantFields | Must be consistently named or positional (semantic error if mixed) |
+| `pub` on variant fields | Allowed syntactically in FieldList | Semantic error—variant fields inherit variant visibility |
+| Rest pattern count | Multiple `..` allowed syntactically | Semantic error if more than one per slice pattern |
+
+**Design principle:** Where possible, disambiguation is syntactic (case-based rules, delimiter differences). Semantic checks handle consistency rules that would complicate the grammar.
 
 #### Common Patterns
 
