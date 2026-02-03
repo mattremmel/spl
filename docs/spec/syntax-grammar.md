@@ -933,7 +933,13 @@ ArgList = Arg { "," Arg } [ "," ] ;
 Arg = NamedArg                              (* named argument: case determines type vs value *)
     | Expression ;                          (* positional argument *)
 
-NamedArg = IDENTIFIER ":" ( Type | Expression ) ;  (* uppercase = Type, lowercase = Expression *)
+(* Case of identifier determines how RHS is parsed — no backtracking *)
+NamedArg = UPPER_IDENT ":" Type             (* type argument: T: i32 *)
+         | LOWER_IDENT ":" Expression ;     (* value argument: x: 1 *)
+
+(* Note: The lexer produces a single IDENTIFIER token. UPPER_IDENT means an
+   identifier starting with A-Z; LOWER_IDENT means starting with a-z or _.
+   The parser checks the first character to select the appropriate alternative. *)
 ```
 
 ### Primary Expressions
@@ -1310,11 +1316,18 @@ StructPatternFields = StructPatternField { "," StructPatternField } [ "," ] [ ".
 (* Field with optional pattern binding *)
 StructPatternField = IDENTIFIER [ ":" Pattern ] ;
 
-(* Enum variant patterns *)
-EnumPattern = TypePath [ "(" [ Pattern { "," Pattern } [ "," ] ] ")" ] ;
+(* Enum variant patterns - supports both tuple-style and struct-style variants *)
+EnumPattern = TypePath [ "(" [ EnumPatternFields ] ")" ] ;
 
 (* Enum variant shorthand pattern - type inferred from context *)
-EnumShorthandPattern = "." IDENTIFIER [ "(" [ Pattern { "," Pattern } [ "," ] ] ")" ] ;
+EnumShorthandPattern = "." IDENTIFIER [ "(" [ EnumPatternFields ] ")" ] ;
+
+(* Pattern fields for enum variants *)
+EnumPatternFields = EnumPatternField { "," EnumPatternField } [ "," ] [ ".." ] ;
+
+(* Named field (struct-style variant) or plain pattern (tuple-style or shorthand) *)
+EnumPatternField = IDENTIFIER ":" Pattern       (* explicit: field name with pattern *)
+                 | Pattern ;                     (* positional or shorthand *)
 
 ReferencePattern = "&" [ "mut" ] Pattern ;
 ```
@@ -1355,10 +1368,13 @@ This works because the compiler knows `point` is a `Point` and can match tuple p
 | `Point(x: a, y: b)`   | Destructure with rename              |
 | `Point(x, ..)`        | Partial struct destructure           |
 | `(a, b) = struct_val` | Destructure struct via type inference |
-| `Some(x)`             | Match enum variant with binding      |
-| `None`                | Match enum variant without payload   |
+| `Some(x)`             | Match tuple-style enum variant       |
+| `None`                | Match unit enum variant              |
 | `Ok(value)`           | Match Result Ok variant              |
 | `Err(e)`              | Match Result Err variant             |
+| `.Move(x, y)`         | Shorthand with field name shorthands |
+| `.Move(x: a, y: b)`   | Shorthand with explicit bindings     |
+| `Message.Move(x, ..)`  | Named variant partial destructure   |
 | `&x`                  | Match reference                      |
 | `&mut x`              | Match mutable reference              |
 | `1 \| 2 \| 3`         | Or-pattern: match any alternative    |
@@ -1864,10 +1880,16 @@ pub struct Point(
     pub y: T,
 ) where T
 
-impl Point(T: T) where T {
-    // Return type with colon
+// Type arg shorthand: Point(T) means Point(T: T)
+impl Point(T) where T {
+    // Return type can use explicit Point(T: T) or shorthand Point(T)
     pub fn new(x: T, y: T): Point(T: T) {
         return Point(x: x, y: y)
+    }
+
+    // Self refers to Point(T) — the impl's self type
+    fn clone(&self): Self {
+        return Self(x: self.x, y: self.y)
     }
 
     pub fn swap(&mut self) {
@@ -2003,16 +2025,6 @@ fn apply(_ f: fn(i32): i32, _ x: i32): i32 {
     return f(x)
 }
 
-// Self type in impl blocks (using type arg shorthand)
-impl Point(T) where T {
-    fn origin(): Self {
-        return Self(x: 0, y: 0)
-    }
-
-    fn clone(&self): Self {
-        return Self(x: self.x, y: self.y)
-    }
-}
 ```
 
 ---
