@@ -12,7 +12,7 @@ SPL uses a clean, consistent syntax with several key principles:
 4. **Case-based disambiguation**: Uppercase identifiers are type args (`T: i32`), lowercase are value args (`x: 1`).
 5. **Return type with `:`**: Functions use `:` for return type: `fn foo(): i32`.
 6. **Where clauses for generics**: `fn id(x: T): T where T`.
-7. **Pattern matching with `is`**: `if value is Some(x)` instead of `if let`.
+7. **Pattern matching with `is`**: `if value is .Some(x)` instead of `if let`.
 8. **Explicit return/break**: `return` for functions, `break` for block values.
 9. **Optional semicolons**: Statement terminators are inferred from newlines, but can be explicitly terminated with a semicolon. Semicolons are only required when writing multiple statements on the same line.
 
@@ -427,8 +427,8 @@ impl Clone for Point {
 impl Clone for Option(T: T) where T: Clone {
     fn clone(&self): Self {
         return match self {
-            Some(v) => Some(v.clone()),
-            None => None,
+            .Some(v) => .Some(v.clone()),
+            .None => .None,
         }
     }
 }
@@ -1022,8 +1022,8 @@ impl Point {
 
 ```spl
 let result = match value {
-    Some(x) => x * 2,
-    None => 0,
+    .Some(x) => x * 2,
+    .None => 0,
 }
 
 let description = match count {
@@ -1114,7 +1114,7 @@ The `is` operator enables pattern matching directly in conditions:
 
 ```spl
 // Pattern matching with is
-if value is Some(x) {
+if value is .Some(x) {
     // x is bound here
 }
 
@@ -1124,12 +1124,12 @@ if value.is_some() {
 }
 
 // Combined with other conditions
-if value is Some(x) && x > 0 {
+if value is .Some(x) && x > 0 {
     // x is positive
 }
 
 // In while loops
-while queue.pop() is Some(item) {
+while queue.pop() is .Some(item) {
     process(item)
 }
 ```
@@ -1333,8 +1333,8 @@ match value {
 }
 
 match option {
-    Some(0) | None => "empty or zero",
-    Some(n) => "has value",
+    .Some(0) | None => "empty or zero",
+    .Some(n) => "has value",
 }
 
 // Bindings must be consistent across alternatives
@@ -1375,7 +1375,7 @@ From lowest to highest precedence:
 | 2    | Coalesce       | `??`                           | Right | `a ?? b ?? c`             |
 | 3    | Logical OR     | `\|\|`                         | Left  | `a \|\| b \|\| c`         |
 | 4    | Logical AND    | `&&`                           | Left  | `a && b && c`             |
-| 5    | Pattern Match  | `is`                           | Left  | `x is Some(v)`            |
+| 5    | Pattern Match  | `is`                           | Left  | `x is .Some(v)`           |
 | 6    | Equality       | `==` `!=`                      | Left  | `a == b != c`             |
 | 7    | Comparison     | `<` `>` `<=` `>=`              | Left  | `a < b`                   |
 | 8    | Bitwise OR     | `\|`                           | Left  | `a \| b \| c`             |
@@ -1601,8 +1601,8 @@ foo(T: i32, 42, 43)            // T = type arg, 42 and 43 = positional value arg
 The `is` keyword binds looser than comparison but tighter than `&&`.
 
 ```spl
-x > 0 && y is Some(v)     // (x > 0) && (y is Some(v))
-value is Some(x) && x > 0 // (value is Some(x)) && (x > 0)
+x > 0 && y is .Some(v)     // (x > 0) && (y is .Some(v))
+value is .Some(x) && x > 0 // (value is .Some(x)) && (x > 0)
 ```
 
 ### 11. Additional Disambiguation Examples
@@ -1650,7 +1650,7 @@ parse(config: cfg, "input")    // config is value arg (lowercase)
 let x = Option.Some(42)       // Variant constructor
 
 // Option(T: i32) is a type
-let y: Option(T: i32) = Some(42)
+let y: Option(T: i32) = .Some(42)
 
 // Vec(T: i32).new() - type then method
 let v = Vec(T: i32).new()
@@ -1835,8 +1835,8 @@ fn main() {
     }
 
     // Pattern matching with is
-    let maybe: i32? = Some(42)
-    if maybe is Some(x) {
+    let maybe: i32? = .Some(42)
+    if maybe is .Some(x) {
         // x is bound
     }
 
@@ -1846,8 +1846,8 @@ fn main() {
 
     // Match expression
     let doubled = match maybe {
-        Some(n) => n * 2,
-        None => 0,
+        .Some(n) => n * 2,
+        .None => 0,
     }
 
     // Loops
@@ -1967,7 +1967,7 @@ impl Point(T: T) where T {
 | Named struct decl   | `struct Point { x: i32 }` | `struct Point(x: i32)`       |
 | Positional struct   | `struct Pair(i32, i32);`  | `struct Pair(i32, i32)`      |
 | Struct literal      | `Point { x: 1 }`          | `Point(x: 1)` (instantiation) |
-| Pattern matching    | `if let Some(x) = v {}`   | `if v is Some(x) {}`         |
+| Pattern matching    | `if let Some(x) = v {}`  | `if v is .Some(x) {}`        |
 | Function return     | `expr` (implicit tail)    | `expr` (single) or `return` (multi-stmt) |
 | Block value         | `expr` (implicit tail)    | `expr` (single) or `break` (multi-stmt)  |
 | Semicolons          | Semantic (tail vs stmt)   | Optional (newline-terminated) |
