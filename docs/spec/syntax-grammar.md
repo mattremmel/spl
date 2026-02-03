@@ -687,9 +687,10 @@ TypePath = IDENTIFIER { "." IDENTIFIER } ;
 (* Case-based disambiguation: uppercase identifier = type arg, lowercase = value arg *)
 (* Parser uses case to choose initial parse path, backtracks on failure *)
 (* Semantic analysis can reinterpret nodes when resolution reveals the opposite was intended *)
+(* Shorthand: bare identifier T means T: T (type param name matches type name) *)
 GenericArgs = "(" [ TypeArg { "," TypeArg } [ "," ] ] ")" ;
 
-TypeArg = IDENTIFIER ":" Type ;       (* named type argument, e.g., T: i32 *)
+TypeArg = IDENTIFIER [ ":" Type ] ;   (* T: i32 or T (shorthand for T: T) *)
 ```
 
 ### Type Examples
@@ -715,6 +716,9 @@ TypeArg = IDENTIFIER ":" Type ;       (* named type argument, e.g., T: i32 *)
 | `Never`             | Never type                         |
 | `HashMap(K: String, V: i32)` | Multi-param generic type   |
 | `Result(T: i32, E: Error)` | Named type arguments         |
+| `Option(T)`         | Type arg shorthand (same as `Option(T: T)`) |
+| `Result(T, E)`      | Multiple shorthand type args |
+| `Result(T, E: Error)` | Mixed shorthand and explicit |
 | `i32?`              | Optional type (sugar for `Option(T: i32)`) |
 | `String?`           | Optional String                    |
 | `&T?`               | Reference to optional (rare)       |
@@ -1291,6 +1295,17 @@ ReferencePattern = "&" [ "mut" ] Pattern ;
 
 **Note:** At most one `RestPattern` (`..` or `..name`) is allowed per slice pattern. This is enforced semantically, not syntactically.
 
+**Tuple Patterns for Struct Destructuring:**
+
+When the expected type is a struct (known from context), a tuple pattern can destructure it positionally:
+
+```spl
+let point = Point(x: 10.0, y: 20.0)
+let (x, y) = point    // Fields matched positionally by declaration order
+```
+
+This works because the compiler knows `point` is a `Point` and can match tuple pattern elements to struct fields in declaration order. The struct pattern `Point(x, y)` remains available when explicit type naming is preferred.
+
 ### Pattern Examples
 
 | Syntax                | Description                          |
@@ -1313,6 +1328,7 @@ ReferencePattern = "&" [ "mut" ] Pattern ;
 | `Point(x, y)`         | Destructure struct (shorthand)       |
 | `Point(x: a, y: b)`   | Destructure with rename              |
 | `Point(x, ..)`        | Partial struct destructure           |
+| `(a, b) = struct_val` | Destructure struct via type inference |
 | `Some(x)`             | Match enum variant with binding      |
 | `None`                | Match enum variant without payload   |
 | `Ok(value)`           | Match Result Ok variant              |
@@ -1482,7 +1498,63 @@ Point(x, y)              // Equivalent to Point(x: x, y: y)
 Point(x, y: y + 1)       // Mixed shorthand and explicit
 ```
 
-### 7. Index vs Slice
+### 7. Type Argument Shorthand
+
+When a type parameter name matches the type name being passed, the `: Type` part can be omitted. This parallels struct field shorthand.
+
+```spl
+Option(T)                // Equivalent to Option(T: T)
+Result(T, E)             // Equivalent to Result(T: T, E: E)
+Result(T, E: Error)      // Mixed: T shorthand, E explicit
+Vec(T: i32)              // Explicit (T ≠ i32)
+```
+
+This shorthand is particularly useful in generic contexts where type parameter names match:
+
+```spl
+// In where clauses and impl blocks
+impl Clone for Option(T) where T: Clone {  // T means T: T
+    fn clone(&self): Self {
+        match self {
+            .Some(v) => .Some(v.clone()),
+            .None => .None,
+        }
+    }
+}
+
+// In function signatures
+fn wrap(value: T): Option(T) where T {     // Return type uses shorthand
+    return .Some(value)
+}
+```
+
+### 8. Tuple Pattern for Struct Destructuring
+
+A tuple pattern can match a struct when the struct's type is known from context. The pattern elements bind to struct fields in declaration order.
+
+```spl
+struct Point(x: f64, y: f64)
+
+let point = Point(x: 10.0, y: 20.0)
+let (x, y) = point              // Binds x=10.0, y=20.0
+
+// Equivalent to explicit struct pattern:
+let Point(x, y) = point
+```
+
+**When to use which:**
+- `Point(x, y)` — explicit, works in any context, self-documenting
+- `(x, y)` — concise, requires type to be inferrable from context
+
+**Ambiguity:** When the expected type is ambiguous, a tuple pattern matches a tuple. Use the struct pattern form when you need to be explicit:
+
+```spl
+let value = get_value()         // Returns Point or (f64, f64)?
+let (a, b) = value              // Matches based on inferred type
+let Point(a, b) = value         // Explicitly matches Point
+```
+
+### 9. Index vs Slice
 
 A bracketed expression could be an index or a slice.
 
@@ -1503,7 +1575,7 @@ arr[:]           // Slice: full copy
 
 The `$` symbol represents the array/slice length and is valid in index and slice expressions. It enables Python-style negative indexing: `$-1` is the last element, `$-2` is second to last, etc.
 
-### 8. Associated Functions on Types
+### 10. Associated Functions on Types
 
 To call associated functions on a type, use either:
 - **Simple path**: `Point.new()` - for non-generic types
@@ -1522,7 +1594,7 @@ Option(T: T).some(value)         // Generic type with type parameter
 
 Named type arguments (`T: i32`) are syntactically distinct from value arguments, making type expressions unambiguous.
 
-### 9. Type Arguments vs Value Arguments
+### 11. Type Arguments vs Value Arguments
 
 SPL uses **case-based disambiguation with backtracking** to distinguish type arguments from value arguments:
 
@@ -1596,7 +1668,7 @@ print("hello", 42)             // Positional value args
 foo(T: i32, 42, 43)            // T = type arg, 42 and 43 = positional value args
 ```
 
-### 10. `is` vs Other Operators
+### 12. `is` vs Other Operators
 
 The `is` keyword binds looser than comparison but tighter than `&&`.
 
@@ -1605,7 +1677,7 @@ x > 0 && y is .Some(v)     // (x > 0) && (y is .Some(v))
 value is .Some(x) && x > 0 // (value is .Some(x)) && (x > 0)
 ```
 
-### 11. Additional Disambiguation Examples
+### 13. Additional Disambiguation Examples
 
 This section provides comprehensive examples for tricky cases.
 
@@ -1822,9 +1894,10 @@ fn main() {
     let mut origin = Point.new(0.0, 0.0)
     let target = Point(x: 3.0, y: 4.0)
 
-    // Associated functions on generic types
-    let numbers: Vec(T: i32) = Vec(T: i32).new()
-    let map = HashMap(K: String, V: i32).new()
+    // Associated functions on generic types (with shorthand and explicit forms)
+    let numbers: Vec(T: i32) = Vec(T: i32).new()  // Explicit type args
+    let items: Vec(T) = Vec(T).new()              // Shorthand: T means T: T
+    let map = HashMap(K: String, V: i32).new()    // Explicit when types differ
 
     // Named arguments at call site
     let dist = distance(from: &origin, to: &target)
@@ -1904,7 +1977,8 @@ fn main() {
 
     // Patterns
     let (a, b) = (1, 2)                // Tuple destructuring
-    let Point(x, y) = target           // Struct destructuring
+    let Point(x, y) = target           // Struct destructuring (explicit)
+    let (px, py) = target              // Struct destructuring (inferred from type)
     let [first, ..rest] = [1, 2, 3, 4] // Slice pattern with rest
     let [head, .., tail] = [1, 2, 3]   // First and last
 
@@ -1926,8 +2000,8 @@ fn apply(_ f: fn(i32): i32, _ x: i32): i32 {
     return f(x)
 }
 
-// Self type in impl blocks
-impl Point(T: T) where T {
+// Self type in impl blocks (using type arg shorthand)
+impl Point(T) where T {
     fn origin(): Self {
         return Self(x: 0, y: 0)
     }
@@ -1974,3 +2048,5 @@ impl Point(T: T) where T {
 | Named parameters    | Not built-in              | `fn foo(to name: T)`         |
 | Default parameters  | Not supported             | `fn foo(x: i32 = 0)`         |
 | Named tuples        | Not supported             | `(x: i32, y: i32)` type and expr |
+| Type arg shorthand  | Not applicable            | `Option(T)` means `Option(T: T)` |
+| Tuple pattern for struct | Not supported        | `let (x, y) = point` (type inferred) |
