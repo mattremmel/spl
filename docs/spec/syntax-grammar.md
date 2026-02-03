@@ -357,6 +357,7 @@ enum Result{
 ```ebnf
 (* Traits use braces for their body *)
 (* Generic args on trait name for input type parameters, e.g., trait Add(RHS) *)
+(* In declaration context, `: Type` specifies a default: trait Add(RHS: Self) *)
 (* Supertraits specified with : before where clause, e.g., trait Numeric: Add + Sub *)
 (* Unsafe traits have invariants the compiler cannot verify, e.g., unsafe trait Sync *)
 TraitDef = [ "unsafe" ] "trait" IDENTIFIER [ GenericArgs ] [ ":" TypeBound { "+" TypeBound } ] [ WhereClause ] "{" { TraitItem } "}" ;
@@ -391,6 +392,24 @@ trait Default {
 trait Numeric: Add + Sub + Mul + Div {
     fn zero(): Self
     fn one(): Self
+}
+
+// Trait with default type parameter (RHS defaults to Self)
+trait Add(RHS: Self) {
+    type Output
+    fn add(self, rhs: RHS): Self.Output
+}
+
+// Implementation using default (RHS = Self)
+impl Add for Point {
+    type Output = Point
+    fn add(self, rhs: Point): Point { ... }
+}
+
+// Implementation with explicit RHS type
+impl Add(RHS: Vector) for Point {
+    type Output = Point
+    fn add(self, rhs: Vector): Point { ... }
 }
 ```
 
@@ -523,10 +542,11 @@ TypeParamList = IDENTIFIER { "," IDENTIFIER } [ "," ] ;
 
 | Context | Syntax | Example | Purpose |
 |---------|--------|---------|---------|
-| `GenericParams` | Bare identifiers | `type Pair(T, U) = ...` | Declare type parameters |
+| `GenericParams` | Bare identifiers | `type Pair(T, U) = ...` | Declare type parameters (no defaults) |
 | `GenericArgs` | Named type args | `Pair(T: i32, U: String)` | Instantiate with concrete types |
+| `GenericArgs` (in trait declaration) | Named type args | `trait Add(RHS: Self)` | Declare with defaults |
 
-`GenericParams` appears in type alias declarations to introduce type parameter names. `GenericArgs` appears in type instantiation to bind those parameters to concrete types.
+`GenericParams` appears in type alias declarations to introduce type parameter names. `GenericArgs` appears in type instantiation to bind parameters to concrete types, and also in trait declarations where `: Type` specifies a default value for the parameter.
 
 ### Use Declarations
 
@@ -685,8 +705,7 @@ TypePath = IDENTIFIER { "." IDENTIFIER } ;
 
 (* Generic args use parentheses with named type arguments *)
 (* Case-based disambiguation: uppercase identifier = type arg, lowercase = value arg *)
-(* Parser uses case to choose initial parse path, backtracks on failure *)
-(* Semantic analysis can reinterpret nodes when resolution reveals the opposite was intended *)
+(* This is a hard rule enforced by the parser — no backtracking or semantic reinterpretation *)
 (* Shorthand: bare identifier T means T: T (type param name matches type name) *)
 GenericArgs = "(" [ TypeArg { "," TypeArg } [ "," ] ] ")" ;
 
@@ -908,13 +927,13 @@ IndexExpr = Expression
 
 (* Arguments can be named with : *)
 (* Case-based disambiguation: uppercase identifier = type arg, lowercase = value arg *)
-(* Parser backtracks if initial parse (based on case) fails *)
+(* This is a hard rule — uppercase names are always types, lowercase are always values *)
 ArgList = Arg { "," Arg } [ "," ] ;
 
 Arg = NamedArg                              (* named argument: case determines type vs value *)
     | Expression ;                          (* positional argument *)
 
-NamedArg = IDENTIFIER ":" ( Type | Expression ) ;  (* case disambiguates, parser backtracks if needed *)
+NamedArg = IDENTIFIER ":" ( Type | Expression ) ;  (* uppercase = Type, lowercase = Expression *)
 ```
 
 ### Primary Expressions
@@ -979,13 +998,16 @@ ArrayExpr = "[" [ Expression { "," Expression } [ "," ] ] "]"
           | "[" Expression ";" Expression "]" ;
 
 (* Struct instantiation uses parentheses; type args and fields in same list *)
-(* Case-based disambiguation: uppercase = type arg, lowercase = field *)
 StructExpr = StructExprPath "(" [ StructArgList ] ")" ;
 
 StructExprPath = TypePath | "Self" ;
 
 StructArgList = StructArg { "," StructArg } [ "," ] ;
 
+(* Case-based disambiguation (see section 11):
+   - Uppercase IDENTIFIER → TypeArg (type argument)
+   - Lowercase IDENTIFIER → StructField (value field)
+   This is a hard rule; no backtracking occurs. *)
 StructArg = TypeArg                            (* type argument: T: Type *)
           | StructField ;                      (* value field: name: expr or shorthand *)
 
@@ -1440,7 +1462,7 @@ Vec(T: i32).new()                     // Type application then method call
 
 ### 3. Explicit Type Application in Function Calls
 
-When calling a generic function with explicit type arguments, type args use uppercase identifiers and value args use lowercase identifiers (see section 9 for details):
+When calling a generic function with explicit type arguments, type args use uppercase identifiers and value args use lowercase identifiers (see section 11 for details):
 
 ```spl
 identity(T: i32, 42)              // T (uppercase) = type arg, 42 = positional
@@ -1448,14 +1470,11 @@ convert(From: i32, To: f64, value: 100)  // From, To = type args, value = value 
 parse(T: Config, input: text)     // T = type arg, input = value arg
 ```
 
-**Case-based disambiguation with backtracking:**
-- Uppercase identifier: parser first tries Type grammar for RHS
-- Lowercase identifier: parser first tries Expression grammar for RHS
-- On parse failure, parser backtracks and tries the alternate grammar
-- If both succeed, case determines which AST to use
-- Semantic analysis may reinterpret if resolution reveals the opposite was intended
+**Case-based disambiguation (hard rule):**
+- Uppercase identifier → RHS parsed as Type
+- Lowercase identifier → RHS parsed as Expression
 
-Most generic calls don't need explicit type args due to inference:
+No backtracking or semantic reinterpretation occurs. Most generic calls don't need explicit type args due to inference:
 
 ```spl
 let x = identity(42)      // T inferred as i32
@@ -1600,58 +1619,38 @@ Named type arguments (`T: i32`) are syntactically distinct from value arguments,
 
 ### 11. Type Arguments vs Value Arguments
 
-SPL uses **case-based disambiguation with backtracking** to distinguish type arguments from value arguments:
+SPL uses **case-based disambiguation** to distinguish type arguments from value arguments:
 
-| Identifier Case | Initial Parse | Fallback |
-|-----------------|---------------|----------|
-| **Uppercase** (e.g., `T`, `Key`) | Type grammar | Expression grammar |
-| **Lowercase** (e.g., `x`, `name`) | Expression grammar | Type grammar |
+| Identifier Case | Parsed As |
+|-----------------|-----------|
+| **Uppercase** (e.g., `T`, `Key`) | Type argument |
+| **Lowercase** (e.g., `x`, `name`) | Value argument |
 
-The parser uses the identifier's case to choose which grammar to try first. If parsing fails, it backtracks and tries the alternate grammar. When both grammars would succeed (ambiguous cases), the case determines the AST node type.
+This is a hard rule enforced by the parser. There is no backtracking or semantic reinterpretation—the case of the identifier definitively determines how it is parsed.
 
-**Default behavior:**
+**Examples:**
 ```spl
-// Uppercase identifier → try Type grammar first
-Vec(T: i32)                    // T is uppercase, i32 parsed as Type
+// Uppercase identifier → type argument
+Vec(T: i32)                    // T is uppercase → type arg, i32 is a Type
 HashMap(K: String, V: i32)     // K, V uppercase → type args
 
-// Lowercase identifier → try Expression grammar first
+// Lowercase identifier → value argument
 Point(x: 1, y: 2)              // x, y lowercase → value args
 greet(to: "Alice")             // to lowercase → value arg
 ```
 
-**Backtracking examples:**
+**Naming conventions:**
 
-When the default parse fails, the parser automatically backtracks:
+Because case determines parsing, SPL enforces naming conventions:
+- Type parameters must be uppercase: `T`, `K`, `V`, `Item`, `Error`
+- Value parameters/fields must be lowercase: `x`, `name`, `value`, `count`
+
+Code that violates these conventions will not parse as intended:
 ```spl
-// T is uppercase, but if `Config` is a value (not a type), parser backtracks
-// and reparses as Expression
-parse(T: Config, data: input)  // If Config resolves to value, T becomes value arg
-
-// x is lowercase, but if it's followed by something only valid as Type,
-// parser backtracks and parses as Type
-some_call(x: &SomeType)        // Backtrack if & indicates reference type
+// These would NOT work as the author might expect:
+Point(X: 1)                    // X is uppercase → parser expects a Type, not 1
+vec(t: i32)                    // t is lowercase → parser expects an Expression, not i32 type
 ```
-
-**Semantic reinterpretation:**
-
-When both Type and Expression grammars succeed (common for simple paths), the parser uses case to build the AST. If semantic analysis later determines the opposite was intended, it reinterprets the node:
-
-| Parsed As | Resolved To | Reinterpreted As |
-|-----------|-------------|------------------|
-| `PathType("Foo")` | value | `PathExpr("Foo")` |
-| `PathExpr("foo")` | type | `PathType("foo")` |
-| `ReferenceType(&Foo)` | value | `AddressOf(Foo)` |
-| `AddressOf(&x)` | type | `ReferenceType(x)` |
-
-This allows natural usage without forcing sigils:
-```spl
-// Works even if naming conventions differ from SPL defaults
-Config(URL: url_value)         // URL uppercase but refers to value field
-functor(f: Option)             // f lowercase but refers to type parameter
-```
-
-**Implementation note:** The exact backtracking semantics (when to backtrack, how far, and error recovery) require further specification. The distinction between syntactic backtracking during parsing versus semantic reinterpretation during analysis should be clarified in the parser specification.
 
 **Mixed type and value arguments:**
 ```spl
@@ -1697,11 +1696,12 @@ let v: Vec(T: String) = Vec.new()
 let s = string              // Variable reference
 let p = Point(x: string)    // Value passed to field
 
-// Lowercase type alias - case suggests value, but semantic analysis
-// reinterprets when `myint` resolves to a type
-type myint = i32
-let v: Vec(t: myint) = Vec.new()  // t lowercase, but myint is a type
-                                   // Semantic analysis reinterprets as type arg
+// Type aliases must be uppercase to be usable as type arguments
+type MyInt = i32                   // OK: uppercase alias
+let v: Vec(T: MyInt) = Vec.new()   // T: uppercase → type arg, MyInt parsed as Type
+
+// type myint = i32              // Discouraged: lowercase type alias
+// let v: Vec(t: myint) = ...    // ERROR: t lowercase → parsed as value arg
 ```
 
 #### Distinguishing Calls from Instantiation
@@ -1778,36 +1778,35 @@ Vec(T: i32)
 Container(T: i32, value: 42)   // T: type, value: value
 ```
 
-#### Uppercase Value Fields and Lowercase Type Parameters
+#### Naming Convention Requirements
 
-The backtracking and semantic reinterpretation approach handles edge cases naturally:
+Because case determines parsing without backtracking, certain naming patterns are not supported:
 
 ```spl
-// JSON-like API with uppercase field names
-// Parser initially tries Type grammar due to uppercase, but backtracks
-// when it can't parse the string literal as a type
+// NOT SUPPORTED: Uppercase value field names
 struct JsonObject(
-    Type: String,       // Field named "Type" - value field
-    ID: i64,            // Field named "ID" - value field
-    data: Vec(T: u8),   // Normal field
+    Type: String,       // ERROR: "Type" is uppercase, parser expects a Type not String
+    ID: i64,            // ERROR: "ID" is uppercase, parser expects a Type not i64
 )
 
-// Creating instance - uppercase but semantic analysis knows these are value fields
-let obj = JsonObject(
-    Type: "user",       // Uppercase, but string literal forces value interpretation
-    ID: 12345,          // Uppercase, but integer literal forces value interpretation
-    data: bytes,        // Value arg (lowercase default)
+// SUPPORTED: Use lowercase field names
+struct JsonObject(
+    type_name: String,  // OK: lowercase field name
+    id: i64,            // OK: lowercase field name
 )
 
-// Haskell-style lowercase type parameters
-// Parser initially tries Expression grammar due to lowercase, but backtracks
-// when semantic analysis can't find a value named `f`
-trait Functor where f {
-    fn map(self, func: fn(A): B): f(b: B) where A, B, a, b
+// NOT SUPPORTED: Lowercase type parameters
+trait Functor where f {  // ERROR: f is lowercase, parsed as value not type
+    // ...
 }
-// Semantic analysis reinterprets f, a, b as type parameters when they
-// resolve to types rather than values
+
+// SUPPORTED: Use uppercase type parameters
+trait Functor where F {  // OK: F is uppercase
+    fn map(self, func: fn(A): B): F(T: B) where A, B
+}
 ```
+
+This design trades flexibility for simplicity—the parser never needs to backtrack or defer disambiguation to semantic analysis.
 
 #### Common Patterns
 
@@ -2036,7 +2035,7 @@ impl Point(T) where T {
 |---------------------|---------------------------|------------------------------|
 | Path separator      | `::`                      | `.`                          |
 | Generic application | `Vec<T>`                  | `Vec(T: T)` or `Vec(T: i32)` |
-| Type vs value args  | Context-dependent         | Case-based: `T:` = type, `x:` = value |
+| Type vs value args  | Context-dependent         | Case-based (hard rule): `T:` = type, `x:` = value |
 | Return type         | `-> T`                    | `: T`                        |
 | Generic declaration | `fn foo<T>() {}`          | `fn foo() where T {}`        |
 | Where clause        | Constrains only           | Declares AND constrains      |
