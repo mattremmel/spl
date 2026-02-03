@@ -832,7 +832,7 @@ Expressions are defined using layered production rules that encode operator prec
 | 13         | `+` `-`                      | Left          | AdditiveExpr       |
 | 14         | `*` `/` `%`                  | Left          | MultiplicativeExpr |
 | 15         | `**`                         | Right         | ExponentiationExpr |
-| 16         | `!` `-` `&` `~` (unary)      | Right         | UnaryExpr          |
+| 16         | `!` `-` `*` `&` `~` (unary)  | Right         | UnaryExpr          |
 | 17 (highest)| `.` `?.` `()` `[]` `[:]` `!` | Left          | PostfixExpr        |
 
 Note: `&` serves as both a unary reference operator (prefix) and a binary bitwise AND operator; context disambiguates. Type conversions use methods (`.widen()`, `.truncate()`, `.try_into()`) rather than a cast operator.
@@ -914,7 +914,7 @@ ArgList = Arg { "," Arg } [ "," ] ;
 Arg = NamedArg                              (* named argument: case determines type vs value *)
     | Expression ;                          (* positional argument *)
 
-NamedArg = IDENTIFIER ":" TypeOrExpr ;      (* case disambiguates, parser backtracks if needed *)
+NamedArg = IDENTIFIER ":" ( Type | Expression ) ;  (* case disambiguates, parser backtracks if needed *)
 ```
 
 ### Primary Expressions
@@ -1349,7 +1349,7 @@ match value {
 }
 
 match option {
-    .Some(0) | None => "empty or zero",
+    .Some(0) | .None => "empty or zero",
     .Some(n) => "has value",
 }
 
@@ -2020,7 +2020,7 @@ impl Point(T) where T {
 |-------------|---------------------------------------------------------------------|
 | Program     | `Program`, `Item`, `FunctionDef`, `StructDef`, `EnumDef`, `TraitDef`|
 | Modules     | `UseDecl`, `UsePath`, `UseTree`, `ModuleDecl`                       |
-| Types       | `Type`, `ReferenceType`, `ArrayType`, `FnPointerType`, `GenericArgs`|
+| Types       | `Type`, `ReferenceType`, `ArrayType`, `FnType`, `GenericArgs`       |
 | Statements  | `Block`, `Statement`, `LetStatement`                                |
 | Expressions | `Expression`, `TypeExpr`, `IsExpr`, `MatchExpr`, `IfExpr`, `LoopExpr`|
 | Patterns    | `Pattern`, `EnumPattern`, `StructPattern`, `SlicePattern`           |
