@@ -121,7 +121,7 @@ static mut GLOBAL_STATE: i32 = 0  // Requires unsafe to access
 ### Function Definitions
 
 ```ebnf
-FunctionDef = "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ ThrowsClause ] [ WhereClause ] Block ;
+FunctionDef = [ "unsafe" ] "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ ThrowsClause ] [ WhereClause ] Block ;
 
 (* Generator functions yield multiple values lazily *)
 GeneratorDef = "gen" "fn" IDENTIFIER "(" [ ParamList ] ")" ":" Type [ WhereClause ] Block ;
@@ -428,7 +428,9 @@ impl Add(RHS: Vector) for Point {
 (* Unsafe impl required for implementing unsafe traits: unsafe impl Sync for MyType *)
 ImplBlock = [ "unsafe" ] "impl" [ TypePath [ GenericArgs ] "for" ] TypePath [ GenericArgs ] [ WhereClause ] "{" { ImplItem } "}" ;
 
-ImplItem = [ "pub" ] FunctionDef ;
+ImplItem = [ "pub" ] ( FunctionDef | TypeAssignment ) ;
+
+TypeAssignment = "type" IDENTIFIER "=" Type [ ";" ] ;
 ```
 
 **Examples:**
@@ -709,7 +711,11 @@ SelfType = "Self" [ "." IDENTIFIER ] ;  (* Self or Self.AssociatedType *)
    applies to the entire path type, not just the final identifier. *)
 
 (* Paths use dot, not double-colon *)
-TypePath = IDENTIFIER { "." IDENTIFIER } ;
+TypePath = [ PathRoot ] IDENTIFIER { "." IDENTIFIER } ;
+
+PathRoot = "$" "."          (* package root *)
+         | "super" "."      (* parent module *)
+         | "self" "." ;     (* current module *)
 
 (* Generic args use parentheses with named type arguments *)
 (* Case-based disambiguation: uppercase identifier = type arg, lowercase = value arg *)
@@ -791,7 +797,8 @@ let mixed: (i32, name: String) = (42, name: "hello")
 Block = "{" { Statement } "}" ;
 
 Statement = LetStatement
-          | ExpressionStatement ;
+          | ExpressionStatement
+          | Item ;                  (* nested items like functions *)
 
 LetStatement = "let" [ "mut" ] Pattern [ ":" Type ] [ "=" Expression ] [ ";" ] ;
 
@@ -800,6 +807,22 @@ ExpressionStatement = Expression [ ";" ]
 ```
 
 Block expressions (`if`, `while`, `for`, `loop`, and bare blocks) may omit the trailing semicolon when used as statements.
+
+**Nested Items:**
+
+Items (functions, structs, etc.) can be defined inside blocks, similar to Rust. These nested items are scoped to the containing block and can access generic type parameters from the enclosing function:
+
+```spl
+fn outer(value: T): i32 where T: Display {
+    // Nested function - can use T from outer scope
+    fn helper(x: T): String {
+        return x.to_string()
+    }
+
+    let s = helper(value)
+    return s.len()
+}
+```
 
 **Semicolon Rules:**
 
@@ -919,8 +942,8 @@ UnaryExpr = ( "!" | "-" | "&" [ "mut" ] | "*" | "~" ) UnaryExpr
 (* No :: for paths - use . only *)
 PostfixExpr = PrimaryExpr { PostfixOp } ;
 
-PostfixOp = "." IDENTIFIER [ GenericArgs ]                   (* field or associated item *)
-          | "." IDENTIFIER [ GenericArgs ] "(" [ ArgList ] ")" (* method call *)
+PostfixOp = "." IDENTIFIER                                   (* field access *)
+          | "." IDENTIFIER "(" [ ArgList ] ")"               (* method call *)
           | "?." IDENTIFIER                                   (* optional chain field *)
           | "?." IDENTIFIER "(" [ ArgList ] ")"               (* optional chain method *)
           | "(" [ ArgList ] ")"                               (* function call *)
@@ -972,7 +995,8 @@ PrimaryExpr = LiteralExpr
             | ContinueExpr
             | ReturnExpr
             | YieldExpr
-            | ThrowExpr ;
+            | ThrowExpr
+            | UnsafeExpr ;
 
 (* Type expressions - types used as values for associated function calls *)
 (* Requires GenericArgs to distinguish from PathExpr *)
@@ -1000,7 +1024,7 @@ LiteralExpr = INTEGER | FLOAT | STRING | CHAR | "true" | "false" ;
 EnumShorthandExpr = "." IDENTIFIER [ "(" [ ArgList ] ")" ] ;
 
 (* Paths use dot separator *)
-PathExpr = IDENTIFIER { "." IDENTIFIER } ;
+PathExpr = [ PathRoot ] IDENTIFIER { "." IDENTIFIER } ;
 
 GroupedExpr = "(" Expression ")" ;
 
@@ -1028,6 +1052,10 @@ StructArg = TypeArg                            (* type argument: T: Type *)
 
 (* Field with optional expression; colon separates name from value *)
 (* Bare identifier = shorthand: `x` means `x: x` *)
+(* Note: Uppercase identifiers are parsed as TypeArg (see StructArg above).
+   Lowercase identifiers are struct field names. Using an uppercase field name
+   (e.g., `Type: "json"`) would be parsed as a type argument and produce a
+   semantic error, since "json" is not a valid type. *)
 StructField = IDENTIFIER [ ":" Expression ] ;
 
 (* Match expression *)
@@ -1147,7 +1175,46 @@ YieldExpr = "yield" Expression ;
 
 (* Throw an error in a throws function - desugars to return Err(expr) *)
 ThrowExpr = "throw" Expression ;
+
+(* Unsafe enables operations the compiler cannot verify as safe.
+   Block form: `unsafe { statements; expr }` - enables unsafe in entire block
+   Expression form: `unsafe expr` - applies to single expression only *)
+UnsafeExpr = "unsafe" Block
+           | "unsafe" UnaryExpr ;    (* binds tightly to single expression *)
 ```
+
+**Unsafe Blocks and Expressions:**
+
+The `unsafe` keyword enables operations that the compiler cannot verify as safe. There are two forms:
+
+| Form | Syntax | Scope |
+|------|--------|-------|
+| Block | `unsafe { ... }` | All code within the block can perform unsafe operations |
+| Expression | `unsafe expr` | Only the immediately following expression is unsafe |
+
+The expression form uses `UnaryExpr` precedence, meaning it binds tightly to the next expression.
+
+```spl
+// Block form - multiple unsafe operations
+let values = unsafe {
+    let a = p1.read()
+    let b = p2.read()
+    (a, b)
+}
+
+// Expression form - single unsafe operation
+let value = unsafe p.read()
+
+// Unsafe function definition
+unsafe fn dangerous_operation(p: Ptr(T: i32)): i32 {
+    return p.read()  // body is implicitly unsafe
+}
+
+// Calling unsafe function requires unsafe context
+let result = unsafe dangerous_operation(ptr)
+```
+
+See [unsafe.md](unsafe.md) for the full list of operations that require unsafe.
 
 **Pattern Matching in Control Flow:**
 
@@ -1318,7 +1385,9 @@ SlicePatternElement = RestPattern | Pattern ;
 RestPattern = ".." [ IDENTIFIER ] ;
 
 (* Struct patterns use parentheses *)
-StructPattern = TypePath "(" [ StructPatternFields ] ")" ;
+StructPattern = StructPatternPath "(" [ StructPatternFields ] ")" ;
+
+StructPatternPath = TypePath | "Self" ;
 
 StructPatternFields = StructPatternField { "," StructPatternField } [ "," ] [ ".." ] ;
 
@@ -1326,7 +1395,9 @@ StructPatternFields = StructPatternField { "," StructPatternField } [ "," ] [ ".
 StructPatternField = IDENTIFIER [ ":" Pattern ] ;
 
 (* Enum variant patterns - supports both tuple-style and struct-style variants *)
-EnumPattern = TypePath [ "(" [ EnumPatternFields ] ")" ] ;
+EnumPattern = EnumPatternPath [ "(" [ EnumPatternFields ] ")" ] ;
+
+EnumPatternPath = TypePath | "Self" ;
 
 (* Enum variant shorthand pattern - type inferred from context.
    See EnumShorthandExpr in section 4 for the corresponding expression syntax. *)
@@ -1491,14 +1562,19 @@ let m: HashMap(K: String, V: i32)     // Multiple named type args
 Vec(T: i32).new()                     // Type application then method call
 ```
 
-### 3. Explicit Type Application in Function Calls
+### 3. Explicit Type Application in Function and Method Calls
 
-When calling a generic function with explicit type arguments, type args use uppercase identifiers and value args use lowercase identifiers (see section 11 for details):
+When calling generic functions or methods with explicit type arguments, type args use uppercase identifiers and value args use lowercase identifiers (see section 11 for details). Type arguments are mixed into `ArgList` alongside value arguments:
 
 ```spl
+// Function calls
 identity(T: i32, 42)              // T (uppercase) = type arg, 42 = positional
 convert(From: i32, To: f64, value: 100)  // From, To = type args, value = value arg
 parse(T: Config, input: text)     // T = type arg, input = value arg
+
+// Method calls - same pattern
+obj.method(T: i32, x: 1, y: 2)    // T = type arg, x/y = value args
+list.collect(T: Vec(T: i32))      // explicit result type
 ```
 
 **Case-based disambiguation (hard rule):**
@@ -1515,11 +1591,14 @@ v.push(1)                 // Now v: Vec(T: i32)
 
 ### 4. Paths
 
-All paths use `.` (dot) as the separator. No `::` exists.
+All paths use `.` (dot) as the separator. No `::` exists. Paths can be prefixed with `$`, `super`, or `self` to specify the starting point:
 
 ```spl
 std.vec.Vec              // Module path
-self.field               // Field access
+self.field               // Field access (value)
+self.helper              // Current module path
+super.Parent             // Parent module path
+$.utils.Config           // Package-root qualified path
 Point.new()              // Associated function
 ```
 
