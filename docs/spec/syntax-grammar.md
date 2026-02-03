@@ -544,6 +544,8 @@ GenericParams = "(" TypeParamList ")" ;
 TypeParamList = IDENTIFIER { "," IDENTIFIER } [ "," ] ;
 ```
 
+**Note:** Type aliases use `GenericParams` (bare identifiers) rather than `GenericArgs` (named type args) because they declare new type parameters rather than instantiate existing ones. See the comparison table below.
+
 **GenericParams vs GenericArgs:**
 
 | Context | Syntax | Example | Purpose |
@@ -993,7 +995,8 @@ ClosureBody = Block | Expression ;
 
 LiteralExpr = INTEGER | FLOAT | STRING | CHAR | "true" | "false" ;
 
-(* Enum variant shorthand - type inferred from context *)
+(* Enum variant shorthand - type inferred from context.
+   See EnumShorthandPattern in section 5 for the corresponding pattern syntax. *)
 EnumShorthandExpr = "." IDENTIFIER [ "(" [ ArgList ] ")" ] ;
 
 (* Paths use dot separator *)
@@ -1325,7 +1328,8 @@ StructPatternField = IDENTIFIER [ ":" Pattern ] ;
 (* Enum variant patterns - supports both tuple-style and struct-style variants *)
 EnumPattern = TypePath [ "(" [ EnumPatternFields ] ")" ] ;
 
-(* Enum variant shorthand pattern - type inferred from context *)
+(* Enum variant shorthand pattern - type inferred from context.
+   See EnumShorthandExpr in section 4 for the corresponding expression syntax. *)
 EnumShorthandPattern = "." IDENTIFIER [ "(" [ EnumPatternFields ] ")" ] ;
 
 (* Pattern fields for enum variants *)
@@ -1335,7 +1339,8 @@ EnumPatternFields = EnumPatternField { "," EnumPatternField } [ "," ] [ ".." ] ;
 (* SEMANTIC NOTE: When the Pattern alternative is an IdentifierPattern (e.g., `x`),
    semantic analysis checks if the enum variant has a field with that name. If so,
    the pattern is interpreted as shorthand for `x: x` (bind field x to variable x).
-   Otherwise, it's a positional match. This mirrors struct field shorthand. *)
+   Otherwise, it's a positional match. This mirrors struct field shorthand in
+   expressions — see "Struct Field Shorthand" in the Ambiguity Resolution section. *)
 EnumPatternField = IDENTIFIER ":" Pattern       (* explicit: field name with pattern *)
                  | Pattern ;                     (* positional or shorthand *)
 
