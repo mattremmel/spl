@@ -423,10 +423,7 @@ impl IsExpr {
         token(&self.0, SyntaxKind::IS_KW)
     }
 
-    /// Check if this is an `is not` expression.
-    pub fn is_negated(&self) -> bool {
-        token(&self.0, SyntaxKind::NOT_KW).is_some()
-    }
+    // Note: 'is not' syntax was removed - use `!(expr is Pattern)` instead
 
     /// Get the pattern being matched against.
     pub fn pattern(&self) -> Option<Pat> {
@@ -891,14 +888,8 @@ mod tests {
         let is_expr: IsExpr = parse_expr("fn main() { x is Some(y) }");
         assert!(is_expr.lhs().is_some());
         assert!(is_expr.is_token().is_some());
-        assert!(!is_expr.is_negated());
+        // Note: 'is not' syntax was removed - all IsExpr are now non-negated
         assert!(is_expr.pattern().is_some());
-    }
-
-    #[test]
-    fn is_expr_negated() {
-        let is_expr: IsExpr = parse_expr("fn main() { x is not None }");
-        assert!(is_expr.is_negated());
     }
 
     // =========================================================================

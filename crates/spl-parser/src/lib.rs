@@ -693,7 +693,7 @@ pub(crate) mod tests {
         // Error recovery should produce a well-formed tree
         // Note: whitespace before recovery point attaches to next item
         check_source_file(
-            "fn a() {} @@@ fn b() {}",
+            "fn a() {} ``` fn b() {}",
             &expect![[r#"
                 SourceFile@0..23
                   FunctionDef@0..9
@@ -710,9 +710,9 @@ pub(crate) mod tests {
                       R_BRACE@8..9 "}"
                   ERROR@9..13
                     WHITESPACE@9..10 " "
-                    ERROR@10..11 "@"
-                    ERROR@11..12 "@"
-                    ERROR@12..13 "@"
+                    ERROR@10..11 "`"
+                    ERROR@11..12 "`"
+                    ERROR@12..13 "`"
                   FunctionDef@13..23
                     WHITESPACE@13..14 " "
                     FN_KW@14..16 "fn"
@@ -1117,14 +1117,14 @@ pub(crate) mod tests {
             r#"
             pub struct Foo(
                 pub a: i32,
-                pub(crate) b: i32,
-                pub(super) c: i32,
+                pub(super) b: i32,
+                pub($) c: i32,
                 d: i32
             )
 
             impl Foo {
                 pub fn public() {}
-                pub(crate) fn internal() {}
+                pub(super) fn internal() {}
                 fn private() {}
             }
         "#,

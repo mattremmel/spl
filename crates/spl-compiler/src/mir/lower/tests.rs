@@ -8938,39 +8938,3 @@ fn is_expr_wildcard_generates_constant_true() {
     });
     assert!(has_const_true, "is _ should generate constant true");
 }
-
-#[test]
-fn is_not_wildcard_generates_constant_false() {
-    // 42 is not _ should generate constant false
-    let bodies = lower_source("fn main(): bool { 42 is not _ }");
-    let body = &bodies[0];
-
-    let has_const_false = body.basic_blocks.iter().any(|bb| {
-        bb.statements.iter().any(|stmt| {
-            matches!(
-                &stmt.kind,
-                StatementKind::Assign(_, Rvalue::Use(Operand::Constant(Constant::Bool(false))))
-            )
-        })
-    });
-    assert!(has_const_false, "is not _ should generate constant false");
-}
-
-#[test]
-fn is_not_literal_generates_ne_comparison() {
-    // 42 is not 0 should generate BinaryOp::Ne (or Eq + Not)
-    let bodies = lower_source("fn main(): bool { 42 is not 0 }");
-    let body = &bodies[0];
-
-    // Should have either Ne comparison or Eq + Not
-    let has_ne_or_negation = body.basic_blocks.iter().any(|bb| {
-        bb.statements.iter().any(|stmt| {
-            matches!(
-                &stmt.kind,
-                StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Ne, _, _))
-                    | StatementKind::Assign(_, Rvalue::UnaryOp(UnOp::Not, _))
-            )
-        })
-    });
-    assert!(has_ne_or_negation, "is not should generate Ne or negation");
-}

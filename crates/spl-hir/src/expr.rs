@@ -186,12 +186,9 @@ pub enum HirExprKind {
     /// Cast expression: `expr as Type`.
     Cast { expr: ExprId, target_ty: TypeId },
 
-    /// Is expression: `expr is pattern` or `expr is not pattern`.
-    Is {
-        scrutinee: ExprId,
-        pattern: PatId,
-        negated: bool,
-    },
+    /// Is expression: `expr is pattern`.
+    /// Note: `is not` syntax was removed - use `!(expr is pattern)` instead.
+    Is { scrutinee: ExprId, pattern: PatId },
 
     /// Match expression: `match expr { pattern => body, ... }`.
     Match {

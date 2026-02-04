@@ -401,9 +401,9 @@ impl SemanticContext {
 /// |------------|------|
 /// | Private (default) | Visible within current module and descendant submodules |
 /// | Public (pub) | Visible to all |
-/// | Crate (pub(crate)) | Future - visible within crate only (treated as Public for now) |
+/// | Package (pub($)) | Future - visible within package only (treated as Public for now) |
+/// | Package path (pub($.path)) | Future - visible to specific module from package root (treated as Public for now) |
 /// | Super (pub(super)) | Future - visible to parent module (treated as Public for now) |
-/// | `PubSelf` (pub(self)) | Future - same as Private (treated as Public for now) |
 ///
 /// Key semantics:
 /// - Child modules CAN access parent's private items (descendants see ancestors' private items)

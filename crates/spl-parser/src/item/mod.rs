@@ -256,7 +256,7 @@ fn attr_value(p: &mut Parser<'_>) -> Result<(), crate::ParseError> {
     }
 }
 
-/// Parse optional visibility: `pub`, `pub(crate)`, `pub(super)`, `pub(self)`, `pub(in path)`
+/// Parse optional visibility: `pub`, `pub($)`, `pub($.path)`, `pub(super)`
 fn opt_visibility(p: &mut Parser<'_>) -> Option<CompletedMarker> {
     if !p.at(SyntaxKind::PUB_KW) {
         return None;
@@ -268,15 +268,17 @@ fn opt_visibility(p: &mut Parser<'_>) -> Option<CompletedMarker> {
     if p.at(SyntaxKind::L_PAREN) {
         p.bump(); // (
 
-        if p.at(SyntaxKind::CRATE_KW)
-            || p.at(SyntaxKind::SUPER_KW)
-            || p.at(SyntaxKind::SELF_VALUE_KW)
-        {
+        // Handle pub($), pub($.path), and pub(super)
+        if p.at(SyntaxKind::SUPER_KW) {
             p.bump();
-        } else if p.at(SyntaxKind::IN_KW) {
-            p.bump(); // in
-            // Parse path, ignoring errors (continue to closing paren for recovery)
-            let _ = crate::path::path_no_generics(p);
+        } else if p.at(SyntaxKind::DOLLAR) {
+            p.bump(); // $
+            // Optional path after $: pub($.path)
+            if p.at(SyntaxKind::DOT) {
+                p.bump(); // .
+                // Parse the path after $.
+                let _ = crate::path::path_no_generics(p);
+            }
         }
 
         p.expect(SyntaxKind::R_PAREN).ok();
@@ -964,7 +966,6 @@ fn is_use_path_segment_kind(kind: SyntaxKind) -> bool {
             | SyntaxKind::SELF_VALUE_KW
             | SyntaxKind::SUPER_KW
             | SyntaxKind::MODULE_KW
-            | SyntaxKind::CRATE_KW
     )
 }
 

@@ -348,11 +348,8 @@ impl AstPrinter {
     }
 
     fn print_is_expr(&mut self, is_expr: &IsExpr) {
-        self.line(if is_expr.is_negated() {
-            "IsNotExpr"
-        } else {
-            "IsExpr"
-        });
+        // Note: 'is not' syntax was removed - all IsExpr are now non-negated
+        self.line("IsExpr");
         self.indented(|p| {
             if let Some(lhs) = is_expr.lhs() {
                 p.print_expr(&lhs);

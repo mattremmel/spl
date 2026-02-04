@@ -3125,11 +3125,6 @@ fn is_expr_with_wildcard() {
 }
 
 #[test]
-fn is_not_expr_returns_bool() {
-    check("fn main() { let x = 42 is not 0; }", "bool");
-}
-
-#[test]
 fn is_expr_tuple_pattern() {
     check("fn main() { let t = (1, 2); let b = t is (_, _); }", "bool");
 }

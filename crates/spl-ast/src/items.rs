@@ -251,7 +251,6 @@ impl UseTree {
                         | SyntaxKind::MODULE_KW
                         | SyntaxKind::SUPER_KW
                         | SyntaxKind::SELF_VALUE_KW
-                        | SyntaxKind::CRATE_KW
                 )
             })
     }
@@ -436,9 +435,7 @@ impl Visibility {
         token(&self.0, SyntaxKind::PUB_KW)
     }
 
-    pub fn crate_kw(&self) -> Option<SyntaxToken> {
-        token(&self.0, SyntaxKind::CRATE_KW)
-    }
+    // Note: 'crate' keyword was removed - use '$' for package root
 
     pub fn super_kw(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::SUPER_KW)

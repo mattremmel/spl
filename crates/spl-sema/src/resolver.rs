@@ -258,9 +258,8 @@ impl<'ctx> Resolver<'ctx> {
         match vis {
             None => Visibility::Private,
             Some(v) => {
-                if v.crate_kw().is_some() {
-                    Visibility::Crate
-                } else if v.super_kw().is_some() {
+                // Note: 'pub(crate)' syntax removed - use '$' for package root if needed
+                if v.super_kw().is_some() {
                     Visibility::Super
                 } else if v.self_kw().is_some() {
                     Visibility::PubSelf
@@ -2757,18 +2756,13 @@ mod tests {
 
     // Visibility modifier tests
     #[test]
-    fn resolve_pub_crate_function() {
-        check_ok("pub(crate) fn internal() {}");
-    }
-
-    #[test]
     fn resolve_pub_super_function() {
         check_ok("pub(super) fn package_internal() {}");
     }
 
     #[test]
-    fn resolve_pub_self_function() {
-        check_ok("pub(self) fn module_internal() {}");
+    fn resolve_pub_package_function() {
+        check_ok("pub($) fn package_internal() {}");
     }
 
     // Edge case tests

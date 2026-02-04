@@ -433,11 +433,8 @@ impl<'hir> MirLoweringContext<'hir> {
                 ));
                 Ok(place)
             }
-            HirExprKind::Is {
-                scrutinee,
-                pattern,
-                negated,
-            } => {
+            HirExprKind::Is { scrutinee, pattern } => {
+                // Note: 'is not' syntax was removed - all Is expressions are positive matches
                 let scrutinee_val = self.lower_expr_as_operand(builder, *scrutinee)?;
                 let pat = self.hir.pat(*pattern);
 
@@ -447,10 +444,9 @@ impl<'hir> MirLoweringContext<'hir> {
                 match &pat.kind {
                     // Wildcard/binding always matches
                     crate::hir::HirPatKind::Wildcard | crate::hir::HirPatKind::Bind { .. } => {
-                        let result = !negated;
                         builder.push_statement(Statement::assign(
                             place.clone(),
-                            Rvalue::Use(Operand::Constant(Constant::Bool(result))),
+                            Rvalue::Use(Operand::Constant(Constant::Bool(true))),
                             span,
                         ));
                     }
@@ -458,10 +454,9 @@ impl<'hir> MirLoweringContext<'hir> {
                     // Literal patterns: compare scrutinee to literal
                     crate::hir::HirPatKind::Literal(lit) => {
                         let pattern_operand = literal_to_operand(lit, pat.ty);
-                        let cmp_op = if *negated { BinOp::Ne } else { BinOp::Eq };
                         builder.push_statement(Statement::assign(
                             place.clone(),
-                            Rvalue::BinaryOp(cmp_op, scrutinee_val, pattern_operand),
+                            Rvalue::BinaryOp(BinOp::Eq, scrutinee_val, pattern_operand),
                             span,
                         ));
                     }
@@ -470,7 +465,7 @@ impl<'hir> MirLoweringContext<'hir> {
                     _ => {
                         builder.push_statement(Statement::assign(
                             place.clone(),
-                            Rvalue::Use(Operand::Constant(Constant::Bool(*negated))),
+                            Rvalue::Use(Operand::Constant(Constant::Bool(false))),
                             span,
                         ));
                     }

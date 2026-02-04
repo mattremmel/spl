@@ -60,9 +60,9 @@ pub(super) fn prefix_expr(
         return Ok(Some(m.complete(p, SyntaxKind::RefExpr)));
     }
 
-    // Handle range prefix specially (..expr or ..)
-    if op == SyntaxKind::DOT_DOT {
-        p.bump(); // ..
+    // Handle range prefix specially (..expr, ..=expr, .., or ..=)
+    if op == SyntaxKind::DOT_DOT || op == SyntaxKind::DOT_DOT_EQ {
+        p.bump(); // .. or ..=
         if let Err(e) = expr_bp(p, r_bp, allow_struct, depth) {
             m.abandon(p);
             return Err(e);
@@ -111,12 +111,10 @@ pub(super) fn infix_expr(
         return Ok(m.complete(p, SyntaxKind::CastExpr));
     }
 
-    // Handle 'is' pattern matching specially: `expr is [not] Pattern`
+    // Handle 'is' pattern matching specially: `expr is Pattern`
+    // Note: 'is not' syntax was removed - use `!(expr is Pattern)` instead
     if op == SyntaxKind::IS_KW {
         p.bump(); // is
-
-        // Optional 'not' for `is not Pattern`
-        p.eat(SyntaxKind::NOT_KW);
 
         // Parse pattern
         if let Err(e) = crate::pattern::pattern(p) {
@@ -135,7 +133,7 @@ pub(super) fn infix_expr(
 
     // Determine the node kind based on operator
     let kind = match op {
-        SyntaxKind::DOT_DOT => SyntaxKind::RangeExpr,
+        SyntaxKind::DOT_DOT | SyntaxKind::DOT_DOT_EQ => SyntaxKind::RangeExpr,
         _ => SyntaxKind::BinExpr,
     };
 
@@ -1546,29 +1544,6 @@ mod tests {
                       Name@10..11
                         IDENT@10..11 "v"
                     R_PAREN@11..12 ")"
-            "#]],
-        );
-    }
-
-    #[test]
-    fn is_not_expr() {
-        check_expr(
-            "x is not None",
-            &expect![[r#"
-                IsExpr@0..13
-                  PathExpr@0..1
-                    Path@0..1
-                      PathSegment@0..1
-                        NameRef@0..1
-                          IDENT@0..1 "x"
-                  WHITESPACE@1..2 " "
-                  IS_KW@2..4 "is"
-                  WHITESPACE@4..5 " "
-                  NOT_KW@5..8 "not"
-                  IdentPat@8..13
-                    Name@8..13
-                      WHITESPACE@8..9 " "
-                      IDENT@9..13 "None"
             "#]],
         );
     }

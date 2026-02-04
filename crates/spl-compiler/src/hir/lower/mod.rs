@@ -1986,14 +1986,10 @@ impl<'a> LoweringContext<'a> {
                 self.db.alloc_pat(missing_pat)
             });
 
-        let negated = is_expr.is_negated();
+        // Note: 'is not' syntax was removed
 
         let expr = HirExpr {
-            kind: HirExprKind::Is {
-                scrutinee,
-                pattern,
-                negated,
-            },
+            kind: HirExprKind::Is { scrutinee, pattern },
             ty,
             span,
         };

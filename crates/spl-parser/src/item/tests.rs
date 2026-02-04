@@ -157,33 +157,6 @@ fn function_pub() {
 }
 
 #[test]
-fn visibility_pub_crate() {
-    check_item(
-        "pub(crate) fn foo() {}",
-        &expect![[r#"
-            FunctionDef@0..22
-              Visibility@0..10
-                PUB_KW@0..3 "pub"
-                L_PAREN@3..4 "("
-                CRATE_KW@4..9 "crate"
-                R_PAREN@9..10 ")"
-              WHITESPACE@10..11 " "
-              FN_KW@11..13 "fn"
-              Name@13..17
-                WHITESPACE@13..14 " "
-                IDENT@14..17 "foo"
-              ParamList@17..19
-                L_PAREN@17..18 "("
-                R_PAREN@18..19 ")"
-              Block@19..22
-                WHITESPACE@19..20 " "
-                L_BRACE@20..21 "{"
-                R_BRACE@21..22 "}"
-        "#]],
-    );
-}
-
-#[test]
 fn visibility_pub_super() {
     check_item(
         "pub(super) fn foo() {}",
@@ -211,120 +184,64 @@ fn visibility_pub_super() {
 }
 
 #[test]
-fn visibility_pub_self() {
+fn visibility_pub_package() {
     check_item(
-        "pub(self) fn foo() {}",
+        "pub($) fn foo() {}",
         &expect![[r#"
-            FunctionDef@0..21
-              Visibility@0..9
+            FunctionDef@0..18
+              Visibility@0..6
                 PUB_KW@0..3 "pub"
                 L_PAREN@3..4 "("
-                SELF_VALUE_KW@4..8 "self"
-                R_PAREN@8..9 ")"
-              WHITESPACE@9..10 " "
-              FN_KW@10..12 "fn"
-              Name@12..16
-                WHITESPACE@12..13 " "
-                IDENT@13..16 "foo"
-              ParamList@16..18
-                L_PAREN@16..17 "("
-                R_PAREN@17..18 ")"
-              Block@18..21
-                WHITESPACE@18..19 " "
-                L_BRACE@19..20 "{"
-                R_BRACE@20..21 "}"
+                DOLLAR@4..5 "$"
+                R_PAREN@5..6 ")"
+              WHITESPACE@6..7 " "
+              FN_KW@7..9 "fn"
+              Name@9..13
+                WHITESPACE@9..10 " "
+                IDENT@10..13 "foo"
+              ParamList@13..15
+                L_PAREN@13..14 "("
+                R_PAREN@14..15 ")"
+              Block@15..18
+                WHITESPACE@15..16 " "
+                L_BRACE@16..17 "{"
+                R_BRACE@17..18 "}"
         "#]],
     );
 }
 
 #[test]
-fn visibility_pub_in_path() {
+fn visibility_pub_package_path() {
     check_item(
-        "pub(in crate.foo) fn bar() {}",
+        "pub($.foo.bar) fn baz() {}",
         &expect![[r#"
-            FunctionDef@0..29
-              Visibility@0..17
+            FunctionDef@0..26
+              Visibility@0..14
                 PUB_KW@0..3 "pub"
                 L_PAREN@3..4 "("
-                IN_KW@4..6 "in"
-                Path@6..16
-                  PathSegment@6..12
-                    NameRef@6..12
-                      WHITESPACE@6..7 " "
-                      CRATE_KW@7..12 "crate"
-                  DOT@12..13 "."
-                  PathSegment@13..16
-                    NameRef@13..16
-                      IDENT@13..16 "foo"
-                R_PAREN@16..17 ")"
-              WHITESPACE@17..18 " "
-              FN_KW@18..20 "fn"
-              Name@20..24
-                WHITESPACE@20..21 " "
-                IDENT@21..24 "bar"
-              ParamList@24..26
-                L_PAREN@24..25 "("
-                R_PAREN@25..26 ")"
-              Block@26..29
-                WHITESPACE@26..27 " "
-                L_BRACE@27..28 "{"
-                R_BRACE@28..29 "}"
-        "#]],
-    );
-}
-
-#[test]
-fn struct_pub_crate_paren() {
-    check_item(
-        "pub(crate) struct Foo()",
-        &expect![[r#"
-            StructDef@0..23
-              Visibility@0..10
-                PUB_KW@0..3 "pub"
-                L_PAREN@3..4 "("
-                CRATE_KW@4..9 "crate"
-                R_PAREN@9..10 ")"
-              WHITESPACE@10..11 " "
-              STRUCT_KW@11..17 "struct"
+                DOLLAR@4..5 "$"
+                DOT@5..6 "."
+                Path@6..13
+                  PathSegment@6..9
+                    NameRef@6..9
+                      IDENT@6..9 "foo"
+                  DOT@9..10 "."
+                  PathSegment@10..13
+                    NameRef@10..13
+                      IDENT@10..13 "bar"
+                R_PAREN@13..14 ")"
+              WHITESPACE@14..15 " "
+              FN_KW@15..17 "fn"
               Name@17..21
                 WHITESPACE@17..18 " "
-                IDENT@18..21 "Foo"
-              FieldList@21..23
+                IDENT@18..21 "baz"
+              ParamList@21..23
                 L_PAREN@21..22 "("
                 R_PAREN@22..23 ")"
-        "#]],
-    );
-}
-
-#[test]
-fn field_pub_crate_paren() {
-    check_item(
-        "struct Foo(pub(crate) x: i32)",
-        &expect![[r#"
-            StructDef@0..29
-              STRUCT_KW@0..6 "struct"
-              Name@6..10
-                WHITESPACE@6..7 " "
-                IDENT@7..10 "Foo"
-              FieldList@10..29
-                L_PAREN@10..11 "("
-                FieldDef@11..28
-                  Visibility@11..21
-                    PUB_KW@11..14 "pub"
-                    L_PAREN@14..15 "("
-                    CRATE_KW@15..20 "crate"
-                    R_PAREN@20..21 ")"
-                  Name@21..23
-                    WHITESPACE@21..22 " "
-                    IDENT@22..23 "x"
-                  COLON@23..24 ":"
-                  PathType@24..28
-                    Path@24..28
-                      PathSegment@24..28
-                        NameRef@24..28
-                          WHITESPACE@24..25 " "
-                          IDENT@25..28 "i32"
-                R_PAREN@28..29 ")"
+              Block@23..26
+                WHITESPACE@23..24 " "
+                L_BRACE@24..25 "{"
+                R_BRACE@25..26 "}"
         "#]],
     );
 }
@@ -1182,7 +1099,7 @@ fn struct_many_fields_paren() {
 #[test]
 fn struct_mixed_visibility_paren() {
     check_item(
-        "struct S(pub a: i32, pub(crate) b: i32, c: i32)",
+        "struct S(pub a: i32, pub(super) b: i32, c: i32)",
         &expect![[r#"
             StructDef@0..47
               STRUCT_KW@0..6 "struct"
@@ -1210,7 +1127,7 @@ fn struct_mixed_visibility_paren() {
                     WHITESPACE@20..21 " "
                     PUB_KW@21..24 "pub"
                     L_PAREN@24..25 "("
-                    CRATE_KW@25..30 "crate"
+                    SUPER_KW@25..30 "super"
                     R_PAREN@30..31 ")"
                   Name@31..33
                     WHITESPACE@31..32 " "

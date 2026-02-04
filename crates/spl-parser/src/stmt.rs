@@ -166,12 +166,9 @@ pub(crate) fn type_annotation(p: &mut Parser<'_>) -> Result<CompletedMarker, cra
         return Ok(m.complete(p, SyntaxKind::FnPtrType));
     }
 
-    // Path type: identifier, Self, crate, super, or path::to::Type<Args>
-    if !p.at(SyntaxKind::IDENT)
-        && !p.at(SyntaxKind::SELF_TYPE_KW)
-        && !p.at(SyntaxKind::CRATE_KW)
-        && !p.at(SyntaxKind::SUPER_KW)
-    {
+    // Path type: identifier, Self, super, or path::to::Type<Args>
+    // Note: 'crate' keyword was removed - use '$' for package root
+    if !p.at(SyntaxKind::IDENT) && !p.at(SyntaxKind::SELF_TYPE_KW) && !p.at(SyntaxKind::SUPER_KW) {
         let err = p.error_at_current("expected type".to_string());
         m.abandon(p);
         return Err(err);

@@ -23,8 +23,8 @@ pub enum Token {
     #[regex(r"//[^\n]*")]
     LineComment,
 
-    /// Block comment (/* ... */)
-    #[regex(r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/")]
+    /// Block comment (/* ... */) - supports nesting
+    #[token("/*", lex_block_comment)]
     BlockComment,
 
     // === Keywords ===
@@ -34,8 +34,14 @@ pub enum Token {
     Mut,
     #[token("fn")]
     Fn,
+    #[token("gen")]
+    Gen,
     #[token("struct")]
     Struct,
+    #[token("enum")]
+    Enum,
+    #[token("trait")]
+    Trait,
     #[token("type")]
     Type,
     #[token("impl")]
@@ -58,6 +64,12 @@ pub enum Token {
     Continue,
     #[token("return")]
     Return,
+    #[token("yield")]
+    Yield,
+    #[token("throw")]
+    Throw,
+    #[token("throws")]
+    Throws,
     #[token("as")]
     As,
     #[token("true")]
@@ -70,29 +82,33 @@ pub enum Token {
     SelfType,
     #[token("self")]
     SelfValue,
-    #[token("crate")]
-    Crate,
     #[token("super")]
     Super,
     #[token("where")]
     Where,
     #[token("is")]
     Is,
-    #[token("not")]
-    Not,
     #[token("match")]
     Match,
-    #[token("yield")]
-    Yield,
     #[token("extern")]
     Extern,
+    #[token("const")]
+    Const,
+    #[token("static")]
+    Static,
+    #[token("unsafe")]
+    Unsafe,
     #[token("use")]
     Use,
     #[token("module")]
     Module,
 
     // === Operators ===
-    // Arithmetic
+    // Arithmetic (multi-char first for longest match)
+    #[token("**=")]
+    StarStarEq,
+    #[token("**")]
+    StarStar,
     #[token("+")]
     Plus,
     #[token("-")]
@@ -109,6 +125,14 @@ pub enum Token {
     EqEq,
     #[token("!=")]
     Ne,
+    #[token("<<=")]
+    ShlEq,
+    #[token(">>=")]
+    ShrEq,
+    #[token("<<")]
+    Shl,
+    #[token(">>")]
+    Shr,
     #[token("<=")]
     Le,
     #[token(">=")]
@@ -125,6 +149,22 @@ pub enum Token {
     OrOr,
     #[token("!")]
     Bang,
+
+    // Bitwise
+    #[token("|=")]
+    PipeEq,
+    #[token("^=")]
+    CaretEq,
+    #[token("&=")]
+    AmpEq,
+    #[token("|")]
+    Pipe,
+    #[token("^")]
+    Caret,
+    #[token("~")]
+    Tilde,
+    #[token("&")]
+    Amp,
 
     // Assignment (multi-char first)
     #[token("+=")]
@@ -147,16 +187,24 @@ pub enum Token {
     FatArrow,
     #[token("::")]
     ColonColon,
+    #[token("..=")]
+    DotDotEq,
     #[token("..")]
     DotDot,
+    #[token("?.")]
+    QuestionDot,
+    #[token("??")]
+    QuestionQuestion,
+    #[token("?")]
+    Question,
     #[token(".")]
     Dot,
-    #[token("&")]
-    Amp,
     #[token("$")]
     Dollar,
     #[token("#")]
     Hash,
+    #[token("@")]
+    At,
 
     // === Delimiters ===
     #[token("(")]
@@ -180,31 +228,135 @@ pub enum Token {
 
     // === Literals ===
     // Float must come before Integer to handle 3.14 correctly
-    #[regex(r"[0-9][0-9_]*\.[0-9][0-9_]*(e[+-]?[0-9][0-9_]*)?(f32|f64)?")]
-    #[regex(r"[0-9][0-9_]*e[+-]?[0-9][0-9_]*(f32|f64)?")]
+    // Supports both e and E for exponent, decimal suffix
+    #[regex(r"[0-9][0-9_]*\.[0-9][0-9_]*([eE][+-]?[0-9][0-9_]*)?(f32|f64|decimal)?")]
+    #[regex(r"[0-9][0-9_]*[eE][+-]?[0-9][0-9_]*(f32|f64|decimal)?")]
     Float,
 
-    // Integer suffixes: i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize
-    // Compact pattern: [iu](8|16|32|64|128|size)
-    #[regex(r"0x[0-9a-fA-F][0-9a-fA-F_]*([iu](8|16|32|64|128|size))?")]
-    #[regex(r"0b[01][01_]*([iu](8|16|32|64|128|size))?")]
-    #[regex(r"0o[0-7][0-7_]*([iu](8|16|32|64|128|size))?")]
-    #[regex(r"[0-9][0-9_]*([iu](8|16|32|64|128|size))?")]
+    // Integer suffixes: i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize|bigint
+    // Note: Underscore allowed before suffix (e.g., 42_i64, 0xFF_bigint)
+    // For hex ending in 'b', use underscore to disambiguate: 0xFFb_bigint vs 0xFFbigint
+    #[regex(r"0[xX][0-9a-fA-F][0-9a-fA-F_]*(_?([iu](8|16|32|64|128|size)|bigint))?")]
+    #[regex(r"0[bB][01][01_]*(_?([iu](8|16|32|64|128|size)|bigint))?")]
+    #[regex(r"0[oO][0-7][0-7_]*(_?([iu](8|16|32|64|128|size)|bigint))?")]
+    #[regex(r"[0-9][0-9_]*(_?([iu](8|16|32|64|128|size)|bigint))?")]
     Integer,
 
-    #[regex(r#""([^"\\]|\\.)*""#)]
+    // String literals with full escape support including \xNN and \u{NNNNNN}
+    #[regex(r#""([^"\\]|\\[nrt\\'\"0]|\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]{1,6}\})*""#)]
     String,
 
-    #[regex(r"'([^'\\]|\\.)?'")]
+    // Character literals with full escape support
+    #[regex(r#"'([^'\\]|\\[nrt\\'\"0]|\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]{1,6}\})?'"#)]
     Char,
 
+    // Raw string literals: r"..." or r#"..."# etc.
+    #[regex(r#"r#*""#, lex_raw_string)]
+    RawString,
+
+    // Byte string literals: b"..."
+    #[regex(r#"b"([^"\\]|\\[nrt\\'\"0]|\\x[0-9a-fA-F]{2})*""#)]
+    ByteString,
+
+    // Raw byte string literals: br"..." or br#"..."#
+    #[regex(r#"br#*""#, lex_raw_byte_string)]
+    RawByteString,
+
+    // C string literals: c"..."
+    #[regex(r#"c"([^"\\]|\\[nrt\\'\"0]|\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]{1,6}\})*""#)]
+    CString,
+
+    // Byte character literals: b'...'
+    #[regex(r"b'([^'\\]|\\[nrt\\'0]|\\x[0-9a-fA-F]{2})'")]
+    ByteChar,
+
     // === Identifier ===
-    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*")]
+    // Unicode XID identifiers - ASCII pattern has higher priority for performance
+    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", priority = 3)]
+    #[regex(r"[\p{XID_Start}][\p{XID_Continue}]*", priority = 2)]
     Ident,
 
     // === Error ===
     /// Represents invalid/unrecognized input
     Error,
+}
+
+/// Lex a nested block comment starting after "/*"
+fn lex_block_comment(lex: &mut logos::Lexer<'_, Token>) -> bool {
+    let remainder = lex.remainder();
+    let bytes = remainder.as_bytes();
+    let mut depth = 1;
+    let mut i = 0;
+
+    while i < bytes.len() && depth > 0 {
+        if i + 1 < bytes.len() {
+            if bytes[i] == b'/' && bytes[i + 1] == b'*' {
+                depth += 1;
+                i += 2;
+                continue;
+            }
+            if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                depth -= 1;
+                i += 2;
+                continue;
+            }
+        }
+        i += 1;
+    }
+
+    if depth == 0 {
+        lex.bump(i);
+        true
+    } else {
+        // Consume all remaining input for unterminated comment error
+        lex.bump(bytes.len());
+        false
+    }
+}
+
+/// Lex a raw string literal starting at r#*"
+fn lex_raw_string(lex: &mut logos::Lexer<'_, Token>) -> bool {
+    let slice = lex.slice();
+    // Count # characters (slice is "r#*\"")
+    let hash_count = slice.len() - 2; // subtract 'r' and '"'
+
+    lex_raw_string_body(lex, hash_count)
+}
+
+/// Lex a raw byte string literal starting at br#*"
+fn lex_raw_byte_string(lex: &mut logos::Lexer<'_, Token>) -> bool {
+    let slice = lex.slice();
+    // Count # characters (slice is "br#*\"")
+    let hash_count = slice.len() - 3; // subtract 'br' and '"'
+
+    lex_raw_string_body(lex, hash_count)
+}
+
+/// Common logic for lexing raw string body
+fn lex_raw_string_body(lex: &mut logos::Lexer<'_, Token>, hash_count: usize) -> bool {
+    let remainder = lex.remainder();
+    let bytes = remainder.as_bytes();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        if bytes[i] == b'"' {
+            // Check for matching hashes
+            let mut hashes = 0;
+            while i + 1 + hashes < bytes.len() && bytes[i + 1 + hashes] == b'#' {
+                hashes += 1;
+            }
+            if hashes >= hash_count {
+                // Found closing delimiter
+                lex.bump(i + 1 + hash_count);
+                return true;
+            }
+        }
+        i += 1;
+    }
+
+    // No closing delimiter found - consume all for error
+    lex.bump(bytes.len());
+    false
 }
 
 /// A span representing the byte range of a token in the source code.
@@ -217,8 +369,16 @@ pub enum LexErrorKind {
     InvalidCharacter(char),
     /// A string literal was not terminated before end of input.
     UnterminatedString,
+    /// A raw string literal was not terminated before end of input.
+    UnterminatedRawString,
+    /// A byte string literal was not terminated before end of input.
+    UnterminatedByteString,
+    /// A C string literal was not terminated before end of input.
+    UnterminatedCString,
     /// A character literal was not terminated before end of input.
     UnterminatedChar,
+    /// A byte character literal was not terminated before end of input.
+    UnterminatedByteChar,
     /// A block comment was not terminated before end of input.
     UnterminatedBlockComment,
     /// An empty character literal `''` was encountered.
@@ -238,7 +398,13 @@ impl fmt::Display for LexErrorKind {
                 write!(f, "invalid character '{}'", c.escape_default())
             }
             LexErrorKind::UnterminatedString => write!(f, "unterminated string literal"),
+            LexErrorKind::UnterminatedRawString => write!(f, "unterminated raw string literal"),
+            LexErrorKind::UnterminatedByteString => write!(f, "unterminated byte string literal"),
+            LexErrorKind::UnterminatedCString => write!(f, "unterminated C string literal"),
             LexErrorKind::UnterminatedChar => write!(f, "unterminated character literal"),
+            LexErrorKind::UnterminatedByteChar => {
+                write!(f, "unterminated byte character literal")
+            }
             LexErrorKind::UnterminatedBlockComment => write!(f, "unterminated block comment"),
             LexErrorKind::EmptyCharLiteral => write!(f, "empty character literal"),
             LexErrorKind::MultiCharacterLiteral => {
@@ -353,9 +519,9 @@ impl<'a> LexResult<'a> {
 /// ```
 /// use spl_lexer::{lex_all, Token, LexErrorKind};
 ///
-/// let result = lex_all("let x = @;");
+/// let result = lex_all("let x = `;");
 /// assert!(result.has_errors());
-/// assert_eq!(result.errors[0].kind, LexErrorKind::InvalidCharacter('@'));
+/// assert_eq!(result.errors[0].kind, LexErrorKind::InvalidCharacter('`'));
 ///
 /// // Valid tokens are still produced
 /// assert!(result.tokens.iter().any(|t| t.token == Token::Let));
@@ -384,6 +550,31 @@ pub fn lex_all(source: &str) -> LexResult<'_> {
 fn classify_error(source: &str, token: &SpannedToken<'_>) -> LexError {
     let text = token.text;
     let span = token.span.clone();
+
+    // Check for unterminated raw string
+    if text.starts_with("r#") || text.starts_with("r\"") {
+        return LexError::new(LexErrorKind::UnterminatedRawString, span);
+    }
+
+    // Check for unterminated raw byte string
+    if text.starts_with("br#") || text.starts_with("br\"") {
+        return LexError::new(LexErrorKind::UnterminatedRawString, span);
+    }
+
+    // Check for unterminated byte string
+    if text.starts_with("b\"") {
+        return LexError::new(LexErrorKind::UnterminatedByteString, span);
+    }
+
+    // Check for unterminated C string
+    if text.starts_with("c\"") {
+        return LexError::new(LexErrorKind::UnterminatedCString, span);
+    }
+
+    // Check for unterminated byte char
+    if text.starts_with("b'") {
+        return LexError::new(LexErrorKind::UnterminatedByteChar, span);
+    }
 
     // Single character errors
     if let Some(c) = text.chars().next() {
@@ -415,7 +606,8 @@ fn classify_error(source: &str, token: &SpannedToken<'_>) -> LexError {
         for (i, &b) in bytes.iter().enumerate() {
             if b == b'\\' && i + 1 < bytes.len() {
                 let next = bytes[i + 1] as char;
-                if !matches!(next, 'n' | 'r' | 't' | '\\' | '\'' | '"' | '0') {
+                // Valid escapes: n, r, t, \, ', ", 0, x (for \xNN), u (for \u{})
+                if !matches!(next, 'n' | 'r' | 't' | '\\' | '\'' | '"' | '0' | 'x' | 'u') {
                     return LexError::new(LexErrorKind::InvalidEscape(next), span);
                 }
             }
@@ -443,7 +635,7 @@ fn classify_error(source: &str, token: &SpannedToken<'_>) -> LexError {
 fn check_unterminated(source: &str) -> Option<LexError> {
     let mut in_string = false;
     let mut in_char = false;
-    let mut in_block_comment = false;
+    let mut block_comment_depth = 0;
     let mut string_start = 0;
     let mut char_start = 0;
     let mut comment_start = 0;
@@ -481,9 +673,14 @@ fn check_unterminated(source: &str) -> Option<LexError> {
             continue;
         }
 
-        if in_block_comment {
+        if block_comment_depth > 0 {
+            if b == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'*' {
+                block_comment_depth += 1;
+                i += 2;
+                continue;
+            }
             if b == b'*' && i + 1 < bytes.len() && bytes[i + 1] == b'/' {
-                in_block_comment = false;
+                block_comment_depth -= 1;
                 i += 2;
                 continue;
             }
@@ -500,7 +697,7 @@ fn check_unterminated(source: &str) -> Option<LexError> {
             char_start = i;
         } else if b == b'/' && i + 1 < bytes.len() {
             if bytes[i + 1] == b'*' {
-                in_block_comment = true;
+                block_comment_depth = 1;
                 comment_start = i;
                 i += 2;
                 continue;
@@ -527,7 +724,7 @@ fn check_unterminated(source: &str) -> Option<LexError> {
             char_start..source.len(),
         ));
     }
-    if in_block_comment {
+    if block_comment_depth > 0 {
         return Some(LexError::new(
             LexErrorKind::UnterminatedBlockComment,
             comment_start..source.len(),

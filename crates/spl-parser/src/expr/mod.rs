@@ -165,7 +165,7 @@ fn prefix_bp(op: SyntaxKind) -> Option<((), u8)> {
             Some(((), BP_PREFIX))
         }
         SyntaxKind::AMP => Some(((), BP_PREFIX)),
-        SyntaxKind::DOT_DOT => Some(((), BP_RANGE.1)), // Range prefix: same r_bp as infix range
+        SyntaxKind::DOT_DOT | SyntaxKind::DOT_DOT_EQ => Some(((), BP_RANGE.1)), // Range prefix: same r_bp as infix range
         _ => None,
     }
 }
@@ -197,7 +197,7 @@ fn infix_bp(op: SyntaxKind) -> Option<(u8, u8)> {
         SyntaxKind::LT | SyntaxKind::GT | SyntaxKind::LE | SyntaxKind::GE => Some(BP_COMPARISON),
 
         // Range (left-associative)
-        SyntaxKind::DOT_DOT => Some(BP_RANGE),
+        SyntaxKind::DOT_DOT | SyntaxKind::DOT_DOT_EQ => Some(BP_RANGE),
 
         // Additive (left-associative)
         SyntaxKind::PLUS | SyntaxKind::MINUS => Some(BP_ADDITIVE),

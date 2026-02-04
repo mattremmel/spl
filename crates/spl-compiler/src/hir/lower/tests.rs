@@ -1689,25 +1689,14 @@ fn types_are_attached() {
 fn lower_is_expr() {
     let db = lower("fn main() { let x = 42 is 42; }");
     for (_, expr) in db.exprs.iter() {
-        if let HirExprKind::Is { negated, .. } = &expr.kind {
-            assert!(!negated);
+        if matches!(&expr.kind, HirExprKind::Is { .. }) {
             return;
         }
     }
     panic!("Did not find is expression");
 }
 
-#[test]
-fn lower_is_not_expr() {
-    let db = lower("fn main() { let x = 42 is not 0; }");
-    for (_, expr) in db.exprs.iter() {
-        if let HirExprKind::Is { negated, .. } = &expr.kind {
-            assert!(negated);
-            return;
-        }
-    }
-    panic!("Did not find is-not expression");
-}
+// Note: 'is not' syntax was removed - use `!(expr is pattern)` instead
 
 #[test]
 fn lower_is_expr_with_wildcard() {

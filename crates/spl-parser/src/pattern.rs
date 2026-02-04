@@ -29,7 +29,8 @@ pub fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
             }
         },
         // Path-starting keywords that can begin qualified patterns (module.Type, super.Type, etc.)
-        MODULE_KW | SUPER_KW | SELF_VALUE_KW | CRATE_KW => {
+        // Note: 'crate' keyword was removed - use '$' for package root
+        MODULE_KW | SUPER_KW | SELF_VALUE_KW => {
             // These keywords can start paths in patterns (e.g., module.Point(x: x))
             path_or_struct_or_enum_pat(p)
         },

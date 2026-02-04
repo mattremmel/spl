@@ -50,7 +50,6 @@ fn is_path_segment_start(token: Option<SyntaxKind>) -> bool {
         Some(SyntaxKind::IDENT)
             | Some(SyntaxKind::SELF_VALUE_KW)
             | Some(SyntaxKind::SELF_TYPE_KW)
-            | Some(SyntaxKind::CRATE_KW)
             | Some(SyntaxKind::SUPER_KW)
             | Some(SyntaxKind::MODULE_KW)
     )
@@ -100,7 +99,6 @@ pub(crate) fn name_ref(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError
     if p.at(SyntaxKind::IDENT)
         || p.at(SyntaxKind::SELF_VALUE_KW)
         || p.at(SyntaxKind::SELF_TYPE_KW)
-        || p.at(SyntaxKind::CRATE_KW)
         || p.at(SyntaxKind::SUPER_KW)
         || p.at(SyntaxKind::MODULE_KW)
     {
