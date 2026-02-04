@@ -199,6 +199,7 @@ pub enum SyntaxKind {
     MatchExpr,
     MatchArm,
     EnumShorthandExpr,
+    TryExpr,
 
     // Types
     RefType,

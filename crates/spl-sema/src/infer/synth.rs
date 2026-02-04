@@ -326,6 +326,16 @@ impl<'a> InferEngine<'a> {
                 // Return error - full inference requires expected type context
                 self.types.error()
             }
+            // Try/propagate: expr!
+            // TODO: Implement proper Result unwrapping inference
+            Expr::Try(try_expr) => {
+                // Synthesize the inner expression
+                if let Some(inner) = try_expr.expr() {
+                    self.synth_expr(&inner);
+                }
+                // For now, return error - proper inference requires Result type handling
+                self.types.error()
+            }
         };
         self.results.expr_types.insert(span, type_id);
         type_id

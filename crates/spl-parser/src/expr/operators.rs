@@ -152,8 +152,20 @@ pub(super) fn postfix_expr(
         SyntaxKind::L_PAREN => call_expr(p, lhs),
         SyntaxKind::L_BRACKET => index_or_slice_expr(p, lhs),
         SyntaxKind::DOT => field_or_method_expr(p, lhs),
+        SyntaxKind::BANG => try_expr(p, lhs),
         _ => unreachable!("unexpected postfix operator: {:?}", op),
     }
+}
+
+/// Parse try/propagate expression: expr!
+#[allow(clippy::unnecessary_wraps)] // Consistent with other postfix_expr handlers
+fn try_expr(
+    p: &mut Parser<'_>,
+    lhs: CompletedMarker,
+) -> Result<CompletedMarker, crate::ParseError> {
+    let m = lhs.precede(p);
+    p.bump(); // consume !
+    Ok(m.complete(p, SyntaxKind::TryExpr))
 }
 
 /// Parse a call expression: expr(args)
@@ -1623,6 +1635,93 @@ mod tests {
                         PathSegment@2..3
                           NameRef@2..3
                             IDENT@2..3 "x"
+            "#]],
+        );
+    }
+
+    // === Try/Propagate Operator (postfix !) ===
+
+    #[test]
+    fn try_expr_simple() {
+        check_expr(
+            "foo()!",
+            &expect![[r#"
+                TryExpr@0..6
+                  CallExpr@0..5
+                    PathExpr@0..3
+                      Path@0..3
+                        PathSegment@0..3
+                          NameRef@0..3
+                            IDENT@0..3 "foo"
+                    L_PAREN@3..4 "("
+                    R_PAREN@4..5 ")"
+                  BANG@5..6 "!"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn try_expr_on_path() {
+        check_expr(
+            "result!",
+            &expect![[r#"
+                TryExpr@0..7
+                  PathExpr@0..6
+                    Path@0..6
+                      PathSegment@0..6
+                        NameRef@0..6
+                          IDENT@0..6 "result"
+                  BANG@6..7 "!"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn try_expr_chained() {
+        // foo()!.bar()! parses as ((foo()!).bar())!
+        check_expr(
+            "foo()!.bar()!",
+            &expect![[r#"
+                TryExpr@0..13
+                  CallExpr@0..12
+                    FieldExpr@0..10
+                      TryExpr@0..6
+                        CallExpr@0..5
+                          PathExpr@0..3
+                            Path@0..3
+                              PathSegment@0..3
+                                NameRef@0..3
+                                  IDENT@0..3 "foo"
+                          L_PAREN@3..4 "("
+                          R_PAREN@4..5 ")"
+                        BANG@5..6 "!"
+                      DOT@6..7 "."
+                      IDENT@7..10 "bar"
+                    L_PAREN@10..11 "("
+                    R_PAREN@11..12 ")"
+                  BANG@12..13 "!"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn try_expr_precedence_vs_prefix() {
+        // -foo()! parses as -(foo()!) since postfix binds tighter
+        check_expr(
+            "-foo()!",
+            &expect![[r#"
+                PrefixExpr@0..7
+                  MINUS@0..1 "-"
+                  TryExpr@1..7
+                    CallExpr@1..6
+                      PathExpr@1..4
+                        Path@1..4
+                          PathSegment@1..4
+                            NameRef@1..4
+                              IDENT@1..4 "foo"
+                      L_PAREN@4..5 "("
+                      R_PAREN@5..6 ")"
+                    BANG@6..7 "!"
             "#]],
         );
     }

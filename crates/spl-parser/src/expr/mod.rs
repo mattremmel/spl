@@ -251,6 +251,7 @@ fn postfix_bp(op: SyntaxKind) -> Option<(u8, ())> {
         SyntaxKind::L_PAREN     // call
         | SyntaxKind::L_BRACKET // index/slice
         | SyntaxKind::DOT       // field/method
+        | SyntaxKind::BANG      // try/propagate: expr!
         => Some((BP_POSTFIX, ())),
         _ => None,
     }

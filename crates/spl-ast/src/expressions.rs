@@ -32,6 +32,7 @@ ast_node!(IsExpr);
 ast_node!(MatchExpr);
 ast_node!(MatchArm);
 ast_node!(EnumShorthandExpr);
+ast_node!(TryExpr);
 ast_node!(Path);
 ast_node!(PathSegment);
 
@@ -64,6 +65,7 @@ ast_enum!(
         Is(IsExpr),
         Match(MatchExpr),
         EnumShorthand(EnumShorthandExpr),
+        Try(TryExpr),
     }
 );
 
@@ -485,6 +487,18 @@ impl EnumShorthandExpr {
     /// Get the arguments, if any.
     pub fn args(&self) -> impl Iterator<Item = CallArg> {
         children(&self.0)
+    }
+}
+
+impl TryExpr {
+    /// Get the inner expression being unwrapped.
+    pub fn expr(&self) -> Option<Expr> {
+        child(&self.0)
+    }
+
+    /// Get the `!` token.
+    pub fn bang_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::BANG)
     }
 }
 
@@ -949,5 +963,16 @@ mod tests {
         let call: CallExpr = parse_expr("fn main() { obj.method(1, 2) }");
         assert!(call.callee().is_some());
         assert_eq!(call.args().count(), 2);
+    }
+
+    // =========================================================================
+    // TryExpr Tests
+    // =========================================================================
+
+    #[test]
+    fn try_expr() {
+        let try_expr: TryExpr = parse_expr("fn main() { foo()! }");
+        assert!(try_expr.expr().is_some());
+        assert!(try_expr.bang_token().is_some());
     }
 }

@@ -397,7 +397,17 @@ impl AstPrinter {
             Expr::Is(i) => self.print_is_expr(i),
             Expr::Match(m) => self.print_match_expr(m),
             Expr::EnumShorthand(e) => self.print_enum_shorthand_expr(e),
+            Expr::Try(t) => self.print_try_expr(t),
         }
+    }
+
+    fn print_try_expr(&mut self, expr: &crate::TryExpr) {
+        self.line("TryExpr");
+        self.indented(|p| {
+            if let Some(inner) = expr.expr() {
+                p.print_expr(&inner);
+            }
+        });
     }
 
     fn print_enum_shorthand_expr(&mut self, expr: &crate::EnumShorthandExpr) {

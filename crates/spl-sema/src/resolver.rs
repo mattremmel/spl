@@ -1285,6 +1285,13 @@ impl<'ctx> Resolver<'ctx> {
                     }
                 }
             }
+            // Try/propagate expression: expr!
+            // Resolve the inner expression
+            Expr::Try(try_expr) => {
+                if let Some(inner) = try_expr.expr() {
+                    self.resolve_expr(&inner);
+                }
+            }
         }
     }
 
