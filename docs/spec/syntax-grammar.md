@@ -595,22 +595,50 @@ impl Format for Amount(T: EUR) {
 ```ebnf
 TypeAlias = "type" IDENTIFIER [ GenericParams ] "=" Type [ WhereClause ] [ ";" ] ;
 
-GenericParams = "(" TypeParamList ")" ;
+GenericParams = "(" [ GenericParam { "," GenericParam } [ "," ] ] ")" ;
 
-TypeParamList = IDENTIFIER { "," IDENTIFIER } [ "," ] ;
+GenericParam = IDENTIFIER [ "=" Type ] ;
 ```
 
-**Note:** Type aliases use `GenericParams` (bare identifiers) rather than `GenericArgs` (named type args) because they declare new type parameters rather than instantiate existing ones. See the comparison table below.
+**Note:** Type aliases use `GenericParams` (identifier with optional default) rather than `GenericArgs` (named type args) because they declare new type parameters rather than instantiate existing ones. Bounds on type parameters are specified in the `where` clause, keeping `GenericParams` focused on declaring the interface.
 
-**GenericParams vs GenericArgs:**
+**GenericParams vs GenericArgs vs WhereClause:**
 
 | Context | Syntax | Example | Purpose |
 |---------|--------|---------|---------|
-| `GenericParams` | Bare identifiers | `type Pair(T, U) = ...` | Declare type parameters (no defaults) |
-| `GenericArgs` | Named type args | `Pair(T: i32, U: String)` | Instantiate with concrete types |
-| `GenericArgs` (in trait declaration) | Named type args | `trait Add(RHS: Self)` | Declare with defaults |
+| `GenericParams` | Identifier with optional default | `type MyResult(T, E = Error) = ...` | Declare type alias parameters |
+| `GenericArgs` | Named type args | `Result(T: i32, E: String)` | Instantiate with concrete types |
+| `GenericArgs` (in trait declaration) | Named type args | `trait Add(RHS: Self)` | Declare input type params with defaults |
+| `WhereClause` | Type param with bounds | `where T: Clone` | Declare AND constrain params (structs/fns/impls) OR just constrain (type aliases) |
 
-`GenericParams` appears in type alias declarations to introduce type parameter names. `GenericArgs` appears in type instantiation to bind parameters to concrete types, and also in trait declarations where `: Type` specifies a default value for the parameter.
+`GenericParams` appears in type alias declarations to introduce type parameter names with optional defaults. The LHS params define the alias's interface—users can see exactly which type parameters the alias accepts. Bounds go in the `where` clause for consistency with other constructs.
+
+**Examples:**
+
+```spl
+// Simple type alias with generic parameter
+type Pair(T) = (T, T)
+
+// Type alias with default type parameter
+type MyResult(T, E = Error) = Result(T: T, E: E)
+
+// Type alias with bounds (bounds in where clause, not on params)
+type CloneBox(T) = Box(T: T) where T: Clone
+
+// Type alias with default and bounds
+type StringMap(V, K = String) = HashMap(K: K, V: V) where K: Hash + Eq
+```
+
+**Why LHS params are needed:**
+
+Without LHS params, the alias interface would be ambiguous:
+```spl
+// BAD: Does Foo take 0, 1, or 2 params?
+type Foo = Bar(T: i32, U: U) where U
+
+// GOOD: Clearly Foo takes 1 param (U)
+type Foo(U) = Bar(T: i32, U: U)
+```
 
 ### Use Declarations
 
@@ -2083,8 +2111,10 @@ impl Point(T) where T {
     }
 }
 
-// Type alias with generic
+// Type aliases with generics
 type Pair(T) = (T, T)
+type MyResult(T, E = Error) = Result(T: T, E: E)     // Default type parameter
+type CloneVec(T) = Vec(T: T) where T: Clone          // With bounds in where clause
 
 // Function with default parameters
 fn create_point(x: f64 = 0.0, y: f64 = 0.0): Point(T: f64) {
@@ -2251,5 +2281,6 @@ fn apply(_ f: fn(i32): i32, _ x: i32): i32 {
 | Default parameters  | Not supported             | `fn foo(x: i32 = 0)`         |
 | Named tuples        | Not supported             | `(x: i32, y: i32)` type and expr |
 | Type arg shorthand  | Not applicable            | `Option(T)` means `Option(T: T)` — parallels struct field shorthand for consistency |
+| Type alias defaults | `type Foo<T = i32> = ...` | `type Foo(T = i32) = ...` — defaults on LHS params, bounds in where |
 | Tuple pattern for struct | Not supported        | `let (x, y) = point` (type inferred) |
 | Concurrency model   | `async`/`await` keywords  | Go-style: `await()` is a method call, not a keyword |
