@@ -24,6 +24,7 @@ ast_node!(ParamList);
 ast_node!(Param);
 ast_node!(SelfParam);
 ast_node!(GenericParam);
+ast_node!(GenericParams);
 ast_node!(GenericArgs);
 ast_node!(FieldList);
 ast_node!(FieldDef);
@@ -298,6 +299,11 @@ impl TypeAlias {
         child(&self.0)
     }
 
+    /// Get the generic parameters if present (e.g., `(T, E)` in `type Pair(T, E) = ...`).
+    pub fn generic_params(&self) -> Option<GenericParams> {
+        child(&self.0)
+    }
+
     pub fn ty(&self) -> Option<Type> {
         child(&self.0)
     }
@@ -539,6 +545,13 @@ impl GenericParam {
 
     /// Get type bounds (e.g., Clone, Debug in `T: Clone + Debug`).
     pub fn bounds(&self) -> impl Iterator<Item = TypeBound> {
+        children(&self.0)
+    }
+}
+
+impl GenericParams {
+    /// Get the parameter names declared in this generic params list.
+    pub fn params(&self) -> impl Iterator<Item = Name> {
         children(&self.0)
     }
 }

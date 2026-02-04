@@ -1171,18 +1171,20 @@ fn type_alias_tuple() {
               TupleType@11..22
                 WHITESPACE@11..12 " "
                 L_PAREN@12..13 "("
-                PathType@13..16
-                  Path@13..16
-                    PathSegment@13..16
-                      NameRef@13..16
-                        IDENT@13..16 "i32"
+                TupleTypeElement@13..16
+                  PathType@13..16
+                    Path@13..16
+                      PathSegment@13..16
+                        NameRef@13..16
+                          IDENT@13..16 "i32"
                 COMMA@16..17 ","
-                PathType@17..21
-                  Path@17..21
-                    PathSegment@17..21
-                      NameRef@17..21
-                        WHITESPACE@17..18 " "
-                        IDENT@18..21 "i32"
+                TupleTypeElement@17..21
+                  PathType@17..21
+                    Path@17..21
+                      PathSegment@17..21
+                        NameRef@17..21
+                          WHITESPACE@17..18 " "
+                          IDENT@18..21 "i32"
                 R_PAREN@21..22 ")"
               SEMI@22..23 ";"
         "#]],
@@ -1215,6 +1217,211 @@ fn type_alias_array() {
                   INT_LITERAL@19..23 "1024"
                 R_BRACKET@23..24 "]"
               SEMI@24..25 ";"
+        "#]],
+    );
+}
+
+// === Generic Type Alias Parameters Tests ===
+
+#[test]
+fn type_alias_no_params_unchanged() {
+    // Baseline test: type aliases without generic params should still work
+    check_item(
+        "type Int = i32;",
+        &expect![[r#"
+            TypeAlias@0..15
+              TYPE_KW@0..4 "type"
+              Name@4..8
+                WHITESPACE@4..5 " "
+                IDENT@5..8 "Int"
+              WHITESPACE@8..9 " "
+              EQ@9..10 "="
+              PathType@10..14
+                Path@10..14
+                  PathSegment@10..14
+                    NameRef@10..14
+                      WHITESPACE@10..11 " "
+                      IDENT@11..14 "i32"
+              SEMI@14..15 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn type_alias_single_generic() {
+    check_item(
+        "type Box(T) = T;",
+        &expect![[r#"
+            TypeAlias@0..16
+              TYPE_KW@0..4 "type"
+              Name@4..8
+                WHITESPACE@4..5 " "
+                IDENT@5..8 "Box"
+              GenericParams@8..11
+                L_PAREN@8..9 "("
+                Name@9..10
+                  IDENT@9..10 "T"
+                R_PAREN@10..11 ")"
+              WHITESPACE@11..12 " "
+              EQ@12..13 "="
+              PathType@13..15
+                Path@13..15
+                  PathSegment@13..15
+                    NameRef@13..15
+                      WHITESPACE@13..14 " "
+                      IDENT@14..15 "T"
+              SEMI@15..16 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn type_alias_multiple_params() {
+    check_item(
+        "type Pair(T, E) = (T, E);",
+        &expect![[r#"
+            TypeAlias@0..25
+              TYPE_KW@0..4 "type"
+              Name@4..9
+                WHITESPACE@4..5 " "
+                IDENT@5..9 "Pair"
+              GenericParams@9..15
+                L_PAREN@9..10 "("
+                Name@10..11
+                  IDENT@10..11 "T"
+                COMMA@11..12 ","
+                Name@12..14
+                  WHITESPACE@12..13 " "
+                  IDENT@13..14 "E"
+                R_PAREN@14..15 ")"
+              WHITESPACE@15..16 " "
+              EQ@16..17 "="
+              TupleType@17..24
+                WHITESPACE@17..18 " "
+                L_PAREN@18..19 "("
+                TupleTypeElement@19..20
+                  PathType@19..20
+                    Path@19..20
+                      PathSegment@19..20
+                        NameRef@19..20
+                          IDENT@19..20 "T"
+                COMMA@20..21 ","
+                TupleTypeElement@21..23
+                  PathType@21..23
+                    Path@21..23
+                      PathSegment@21..23
+                        NameRef@21..23
+                          WHITESPACE@21..22 " "
+                          IDENT@22..23 "E"
+                R_PAREN@23..24 ")"
+              SEMI@24..25 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn type_alias_empty_params() {
+    check_item(
+        "type Unit() = ();",
+        &expect![[r#"
+            TypeAlias@0..17
+              TYPE_KW@0..4 "type"
+              Name@4..9
+                WHITESPACE@4..5 " "
+                IDENT@5..9 "Unit"
+              GenericParams@9..11
+                L_PAREN@9..10 "("
+                R_PAREN@10..11 ")"
+              WHITESPACE@11..12 " "
+              EQ@12..13 "="
+              TupleType@13..16
+                WHITESPACE@13..14 " "
+                L_PAREN@14..15 "("
+                R_PAREN@15..16 ")"
+              SEMI@16..17 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn type_alias_with_where_and_params() {
+    check_item(
+        "type CloneBox(T) = T where T: Clone;",
+        &expect![[r#"
+            TypeAlias@0..36
+              TYPE_KW@0..4 "type"
+              Name@4..13
+                WHITESPACE@4..5 " "
+                IDENT@5..13 "CloneBox"
+              GenericParams@13..16
+                L_PAREN@13..14 "("
+                Name@14..15
+                  IDENT@14..15 "T"
+                R_PAREN@15..16 ")"
+              WHITESPACE@16..17 " "
+              EQ@17..18 "="
+              PathType@18..20
+                Path@18..20
+                  PathSegment@18..20
+                    NameRef@18..20
+                      WHITESPACE@18..19 " "
+                      IDENT@19..20 "T"
+              WhereClause@20..35
+                WHITESPACE@20..21 " "
+                WHERE_KW@21..26 "where"
+                GenericParam@26..35
+                  Name@26..28
+                    WHITESPACE@26..27 " "
+                    IDENT@27..28 "T"
+                  COLON@28..29 ":"
+                  TypeBound@29..35
+                    Path@29..35
+                      PathSegment@29..35
+                        NameRef@29..35
+                          WHITESPACE@29..30 " "
+                          IDENT@30..35 "Clone"
+              SEMI@35..36 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn type_alias_trailing_comma() {
+    check_item(
+        "type Pair(T,) = (T, T);",
+        &expect![[r#"
+            TypeAlias@0..23
+              TYPE_KW@0..4 "type"
+              Name@4..9
+                WHITESPACE@4..5 " "
+                IDENT@5..9 "Pair"
+              GenericParams@9..13
+                L_PAREN@9..10 "("
+                Name@10..11
+                  IDENT@10..11 "T"
+                COMMA@11..12 ","
+                R_PAREN@12..13 ")"
+              WHITESPACE@13..14 " "
+              EQ@14..15 "="
+              TupleType@15..22
+                WHITESPACE@15..16 " "
+                L_PAREN@16..17 "("
+                TupleTypeElement@17..18
+                  PathType@17..18
+                    Path@17..18
+                      PathSegment@17..18
+                        NameRef@17..18
+                          IDENT@17..18 "T"
+                COMMA@18..19 ","
+                TupleTypeElement@19..21
+                  PathType@19..21
+                    Path@19..21
+                      PathSegment@19..21
+                        NameRef@19..21
+                          WHITESPACE@19..20 " "
+                          IDENT@20..21 "T"
+                R_PAREN@21..22 ")"
+              SEMI@22..23 ";"
         "#]],
     );
 }
@@ -1647,18 +1854,20 @@ fn struct_tuple_complex_types() {
                     INT_LITERAL@22..23 "1"
                   TupleType@23..31
                     L_PAREN@23..24 "("
-                    PathType@24..26
-                      Path@24..26
-                        PathSegment@24..26
-                          NameRef@24..26
-                            IDENT@24..26 "u8"
+                    TupleTypeElement@24..26
+                      PathType@24..26
+                        Path@24..26
+                          PathSegment@24..26
+                            NameRef@24..26
+                              IDENT@24..26 "u8"
                     COMMA@26..27 ","
-                    PathType@27..30
-                      Path@27..30
-                        PathSegment@27..30
-                          NameRef@27..30
-                            WHITESPACE@27..28 " "
-                            IDENT@28..30 "u8"
+                    TupleTypeElement@27..30
+                      PathType@27..30
+                        Path@27..30
+                          PathSegment@27..30
+                            NameRef@27..30
+                              WHITESPACE@27..28 " "
+                              IDENT@28..30 "u8"
                     R_PAREN@30..31 ")"
                 R_PAREN@31..32 ")"
               SEMI@32..33 ";"
@@ -1821,18 +2030,20 @@ fn function_with_where_clause_multiple_params() {
               TupleType@20..27
                 WHITESPACE@20..21 " "
                 L_PAREN@21..22 "("
-                PathType@22..23
-                  Path@22..23
-                    PathSegment@22..23
-                      NameRef@22..23
-                        IDENT@22..23 "T"
+                TupleTypeElement@22..23
+                  PathType@22..23
+                    Path@22..23
+                      PathSegment@22..23
+                        NameRef@22..23
+                          IDENT@22..23 "T"
                 COMMA@23..24 ","
-                PathType@24..26
-                  Path@24..26
-                    PathSegment@24..26
-                      NameRef@24..26
-                        WHITESPACE@24..25 " "
-                        IDENT@25..26 "U"
+                TupleTypeElement@24..26
+                  PathType@24..26
+                    Path@24..26
+                      PathSegment@24..26
+                        NameRef@24..26
+                          WHITESPACE@24..25 " "
+                          IDENT@25..26 "U"
                 R_PAREN@26..27 ")"
               WhereClause@27..38
                 WHITESPACE@27..28 " "

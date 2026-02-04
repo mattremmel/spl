@@ -7,6 +7,7 @@ ast_node!(RefType);
 ast_node!(ArrayType);
 ast_node!(SliceType);
 ast_node!(TupleType);
+ast_node!(TupleTypeElement);
 ast_node!(FnPtrType);
 ast_node!(PathType);
 ast_node!(NeverType);
@@ -57,8 +58,26 @@ impl SliceType {
 }
 
 impl TupleType {
-    pub fn types(&self) -> impl Iterator<Item = Type> {
+    /// Get the elements of this tuple type.
+    pub fn elements(&self) -> impl Iterator<Item = TupleTypeElement> {
         children(&self.0)
+    }
+
+    /// Get the types of all elements (ignoring names).
+    pub fn types(&self) -> impl Iterator<Item = Type> {
+        self.elements().filter_map(|e| e.ty())
+    }
+}
+
+impl TupleTypeElement {
+    /// Get the name if this is a named element (e.g., `x` in `x: i32`).
+    pub fn name(&self) -> Option<crate::Name> {
+        child(&self.0)
+    }
+
+    /// Get the type of this element.
+    pub fn ty(&self) -> Option<Type> {
+        child(&self.0)
     }
 }
 

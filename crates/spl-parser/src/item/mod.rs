@@ -1092,7 +1092,43 @@ pub(crate) fn const_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::Pa
     Ok(m.complete(p, SyntaxKind::ConstDef))
 }
 
-/// Parse a type alias: `[attrs] [pub] type Name = Type [where ...];`
+/// Parse optional generic parameters: `(T, U, ...)`
+///
+/// Used for type alias generic params: `type Pair(T) = (T, T)`
+fn opt_generic_params(p: &mut Parser<'_>) -> Option<CompletedMarker> {
+    if !p.at(SyntaxKind::L_PAREN) {
+        return None;
+    }
+
+    let m = p.start();
+    p.bump(); // (
+
+    // Parse comma-delimited Name list
+    if !p.at(SyntaxKind::R_PAREN) {
+        if let Err(e) = name(p) {
+            p.error(e);
+        }
+
+        while p.eat(SyntaxKind::COMMA) {
+            // Allow trailing comma
+            if p.at(SyntaxKind::R_PAREN) {
+                break;
+            }
+            if let Err(e) = name(p) {
+                p.error(e);
+                break;
+            }
+        }
+    }
+
+    if let Err(e) = p.expect(SyntaxKind::R_PAREN) {
+        p.error(e);
+    }
+
+    Some(m.complete(p, SyntaxKind::GenericParams))
+}
+
+/// Parse a type alias: `[attrs] [pub] type Name [(params)] = Type [where ...];`
 pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
 
@@ -1113,6 +1149,9 @@ pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::P
         m.abandon(p);
         return Err(e);
     }
+
+    // Optional generic params: type Pair(T) = ...
+    opt_generic_params(p);
 
     // = Type
     if let Err(e) = p.expect(SyntaxKind::EQ) {

@@ -116,6 +116,30 @@ fn let_stmt(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     Ok(m.complete(p, SyntaxKind::LetStmt))
 }
 
+/// Parse a tuple type element: either `name: Type` (named) or just `Type` (positional).
+///
+/// Named elements have the form `IDENT COLON Type`. This is unambiguous because:
+/// - Paths use `.` in SPL (e.g., `path.Type`), not `::`
+/// - Type annotations always follow a single `:`
+fn tuple_type_element(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    // Check if this is a named element: IDENT followed by COLON
+    let is_named = p.at(SyntaxKind::IDENT) && p.peek_at(1, SyntaxKind::COLON);
+
+    if is_named {
+        // Named element: name: Type
+        crate::item::name(p)?;
+        p.expect(SyntaxKind::COLON)?;
+        type_annotation(p)?;
+    } else {
+        // Positional element: just Type
+        type_annotation(p)?;
+    }
+
+    Ok(m.complete(p, SyntaxKind::TupleTypeElement))
+}
+
 /// Parse a type annotation.
 pub(crate) fn type_annotation(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
@@ -149,11 +173,11 @@ pub(crate) fn type_annotation(p: &mut Parser<'_>) -> Result<CompletedMarker, cra
         return Ok(m.complete(p, SyntaxKind::SliceType));
     }
 
-    // Tuple type: (T1, T2, ...)
+    // Tuple type: (T1, T2, ...) or (name: T1, ...)
     if p.at(SyntaxKind::L_PAREN) {
         p.bump();
         p.parse_delimited(SyntaxKind::R_PAREN, |p| {
-            type_annotation(p)?;
+            tuple_type_element(p)?;
             Ok(())
         })?;
         p.expect(SyntaxKind::R_PAREN)?;
@@ -274,8 +298,224 @@ pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseE
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::check_expr;
+    use crate::tests::{check_expr, check_item};
     use expect_test::expect;
+
+    // === Named Tuple Type Tests ===
+
+    #[test]
+    fn tuple_type_positional_unchanged() {
+        // Baseline test: existing positional tuple types should still work
+        check_item(
+            "type T = (i32, bool);",
+            &expect![[r#"
+                TypeAlias@0..21
+                  TYPE_KW@0..4 "type"
+                  Name@4..6
+                    WHITESPACE@4..5 " "
+                    IDENT@5..6 "T"
+                  WHITESPACE@6..7 " "
+                  EQ@7..8 "="
+                  TupleType@8..20
+                    WHITESPACE@8..9 " "
+                    L_PAREN@9..10 "("
+                    TupleTypeElement@10..13
+                      PathType@10..13
+                        Path@10..13
+                          PathSegment@10..13
+                            NameRef@10..13
+                              IDENT@10..13 "i32"
+                    COMMA@13..14 ","
+                    TupleTypeElement@14..19
+                      PathType@14..19
+                        Path@14..19
+                          PathSegment@14..19
+                            NameRef@14..19
+                              WHITESPACE@14..15 " "
+                              IDENT@15..19 "bool"
+                    R_PAREN@19..20 ")"
+                  SEMI@20..21 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn tuple_type_named_single() {
+        check_item(
+            "type T = (name: i32);",
+            &expect![[r#"
+                TypeAlias@0..21
+                  TYPE_KW@0..4 "type"
+                  Name@4..6
+                    WHITESPACE@4..5 " "
+                    IDENT@5..6 "T"
+                  WHITESPACE@6..7 " "
+                  EQ@7..8 "="
+                  TupleType@8..20
+                    WHITESPACE@8..9 " "
+                    L_PAREN@9..10 "("
+                    TupleTypeElement@10..19
+                      Name@10..14
+                        IDENT@10..14 "name"
+                      COLON@14..15 ":"
+                      PathType@15..19
+                        Path@15..19
+                          PathSegment@15..19
+                            NameRef@15..19
+                              WHITESPACE@15..16 " "
+                              IDENT@16..19 "i32"
+                    R_PAREN@19..20 ")"
+                  SEMI@20..21 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn tuple_type_named_multiple() {
+        check_item(
+            "type Point = (x: i32, y: i32);",
+            &expect![[r#"
+                TypeAlias@0..30
+                  TYPE_KW@0..4 "type"
+                  Name@4..10
+                    WHITESPACE@4..5 " "
+                    IDENT@5..10 "Point"
+                  WHITESPACE@10..11 " "
+                  EQ@11..12 "="
+                  TupleType@12..29
+                    WHITESPACE@12..13 " "
+                    L_PAREN@13..14 "("
+                    TupleTypeElement@14..20
+                      Name@14..15
+                        IDENT@14..15 "x"
+                      COLON@15..16 ":"
+                      PathType@16..20
+                        Path@16..20
+                          PathSegment@16..20
+                            NameRef@16..20
+                              WHITESPACE@16..17 " "
+                              IDENT@17..20 "i32"
+                    COMMA@20..21 ","
+                    TupleTypeElement@21..28
+                      Name@21..23
+                        WHITESPACE@21..22 " "
+                        IDENT@22..23 "y"
+                      COLON@23..24 ":"
+                      PathType@24..28
+                        Path@24..28
+                          PathSegment@24..28
+                            NameRef@24..28
+                              WHITESPACE@24..25 " "
+                              IDENT@25..28 "i32"
+                    R_PAREN@28..29 ")"
+                  SEMI@29..30 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn tuple_type_mixed() {
+        // Mixed: first positional, second named
+        check_item(
+            "type T = (i32, name: String);",
+            &expect![[r#"
+                TypeAlias@0..29
+                  TYPE_KW@0..4 "type"
+                  Name@4..6
+                    WHITESPACE@4..5 " "
+                    IDENT@5..6 "T"
+                  WHITESPACE@6..7 " "
+                  EQ@7..8 "="
+                  TupleType@8..28
+                    WHITESPACE@8..9 " "
+                    L_PAREN@9..10 "("
+                    TupleTypeElement@10..13
+                      PathType@10..13
+                        Path@10..13
+                          PathSegment@10..13
+                            NameRef@10..13
+                              IDENT@10..13 "i32"
+                    COMMA@13..14 ","
+                    TupleTypeElement@14..27
+                      Name@14..19
+                        WHITESPACE@14..15 " "
+                        IDENT@15..19 "name"
+                      COLON@19..20 ":"
+                      PathType@20..27
+                        Path@20..27
+                          PathSegment@20..27
+                            NameRef@20..27
+                              WHITESPACE@20..21 " "
+                              IDENT@21..27 "String"
+                    R_PAREN@27..28 ")"
+                  SEMI@28..29 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn tuple_type_trailing_comma() {
+        check_item(
+            "type T = (x: i32,);",
+            &expect![[r#"
+                TypeAlias@0..19
+                  TYPE_KW@0..4 "type"
+                  Name@4..6
+                    WHITESPACE@4..5 " "
+                    IDENT@5..6 "T"
+                  WHITESPACE@6..7 " "
+                  EQ@7..8 "="
+                  TupleType@8..18
+                    WHITESPACE@8..9 " "
+                    L_PAREN@9..10 "("
+                    TupleTypeElement@10..16
+                      Name@10..11
+                        IDENT@10..11 "x"
+                      COLON@11..12 ":"
+                      PathType@12..16
+                        Path@12..16
+                          PathSegment@12..16
+                            NameRef@12..16
+                              WHITESPACE@12..13 " "
+                              IDENT@13..16 "i32"
+                    COMMA@16..17 ","
+                    R_PAREN@17..18 ")"
+                  SEMI@18..19 ";"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn tuple_type_path_not_confused_with_named() {
+        // path.Type should NOT be parsed as named - it's a qualified path type
+        check_item(
+            "type T = (path.Type);",
+            &expect![[r#"
+                TypeAlias@0..21
+                  TYPE_KW@0..4 "type"
+                  Name@4..6
+                    WHITESPACE@4..5 " "
+                    IDENT@5..6 "T"
+                  WHITESPACE@6..7 " "
+                  EQ@7..8 "="
+                  TupleType@8..20
+                    WHITESPACE@8..9 " "
+                    L_PAREN@9..10 "("
+                    TupleTypeElement@10..19
+                      PathType@10..19
+                        Path@10..19
+                          PathSegment@10..14
+                            NameRef@10..14
+                              IDENT@10..14 "path"
+                          DOT@14..15 "."
+                          PathSegment@15..19
+                            NameRef@15..19
+                              IDENT@15..19 "Type"
+                    R_PAREN@19..20 ")"
+                  SEMI@20..21 ";"
+            "#]],
+        );
+    }
 
     #[test]
     fn block_with_let_stmt() {
