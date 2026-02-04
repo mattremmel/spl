@@ -813,11 +813,13 @@ impl<'a> LoweringContext<'a> {
             Expr::Ref(ref_expr) => self.lower_ref_expr(ref_expr, span, ty),
             Expr::Field(field) => self.lower_field_expr(field, span, ty),
             Expr::Index(index) => self.lower_index_expr(index, span, ty),
-            // TODO: Slice, Range, EnumShorthand, Try, and Closure are not yet implemented
+            // TODO: Slice, Range, EnumShorthand, Try, OptionalField, Dollar, and Closure are not yet implemented
             Expr::Slice(_)
             | Expr::Range(_)
             | Expr::EnumShorthand(_)
             | Expr::Try(_)
+            | Expr::OptionalField(_)
+            | Expr::Dollar(_)
             | Expr::Closure(_) => self.lower_missing(span),
             Expr::Yield(yield_expr) => self.lower_yield_expr(yield_expr, span),
             Expr::For(for_expr) => self.lower_for_expr(for_expr, span),

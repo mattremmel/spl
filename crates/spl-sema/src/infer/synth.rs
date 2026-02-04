@@ -354,6 +354,23 @@ impl<'a> InferEngine<'a> {
                 // For now, return error - proper closure type requires FnOnce/FnMut/Fn trait handling
                 self.types.error()
             }
+            // Optional field access: expr?.field
+            // TODO: Implement proper Option unwrapping inference
+            Expr::OptionalField(optional_field) => {
+                // Synthesize the base expression
+                if let Some(base) = optional_field.expr() {
+                    self.synth_expr(&base);
+                }
+                // For now, return error - proper inference requires Option type handling
+                self.types.error()
+            }
+            // Dollar expression: $ represents array length in index contexts
+            // This needs context to know what array it refers to
+            // TODO: Implement proper $ inference in index expressions
+            Expr::Dollar(_) => {
+                // $ is usize (array length), but needs context to validate
+                self.types.primitive(PrimitiveKind::Usize)
+            }
         };
         self.results.expr_types.insert(span, type_id);
         type_id

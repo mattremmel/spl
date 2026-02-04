@@ -67,6 +67,8 @@ pub(super) fn primary_expr(
                 Ok(None)
             }
         },
+        // Dollar expression: $ represents array length in index expressions
+        DOLLAR => Ok(Some(dollar_expr(p))),
         _ => Ok(None),
     })
 }
@@ -331,6 +333,14 @@ pub(super) fn literal_expr(p: &mut Parser<'_>) -> CompletedMarker {
     let m = p.start();
     p.bump();
     m.complete(p, SyntaxKind::LiteralExpr)
+}
+
+/// Parse a dollar expression: `$` represents array length in index expressions.
+/// Enables `arr[$-1]` syntax for last element access.
+fn dollar_expr(p: &mut Parser<'_>) -> CompletedMarker {
+    let m = p.start();
+    p.bump(); // consume $
+    m.complete(p, SyntaxKind::DollarExpr)
 }
 
 /// Parse a path or call expression.

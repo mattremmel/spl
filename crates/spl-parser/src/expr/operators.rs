@@ -152,6 +152,7 @@ pub(super) fn postfix_expr(
         SyntaxKind::L_PAREN => call_expr(p, lhs),
         SyntaxKind::L_BRACKET => index_or_slice_expr(p, lhs),
         SyntaxKind::DOT => field_or_method_expr(p, lhs),
+        SyntaxKind::QUESTION_DOT => optional_field_expr(p, lhs),
         SyntaxKind::BANG => try_expr(p, lhs),
         _ => unreachable!("unexpected postfix operator: {:?}", op),
     }
@@ -166,6 +167,37 @@ fn try_expr(
     let m = lhs.precede(p);
     p.bump(); // consume !
     Ok(m.complete(p, SyntaxKind::TryExpr))
+}
+
+/// Parse optional field access: `expr?.field`
+/// On None, short-circuits to None. On `Some(v)`, accesses field on v.
+/// Method calls work naturally: `expr?.method()` becomes `CallExpr(OptionalFieldExpr, args)`.
+fn optional_field_expr(
+    p: &mut Parser<'_>,
+    lhs: CompletedMarker,
+) -> Result<CompletedMarker, crate::ParseError> {
+    let m = lhs.precede(p);
+    if let Err(e) = p.expect(SyntaxKind::QUESTION_DOT) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Must be followed by an identifier (field or method name)
+    if !p.at(SyntaxKind::IDENT) {
+        m.abandon(p);
+        return Err(p.error_at_current("expected identifier after '?.'".to_string()));
+    }
+    p.bump(); // consume identifier
+
+    // Complete as OptionalFieldExpr
+    let optional_field = m.complete(p, SyntaxKind::OptionalFieldExpr);
+
+    // Check for method call - if followed by (, wrap in CallExpr
+    if p.at(SyntaxKind::L_PAREN) {
+        call_expr(p, optional_field)
+    } else {
+        Ok(optional_field)
+    }
 }
 
 /// Parse a call expression: expr(args)
@@ -205,14 +237,12 @@ fn index_or_slice_expr(
     if is_slice || p.at(SyntaxKind::COLON) {
         p.bump(); // consume :
 
-        // Parse optional end expression
-        if !p.at(SyntaxKind::R_BRACKET) {
-            if p.at(SyntaxKind::DOLLAR) {
-                p.bump(); // $ (slice to end)
-            } else if let Err(e) = expr(p) {
-                m.abandon(p);
-                return Err(e);
-            }
+        // Parse optional end expression ($ is now handled as DollarExpr via expr())
+        if !p.at(SyntaxKind::R_BRACKET)
+            && let Err(e) = expr(p)
+        {
+            m.abandon(p);
+            return Err(e);
         }
         if let Err(e) = p.expect(SyntaxKind::R_BRACKET) {
             m.abandon(p);
@@ -1722,6 +1752,232 @@ mod tests {
                       L_PAREN@4..5 "("
                       R_PAREN@5..6 ")"
                     BANG@6..7 "!"
+            "#]],
+        );
+    }
+
+    // === Optional Chaining `?.` ===
+
+    #[test]
+    fn optional_chain_field() {
+        check_expr(
+            "x?.foo",
+            &expect![[r#"
+                OptionalFieldExpr@0..6
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
+                  QUESTION_DOT@1..3 "?."
+                  IDENT@3..6 "foo"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn optional_chain_nested() {
+        check_expr(
+            "x?.foo?.bar",
+            &expect![[r#"
+                OptionalFieldExpr@0..11
+                  OptionalFieldExpr@0..6
+                    PathExpr@0..1
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "x"
+                    QUESTION_DOT@1..3 "?."
+                    IDENT@3..6 "foo"
+                  QUESTION_DOT@6..8 "?."
+                  IDENT@8..11 "bar"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn optional_chain_after_field() {
+        check_expr(
+            "x.foo?.bar",
+            &expect![[r#"
+                OptionalFieldExpr@0..10
+                  PathExpr@0..5
+                    Path@0..5
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
+                      DOT@1..2 "."
+                      PathSegment@2..5
+                        NameRef@2..5
+                          IDENT@2..5 "foo"
+                  QUESTION_DOT@5..7 "?."
+                  IDENT@7..10 "bar"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn optional_chain_method() {
+        check_expr(
+            "x?.foo()",
+            &expect![[r#"
+                CallExpr@0..8
+                  OptionalFieldExpr@0..6
+                    PathExpr@0..1
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "x"
+                    QUESTION_DOT@1..3 "?."
+                    IDENT@3..6 "foo"
+                  L_PAREN@6..7 "("
+                  R_PAREN@7..8 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn optional_chain_method_with_args() {
+        check_expr(
+            "obj?.process(1, 2)",
+            &expect![[r#"
+                CallExpr@0..18
+                  OptionalFieldExpr@0..12
+                    PathExpr@0..3
+                      Path@0..3
+                        PathSegment@0..3
+                          NameRef@0..3
+                            IDENT@0..3 "obj"
+                    QUESTION_DOT@3..5 "?."
+                    IDENT@5..12 "process"
+                  L_PAREN@12..13 "("
+                  CallArg@13..14
+                    LiteralExpr@13..14
+                      INT_LITERAL@13..14 "1"
+                  COMMA@14..15 ","
+                  CallArg@15..17
+                    LiteralExpr@15..17
+                      WHITESPACE@15..16 " "
+                      INT_LITERAL@16..17 "2"
+                  R_PAREN@17..18 ")"
+            "#]],
+        );
+    }
+
+    // === Dollar Expression `$` in Index/Slice ===
+
+    #[test]
+    fn index_dollar_last() {
+        check_expr(
+            "arr[$-1]",
+            &expect![[r#"
+                IndexExpr@0..8
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "arr"
+                  L_BRACKET@3..4 "["
+                  BinExpr@4..7
+                    DollarExpr@4..5
+                      DOLLAR@4..5 "$"
+                    MINUS@5..6 "-"
+                    LiteralExpr@6..7
+                      INT_LITERAL@6..7 "1"
+                  R_BRACKET@7..8 "]"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn index_dollar_alone() {
+        check_expr(
+            "arr[$]",
+            &expect![[r#"
+                IndexExpr@0..6
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "arr"
+                  L_BRACKET@3..4 "["
+                  DollarExpr@4..5
+                    DOLLAR@4..5 "$"
+                  R_BRACKET@5..6 "]"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn index_dollar_minus_expr() {
+        check_expr(
+            "arr[$-n]",
+            &expect![[r#"
+                IndexExpr@0..8
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "arr"
+                  L_BRACKET@3..4 "["
+                  BinExpr@4..7
+                    DollarExpr@4..5
+                      DOLLAR@4..5 "$"
+                    MINUS@5..6 "-"
+                    PathExpr@6..7
+                      Path@6..7
+                        PathSegment@6..7
+                          NameRef@6..7
+                            IDENT@6..7 "n"
+                  R_BRACKET@7..8 "]"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn slice_to_dollar() {
+        check_expr(
+            "arr[1:$]",
+            &expect![[r#"
+                SliceExpr@0..8
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "arr"
+                  L_BRACKET@3..4 "["
+                  LiteralExpr@4..5
+                    INT_LITERAL@4..5 "1"
+                  COLON@5..6 ":"
+                  DollarExpr@6..7
+                    DOLLAR@6..7 "$"
+                  R_BRACKET@7..8 "]"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn slice_dollar_minus() {
+        check_expr(
+            "arr[1:$-1]",
+            &expect![[r#"
+                SliceExpr@0..10
+                  PathExpr@0..3
+                    Path@0..3
+                      PathSegment@0..3
+                        NameRef@0..3
+                          IDENT@0..3 "arr"
+                  L_BRACKET@3..4 "["
+                  LiteralExpr@4..5
+                    INT_LITERAL@4..5 "1"
+                  COLON@5..6 ":"
+                  BinExpr@6..9
+                    DollarExpr@6..7
+                      DOLLAR@6..7 "$"
+                    MINUS@7..8 "-"
+                    LiteralExpr@8..9
+                      INT_LITERAL@8..9 "1"
+                  R_BRACKET@9..10 "]"
             "#]],
         );
     }

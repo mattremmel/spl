@@ -398,6 +398,8 @@ impl AstPrinter {
             Expr::Match(m) => self.print_match_expr(m),
             Expr::EnumShorthand(e) => self.print_enum_shorthand_expr(e),
             Expr::Try(t) => self.print_try_expr(t),
+            Expr::OptionalField(o) => self.print_optional_field_expr(o),
+            Expr::Dollar(_) => self.line("DollarExpr"),
             Expr::Closure(c) => self.print_closure_expr(c),
         }
     }
@@ -407,6 +409,18 @@ impl AstPrinter {
         self.indented(|p| {
             if let Some(inner) = expr.expr() {
                 p.print_expr(&inner);
+            }
+        });
+    }
+
+    fn print_optional_field_expr(&mut self, expr: &crate::OptionalFieldExpr) {
+        self.line("OptionalFieldExpr");
+        self.indented(|p| {
+            if let Some(inner) = expr.expr() {
+                p.print_expr(&inner);
+            }
+            if let Some(name) = expr.name_token() {
+                p.line(&format!("field: {}", name.text()));
             }
         });
     }

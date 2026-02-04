@@ -1102,8 +1102,9 @@ impl<'ctx> Resolver<'ctx> {
 
     fn resolve_expr(&mut self, expr: &Expr) {
         match expr {
-            // Literals and Continue have nothing to resolve
-            Expr::Literal(_) | Expr::Continue(_) => {}
+            // Literals, Continue, and Dollar have nothing to resolve
+            // Dollar is a contextual placeholder for array length
+            Expr::Literal(_) | Expr::Continue(_) | Expr::Dollar(_) => {}
             Expr::Path(path_expr) => {
                 if let Some(path) = path_expr.path() {
                     self.resolve_path(&path);
@@ -1290,6 +1291,13 @@ impl<'ctx> Resolver<'ctx> {
             Expr::Try(try_expr) => {
                 if let Some(inner) = try_expr.expr() {
                     self.resolve_expr(&inner);
+                }
+            }
+            // Optional field access: expr?.field
+            // Resolve the base expression (field name resolution deferred to type checking)
+            Expr::OptionalField(optional_field) => {
+                if let Some(base) = optional_field.expr() {
+                    self.resolve_expr(&base);
                 }
             }
             // Closure expression: |params| body or @[captures] |params| body

@@ -200,6 +200,8 @@ pub enum SyntaxKind {
     MatchArm,
     EnumShorthandExpr,
     TryExpr,
+    OptionalFieldExpr,
+    DollarExpr,
     ClosureExpr,
     CaptureList,
     Capture,

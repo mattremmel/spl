@@ -248,10 +248,11 @@ fn infix_bp(op: SyntaxKind) -> Option<(u8, u8)> {
 fn postfix_bp(op: SyntaxKind) -> Option<(u8, ())> {
     match op {
         // Postfix (highest precedence)
-        SyntaxKind::L_PAREN     // call
-        | SyntaxKind::L_BRACKET // index/slice
-        | SyntaxKind::DOT       // field/method
-        | SyntaxKind::BANG      // try/propagate: expr!
+        SyntaxKind::L_PAREN      // call
+        | SyntaxKind::L_BRACKET  // index/slice
+        | SyntaxKind::DOT        // field/method
+        | SyntaxKind::QUESTION_DOT // optional chaining: expr?.field
+        | SyntaxKind::BANG       // try/propagate: expr!
         => Some((BP_POSTFIX, ())),
         _ => None,
     }

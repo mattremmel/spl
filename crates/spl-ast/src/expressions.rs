@@ -33,6 +33,8 @@ ast_node!(MatchExpr);
 ast_node!(MatchArm);
 ast_node!(EnumShorthandExpr);
 ast_node!(TryExpr);
+ast_node!(OptionalFieldExpr);
+ast_node!(DollarExpr);
 ast_node!(ClosureExpr);
 ast_node!(CaptureList);
 ast_node!(Capture);
@@ -71,6 +73,8 @@ ast_enum!(
         Match(MatchExpr),
         EnumShorthand(EnumShorthandExpr),
         Try(TryExpr),
+        OptionalField(OptionalFieldExpr),
+        Dollar(DollarExpr),
         Closure(ClosureExpr),
     }
 );
@@ -505,6 +509,30 @@ impl TryExpr {
     /// Get the `!` token.
     pub fn bang_token(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::BANG)
+    }
+}
+
+impl OptionalFieldExpr {
+    /// Get the base expression (the value being accessed).
+    pub fn expr(&self) -> Option<Expr> {
+        child(&self.0)
+    }
+
+    /// Get the `?.` token.
+    pub fn question_dot_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::QUESTION_DOT)
+    }
+
+    /// Get the field name token.
+    pub fn name_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::IDENT)
+    }
+}
+
+impl DollarExpr {
+    /// Get the `$` token.
+    pub fn dollar_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::DOLLAR)
     }
 }
 
