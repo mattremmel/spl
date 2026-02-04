@@ -4,8 +4,8 @@ use crate::{CompletedMarker, Marker, Parser};
 use spl_syntax::SyntaxKind;
 
 use super::control_flow::{
-    block_expr, break_expr, continue_expr, for_expr, if_expr, loop_expr, return_expr, while_expr,
-    yield_expr,
+    block_expr, break_expr, continue_expr, for_expr, if_expr, labeled_expr, loop_expr, return_expr,
+    while_expr, yield_expr,
 };
 use super::expr;
 
@@ -69,6 +69,8 @@ pub(super) fn primary_expr(
         },
         // Dollar expression: $ represents array length in index expressions
         DOLLAR => Ok(Some(dollar_expr(p))),
+        // Labeled expression: 'label: loop/while/for/block
+        TICK => labeled_expr(p),
         _ => Ok(None),
     })
 }

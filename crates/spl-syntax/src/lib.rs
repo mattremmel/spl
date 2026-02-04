@@ -115,6 +115,9 @@ pub enum SyntaxKind {
     COLON,
     COMMA,
 
+    // Label marker
+    TICK,
+
     // Literals & Identifiers
     INT_LITERAL,
     FLOAT_LITERAL,
@@ -165,6 +168,8 @@ pub enum SyntaxKind {
     WhereClause,
     TypeBound,
     LabelSpec,
+    /// Label for labeled loops/blocks: 'name:
+    Label,
 
     // Statements
     Block,
@@ -363,6 +368,7 @@ impl From<Token> for SyntaxKind {
             Token::Semi => Self::SEMI,
             Token::Colon => Self::COLON,
             Token::Comma => Self::COMMA,
+            Token::Tick => Self::TICK,
             // Literals
             Token::Integer => Self::INT_LITERAL,
             Token::Float => Self::FLOAT_LITERAL,

@@ -270,6 +270,12 @@ pub enum Token {
     #[regex(r"b'([^'\\]|\\[nrt\\'0]|\\x[0-9a-fA-F]{2})'")]
     ByteChar,
 
+    // Tick (single quote) for label syntax: 'label
+    // Note: Logos uses longest-match, so 'a' matches Char (complete char literal)
+    // while standalone ' matches Tick
+    #[token("'")]
+    Tick,
+
     // === Identifier ===
     // Unicode XID identifiers - ASCII pattern has higher priority for performance
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", priority = 3)]

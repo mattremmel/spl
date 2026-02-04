@@ -5,6 +5,100 @@ use spl_syntax::SyntaxKind;
 
 use super::{expr, expr_no_struct};
 
+/// Try to parse a label: 'name:
+/// Returns true if a label was parsed.
+fn try_parse_label(p: &mut Parser<'_>) -> bool {
+    if !p.at(SyntaxKind::TICK) {
+        return false;
+    }
+
+    let m = p.start();
+    p.bump(); // consume '
+
+    // Parse the label name
+    let _ = crate::item::name(p);
+
+    // Expect colon
+    let _ = p.expect(SyntaxKind::COLON);
+
+    m.complete(p, SyntaxKind::Label);
+    true
+}
+
+/// Parse a labeled expression: 'label: loop/while/for/block
+/// Called from primary.rs when we see a TICK token.
+pub(super) fn labeled_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    // We already know we're at TICK, so start the outer marker for the loop/block
+    let m = p.start();
+
+    // Parse the label
+    if !try_parse_label(p) {
+        m.abandon(p);
+        return Ok(None);
+    }
+
+    // Now dispatch to the appropriate loop/block based on keyword
+    let kind = match p.current() {
+        Some(SyntaxKind::LOOP_KW) => {
+            p.bump(); // consume 'loop'
+            if let Err(e) = block(p) {
+                m.abandon(p);
+                return Err(e);
+            }
+            SyntaxKind::LoopExpr
+        }
+        Some(SyntaxKind::WHILE_KW) => {
+            p.bump(); // consume 'while'
+            if let Err(e) = expr_no_struct(p) {
+                m.abandon(p);
+                return Err(e);
+            }
+            if let Err(e) = block(p) {
+                m.abandon(p);
+                return Err(e);
+            }
+            SyntaxKind::WhileExpr
+        }
+        Some(SyntaxKind::FOR_KW) => {
+            p.bump(); // consume 'for'
+            // Pattern
+            if let Err(err) = crate::pattern::pattern(p) {
+                m.abandon(p);
+                return Err(err);
+            }
+            if let Err(err) = p.expect(SyntaxKind::IN_KW) {
+                m.abandon(p);
+                return Err(err);
+            }
+            if let Err(err) = expr_no_struct(p) {
+                m.abandon(p);
+                return Err(err);
+            }
+            if let Err(err) = block(p) {
+                m.abandon(p);
+                return Err(err);
+            }
+            SyntaxKind::ForExpr
+        }
+        Some(SyntaxKind::L_BRACE) => {
+            // Labeled block
+            if let Err(e) = block(p) {
+                m.abandon(p);
+                return Err(e);
+            }
+            SyntaxKind::BlockExpr
+        }
+        _ => {
+            // Error: label must be followed by loop, while, for, or block
+            // Just abandon and return None - the caller will handle it
+            m.abandon(p);
+            return Ok(None);
+        }
+    };
+
+    Ok(Some(m.complete(p, kind)))
+}
+
 /// Parse a block expression.
 pub(super) fn block_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
     let m = p.start();
@@ -124,6 +218,12 @@ pub(super) fn break_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, 
         return Err(e);
     }
 
+    // Optional label: 'label
+    if p.at(SyntaxKind::TICK) {
+        p.bump(); // consume '
+        let _ = crate::path::name_ref(p);
+    }
+
     // Optional value
     if p.current().is_some()
         && !p.at(SyntaxKind::SEMI)
@@ -147,6 +247,13 @@ pub(super) fn continue_expr(
         m.abandon(p);
         return Err(e);
     }
+
+    // Optional label: 'label
+    if p.at(SyntaxKind::TICK) {
+        p.bump(); // consume '
+        let _ = crate::path::name_ref(p);
+    }
+
     Ok(Some(m.complete(p, SyntaxKind::ContinueExpr)))
 }
 
@@ -922,6 +1029,229 @@ mod tests {
                       SEMI@18..19 ";"
                     WHITESPACE@19..20 " "
                     R_BRACE@20..21 "}"
+            "#]],
+        );
+    }
+
+    // === Labeled Control Flow Tests ===
+
+    #[test]
+    fn break_with_label() {
+        check_expr(
+            "break 'outer",
+            &expect![[r#"
+                BreakExpr@0..12
+                  BREAK_KW@0..5 "break"
+                  WHITESPACE@5..6 " "
+                  TICK@6..7 "'"
+                  NameRef@7..12
+                    IDENT@7..12 "outer"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn break_with_label_and_value() {
+        check_expr(
+            "break 'outer 42",
+            &expect![[r#"
+                BreakExpr@0..15
+                  BREAK_KW@0..5 "break"
+                  WHITESPACE@5..6 " "
+                  TICK@6..7 "'"
+                  NameRef@7..12
+                    IDENT@7..12 "outer"
+                  LiteralExpr@12..15
+                    WHITESPACE@12..13 " "
+                    INT_LITERAL@13..15 "42"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn continue_with_label() {
+        check_expr(
+            "continue 'outer",
+            &expect![[r#"
+                ContinueExpr@0..15
+                  CONTINUE_KW@0..8 "continue"
+                  WHITESPACE@8..9 " "
+                  TICK@9..10 "'"
+                  NameRef@10..15
+                    IDENT@10..15 "outer"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn labeled_loop() {
+        check_expr(
+            "'outer: loop { }",
+            &expect![[r#"
+                LoopExpr@0..16
+                  Label@0..7
+                    TICK@0..1 "'"
+                    Name@1..6
+                      IDENT@1..6 "outer"
+                    COLON@6..7 ":"
+                  WHITESPACE@7..8 " "
+                  LOOP_KW@8..12 "loop"
+                  Block@12..16
+                    WHITESPACE@12..13 " "
+                    L_BRACE@13..14 "{"
+                    WHITESPACE@14..15 " "
+                    R_BRACE@15..16 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn labeled_while() {
+        check_expr(
+            "'outer: while true { }",
+            &expect![[r#"
+                WhileExpr@0..22
+                  Label@0..7
+                    TICK@0..1 "'"
+                    Name@1..6
+                      IDENT@1..6 "outer"
+                    COLON@6..7 ":"
+                  WHITESPACE@7..8 " "
+                  WHILE_KW@8..13 "while"
+                  LiteralExpr@13..18
+                    WHITESPACE@13..14 " "
+                    TRUE_KW@14..18 "true"
+                  Block@18..22
+                    WHITESPACE@18..19 " "
+                    L_BRACE@19..20 "{"
+                    WHITESPACE@20..21 " "
+                    R_BRACE@21..22 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn labeled_for() {
+        check_expr(
+            "'outer: for i in items { }",
+            &expect![[r#"
+                ForExpr@0..26
+                  Label@0..7
+                    TICK@0..1 "'"
+                    Name@1..6
+                      IDENT@1..6 "outer"
+                    COLON@6..7 ":"
+                  WHITESPACE@7..8 " "
+                  FOR_KW@8..11 "for"
+                  IdentPat@11..13
+                    Name@11..13
+                      WHITESPACE@11..12 " "
+                      IDENT@12..13 "i"
+                  WHITESPACE@13..14 " "
+                  IN_KW@14..16 "in"
+                  PathExpr@16..22
+                    Path@16..22
+                      PathSegment@16..22
+                        NameRef@16..22
+                          WHITESPACE@16..17 " "
+                          IDENT@17..22 "items"
+                  Block@22..26
+                    WHITESPACE@22..23 " "
+                    L_BRACE@23..24 "{"
+                    WHITESPACE@24..25 " "
+                    R_BRACE@25..26 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn labeled_block() {
+        check_expr(
+            "'outer: { 1 }",
+            &expect![[r#"
+                BlockExpr@0..13
+                  Label@0..7
+                    TICK@0..1 "'"
+                    Name@1..6
+                      IDENT@1..6 "outer"
+                    COLON@6..7 ":"
+                  Block@7..13
+                    WHITESPACE@7..8 " "
+                    L_BRACE@8..9 "{"
+                    LiteralExpr@9..11
+                      WHITESPACE@9..10 " "
+                      INT_LITERAL@10..11 "1"
+                    WHITESPACE@11..12 " "
+                    R_BRACE@12..13 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn nested_labeled_loops() {
+        check_expr(
+            "'outer: loop { 'inner: loop { break 'outer } }",
+            &expect![[r#"
+                LoopExpr@0..46
+                  Label@0..7
+                    TICK@0..1 "'"
+                    Name@1..6
+                      IDENT@1..6 "outer"
+                    COLON@6..7 ":"
+                  WHITESPACE@7..8 " "
+                  LOOP_KW@8..12 "loop"
+                  Block@12..46
+                    WHITESPACE@12..13 " "
+                    L_BRACE@13..14 "{"
+                    LoopExpr@14..44
+                      Label@14..22
+                        WHITESPACE@14..15 " "
+                        TICK@15..16 "'"
+                        Name@16..21
+                          IDENT@16..21 "inner"
+                        COLON@21..22 ":"
+                      WHITESPACE@22..23 " "
+                      LOOP_KW@23..27 "loop"
+                      Block@27..44
+                        WHITESPACE@27..28 " "
+                        L_BRACE@28..29 "{"
+                        BreakExpr@29..42
+                          WHITESPACE@29..30 " "
+                          BREAK_KW@30..35 "break"
+                          WHITESPACE@35..36 " "
+                          TICK@36..37 "'"
+                          NameRef@37..42
+                            IDENT@37..42 "outer"
+                        WHITESPACE@42..43 " "
+                        R_BRACE@43..44 "}"
+                    WHITESPACE@44..45 " "
+                    R_BRACE@45..46 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn char_literal_in_labeled_loop() {
+        // Ensure 'a' (char literal) is not confused with label syntax
+        check_expr(
+            "'outer: loop { 'a' }",
+            &expect![[r#"
+                LoopExpr@0..20
+                  Label@0..7
+                    TICK@0..1 "'"
+                    Name@1..6
+                      IDENT@1..6 "outer"
+                    COLON@6..7 ":"
+                  WHITESPACE@7..8 " "
+                  LOOP_KW@8..12 "loop"
+                  Block@12..20
+                    WHITESPACE@12..13 " "
+                    L_BRACE@13..14 "{"
+                    LiteralExpr@14..18
+                      WHITESPACE@14..15 " "
+                      CHAR_LITERAL@15..18 "'a'"
+                    WHITESPACE@18..19 " "
+                    R_BRACE@19..20 "}"
             "#]],
         );
     }

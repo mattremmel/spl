@@ -1181,9 +1181,11 @@ fn error_unterminated_string() {
 }
 
 #[test]
-fn error_unterminated_char() {
-    let tokens = lex("'a");
-    assert!(tokens.iter().any(|(t, _)| *t == Token::Error));
+fn tick_followed_by_ident() {
+    // With the Tick token, 'a is now Tick + Ident (for label syntax)
+    // rather than an unterminated char literal
+    let tokens = lex_no_trivia("'a");
+    assert_eq!(tokens, vec![(Token::Tick, "'"), (Token::Ident, "a")]);
 }
 
 // ============================================================
@@ -1805,6 +1807,52 @@ fn removed_keyword_crate_is_now_ident() {
 fn removed_keyword_not_is_now_ident() {
     // 'not' is no longer a keyword
     check_single("not", Token::Ident);
+}
+
+// ============================================================
+// Tick Token (for labels)
+// ============================================================
+
+#[test]
+fn tick_standalone() {
+    check_single("'", Token::Tick);
+}
+
+#[test]
+fn tick_before_ident() {
+    check(
+        "'outer:",
+        &[
+            (Token::Tick, "'"),
+            (Token::Ident, "outer"),
+            (Token::Colon, ":"),
+        ],
+    );
+}
+
+#[test]
+fn char_literal_still_works() {
+    // Ensure char literals with content still work after adding Tick
+    check_single("'a'", Token::Char);
+}
+
+#[test]
+fn tick_in_break_label() {
+    check(
+        "break 'outer",
+        &[
+            (Token::Break, "break"),
+            (Token::Tick, "'"),
+            (Token::Ident, "outer"),
+        ],
+    );
+}
+
+#[test]
+fn tick_vs_char_disambiguation() {
+    // 'a' is a char, 'a is tick + ident
+    check("'a'", &[(Token::Char, "'a'")]);
+    check("'a:", &[(Token::Tick, "'"), (Token::Ident, "a"), (Token::Colon, ":")]);
 }
 
 // ============================================================

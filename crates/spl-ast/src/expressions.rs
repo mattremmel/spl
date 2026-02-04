@@ -42,6 +42,7 @@ ast_node!(ClosureParams);
 ast_node!(ClosureParam);
 ast_node!(Path);
 ast_node!(PathSegment);
+ast_node!(Label);
 
 ast_enum!(
     /// Expression enum - all expression variants.
@@ -320,6 +321,11 @@ impl IfExpr {
 }
 
 impl WhileExpr {
+    /// Get the label for this while loop, if present (e.g., `'outer: while cond { }`).
+    pub fn label(&self) -> Option<Label> {
+        child(&self.0)
+    }
+
     pub fn condition(&self) -> Option<Expr> {
         child(&self.0)
     }
@@ -330,6 +336,11 @@ impl WhileExpr {
 }
 
 impl ForExpr {
+    /// Get the label for this for loop, if present (e.g., `'outer: for i in items { }`).
+    pub fn label(&self) -> Option<Label> {
+        child(&self.0)
+    }
+
     pub fn pat(&self) -> Option<Pat> {
         child(&self.0)
     }
@@ -344,19 +355,33 @@ impl ForExpr {
 }
 
 impl LoopExpr {
+    /// Get the label for this loop, if present (e.g., `'outer: loop { }`).
+    pub fn label(&self) -> Option<Label> {
+        child(&self.0)
+    }
+
     pub fn body(&self) -> Option<Block> {
         child(&self.0)
     }
 }
 
 impl BreakExpr {
+    /// Get the label for this break, if present (e.g., `break 'outer`).
+    pub fn label(&self) -> Option<NameRef> {
+        child(&self.0)
+    }
+
+    /// Get the value expression, if present.
     pub fn expr(&self) -> Option<Expr> {
         child(&self.0)
     }
 }
 
 impl ContinueExpr {
-    // continue has no value
+    /// Get the label for this continue, if present (e.g., `continue 'outer`).
+    pub fn label(&self) -> Option<NameRef> {
+        child(&self.0)
+    }
 }
 
 impl ReturnExpr {
@@ -376,6 +401,11 @@ impl YieldExpr {
 }
 
 impl BlockExpr {
+    /// Get the label for this block, if present (e.g., `'outer: { }`).
+    pub fn label(&self) -> Option<Label> {
+        child(&self.0)
+    }
+
     pub fn block(&self) -> Option<Block> {
         child(&self.0)
     }
@@ -588,6 +618,23 @@ impl ClosureParam {
     /// Get the parameter type, if present.
     pub fn ty(&self) -> Option<Type> {
         child(&self.0)
+    }
+}
+
+impl Label {
+    /// Get the label name.
+    pub fn name(&self) -> Option<crate::Name> {
+        child(&self.0)
+    }
+
+    /// Get the tick token.
+    pub fn tick_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::TICK)
+    }
+
+    /// Get the colon token.
+    pub fn colon_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::COLON)
     }
 }
 
@@ -1063,5 +1110,85 @@ mod tests {
         let try_expr: TryExpr = parse_expr("fn main() { foo()! }");
         assert!(try_expr.expr().is_some());
         assert!(try_expr.bang_token().is_some());
+    }
+
+    // =========================================================================
+    // Labeled Control Flow Tests
+    // =========================================================================
+
+    #[test]
+    fn labeled_loop() {
+        let loop_expr: LoopExpr = parse_expr("fn main() { 'outer: loop { break 'outer; } }");
+        assert!(loop_expr.label().is_some());
+        let label = loop_expr.label().unwrap();
+        assert!(label.name().is_some());
+        assert_eq!(
+            label.name().unwrap().ident_token().unwrap().text(),
+            "outer"
+        );
+        assert!(loop_expr.body().is_some());
+    }
+
+    #[test]
+    fn unlabeled_loop() {
+        let loop_expr: LoopExpr = parse_expr("fn main() { loop { break; } }");
+        assert!(loop_expr.label().is_none());
+        assert!(loop_expr.body().is_some());
+    }
+
+    #[test]
+    fn labeled_while() {
+        let while_expr: WhileExpr = parse_expr("fn main() { 'outer: while true { } }");
+        assert!(while_expr.label().is_some());
+        let label = while_expr.label().unwrap();
+        assert_eq!(
+            label.name().unwrap().ident_token().unwrap().text(),
+            "outer"
+        );
+        assert!(while_expr.condition().is_some());
+        assert!(while_expr.body().is_some());
+    }
+
+    #[test]
+    fn labeled_for() {
+        let for_expr: ForExpr = parse_expr("fn main() { 'outer: for i in items { } }");
+        assert!(for_expr.label().is_some());
+        let label = for_expr.label().unwrap();
+        assert_eq!(
+            label.name().unwrap().ident_token().unwrap().text(),
+            "outer"
+        );
+        assert!(for_expr.pat().is_some());
+        assert!(for_expr.iterable().is_some());
+        assert!(for_expr.body().is_some());
+    }
+
+    #[test]
+    fn labeled_block() {
+        let block_expr: BlockExpr = parse_expr("fn main() { 'outer: { 42 } }");
+        assert!(block_expr.label().is_some());
+        let label = block_expr.label().unwrap();
+        assert_eq!(
+            label.name().unwrap().ident_token().unwrap().text(),
+            "outer"
+        );
+        assert!(block_expr.block().is_some());
+    }
+
+    #[test]
+    fn break_with_label() {
+        let brk: BreakExpr = parse_expr("fn main() { loop { break 'outer; } }");
+        assert!(brk.label().is_some());
+        assert_eq!(brk.label().unwrap().ident_token().unwrap().text(), "outer");
+    }
+
+    #[test]
+    fn continue_with_label() {
+        let cont: ContinueExpr = parse_expr("fn main() { loop { continue 'outer; } }");
+        assert!(cont.label().is_some());
+        assert_eq!(
+            cont.label().unwrap().ident_token().unwrap().text(),
+            "outer"
+        );
     }
 }
