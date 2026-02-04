@@ -768,7 +768,7 @@ impl<'a> LoweringContext<'a> {
                 };
                 self.db.alloc_pat(hir_pat)
             }
-            Pat::Slice(_) | Pat::Range(_) | Pat::Rest(_) => {
+            Pat::Slice(_) | Pat::Range(_) | Pat::Rest(_) | Pat::EnumShorthand(_) => {
                 // TODO: implement these patterns
                 let hir_pat = HirPat {
                     kind: HirPatKind::Missing,
@@ -800,8 +800,8 @@ impl<'a> LoweringContext<'a> {
             Expr::Ref(ref_expr) => self.lower_ref_expr(ref_expr, span, ty),
             Expr::Field(field) => self.lower_field_expr(field, span, ty),
             Expr::Index(index) => self.lower_index_expr(index, span, ty),
-            // TODO: Slice and Range are not yet implemented as standalone expressions.
-            Expr::Slice(_) | Expr::Range(_) => self.lower_missing(span),
+            // TODO: Slice, Range, and EnumShorthand are not yet implemented
+            Expr::Slice(_) | Expr::Range(_) | Expr::EnumShorthand(_) => self.lower_missing(span),
             Expr::Yield(yield_expr) => self.lower_yield_expr(yield_expr, span),
             Expr::For(for_expr) => self.lower_for_expr(for_expr, span),
             Expr::If(if_expr) => self.lower_if_expr(if_expr, span, ty),

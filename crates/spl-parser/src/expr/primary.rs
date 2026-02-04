@@ -31,6 +31,15 @@ pub(super) fn primary_expr(
                 path_expr_only(p)
             }
         },
+        // Enum shorthand: .Variant or .Variant(args)
+        DOT => {
+            // Check if followed by identifier (enum shorthand)
+            if p.peek(1) == Some(SyntaxKind::IDENT) {
+                enum_shorthand_expr(p)
+            } else {
+                Ok(None) // Not a primary expression (could be range like `..`)
+            }
+        },
         // Grouped or tuple expression
         L_PAREN => paren_or_tuple_expr(p),
         // Array expression
@@ -50,6 +59,48 @@ pub(super) fn primary_expr(
         MATCH_KW => match_expr(p),
         _ => Ok(None),
     })
+}
+
+/// Parse an enum shorthand expression: `.Variant` or `.Variant(args)`
+fn enum_shorthand_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    let m = p.start();
+
+    // Consume the leading dot
+    if let Err(e) = p.expect(SyntaxKind::DOT) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Parse the variant name
+    if let Err(e) = crate::item::name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional argument list: (arg, ...)
+    if p.at(SyntaxKind::L_PAREN) {
+        if let Err(e) = p.expect(SyntaxKind::L_PAREN) {
+            m.abandon(p);
+            return Err(e);
+        }
+
+        while !p.at(SyntaxKind::R_PAREN) && p.current().is_some() {
+            if let Err(e) = call_arg(p) {
+                m.abandon(p);
+                return Err(e);
+            }
+            if !p.at(SyntaxKind::R_PAREN) && !p.eat(SyntaxKind::COMMA) {
+                break;
+            }
+        }
+
+        if let Err(e) = p.expect(SyntaxKind::R_PAREN) {
+            m.abandon(p);
+            return Err(e);
+        }
+    }
+
+    Ok(Some(m.complete(p, SyntaxKind::EnumShorthandExpr)))
 }
 
 /// Parse a match expression: `match expr { arms }`
@@ -1053,6 +1104,114 @@ mod tests {
                     COMMA@33..34 ","
                   WHITESPACE@34..35 " "
                   R_BRACE@35..36 "}"
+            "#]],
+        );
+    }
+
+    // === Enum Shorthand Expressions ===
+
+    #[test]
+    fn enum_shorthand_unit() {
+        check_expr(
+            ".None",
+            &expect![[r#"
+                EnumShorthandExpr@0..5
+                  DOT@0..1 "."
+                  Name@1..5
+                    IDENT@1..5 "None"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn enum_shorthand_tuple() {
+        check_expr(
+            ".Some(42)",
+            &expect![[r#"
+                EnumShorthandExpr@0..9
+                  DOT@0..1 "."
+                  Name@1..5
+                    IDENT@1..5 "Some"
+                  L_PAREN@5..6 "("
+                  CallArg@6..8
+                    LiteralExpr@6..8
+                      INT_LITERAL@6..8 "42"
+                  R_PAREN@8..9 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn enum_shorthand_multiple_args() {
+        check_expr(
+            ".Point(1, 2)",
+            &expect![[r#"
+                EnumShorthandExpr@0..12
+                  DOT@0..1 "."
+                  Name@1..6
+                    IDENT@1..6 "Point"
+                  L_PAREN@6..7 "("
+                  CallArg@7..8
+                    LiteralExpr@7..8
+                      INT_LITERAL@7..8 "1"
+                  COMMA@8..9 ","
+                  CallArg@9..11
+                    LiteralExpr@9..11
+                      WHITESPACE@9..10 " "
+                      INT_LITERAL@10..11 "2"
+                  R_PAREN@11..12 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn enum_shorthand_nested() {
+        check_expr(
+            ".Some(.Inner)",
+            &expect![[r#"
+                EnumShorthandExpr@0..13
+                  DOT@0..1 "."
+                  Name@1..5
+                    IDENT@1..5 "Some"
+                  L_PAREN@5..6 "("
+                  CallArg@6..12
+                    EnumShorthandExpr@6..12
+                      DOT@6..7 "."
+                      Name@7..12
+                        IDENT@7..12 "Inner"
+                  R_PAREN@12..13 ")"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn enum_shorthand_in_match_arm() {
+        check_expr(
+            "match x { _ => .Red }",
+            &expect![[r#"
+                MatchExpr@0..21
+                  MATCH_KW@0..5 "match"
+                  PathExpr@5..7
+                    Path@5..7
+                      PathSegment@5..7
+                        NameRef@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
+                  WHITESPACE@7..8 " "
+                  L_BRACE@8..9 "{"
+                  MatchArm@9..19
+                    WildcardPat@9..11
+                      WHITESPACE@9..10 " "
+                      IDENT@10..11 "_"
+                    WHITESPACE@11..12 " "
+                    FAT_ARROW@12..14 "=>"
+                    EnumShorthandExpr@14..19
+                      WHITESPACE@14..15 " "
+                      DOT@15..16 "."
+                      Name@16..19
+                        IDENT@16..19 "Red"
+                  WHITESPACE@19..20 " "
+                  R_BRACE@20..21 "}"
             "#]],
         );
     }

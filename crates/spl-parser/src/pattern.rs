@@ -34,6 +34,16 @@ pub fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
             // These keywords can start paths in patterns (e.g., module.Point(x: x))
             path_or_struct_or_enum_pat(p)
         },
+        // Enum shorthand pattern: .Variant or .Variant(patterns)
+        DOT => {
+            // Check if followed by identifier (enum shorthand)
+            if p.peek(1) == Some(SyntaxKind::IDENT) {
+                enum_shorthand_pat(p)
+            } else {
+                let err = p.error_at_current("expected pattern".to_string());
+                Err(err)
+            }
+        },
         // Rest pattern: ..
         DOT_DOT => Ok(rest_pat(p)),
         // Literal patterns (may be range pattern if followed by ..)
@@ -45,6 +55,29 @@ pub fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
             Err(err)
         },
     })
+}
+
+/// Parse an enum shorthand pattern: `.Variant` or `.Variant(patterns)`
+fn enum_shorthand_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+    let m = p.start();
+
+    // Consume the leading dot
+    p.expect(SyntaxKind::DOT)?;
+
+    // Parse the variant name
+    crate::item::name(p)?;
+
+    // Optional pattern list: (pattern, ...)
+    if p.at(SyntaxKind::L_PAREN) {
+        p.expect(SyntaxKind::L_PAREN)?;
+        p.parse_delimited(SyntaxKind::R_PAREN, |p| {
+            pattern(p)?;
+            Ok(())
+        })?;
+        p.expect(SyntaxKind::R_PAREN)?;
+    }
+
+    Ok(m.complete(p, SyntaxKind::EnumShorthandPat))
 }
 
 /// Parse a reference pattern: `&x`, `&mut x`
@@ -439,6 +472,169 @@ mod tests {
                       SEMI@27..28 ";"
                     WHITESPACE@28..29 " "
                     R_BRACE@29..30 "}"
+            "#]],
+        );
+    }
+
+    // === Enum Shorthand Patterns ===
+
+    #[test]
+    fn enum_shorthand_pattern_unit() {
+        check_expr(
+            "{ let .None = x; }",
+            &expect![[r#"
+                BlockExpr@0..18
+                  Block@0..18
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..16
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      EnumShorthandPat@5..11
+                        WHITESPACE@5..6 " "
+                        DOT@6..7 "."
+                        Name@7..11
+                          IDENT@7..11 "None"
+                      WHITESPACE@11..12 " "
+                      EQ@12..13 "="
+                      PathExpr@13..15
+                        Path@13..15
+                          PathSegment@13..15
+                            NameRef@13..15
+                              WHITESPACE@13..14 " "
+                              IDENT@14..15 "x"
+                      SEMI@15..16 ";"
+                    WHITESPACE@16..17 " "
+                    R_BRACE@17..18 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn enum_shorthand_pattern_binding() {
+        check_expr(
+            "{ let .Some(x) = opt; }",
+            &expect![[r#"
+                BlockExpr@0..23
+                  Block@0..23
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..21
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      EnumShorthandPat@5..14
+                        WHITESPACE@5..6 " "
+                        DOT@6..7 "."
+                        Name@7..11
+                          IDENT@7..11 "Some"
+                        L_PAREN@11..12 "("
+                        IdentPat@12..13
+                          Name@12..13
+                            IDENT@12..13 "x"
+                        R_PAREN@13..14 ")"
+                      WHITESPACE@14..15 " "
+                      EQ@15..16 "="
+                      PathExpr@16..20
+                        Path@16..20
+                          PathSegment@16..20
+                            NameRef@16..20
+                              WHITESPACE@16..17 " "
+                              IDENT@17..20 "opt"
+                      SEMI@20..21 ";"
+                    WHITESPACE@21..22 " "
+                    R_BRACE@22..23 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn enum_shorthand_pattern_nested() {
+        check_expr(
+            "{ let .Some(.Inner(x)) = opt; }",
+            &expect![[r#"
+                BlockExpr@0..31
+                  Block@0..31
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..29
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      EnumShorthandPat@5..22
+                        WHITESPACE@5..6 " "
+                        DOT@6..7 "."
+                        Name@7..11
+                          IDENT@7..11 "Some"
+                        L_PAREN@11..12 "("
+                        EnumShorthandPat@12..21
+                          DOT@12..13 "."
+                          Name@13..18
+                            IDENT@13..18 "Inner"
+                          L_PAREN@18..19 "("
+                          IdentPat@19..20
+                            Name@19..20
+                              IDENT@19..20 "x"
+                          R_PAREN@20..21 ")"
+                        R_PAREN@21..22 ")"
+                      WHITESPACE@22..23 " "
+                      EQ@23..24 "="
+                      PathExpr@24..28
+                        Path@24..28
+                          PathSegment@24..28
+                            NameRef@24..28
+                              WHITESPACE@24..25 " "
+                              IDENT@25..28 "opt"
+                      SEMI@28..29 ";"
+                    WHITESPACE@29..30 " "
+                    R_BRACE@30..31 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn enum_shorthand_pattern_in_match() {
+        check_expr(
+            "match x { .None => 0, .Some(v) => v }",
+            &expect![[r#"
+                MatchExpr@0..37
+                  MATCH_KW@0..5 "match"
+                  PathExpr@5..7
+                    Path@5..7
+                      PathSegment@5..7
+                        NameRef@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
+                  WHITESPACE@7..8 " "
+                  L_BRACE@8..9 "{"
+                  MatchArm@9..21
+                    EnumShorthandPat@9..15
+                      WHITESPACE@9..10 " "
+                      DOT@10..11 "."
+                      Name@11..15
+                        IDENT@11..15 "None"
+                    WHITESPACE@15..16 " "
+                    FAT_ARROW@16..18 "=>"
+                    LiteralExpr@18..20
+                      WHITESPACE@18..19 " "
+                      INT_LITERAL@19..20 "0"
+                    COMMA@20..21 ","
+                  MatchArm@21..35
+                    EnumShorthandPat@21..30
+                      WHITESPACE@21..22 " "
+                      DOT@22..23 "."
+                      Name@23..27
+                        IDENT@23..27 "Some"
+                      L_PAREN@27..28 "("
+                      IdentPat@28..29
+                        Name@28..29
+                          IDENT@28..29 "v"
+                      R_PAREN@29..30 ")"
+                    WHITESPACE@30..31 " "
+                    FAT_ARROW@31..33 "=>"
+                    PathExpr@33..35
+                      Path@33..35
+                        PathSegment@33..35
+                          NameRef@33..35
+                            WHITESPACE@33..34 " "
+                            IDENT@34..35 "v"
+                  WHITESPACE@35..36 " "
+                  R_BRACE@36..37 "}"
             "#]],
         );
     }

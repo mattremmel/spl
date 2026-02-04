@@ -1275,6 +1275,16 @@ impl<'ctx> Resolver<'ctx> {
                     self.ctx.exit_scope();
                 }
             }
+            // Enum shorthand: .Variant or .Variant(args)
+            // Variant resolution requires type info (deferred to type checking)
+            Expr::EnumShorthand(shorthand) => {
+                // Resolve argument expressions
+                for arg in shorthand.args() {
+                    if let Some(value) = arg.value() {
+                        self.resolve_expr(&value);
+                    }
+                }
+            }
         }
     }
 
@@ -1376,6 +1386,13 @@ impl<'ctx> Resolver<'ctx> {
                     self.resolve_pattern_types(&inner);
                 }
             }
+            // Enum shorthand pattern: .Variant or .Variant(patterns)
+            // Variant resolution requires type info (deferred to type checking)
+            Pat::EnumShorthand(shorthand) => {
+                for inner in shorthand.patterns() {
+                    self.resolve_pattern_types(&inner);
+                }
+            }
             Pat::Ident(_) | Pat::Wildcard(_) | Pat::Literal(_) | Pat::Rest(_) | Pat::Range(_) => {}
         }
     }
@@ -1430,6 +1447,12 @@ impl<'ctx> Resolver<'ctx> {
             Pat::Struct(struct_pat) => self.define_struct_pattern(struct_pat, outer_mutable),
             Pat::Ref(ref_pat) => {
                 if let Some(inner) = ref_pat.pat() {
+                    self.define_pattern(&inner, outer_mutable);
+                }
+            }
+            // Enum shorthand pattern: .Variant or .Variant(patterns)
+            Pat::EnumShorthand(shorthand) => {
+                for inner in shorthand.patterns() {
                     self.define_pattern(&inner, outer_mutable);
                 }
             }

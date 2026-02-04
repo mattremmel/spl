@@ -31,6 +31,7 @@ ast_node!(RangeExpr);
 ast_node!(IsExpr);
 ast_node!(MatchExpr);
 ast_node!(MatchArm);
+ast_node!(EnumShorthandExpr);
 ast_node!(Path);
 ast_node!(PathSegment);
 
@@ -62,6 +63,7 @@ ast_enum!(
         Range(RangeExpr),
         Is(IsExpr),
         Match(MatchExpr),
+        EnumShorthand(EnumShorthandExpr),
     }
 );
 
@@ -471,6 +473,18 @@ impl MatchArm {
         // Body is the expression after `=>`
         let arrow_pos = token(&self.0, SyntaxKind::FAT_ARROW)?.text_range().end();
         children::<Expr>(&self.0).find(|expr| expr.syntax().text_range().start() >= arrow_pos)
+    }
+}
+
+impl EnumShorthandExpr {
+    /// Get the variant name.
+    pub fn variant_name(&self) -> Option<crate::Name> {
+        child(&self.0)
+    }
+
+    /// Get the arguments, if any.
+    pub fn args(&self) -> impl Iterator<Item = CallArg> {
+        children(&self.0)
     }
 }
 

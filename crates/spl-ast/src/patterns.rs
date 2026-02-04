@@ -13,6 +13,7 @@ ast_node!(StructPat);
 ast_node!(RefPat);
 ast_node!(RestPat);
 ast_node!(StructPatField);
+ast_node!(EnumShorthandPat);
 
 ast_enum!(
     /// Pattern enum - all pattern variants.
@@ -26,6 +27,7 @@ ast_enum!(
         Struct(StructPat),
         Ref(RefPat),
         Rest(RestPat),
+        EnumShorthand(EnumShorthandPat),
     }
 );
 
@@ -148,6 +150,18 @@ impl RefPat {
 
 impl RestPat {
     // Rest is just `..`
+}
+
+impl EnumShorthandPat {
+    /// Get the variant name.
+    pub fn variant_name(&self) -> Option<Name> {
+        child(&self.0)
+    }
+
+    /// Get the inner patterns, if any.
+    pub fn patterns(&self) -> impl Iterator<Item = Pat> {
+        children(&self.0)
+    }
 }
 
 #[cfg(test)]

@@ -314,6 +314,18 @@ impl<'a> InferEngine<'a> {
             Expr::Range(range) => self.synth_range(range),
             Expr::Is(is_expr) => self.synth_is(is_expr),
             Expr::Match(match_expr) => self.synth_match(match_expr),
+            // Enum shorthand: .Variant or .Variant(args)
+            // TODO: Implement full type inference - requires expected type context
+            Expr::EnumShorthand(shorthand) => {
+                // For now, synthesize arguments to ensure they're type-checked
+                for arg in shorthand.args() {
+                    if let Some(value) = arg.value() {
+                        self.synth_expr(&value);
+                    }
+                }
+                // Return error - full inference requires expected type context
+                self.types.error()
+            }
         };
         self.results.expr_types.insert(span, type_id);
         type_id

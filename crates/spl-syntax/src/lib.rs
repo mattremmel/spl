@@ -198,6 +198,7 @@ pub enum SyntaxKind {
     IsExpr,
     MatchExpr,
     MatchArm,
+    EnumShorthandExpr,
 
     // Types
     RefType,
@@ -219,6 +220,7 @@ pub enum SyntaxKind {
     RefPat,
     RestPat,
     StructPatField,
+    EnumShorthandPat,
 
     // Names & Paths
     Name,

@@ -396,7 +396,36 @@ impl AstPrinter {
             Expr::Range(r) => self.print_range_expr(r),
             Expr::Is(i) => self.print_is_expr(i),
             Expr::Match(m) => self.print_match_expr(m),
+            Expr::EnumShorthand(e) => self.print_enum_shorthand_expr(e),
         }
+    }
+
+    fn print_enum_shorthand_expr(&mut self, expr: &crate::EnumShorthandExpr) {
+        let name = expr
+            .variant_name()
+            .and_then(|n| n.ident_token())
+            .map(|t| t.text().to_string())
+            .unwrap_or_else(|| "?".to_string());
+        self.line(&format!("EnumShorthandExpr \".{name}\""));
+        self.indented(|p| {
+            for arg in expr.args() {
+                let arg_name = arg.name_token().map(|t| t.text().to_string()).or_else(|| {
+                    arg.name()
+                        .and_then(|n| n.token())
+                        .map(|t| t.text().to_string())
+                });
+                if let Some(arg_name) = arg_name {
+                    p.line(&format!("NamedArg \"{arg_name}\""));
+                } else {
+                    p.line("PositionalArg");
+                }
+                p.indented(|p| {
+                    if let Some(value) = arg.value() {
+                        p.print_expr(&value);
+                    }
+                });
+            }
+        });
     }
 
     fn print_is_expr(&mut self, is_expr: &IsExpr) {
@@ -893,6 +922,7 @@ impl AstPrinter {
             Pat::Struct(s) => self.print_struct_pat(s),
             Pat::Ref(r) => self.print_ref_pat(r),
             Pat::Rest(_) => self.line("RestPat \"..\""),
+            Pat::EnumShorthand(e) => self.print_enum_shorthand_pat(e),
         }
     }
 
@@ -986,6 +1016,20 @@ impl AstPrinter {
         self.indented(|p| {
             if let Some(pat) = r.pat() {
                 p.print_pattern(&pat);
+            }
+        });
+    }
+
+    fn print_enum_shorthand_pat(&mut self, pat: &crate::EnumShorthandPat) {
+        let name = pat
+            .variant_name()
+            .and_then(|n| n.ident_token())
+            .map(|t| t.text().to_string())
+            .unwrap_or_else(|| "?".to_string());
+        self.line(&format!("EnumShorthandPat \".{name}\""));
+        self.indented(|p| {
+            for inner in pat.patterns() {
+                p.print_pattern(&inner);
             }
         });
     }
