@@ -31,6 +31,15 @@ SPL uses a clean, consistent syntax with several key principles:
 
 Trailing commas are allowed in all comma-separated lists.
 
+**Case-Sensitive Identifiers:**
+
+| Token | Meaning |
+|-------|---------|
+| `UPPER_IDENT` | Identifier starting with A-Z (type parameters, enum variants) |
+| `LOWER_IDENT` | Identifier starting with a-z or _ (value parameters, field names) |
+
+The lexer produces a single `IDENTIFIER` token. The parser checks the first character to select the appropriate grammar alternative. This case-based disambiguation is a hard rule—no backtracking occurs.
+
 **Semicolons in the Grammar:** Per the optional semicolons design principle, semicolons are inferred from newlines and only required when multiple statements appear on the same line. Productions that include `[ ";" ]` indicate where an explicit semicolon is syntactically permitted, not where it is required. Productions ending with clear delimiters (blocks `{}`, parenthesized fields `()`) omit `[ ";" ]` since the delimiter itself terminates the construct.
 
 ---
@@ -336,7 +345,7 @@ Named vs positional fields are distinguished by the presence of `:` after an ide
 ### Enum Definitions
 
 ```ebnf
-(* Enums use braces for declarations, like structs *)
+(* Enums use braces for their variant list *)
 (* Type parameters appear in variant data types and must be declared in the where clause *)
 EnumDef = "enum" IDENTIFIER "{" [ VariantList ] "}" [ WhereClause ] ;
 
@@ -355,6 +364,8 @@ Variant = UPPER_IDENT [ "(" VariantFields ")" ] ;
    a semantic error. *)
 VariantFields = FieldList           (* named fields: x: i32, y: i32 *)
               | TypeList ;          (* tuple fields: i32, String *)
+
+(* Note: TypeList is defined in section 2 (Types). *)
 ```
 
 **Examples:**
@@ -396,7 +407,7 @@ TraitDef = [ "unsafe" ] "trait" IDENTIFIER [ GenericArgs ] [ ":" TypeBound { "+"
 
 TraitItem = [ "pub" ] ( TraitMethod | AssociatedType ) ;
 
-TraitMethod = "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ WhereClause ] ( ";" | Block ) ;
+TraitMethod = [ "const" ] [ "unsafe" ] "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ ThrowsClause ] [ WhereClause ] ( ";" | Block ) ;
 
 AssociatedType = "type" IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] [ ";" ] ;
 ```
@@ -1022,9 +1033,7 @@ Arg = NamedArg                              (* named argument: case determines t
 NamedArg = UPPER_IDENT ":" Type             (* type argument: T: i32 *)
          | LOWER_IDENT ":" Expression ;     (* value argument: x: 1 *)
 
-(* Note: The lexer produces a single IDENTIFIER token. UPPER_IDENT means an
-   identifier starting with A-Z; LOWER_IDENT means starting with a-z or _.
-   The parser checks the first character to select the appropriate alternative. *)
+(* Note: UPPER_IDENT and LOWER_IDENT are defined in the EBNF Notation section. *)
 ```
 
 ### Primary Expressions
@@ -1071,6 +1080,11 @@ ClosureParams = "||"
    return type annotation syntax is provided, matching Rust's behavior. *)
 ClosureBody = Block | Expression ;
 
+(* Note: `||` is disambiguated by position. In prefix position (start of an
+   expression where a closure is expected), `||` begins an empty-parameter
+   closure. In infix position (between two expressions), `||` is logical OR.
+   The parser context determines which interpretation applies. *)
+
 (* Note: Explicit capture lists (@[...]) control whether variables are
    captured by reference or by value. The capture expression determines
    ownership: `@[x]` captures x by value (moves), `@[x: &x]` captures by
@@ -1104,20 +1118,12 @@ StructExprPath = TypePath | "Self" ;
 
 StructArgList = StructArg { "," StructArg } [ "," ] ;
 
-(* Case-based disambiguation (see section 11):
-   - Uppercase IDENTIFIER → TypeArg (type argument)
-   - Lowercase IDENTIFIER → StructField (value field)
+(* Case-based disambiguation (see EBNF Notation section):
+   - UPPER_IDENT (starts A-Z) → type argument
+   - LOWER_IDENT (starts a-z or _) → value field
    This is a hard rule; no backtracking occurs. *)
-StructArg = TypeArg                            (* type argument: T: Type *)
-          | StructField ;                      (* value field: name: expr or shorthand *)
-
-(* Field with optional expression; colon separates name from value *)
-(* Bare identifier = shorthand: `x` means `x: x` *)
-(* Note: Uppercase identifiers are parsed as TypeArg (see StructArg above).
-   Lowercase identifiers are struct field names. Using an uppercase field name
-   (e.g., `Type: "json"`) would be parsed as a type argument and produce a
-   semantic error, since "json" is not a valid type. *)
-StructField = IDENTIFIER [ ":" Expression ] ;
+StructArg = UPPER_IDENT [ ":" Type ]           (* type argument: T: Type or T shorthand *)
+          | LOWER_IDENT [ ":" Expression ] ;   (* value field: name: expr or name shorthand *)
 
 (* Match expression *)
 MatchExpr = "match" Expression "{" { MatchArm } "}" ;
@@ -1500,7 +1506,7 @@ EnumPatternFields = EnumPatternField { "," EnumPatternField } [ "," ] [ ".." ] ;
    the pattern is interpreted as shorthand for `x: x` (bind field x to variable x).
    Otherwise, it's a positional match. This mirrors struct field shorthand in
    expressions — see "Struct Field Shorthand" in the Ambiguity Resolution section. *)
-EnumPatternField = IDENTIFIER ":" Pattern       (* explicit: field name with pattern *)
+EnumPatternField = LOWER_IDENT ":" Pattern      (* explicit: field name with pattern *)
                  | Pattern ;                     (* positional or shorthand *)
 
 ReferencePattern = "&" [ "mut" ] Pattern ;
