@@ -142,17 +142,23 @@ fn lhs(
 // Gaps between levels allow inserting new precedences without renumbering.
 
 const BP_ASSIGN: (u8, u8) = (2, 1); // r_bp < l_bp: right-associative
-const BP_LOGICAL_OR: (u8, u8) = (3, 4);
-const BP_LOGICAL_AND: (u8, u8) = (5, 6);
-const BP_IS: (u8, u8) = (7, 8); // Pattern matching: `x is Some(v)`
-const BP_EQUALITY: (u8, u8) = (9, 10);
-const BP_COMPARISON: (u8, u8) = (11, 12);
-const BP_RANGE: (u8, u8) = (13, 14);
-const BP_ADDITIVE: (u8, u8) = (15, 16);
-const BP_MULTIPLICATIVE: (u8, u8) = (17, 18);
-const BP_CAST: (u8, u8) = (19, 20);
-const BP_PREFIX: u8 = 21;
-const BP_POSTFIX: u8 = 23;
+const BP_COALESCE: (u8, u8) = (4, 3); // right-associative: l_bp > r_bp
+const BP_LOGICAL_OR: (u8, u8) = (5, 6);
+const BP_LOGICAL_AND: (u8, u8) = (7, 8);
+const BP_IS: (u8, u8) = (9, 10); // Pattern matching: `x is Some(v)`
+const BP_EQUALITY: (u8, u8) = (11, 12);
+const BP_COMPARISON: (u8, u8) = (13, 14);
+const BP_BITWISE_OR: (u8, u8) = (15, 16);
+const BP_BITWISE_XOR: (u8, u8) = (17, 18);
+const BP_BITWISE_AND: (u8, u8) = (19, 20);
+const BP_SHIFT: (u8, u8) = (21, 22);
+const BP_RANGE: (u8, u8) = (23, 24);
+const BP_ADDITIVE: (u8, u8) = (25, 26);
+const BP_MULTIPLICATIVE: (u8, u8) = (27, 28);
+const BP_EXPONENTIATION: (u8, u8) = (30, 29); // right-associative: l_bp > r_bp
+const BP_CAST: (u8, u8) = (31, 32);
+const BP_PREFIX: u8 = 33;
+const BP_POSTFIX: u8 = 35;
 
 /// Maximum expression nesting depth to prevent stack overflow on malicious input.
 /// 256 levels is sufficient for any reasonable code while preventing `DoS` attacks.
@@ -161,10 +167,12 @@ const MAX_EXPR_DEPTH: usize = 256;
 /// Prefix operator binding power ((), right).
 fn prefix_bp(op: SyntaxKind) -> Option<((), u8)> {
     match op {
-        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::PLUS | SyntaxKind::STAR => {
-            Some(((), BP_PREFIX))
-        }
-        SyntaxKind::AMP => Some(((), BP_PREFIX)),
+        SyntaxKind::BANG
+        | SyntaxKind::MINUS
+        | SyntaxKind::PLUS
+        | SyntaxKind::STAR
+        | SyntaxKind::TILDE
+        | SyntaxKind::AMP => Some(((), BP_PREFIX)),
         SyntaxKind::DOT_DOT | SyntaxKind::DOT_DOT_EQ => Some(((), BP_RANGE.1)), // Range prefix: same r_bp as infix range
         _ => None,
     }
@@ -178,8 +186,17 @@ fn infix_bp(op: SyntaxKind) -> Option<(u8, u8)> {
         | SyntaxKind::PLUS_EQ
         | SyntaxKind::MINUS_EQ
         | SyntaxKind::STAR_EQ
+        | SyntaxKind::STAR_STAR_EQ
         | SyntaxKind::SLASH_EQ
-        | SyntaxKind::PERCENT_EQ => Some(BP_ASSIGN),
+        | SyntaxKind::PERCENT_EQ
+        | SyntaxKind::PIPE_EQ
+        | SyntaxKind::CARET_EQ
+        | SyntaxKind::AMP_EQ
+        | SyntaxKind::SHL_EQ
+        | SyntaxKind::SHR_EQ => Some(BP_ASSIGN),
+
+        // Coalesce (right-associative)
+        SyntaxKind::QUESTION_QUESTION => Some(BP_COALESCE),
 
         // Logical OR (left-associative)
         SyntaxKind::OR_OR => Some(BP_LOGICAL_OR),
@@ -196,6 +213,18 @@ fn infix_bp(op: SyntaxKind) -> Option<(u8, u8)> {
         // Comparison (left-associative)
         SyntaxKind::LT | SyntaxKind::GT | SyntaxKind::LE | SyntaxKind::GE => Some(BP_COMPARISON),
 
+        // Bitwise OR (left-associative)
+        SyntaxKind::PIPE => Some(BP_BITWISE_OR),
+
+        // Bitwise XOR (left-associative)
+        SyntaxKind::CARET => Some(BP_BITWISE_XOR),
+
+        // Bitwise AND (left-associative) - in infix position, AMP is bitwise AND
+        SyntaxKind::AMP => Some(BP_BITWISE_AND),
+
+        // Shift (left-associative)
+        SyntaxKind::SHL | SyntaxKind::SHR => Some(BP_SHIFT),
+
         // Range (left-associative)
         SyntaxKind::DOT_DOT | SyntaxKind::DOT_DOT_EQ => Some(BP_RANGE),
 
@@ -204,6 +233,9 @@ fn infix_bp(op: SyntaxKind) -> Option<(u8, u8)> {
 
         // Multiplicative (left-associative)
         SyntaxKind::STAR | SyntaxKind::SLASH | SyntaxKind::PERCENT => Some(BP_MULTIPLICATIVE),
+
+        // Exponentiation (right-associative)
+        SyntaxKind::STAR_STAR => Some(BP_EXPONENTIATION),
 
         // Cast (left-associative)
         SyntaxKind::AS_KW => Some(BP_CAST),
@@ -1065,6 +1097,708 @@ mod tests {
                         NameRef@6..10
                           WHITESPACE@6..7 " "
                           IDENT@7..10 "i32"
+            "#]],
+        );
+    }
+
+    // === Exponentiation Operator ===
+
+    #[test]
+    fn exponentiation_simple() {
+        check_expr(
+            "2 ** 3",
+            &expect![[r#"
+                BinExpr@0..6
+                  LiteralExpr@0..1
+                    INT_LITERAL@0..1 "2"
+                  WHITESPACE@1..2 " "
+                  STAR_STAR@2..4 "**"
+                  LiteralExpr@4..6
+                    WHITESPACE@4..5 " "
+                    INT_LITERAL@5..6 "3"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn exponentiation_right_associative() {
+        // 2 ** 3 ** 2 parses as 2 ** (3 ** 2)
+        check_expr(
+            "2**3**2",
+            &expect![[r#"
+                BinExpr@0..7
+                  LiteralExpr@0..1
+                    INT_LITERAL@0..1 "2"
+                  STAR_STAR@1..3 "**"
+                  BinExpr@3..7
+                    LiteralExpr@3..4
+                      INT_LITERAL@3..4 "3"
+                    STAR_STAR@4..6 "**"
+                    LiteralExpr@6..7
+                      INT_LITERAL@6..7 "2"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn exponentiation_binds_tighter_than_mult() {
+        // a * b ** c parses as a * (b ** c)
+        check_expr(
+            "a*b**c",
+            &expect![[r#"
+                BinExpr@0..6
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  STAR@1..2 "*"
+                  BinExpr@2..6
+                    PathExpr@2..3
+                      Path@2..3
+                        PathSegment@2..3
+                          NameRef@2..3
+                            IDENT@2..3 "b"
+                    STAR_STAR@3..5 "**"
+                    PathExpr@5..6
+                      Path@5..6
+                        PathSegment@5..6
+                          NameRef@5..6
+                            IDENT@5..6 "c"
+            "#]],
+        );
+    }
+
+    // === Coalesce Operator ===
+
+    #[test]
+    fn coalesce_simple() {
+        check_expr(
+            "a ?? b",
+            &expect![[r#"
+                BinExpr@0..6
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  WHITESPACE@1..2 " "
+                  QUESTION_QUESTION@2..4 "??"
+                  PathExpr@4..6
+                    Path@4..6
+                      PathSegment@4..6
+                        NameRef@4..6
+                          WHITESPACE@4..5 " "
+                          IDENT@5..6 "b"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn coalesce_right_associative() {
+        // a ?? b ?? c parses as a ?? (b ?? c)
+        check_expr(
+            "a??b??c",
+            &expect![[r#"
+                BinExpr@0..7
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  QUESTION_QUESTION@1..3 "??"
+                  BinExpr@3..7
+                    PathExpr@3..4
+                      Path@3..4
+                        PathSegment@3..4
+                          NameRef@3..4
+                            IDENT@3..4 "b"
+                    QUESTION_QUESTION@4..6 "??"
+                    PathExpr@6..7
+                      Path@6..7
+                        PathSegment@6..7
+                          NameRef@6..7
+                            IDENT@6..7 "c"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn coalesce_lower_than_logical_or() {
+        // a ?? b || c parses as (a ?? b) || c since || binds tighter than ??
+        check_expr(
+            "a??b||c",
+            &expect![[r#"
+                BinExpr@0..7
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  QUESTION_QUESTION@1..3 "??"
+                  BinExpr@3..7
+                    PathExpr@3..4
+                      Path@3..4
+                        PathSegment@3..4
+                          NameRef@3..4
+                            IDENT@3..4 "b"
+                    OR_OR@4..6 "||"
+                    PathExpr@6..7
+                      Path@6..7
+                        PathSegment@6..7
+                          NameRef@6..7
+                            IDENT@6..7 "c"
+            "#]],
+        );
+    }
+
+    // === Bitwise Operators ===
+
+    #[test]
+    fn bitwise_or_simple() {
+        check_expr(
+            "a | b",
+            &expect![[r#"
+                BinExpr@0..5
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  WHITESPACE@1..2 " "
+                  PIPE@2..3 "|"
+                  PathExpr@3..5
+                    Path@3..5
+                      PathSegment@3..5
+                        NameRef@3..5
+                          WHITESPACE@3..4 " "
+                          IDENT@4..5 "b"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn bitwise_or_left_associative() {
+        // a | b | c parses as (a | b) | c
+        check_expr(
+            "a|b|c",
+            &expect![[r#"
+                BinExpr@0..5
+                  BinExpr@0..3
+                    PathExpr@0..1
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "a"
+                    PIPE@1..2 "|"
+                    PathExpr@2..3
+                      Path@2..3
+                        PathSegment@2..3
+                          NameRef@2..3
+                            IDENT@2..3 "b"
+                  PIPE@3..4 "|"
+                  PathExpr@4..5
+                    Path@4..5
+                      PathSegment@4..5
+                        NameRef@4..5
+                          IDENT@4..5 "c"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn bitwise_xor_simple() {
+        check_expr(
+            "a ^ b",
+            &expect![[r#"
+                BinExpr@0..5
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  WHITESPACE@1..2 " "
+                  CARET@2..3 "^"
+                  PathExpr@3..5
+                    Path@3..5
+                      PathSegment@3..5
+                        NameRef@3..5
+                          WHITESPACE@3..4 " "
+                          IDENT@4..5 "b"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn bitwise_xor_binds_tighter_than_or() {
+        // a | b ^ c parses as a | (b ^ c)
+        check_expr(
+            "a|b^c",
+            &expect![[r#"
+                BinExpr@0..5
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  PIPE@1..2 "|"
+                  BinExpr@2..5
+                    PathExpr@2..3
+                      Path@2..3
+                        PathSegment@2..3
+                          NameRef@2..3
+                            IDENT@2..3 "b"
+                    CARET@3..4 "^"
+                    PathExpr@4..5
+                      Path@4..5
+                        PathSegment@4..5
+                          NameRef@4..5
+                            IDENT@4..5 "c"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn bitwise_and_simple() {
+        check_expr(
+            "a & b",
+            &expect![[r#"
+                BinExpr@0..5
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  WHITESPACE@1..2 " "
+                  AMP@2..3 "&"
+                  PathExpr@3..5
+                    Path@3..5
+                      PathSegment@3..5
+                        NameRef@3..5
+                          WHITESPACE@3..4 " "
+                          IDENT@4..5 "b"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn bitwise_and_binds_tighter_than_xor() {
+        // a ^ b & c parses as a ^ (b & c)
+        check_expr(
+            "a^b&c",
+            &expect![[r#"
+                BinExpr@0..5
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  CARET@1..2 "^"
+                  BinExpr@2..5
+                    PathExpr@2..3
+                      Path@2..3
+                        PathSegment@2..3
+                          NameRef@2..3
+                            IDENT@2..3 "b"
+                    AMP@3..4 "&"
+                    PathExpr@4..5
+                      Path@4..5
+                        PathSegment@4..5
+                          NameRef@4..5
+                            IDENT@4..5 "c"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn bitwise_and_vs_comparison() {
+        // a < b & c parses as a < (b & c) since bitwise ops bind tighter than comparison
+        check_expr(
+            "a<b&c",
+            &expect![[r#"
+                BinExpr@0..5
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  LT@1..2 "<"
+                  BinExpr@2..5
+                    PathExpr@2..3
+                      Path@2..3
+                        PathSegment@2..3
+                          NameRef@2..3
+                            IDENT@2..3 "b"
+                    AMP@3..4 "&"
+                    PathExpr@4..5
+                      Path@4..5
+                        PathSegment@4..5
+                          NameRef@4..5
+                            IDENT@4..5 "c"
+            "#]],
+        );
+    }
+
+    // === Shift Operators ===
+
+    #[test]
+    fn shift_left_simple() {
+        check_expr(
+            "a << 2",
+            &expect![[r#"
+                BinExpr@0..6
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  WHITESPACE@1..2 " "
+                  SHL@2..4 "<<"
+                  LiteralExpr@4..6
+                    WHITESPACE@4..5 " "
+                    INT_LITERAL@5..6 "2"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn shift_right_simple() {
+        check_expr(
+            "a >> 2",
+            &expect![[r#"
+                BinExpr@0..6
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  WHITESPACE@1..2 " "
+                  SHR@2..4 ">>"
+                  LiteralExpr@4..6
+                    WHITESPACE@4..5 " "
+                    INT_LITERAL@5..6 "2"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn shift_left_associative() {
+        // a << 2 >> 1 parses as (a << 2) >> 1
+        check_expr(
+            "a<<2>>1",
+            &expect![[r#"
+                BinExpr@0..7
+                  BinExpr@0..4
+                    PathExpr@0..1
+                      Path@0..1
+                        PathSegment@0..1
+                          NameRef@0..1
+                            IDENT@0..1 "a"
+                    SHL@1..3 "<<"
+                    LiteralExpr@3..4
+                      INT_LITERAL@3..4 "2"
+                  SHR@4..6 ">>"
+                  LiteralExpr@6..7
+                    INT_LITERAL@6..7 "1"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn shift_binds_tighter_than_bitwise_and() {
+        // a & b << 2 parses as a & (b << 2)
+        check_expr(
+            "a&b<<2",
+            &expect![[r#"
+                BinExpr@0..6
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  AMP@1..2 "&"
+                  BinExpr@2..6
+                    PathExpr@2..3
+                      Path@2..3
+                        PathSegment@2..3
+                          NameRef@2..3
+                            IDENT@2..3 "b"
+                    SHL@3..5 "<<"
+                    LiteralExpr@5..6
+                      INT_LITERAL@5..6 "2"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn shift_binds_looser_than_additive() {
+        // a << 2 + 1 parses as a << (2 + 1) since arithmetic binds tighter
+        check_expr(
+            "a<<2+1",
+            &expect![[r#"
+                BinExpr@0..6
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  SHL@1..3 "<<"
+                  BinExpr@3..6
+                    LiteralExpr@3..4
+                      INT_LITERAL@3..4 "2"
+                    PLUS@4..5 "+"
+                    LiteralExpr@5..6
+                      INT_LITERAL@5..6 "1"
+            "#]],
+        );
+    }
+
+    // === Compound Assignment Operators ===
+
+    #[test]
+    fn compound_pipe_eq() {
+        check_expr(
+            "x |= 1",
+            &expect![[r#"
+                BinExpr@0..6
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
+                  WHITESPACE@1..2 " "
+                  PIPE_EQ@2..4 "|="
+                  LiteralExpr@4..6
+                    WHITESPACE@4..5 " "
+                    INT_LITERAL@5..6 "1"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn compound_caret_eq() {
+        check_expr(
+            "x ^= 1",
+            &expect![[r#"
+                BinExpr@0..6
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
+                  WHITESPACE@1..2 " "
+                  CARET_EQ@2..4 "^="
+                  LiteralExpr@4..6
+                    WHITESPACE@4..5 " "
+                    INT_LITERAL@5..6 "1"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn compound_amp_eq() {
+        check_expr(
+            "x &= 1",
+            &expect![[r#"
+                BinExpr@0..6
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
+                  WHITESPACE@1..2 " "
+                  AMP_EQ@2..4 "&="
+                  LiteralExpr@4..6
+                    WHITESPACE@4..5 " "
+                    INT_LITERAL@5..6 "1"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn compound_shl_eq() {
+        check_expr(
+            "x <<= 1",
+            &expect![[r#"
+                BinExpr@0..7
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
+                  WHITESPACE@1..2 " "
+                  SHL_EQ@2..5 "<<="
+                  LiteralExpr@5..7
+                    WHITESPACE@5..6 " "
+                    INT_LITERAL@6..7 "1"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn compound_shr_eq() {
+        check_expr(
+            "x >>= 1",
+            &expect![[r#"
+                BinExpr@0..7
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
+                  WHITESPACE@1..2 " "
+                  SHR_EQ@2..5 ">>="
+                  LiteralExpr@5..7
+                    WHITESPACE@5..6 " "
+                    INT_LITERAL@6..7 "1"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn compound_star_star_eq() {
+        check_expr(
+            "x **= 2",
+            &expect![[r#"
+                BinExpr@0..7
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "x"
+                  WHITESPACE@1..2 " "
+                  STAR_STAR_EQ@2..5 "**="
+                  LiteralExpr@5..7
+                    WHITESPACE@5..6 " "
+                    INT_LITERAL@6..7 "2"
+            "#]],
+        );
+    }
+
+    // === Integration Tests: Precedence Chains ===
+
+    #[test]
+    fn precedence_bitwise_chain() {
+        // a | b ^ c & d << 2 parses as a | (b ^ (c & (d << 2)))
+        check_expr(
+            "a|b^c&d<<2",
+            &expect![[r#"
+                BinExpr@0..10
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  PIPE@1..2 "|"
+                  BinExpr@2..10
+                    PathExpr@2..3
+                      Path@2..3
+                        PathSegment@2..3
+                          NameRef@2..3
+                            IDENT@2..3 "b"
+                    CARET@3..4 "^"
+                    BinExpr@4..10
+                      PathExpr@4..5
+                        Path@4..5
+                          PathSegment@4..5
+                            NameRef@4..5
+                              IDENT@4..5 "c"
+                      AMP@5..6 "&"
+                      BinExpr@6..10
+                        PathExpr@6..7
+                          Path@6..7
+                            PathSegment@6..7
+                              NameRef@6..7
+                                IDENT@6..7 "d"
+                        SHL@7..9 "<<"
+                        LiteralExpr@9..10
+                          INT_LITERAL@9..10 "2"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn precedence_coalesce_with_logical() {
+        // a ?? b || c && d parses as (a ?? (b || (c && d)))
+        // Since coalesce has lowest precedence (after assign), and || binds tighter than ??, etc.
+        check_expr(
+            "a??b||c&&d",
+            &expect![[r#"
+                BinExpr@0..10
+                  PathExpr@0..1
+                    Path@0..1
+                      PathSegment@0..1
+                        NameRef@0..1
+                          IDENT@0..1 "a"
+                  QUESTION_QUESTION@1..3 "??"
+                  BinExpr@3..10
+                    PathExpr@3..4
+                      Path@3..4
+                        PathSegment@3..4
+                          NameRef@3..4
+                            IDENT@3..4 "b"
+                    OR_OR@4..6 "||"
+                    BinExpr@6..10
+                      PathExpr@6..7
+                        Path@6..7
+                          PathSegment@6..7
+                            NameRef@6..7
+                              IDENT@6..7 "c"
+                      AND_AND@7..9 "&&"
+                      PathExpr@9..10
+                        Path@9..10
+                          PathSegment@9..10
+                            NameRef@9..10
+                              IDENT@9..10 "d"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn precedence_exponentiation_chain_with_mult() {
+        // 2 ** 3 ** 2 * 4 parses as (2 ** (3 ** 2)) * 4 since ** is right-assoc
+        // and ** binds tighter than *
+        check_expr(
+            "2**3**2*4",
+            &expect![[r#"
+                BinExpr@0..9
+                  BinExpr@0..7
+                    LiteralExpr@0..1
+                      INT_LITERAL@0..1 "2"
+                    STAR_STAR@1..3 "**"
+                    BinExpr@3..7
+                      LiteralExpr@3..4
+                        INT_LITERAL@3..4 "3"
+                      STAR_STAR@4..6 "**"
+                      LiteralExpr@6..7
+                        INT_LITERAL@6..7 "2"
+                  STAR@7..8 "*"
+                  LiteralExpr@8..9
+                    INT_LITERAL@8..9 "4"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn tilde_in_expression() {
+        // ~a & b parses as (~a) & b
+        check_expr(
+            "~a&b",
+            &expect![[r#"
+                BinExpr@0..4
+                  PrefixExpr@0..2
+                    TILDE@0..1 "~"
+                    PathExpr@1..2
+                      Path@1..2
+                        PathSegment@1..2
+                          NameRef@1..2
+                            IDENT@1..2 "a"
+                  AMP@2..3 "&"
+                  PathExpr@3..4
+                    Path@3..4
+                      PathSegment@3..4
+                        NameRef@3..4
+                          IDENT@3..4 "b"
             "#]],
         );
     }

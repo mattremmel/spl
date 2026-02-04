@@ -78,9 +78,11 @@ pub(super) fn prefix_expr(
     }
 
     let kind = match op {
-        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::PLUS | SyntaxKind::STAR => {
-            SyntaxKind::PrefixExpr
-        }
+        SyntaxKind::BANG
+        | SyntaxKind::MINUS
+        | SyntaxKind::PLUS
+        | SyntaxKind::STAR
+        | SyntaxKind::TILDE => SyntaxKind::PrefixExpr,
         _ => unreachable!("unexpected prefix operator: {:?}", op),
     };
 
@@ -1588,6 +1590,39 @@ mod tests {
                     LiteralExpr@19..21
                       WHITESPACE@19..20 " "
                       INT_LITERAL@20..21 "0"
+            "#]],
+        );
+    }
+
+    // === Bitwise Operators ===
+
+    #[test]
+    fn prefix_bitwise_not() {
+        check_expr(
+            "~42",
+            &expect![[r#"
+                PrefixExpr@0..3
+                  TILDE@0..1 "~"
+                  LiteralExpr@1..3
+                    INT_LITERAL@1..3 "42"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn prefix_double_tilde() {
+        check_expr(
+            "~~x",
+            &expect![[r#"
+                PrefixExpr@0..3
+                  TILDE@0..1 "~"
+                  PrefixExpr@1..3
+                    TILDE@1..2 "~"
+                    PathExpr@2..3
+                      Path@2..3
+                        PathSegment@2..3
+                          NameRef@2..3
+                            IDENT@2..3 "x"
             "#]],
         );
     }
