@@ -89,6 +89,8 @@ fn is_item_start(kind: SyntaxKind) -> bool {
             | SyntaxKind::EXTERN_KW
             | SyntaxKind::MODULE_KW
             | SyntaxKind::UNSAFE_KW
+            | SyntaxKind::CONST_KW
+            | SyntaxKind::STATIC_KW
     )
 }
 
@@ -951,6 +953,105 @@ fn paren_field_def(p: &mut Parser<'_>, index: u32) -> Result<CompletedMarker, cr
     Ok(m.complete(p, SyntaxKind::FieldDef))
 }
 
+/// Parse a static definition: `[attrs] [pub] static [mut] Name: Type = Expr [;]`
+pub(crate) fn static_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    // Optional attributes
+    opt_attributes(p);
+
+    // Optional visibility
+    opt_visibility(p);
+
+    // static keyword
+    if let Err(e) = p.expect(SyntaxKind::STATIC_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional mut
+    p.eat(SyntaxKind::MUT_KW);
+
+    // Static name
+    if let Err(e) = name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // : Type
+    if let Err(e) = p.expect(SyntaxKind::COLON) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = stmt::type_annotation(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // = Expr
+    if let Err(e) = p.expect(SyntaxKind::EQ) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = expr::expr(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional semicolon
+    p.eat(SyntaxKind::SEMI);
+
+    Ok(m.complete(p, SyntaxKind::StaticDef))
+}
+
+/// Parse a const definition: `[attrs] [pub] const Name: Type = Expr [;]`
+pub(crate) fn const_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    // Optional attributes
+    opt_attributes(p);
+
+    // Optional visibility
+    opt_visibility(p);
+
+    // const keyword
+    if let Err(e) = p.expect(SyntaxKind::CONST_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Const name
+    if let Err(e) = name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // : Type
+    if let Err(e) = p.expect(SyntaxKind::COLON) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = stmt::type_annotation(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // = Expr
+    if let Err(e) = p.expect(SyntaxKind::EQ) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = expr::expr(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional semicolon
+    p.eat(SyntaxKind::SEMI);
+
+    Ok(m.complete(p, SyntaxKind::ConstDef))
+}
+
 /// Parse a type alias: `[attrs] [pub] type Name = Type [where ...];`
 pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
@@ -1336,9 +1437,11 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseEr
         Some(SyntaxKind::EXTERN_KW) if !has_pub => extern_block(p),
         Some(SyntaxKind::USE_KW) => use_decl(p),
         Some(SyntaxKind::MODULE_KW) => module_def(p),
+        Some(SyntaxKind::CONST_KW) => const_def(p),
+        Some(SyntaxKind::STATIC_KW) => static_def(p),
         _ => {
             let err = p.error_at_current(
-                "expected item (fn, struct, enum, trait, type, impl, extern, use, or module)"
+                "expected item (fn, struct, enum, trait, type, impl, extern, use, module, const, or static)"
                     .to_string(),
             );
             Err(err)

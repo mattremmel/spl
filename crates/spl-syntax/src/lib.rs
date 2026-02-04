@@ -153,6 +153,8 @@ pub enum SyntaxKind {
     UseTree,
     UseTreeList,
     ModuleDef,
+    ConstDef,
+    StaticDef,
     ParamList,
     Param,
     SelfParam,

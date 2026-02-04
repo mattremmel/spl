@@ -3935,3 +3935,310 @@ fn trait_unsafe() {
         "#]],
     );
 }
+
+// === Const definition tests ===
+
+#[test]
+fn const_def_simple() {
+    check_item(
+        "const MAX: i32 = 100;",
+        &expect![[r#"
+            ConstDef@0..21
+              CONST_KW@0..5 "const"
+              Name@5..9
+                WHITESPACE@5..6 " "
+                IDENT@6..9 "MAX"
+              COLON@9..10 ":"
+              PathType@10..14
+                Path@10..14
+                  PathSegment@10..14
+                    NameRef@10..14
+                      WHITESPACE@10..11 " "
+                      IDENT@11..14 "i32"
+              WHITESPACE@14..15 " "
+              EQ@15..16 "="
+              LiteralExpr@16..20
+                WHITESPACE@16..17 " "
+                INT_LITERAL@17..20 "100"
+              SEMI@20..21 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn const_def_pub() {
+    check_item(
+        "pub const PI: f64 = 3.14;",
+        &expect![[r#"
+            ConstDef@0..25
+              Visibility@0..3
+                PUB_KW@0..3 "pub"
+              WHITESPACE@3..4 " "
+              CONST_KW@4..9 "const"
+              Name@9..12
+                WHITESPACE@9..10 " "
+                IDENT@10..12 "PI"
+              COLON@12..13 ":"
+              PathType@13..17
+                Path@13..17
+                  PathSegment@13..17
+                    NameRef@13..17
+                      WHITESPACE@13..14 " "
+                      IDENT@14..17 "f64"
+              WHITESPACE@17..18 " "
+              EQ@18..19 "="
+              LiteralExpr@19..24
+                WHITESPACE@19..20 " "
+                FLOAT_LITERAL@20..24 "3.14"
+              SEMI@24..25 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn const_def_with_attribute() {
+    check_item(
+        "#[deprecated] const OLD: i32 = 0;",
+        &expect![[r##"
+            ConstDef@0..33
+              Attribute@0..13
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..12
+                  IDENT@2..12 "deprecated"
+                R_BRACKET@12..13 "]"
+              WHITESPACE@13..14 " "
+              CONST_KW@14..19 "const"
+              Name@19..23
+                WHITESPACE@19..20 " "
+                IDENT@20..23 "OLD"
+              COLON@23..24 ":"
+              PathType@24..28
+                Path@24..28
+                  PathSegment@24..28
+                    NameRef@24..28
+                      WHITESPACE@24..25 " "
+                      IDENT@25..28 "i32"
+              WHITESPACE@28..29 " "
+              EQ@29..30 "="
+              LiteralExpr@30..32
+                WHITESPACE@30..31 " "
+                INT_LITERAL@31..32 "0"
+              SEMI@32..33 ";"
+        "##]],
+    );
+}
+
+#[test]
+fn const_def_complex_expr() {
+    check_item(
+        "const SIZE: usize = 1024 * 4;",
+        &expect![[r#"
+            ConstDef@0..29
+              CONST_KW@0..5 "const"
+              Name@5..10
+                WHITESPACE@5..6 " "
+                IDENT@6..10 "SIZE"
+              COLON@10..11 ":"
+              PathType@11..17
+                Path@11..17
+                  PathSegment@11..17
+                    NameRef@11..17
+                      WHITESPACE@11..12 " "
+                      IDENT@12..17 "usize"
+              WHITESPACE@17..18 " "
+              EQ@18..19 "="
+              BinExpr@19..28
+                LiteralExpr@19..24
+                  WHITESPACE@19..20 " "
+                  INT_LITERAL@20..24 "1024"
+                WHITESPACE@24..25 " "
+                STAR@25..26 "*"
+                LiteralExpr@26..28
+                  WHITESPACE@26..27 " "
+                  INT_LITERAL@27..28 "4"
+              SEMI@28..29 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn const_def_no_semicolon() {
+    check_item(
+        "const X: i32 = 1",
+        &expect![[r#"
+            ConstDef@0..16
+              CONST_KW@0..5 "const"
+              Name@5..7
+                WHITESPACE@5..6 " "
+                IDENT@6..7 "X"
+              COLON@7..8 ":"
+              PathType@8..12
+                Path@8..12
+                  PathSegment@8..12
+                    NameRef@8..12
+                      WHITESPACE@8..9 " "
+                      IDENT@9..12 "i32"
+              WHITESPACE@12..13 " "
+              EQ@13..14 "="
+              LiteralExpr@14..16
+                WHITESPACE@14..15 " "
+                INT_LITERAL@15..16 "1"
+        "#]],
+    );
+}
+
+// === Static definition tests ===
+
+#[test]
+fn static_def_simple() {
+    check_item(
+        "static COUNTER: i32 = 0;",
+        &expect![[r#"
+            StaticDef@0..24
+              STATIC_KW@0..6 "static"
+              Name@6..14
+                WHITESPACE@6..7 " "
+                IDENT@7..14 "COUNTER"
+              COLON@14..15 ":"
+              PathType@15..19
+                Path@15..19
+                  PathSegment@15..19
+                    NameRef@15..19
+                      WHITESPACE@15..16 " "
+                      IDENT@16..19 "i32"
+              WHITESPACE@19..20 " "
+              EQ@20..21 "="
+              LiteralExpr@21..23
+                WHITESPACE@21..22 " "
+                INT_LITERAL@22..23 "0"
+              SEMI@23..24 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn static_def_mut() {
+    check_item(
+        "static mut GLOBAL: i32 = 0;",
+        &expect![[r#"
+            StaticDef@0..27
+              STATIC_KW@0..6 "static"
+              WHITESPACE@6..7 " "
+              MUT_KW@7..10 "mut"
+              Name@10..17
+                WHITESPACE@10..11 " "
+                IDENT@11..17 "GLOBAL"
+              COLON@17..18 ":"
+              PathType@18..22
+                Path@18..22
+                  PathSegment@18..22
+                    NameRef@18..22
+                      WHITESPACE@18..19 " "
+                      IDENT@19..22 "i32"
+              WHITESPACE@22..23 " "
+              EQ@23..24 "="
+              LiteralExpr@24..26
+                WHITESPACE@24..25 " "
+                INT_LITERAL@25..26 "0"
+              SEMI@26..27 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn static_def_pub_mut() {
+    check_item(
+        "pub static mut STATE: i64 = -1;",
+        &expect![[r#"
+            StaticDef@0..31
+              Visibility@0..3
+                PUB_KW@0..3 "pub"
+              WHITESPACE@3..4 " "
+              STATIC_KW@4..10 "static"
+              WHITESPACE@10..11 " "
+              MUT_KW@11..14 "mut"
+              Name@14..20
+                WHITESPACE@14..15 " "
+                IDENT@15..20 "STATE"
+              COLON@20..21 ":"
+              PathType@21..25
+                Path@21..25
+                  PathSegment@21..25
+                    NameRef@21..25
+                      WHITESPACE@21..22 " "
+                      IDENT@22..25 "i64"
+              WHITESPACE@25..26 " "
+              EQ@26..27 "="
+              PrefixExpr@27..30
+                WHITESPACE@27..28 " "
+                MINUS@28..29 "-"
+                LiteralExpr@29..30
+                  INT_LITERAL@29..30 "1"
+              SEMI@30..31 ";"
+        "#]],
+    );
+}
+
+#[test]
+fn static_def_with_attribute() {
+    check_item(
+        "#[no_mangle] pub static HANDLE: i32 = 0;",
+        &expect![[r##"
+            StaticDef@0..40
+              Attribute@0..12
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..11
+                  IDENT@2..11 "no_mangle"
+                R_BRACKET@11..12 "]"
+              Visibility@12..16
+                WHITESPACE@12..13 " "
+                PUB_KW@13..16 "pub"
+              WHITESPACE@16..17 " "
+              STATIC_KW@17..23 "static"
+              Name@23..30
+                WHITESPACE@23..24 " "
+                IDENT@24..30 "HANDLE"
+              COLON@30..31 ":"
+              PathType@31..35
+                Path@31..35
+                  PathSegment@31..35
+                    NameRef@31..35
+                      WHITESPACE@31..32 " "
+                      IDENT@32..35 "i32"
+              WHITESPACE@35..36 " "
+              EQ@36..37 "="
+              LiteralExpr@37..39
+                WHITESPACE@37..38 " "
+                INT_LITERAL@38..39 "0"
+              SEMI@39..40 ";"
+        "##]],
+    );
+}
+
+#[test]
+fn static_def_no_semicolon() {
+    check_item(
+        "static Y: i32 = 2",
+        &expect![[r#"
+            StaticDef@0..17
+              STATIC_KW@0..6 "static"
+              Name@6..8
+                WHITESPACE@6..7 " "
+                IDENT@7..8 "Y"
+              COLON@8..9 ":"
+              PathType@9..13
+                Path@9..13
+                  PathSegment@9..13
+                    NameRef@9..13
+                      WHITESPACE@9..10 " "
+                      IDENT@10..13 "i32"
+              WHITESPACE@13..14 " "
+              EQ@14..15 "="
+              LiteralExpr@15..17
+                WHITESPACE@15..16 " "
+                INT_LITERAL@16..17 "2"
+        "#]],
+    );
+}
