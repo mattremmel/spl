@@ -5083,3 +5083,294 @@ fn param_with_label_and_default() {
         "#]],
     );
 }
+
+// === Generator function tests ===
+
+#[test]
+fn generator_minimal() {
+    check_item(
+        "gen fn foo(): i32 {}",
+        &expect![[r#"
+            GeneratorDef@0..20
+              GEN_KW@0..3 "gen"
+              WHITESPACE@3..4 " "
+              FN_KW@4..6 "fn"
+              Name@6..10
+                WHITESPACE@6..7 " "
+                IDENT@7..10 "foo"
+              ParamList@10..12
+                L_PAREN@10..11 "("
+                R_PAREN@11..12 ")"
+              COLON@12..13 ":"
+              PathType@13..17
+                Path@13..17
+                  PathSegment@13..17
+                    NameRef@13..17
+                      WHITESPACE@13..14 " "
+                      IDENT@14..17 "i32"
+              Block@17..20
+                WHITESPACE@17..18 " "
+                L_BRACE@18..19 "{"
+                R_BRACE@19..20 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn generator_with_params_and_yield() {
+    check_item(
+        "gen fn countdown(from: i32): i32 { yield from; }",
+        &expect![[r#"
+            GeneratorDef@0..48
+              GEN_KW@0..3 "gen"
+              WHITESPACE@3..4 " "
+              FN_KW@4..6 "fn"
+              Name@6..16
+                WHITESPACE@6..7 " "
+                IDENT@7..16 "countdown"
+              ParamList@16..27
+                L_PAREN@16..17 "("
+                Param@17..26
+                  Name@17..21
+                    IDENT@17..21 "from"
+                  COLON@21..22 ":"
+                  PathType@22..26
+                    Path@22..26
+                      PathSegment@22..26
+                        NameRef@22..26
+                          WHITESPACE@22..23 " "
+                          IDENT@23..26 "i32"
+                R_PAREN@26..27 ")"
+              COLON@27..28 ":"
+              PathType@28..32
+                Path@28..32
+                  PathSegment@28..32
+                    NameRef@28..32
+                      WHITESPACE@28..29 " "
+                      IDENT@29..32 "i32"
+              Block@32..48
+                WHITESPACE@32..33 " "
+                L_BRACE@33..34 "{"
+                ExprStmt@34..46
+                  YieldExpr@34..45
+                    WHITESPACE@34..35 " "
+                    YIELD_KW@35..40 "yield"
+                    PathExpr@40..45
+                      Path@40..45
+                        PathSegment@40..45
+                          NameRef@40..45
+                            WHITESPACE@40..41 " "
+                            IDENT@41..45 "from"
+                  SEMI@45..46 ";"
+                WHITESPACE@46..47 " "
+                R_BRACE@47..48 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn generator_pub() {
+    check_item(
+        "pub gen fn foo(): i32 {}",
+        &expect![[r#"
+            GeneratorDef@0..24
+              Visibility@0..3
+                PUB_KW@0..3 "pub"
+              WHITESPACE@3..4 " "
+              GEN_KW@4..7 "gen"
+              WHITESPACE@7..8 " "
+              FN_KW@8..10 "fn"
+              Name@10..14
+                WHITESPACE@10..11 " "
+                IDENT@11..14 "foo"
+              ParamList@14..16
+                L_PAREN@14..15 "("
+                R_PAREN@15..16 ")"
+              COLON@16..17 ":"
+              PathType@17..21
+                Path@17..21
+                  PathSegment@17..21
+                    NameRef@17..21
+                      WHITESPACE@17..18 " "
+                      IDENT@18..21 "i32"
+              Block@21..24
+                WHITESPACE@21..22 " "
+                L_BRACE@22..23 "{"
+                R_BRACE@23..24 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn generator_throws() {
+    check_item(
+        "gen fn foo(): i32 throws {}",
+        &expect![[r#"
+            GeneratorDef@0..27
+              GEN_KW@0..3 "gen"
+              WHITESPACE@3..4 " "
+              FN_KW@4..6 "fn"
+              Name@6..10
+                WHITESPACE@6..7 " "
+                IDENT@7..10 "foo"
+              ParamList@10..12
+                L_PAREN@10..11 "("
+                R_PAREN@11..12 ")"
+              COLON@12..13 ":"
+              PathType@13..17
+                Path@13..17
+                  PathSegment@13..17
+                    NameRef@13..17
+                      WHITESPACE@13..14 " "
+                      IDENT@14..17 "i32"
+              ThrowsClause@17..24
+                WHITESPACE@17..18 " "
+                THROWS_KW@18..24 "throws"
+              Block@24..27
+                WHITESPACE@24..25 " "
+                L_BRACE@25..26 "{"
+                R_BRACE@26..27 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn generator_where_clause() {
+    check_item(
+        "gen fn foo(): i32 where T {}",
+        &expect![[r#"
+            GeneratorDef@0..28
+              GEN_KW@0..3 "gen"
+              WHITESPACE@3..4 " "
+              FN_KW@4..6 "fn"
+              Name@6..10
+                WHITESPACE@6..7 " "
+                IDENT@7..10 "foo"
+              ParamList@10..12
+                L_PAREN@10..11 "("
+                R_PAREN@11..12 ")"
+              COLON@12..13 ":"
+              PathType@13..17
+                Path@13..17
+                  PathSegment@13..17
+                    NameRef@13..17
+                      WHITESPACE@13..14 " "
+                      IDENT@14..17 "i32"
+              WhereClause@17..25
+                WHITESPACE@17..18 " "
+                WHERE_KW@18..23 "where"
+                GenericParam@23..25
+                  Name@23..25
+                    WHITESPACE@23..24 " "
+                    IDENT@24..25 "T"
+              Block@25..28
+                WHITESPACE@25..26 " "
+                L_BRACE@26..27 "{"
+                R_BRACE@27..28 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn generator_no_return_type() {
+    check_item(
+        "gen fn foo() {}",
+        &expect![[r#"
+            GeneratorDef@0..15
+              GEN_KW@0..3 "gen"
+              WHITESPACE@3..4 " "
+              FN_KW@4..6 "fn"
+              Name@6..10
+                WHITESPACE@6..7 " "
+                IDENT@7..10 "foo"
+              ParamList@10..12
+                L_PAREN@10..11 "("
+                R_PAREN@11..12 ")"
+              Block@12..15
+                WHITESPACE@12..13 " "
+                L_BRACE@13..14 "{"
+                R_BRACE@14..15 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn generator_with_attributes() {
+    check_item(
+        "#[test] gen fn foo(): i32 {}",
+        &expect![[r##"
+            GeneratorDef@0..28
+              Attribute@0..7
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..6
+                  IDENT@2..6 "test"
+                R_BRACKET@6..7 "]"
+              WHITESPACE@7..8 " "
+              GEN_KW@8..11 "gen"
+              WHITESPACE@11..12 " "
+              FN_KW@12..14 "fn"
+              Name@14..18
+                WHITESPACE@14..15 " "
+                IDENT@15..18 "foo"
+              ParamList@18..20
+                L_PAREN@18..19 "("
+                R_PAREN@19..20 ")"
+              COLON@20..21 ":"
+              PathType@21..25
+                Path@21..25
+                  PathSegment@21..25
+                    NameRef@21..25
+                      WHITESPACE@21..22 " "
+                      IDENT@22..25 "i32"
+              Block@25..28
+                WHITESPACE@25..26 " "
+                L_BRACE@26..27 "{"
+                R_BRACE@27..28 "}"
+        "##]],
+    );
+}
+
+#[test]
+fn source_file_mixed_fn_and_gen_fn() {
+    check_source_file(
+        "fn a() {} gen fn b(): i32 {}",
+        &expect![[r#"
+            SourceFile@0..28
+              FunctionDef@0..9
+                FN_KW@0..2 "fn"
+                Name@2..4
+                  WHITESPACE@2..3 " "
+                  IDENT@3..4 "a"
+                ParamList@4..6
+                  L_PAREN@4..5 "("
+                  R_PAREN@5..6 ")"
+                Block@6..9
+                  WHITESPACE@6..7 " "
+                  L_BRACE@7..8 "{"
+                  R_BRACE@8..9 "}"
+              GeneratorDef@9..28
+                WHITESPACE@9..10 " "
+                GEN_KW@10..13 "gen"
+                WHITESPACE@13..14 " "
+                FN_KW@14..16 "fn"
+                Name@16..18
+                  WHITESPACE@16..17 " "
+                  IDENT@17..18 "b"
+                ParamList@18..20
+                  L_PAREN@18..19 "("
+                  R_PAREN@19..20 ")"
+                COLON@20..21 ":"
+                PathType@21..25
+                  Path@21..25
+                    PathSegment@21..25
+                      NameRef@21..25
+                        WHITESPACE@21..22 " "
+                        IDENT@22..25 "i32"
+                Block@25..28
+                  WHITESPACE@25..26 " "
+                  L_BRACE@26..27 "{"
+                  R_BRACE@27..28 "}"
+        "#]],
+    );
+}

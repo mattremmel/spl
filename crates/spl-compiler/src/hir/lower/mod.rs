@@ -239,6 +239,10 @@ impl<'a> LoweringContext<'a> {
                 // TODO: lower trait definitions to HIR
                 None
             }
+            Item::Generator(_) => {
+                // TODO: lower generator definitions to HIR
+                None
+            }
         }
     }
 

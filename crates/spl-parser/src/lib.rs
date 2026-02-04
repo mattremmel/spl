@@ -77,6 +77,7 @@ pub use event::ParseError;
 const ITEM_RECOVERY_SET: &[SyntaxKind] = &[
     SyntaxKind::HASH, // Attributes
     SyntaxKind::FN_KW,
+    SyntaxKind::GEN_KW,
     SyntaxKind::STRUCT_KW,
     SyntaxKind::TYPE_KW,
     SyntaxKind::IMPL_KW,

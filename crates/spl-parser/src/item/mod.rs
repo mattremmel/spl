@@ -91,6 +91,7 @@ fn is_item_start(kind: SyntaxKind) -> bool {
             | SyntaxKind::UNSAFE_KW
             | SyntaxKind::CONST_KW
             | SyntaxKind::STATIC_KW
+            | SyntaxKind::GEN_KW
     )
 }
 
@@ -357,6 +358,71 @@ pub(crate) fn function_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate:
     }
 
     Ok(m.complete(p, SyntaxKind::FunctionDef))
+}
+
+/// Parse a generator function definition: `[attrs] [pub] gen fn name(params) [: Type] [throws] [where ...] { body }`
+pub(crate) fn generator_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    // Optional attributes
+    opt_attributes(p);
+
+    // Optional visibility
+    opt_visibility(p);
+
+    // gen keyword
+    if let Err(e) = p.expect(SyntaxKind::GEN_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // fn keyword
+    if let Err(e) = p.expect(SyntaxKind::FN_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Generator name
+    if let Err(e) = name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Parameter list
+    if let Err(e) = param_list(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional return type with `:` syntax
+    if p.eat(SyntaxKind::COLON)
+        && let Err(e) = stmt::type_annotation(p)
+    {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional throws clause
+    if let Some(Err(e)) = opt_throws_clause(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional where clause
+    if p.at(SyntaxKind::WHERE_KW)
+        && let Err(e) = where_clause(p)
+    {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Generator body
+    if let Err(e) = expr::block(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    Ok(m.complete(p, SyntaxKind::GeneratorDef))
 }
 
 /// Parse a where clause: `where T, U: Clone, ...`
@@ -1514,6 +1580,7 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseEr
     }
 
     match p.peek(lookahead) {
+        Some(SyntaxKind::GEN_KW) => generator_def(p),
         Some(SyntaxKind::FN_KW) => function_def(p),
         Some(SyntaxKind::STRUCT_KW) => struct_def(p),
         Some(SyntaxKind::ENUM_KW) => enum_def(p),
@@ -1527,7 +1594,7 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseEr
         Some(SyntaxKind::STATIC_KW) => static_def(p),
         _ => {
             let err = p.error_at_current(
-                "expected item (fn, struct, enum, trait, type, impl, extern, use, module, const, or static)"
+                "expected item (fn, gen, struct, enum, trait, type, impl, extern, use, module, const, or static)"
                     .to_string(),
             );
             Err(err)

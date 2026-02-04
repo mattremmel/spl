@@ -203,7 +203,7 @@ fn get_item_name_and_visibility(item: &Item) -> Option<(String, bool)> {
             }
             None
         }
-        Item::Impl(_) | Item::Use(_) | Item::Enum(_) | Item::Trait(_) => None,
+        Item::Impl(_) | Item::Use(_) | Item::Enum(_) | Item::Trait(_) | Item::Generator(_) => None,
         Item::Module(module_def) => {
             let name = module_def.name()?;
             let name_token = name.ident_token()?;
@@ -324,8 +324,8 @@ fn collect_all_signatures(package: &Package, engine: &mut InferEngine) {
                 Item::Impl(impl_block) => engine.collect_impl_signatures(impl_block),
                 Item::Extern(extern_block) => engine.collect_extern_signatures(extern_block),
                 Item::Module(module_def) => engine.collect_module_signatures(module_def),
-                // TODO: collect enum and trait signatures
-                Item::Use(_) | Item::Enum(_) | Item::Trait(_) => {}
+                // TODO: collect enum, trait, and generator signatures
+                Item::Use(_) | Item::Enum(_) | Item::Trait(_) | Item::Generator(_) => {}
             }
         }
     }

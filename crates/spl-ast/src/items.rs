@@ -5,6 +5,7 @@ use spl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 
 ast_node!(SourceFile);
 ast_node!(FunctionDef);
+ast_node!(GeneratorDef);
 ast_node!(StructDef);
 ast_node!(EnumDef);
 ast_node!(VariantList);
@@ -60,6 +61,7 @@ ast_enum!(
     /// Top-level item (function, struct, enum, trait, impl, type alias, extern block, use decl, module).
     Item {
         Function(FunctionDef),
+        Generator(GeneratorDef),
         Struct(StructDef),
         Enum(EnumDef),
         Trait(TraitDef),
@@ -89,6 +91,49 @@ impl FunctionDef {
     /// Check if this function is marked `unsafe`.
     pub fn is_unsafe(&self) -> bool {
         token(&self.0, SyntaxKind::UNSAFE_KW).is_some()
+    }
+
+    pub fn fn_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::FN_KW)
+    }
+
+    pub fn name(&self) -> Option<Name> {
+        child(&self.0)
+    }
+
+    pub fn param_list(&self) -> Option<ParamList> {
+        child(&self.0)
+    }
+
+    pub fn ret_type(&self) -> Option<Type> {
+        child(&self.0)
+    }
+
+    pub fn throws_clause(&self) -> Option<ThrowsClause> {
+        child(&self.0)
+    }
+
+    pub fn where_clause(&self) -> Option<WhereClause> {
+        child(&self.0)
+    }
+
+    pub fn body(&self) -> Option<Block> {
+        child(&self.0)
+    }
+}
+
+impl GeneratorDef {
+    /// Get outer attributes on this generator function.
+    pub fn attributes(&self) -> impl Iterator<Item = Attribute> {
+        children(&self.0)
+    }
+
+    pub fn visibility(&self) -> Option<Visibility> {
+        child(&self.0)
+    }
+
+    pub fn gen_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::GEN_KW)
     }
 
     pub fn fn_kw(&self) -> Option<SyntaxToken> {

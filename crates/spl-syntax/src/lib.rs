@@ -158,6 +158,7 @@ pub enum SyntaxKind {
     ModuleDef,
     ConstDef,
     StaticDef,
+    GeneratorDef,
     ParamList,
     Param,
     SelfParam,

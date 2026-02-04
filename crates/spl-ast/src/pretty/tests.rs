@@ -1638,4 +1638,39 @@ count
             "#]],
         );
     }
+
+    #[test]
+    fn generator_basic() {
+        check(
+            "gen fn nums(): i32 {}",
+            &expect![[r#"
+                SourceFile
+                  GeneratorDef "nums"
+                    ParamList
+                    ReturnType
+                      Path "i32"
+                    Block
+            "#]],
+        );
+    }
+
+    #[test]
+    fn generator_pub_with_params() {
+        check(
+            "pub gen fn countdown(n: i32): i32 { yield n; }",
+            &expect![[r#"
+                SourceFile
+                  pub GeneratorDef "countdown"
+                    ParamList
+                      Param "n"
+                        Path "i32"
+                    ReturnType
+                      Path "i32"
+                    Block
+                      ExprStmt
+                        YieldExpr
+                          Path "n"
+            "#]],
+        );
+    }
 }

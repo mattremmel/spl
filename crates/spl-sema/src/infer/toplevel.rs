@@ -105,7 +105,7 @@ impl<'a> InferEngine<'a> {
                 }
                 // Use declarations are handled during import resolution
                 // TODO: collect enum and trait type info
-                Item::Use(_) | Item::Enum(_) | Item::Trait(_) => {}
+                Item::Use(_) | Item::Enum(_) | Item::Trait(_) | Item::Generator(_) => {}
             }
         }
 
@@ -202,7 +202,7 @@ impl<'a> InferEngine<'a> {
                     self.collect_module_signatures(nested);
                 }
                 // TODO: collect enum and trait type info
-                Item::Use(_) | Item::Enum(_) | Item::Trait(_) => {}
+                Item::Use(_) | Item::Enum(_) | Item::Trait(_) | Item::Generator(_) => {}
             }
         }
     }

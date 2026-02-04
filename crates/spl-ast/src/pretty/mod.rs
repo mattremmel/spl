@@ -46,6 +46,7 @@ impl AstPrinter {
     fn print_item(&mut self, item: &Item) {
         match item {
             Item::Function(f) => self.print_function(f),
+            Item::Generator(g) => self.print_generator(g),
             Item::Struct(s) => self.print_struct(s),
             Item::Enum(e) => self.print_enum(e),
             Item::Trait(t) => self.print_trait(t),
@@ -85,6 +86,34 @@ impl AstPrinter {
             self.output.push_str(&tree.syntax().text().to_string());
         }
         self.output.push(';');
+    }
+
+    fn print_generator(&mut self, generator: &crate::GeneratorDef) {
+        let name = generator
+            .name()
+            .and_then(|n| n.ident_token())
+            .map(|t| t.text().to_string())
+            .unwrap_or_else(|| "?".to_string());
+
+        let vis = if generator.visibility().is_some() {
+            "pub "
+        } else {
+            ""
+        };
+        self.line(&format!("{vis}GeneratorDef \"{name}\""));
+
+        self.indented(|p| {
+            if let Some(params) = generator.param_list() {
+                p.print_param_list(&params);
+            }
+            if let Some(ret_ty) = generator.ret_type() {
+                p.line("ReturnType");
+                p.indented(|p| p.print_type(&ret_ty));
+            }
+            if let Some(body) = generator.body() {
+                p.print_block(&body);
+            }
+        });
     }
 
     fn print_function(&mut self, func: &FunctionDef) {
