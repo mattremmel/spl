@@ -232,6 +232,21 @@ example(10, 20)         // a=10, b=20
 
 **Note:** Generator functions require a return type annotation (the yielded type). See [iteration.md](iteration.md) for full generator semantics.
 
+**Generator Throws:**
+
+Generators can declare a throws clause, with the same semantics as function throws:
+
+| Declaration | Yield Type | Next() Returns |
+|-------------|------------|----------------|
+| `gen fn foo(): T` | `T` | `Option(T: T)` |
+| `gen fn foo(): T throws E` | `T` | `Result(T: Option(T: T), E: E)` |
+| `gen fn foo(): T throws` | `T` | `Result(T: Option(T: T), E: Error)` |
+
+Inside a throwing generator:
+- `yield value` produces a value
+- `throw error` terminates iteration with an error
+- The `!` operator propagates errors from fallible operations
+
 **Examples:**
 
 ```spl
@@ -606,7 +621,7 @@ UseDecl = "use" UsePath [ ";" ] ;
 
 UsePath = PathPrefix [ "." UseTree ] ;
 
-PathPrefix = [ "$" | "super" | "self" ] "." IDENTIFIER { "." IDENTIFIER }
+PathPrefix = ( "$" | "super" | "self" ) "." IDENTIFIER { "." IDENTIFIER }
            | IDENTIFIER { "." IDENTIFIER } ;
 
 UseTree = "*"                                    (* glob import *)
@@ -675,7 +690,7 @@ ExternBlock = "extern" AbiString "{" { ExternFnDecl } "}" ;
 
 ExternFnDecl = "fn" IDENTIFIER "(" [ ExternParamList ] [ "," "..." ] ")" [ ":" Type ] [ ";" ] ;
 
-ExternParamList = ExternParam { "," ExternParam } ;
+ExternParamList = ExternParam { "," ExternParam } [ "," ] ;
 
 ExternParam = IDENTIFIER ":" Type ;
 
@@ -781,9 +796,6 @@ PathRoot = "$" "."          (* package root *)
 (* Case-based disambiguation: uppercase identifier = type arg, lowercase = value arg *)
 (* This is a hard rule enforced by the parser — no backtracking or semantic reinterpretation *)
 (* Shorthand: bare identifier T means T: T (type param name matches type name) *)
-(* Note: Empty generic arguments `Foo()` are syntactically valid and useful when
-   all type parameters have defaults. For example, with `fn foo() where T = i32`,
-   calling `foo()` uses the default type. *)
 GenericArgs = "(" [ TypeArg { "," TypeArg } [ "," ] ] ")" ;
 
 TypeArg = UPPER_IDENT [ ":" Type ] ;   (* T: i32 or T (shorthand for T: T) *)
@@ -870,7 +882,12 @@ Statement = LetStatement
           | ExpressionStatement
           | Item ;                  (* nested items like functions *)
 
-LetStatement = "let" [ "mut" ] Pattern [ ":" Type ] [ "=" Expression ] [ ";" ] ;
+LetStatement = "let" Pattern [ ":" Type ] [ "=" Expression ] [ ";" ] ;
+
+(* Note: Mutability is specified in the pattern, not on `let` itself:
+   - Simple binding: `let mut x = 5` (where `mut x` is an IdentifierPattern)
+   - Destructuring: `let (mut a, b) = tuple` (mut on individual bindings)
+   This avoids the double-mut issue of `let mut mut x`. *)
 
 ExpressionStatement = Expression [ ";" ] ;
 ```
@@ -1028,6 +1045,9 @@ IndexExpr = Expression
 (* Arguments can be named with : *)
 (* Case-based disambiguation: uppercase identifier = type arg, lowercase = value arg *)
 (* This is a hard rule — uppercase names are always types, lowercase are always values *)
+(* Note: Type arguments in function/method calls use NamedArg with uppercase identifiers.
+   For example, `collect(T: Vec(T: i32))` passes a type argument in a call context.
+   This differs from GenericArgs, which is used in type instantiation contexts. *)
 ArgList = Arg { "," Arg } [ "," ] ;
 
 Arg = NamedArg                              (* named argument: case determines type vs value *)
@@ -1103,8 +1123,10 @@ EnumShorthandExpr = "." UPPER_IDENT [ "(" [ ArgList ] ")" ] ;
 (* Note: Enum variants must start with an uppercase letter (PascalCase convention). *)
 
 (* Paths use dot separator *)
+(* Note: Self is restricted to at most one component (Self or Self.AssociatedItem),
+   matching TypePath and Rust's behavior. This avoids ambiguity about Self.Foo.Bar. *)
 PathExpr = [ PathRoot ] IDENTIFIER { "." IDENTIFIER }
-         | "Self" { "." IDENTIFIER } ;
+         | "Self" [ "." IDENTIFIER ] ;
 
 GroupedExpr = "(" Expression ")" ;
 
