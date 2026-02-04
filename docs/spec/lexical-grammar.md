@@ -185,7 +185,9 @@ INTEGER = 0[xX][0-9a-fA-F][0-9a-fA-F_]* INTEGER_SUFFIX?
         | 0[oO][0-7][0-7_]* INTEGER_SUFFIX?
         | [0-9][0-9_]* INTEGER_SUFFIX?
 
-INTEGER_SUFFIX = [iu](8|16|32|64|128|size) | bigint
+INTEGER_SUFFIX = i8 | i16 | i32 | i64 | i128 | isize
+               | u8 | u16 | u32 | u64 | u128 | usize
+               | bigint
 ```
 
 ### Floating-Point Literals
@@ -235,10 +237,12 @@ STRING = "[^"\\]*(\\.[^"\\]*)*"
 | `\r`   | Carriage return      |
 | `\\`   | Backslash            |
 | `\"`   | Double quote         |
-| `\'`   | Single quote         |
+| `\'`   | Single quote (see note) |
 | `\0`   | Null character       |
 | `\xNN` | Byte value (hex)     |
 | `\u{NNNNNN}` | Unicode code point (1-6 hex digits) |
+
+**Note:** The `\'` escape is primarily useful in character literals (`'\''`). In string literals, single quotes don't need escaping: `"it's"` is valid.
 
 **Examples:** `"hello"`, `"hello\nworld"`, `"say \"hi\""`, `"\u{1F600}"` (emoji)
 
@@ -261,6 +265,8 @@ RAW_STRING = 'r"' [^"]* '"'
 **Lexer Algorithm:**
 
 Raw strings require stateful lexing: the lexer counts the number of `#` characters after `r` in the opening delimiter, then scans for a closing `"` followed by exactly that many `#` characters. The content between delimiters is taken literally without escape processing.
+
+**Implementation Note:** There is no defined limit on the number of `#` delimiters. Implementations should support at least 255 hashes, matching Rust's behavior.
 
 ```
 r"..."      → 0 hashes, ends at first "

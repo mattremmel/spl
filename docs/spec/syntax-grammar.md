@@ -192,7 +192,8 @@ Parameters can have default values that are used when the argument is omitted at
 | Evaluation | Expression evaluated fresh each call when argument omitted |
 | Position | Allowed on any parameter |
 | Calling | After first default, remaining args must use names (unless also defaulted) |
-| Restriction | Default expressions cannot reference other parameters |
+| Restriction | Default expressions cannot reference other parameters of the same function |
+| Outer Scope | Default expressions CAN reference variables from outer scope (captured like closures) |
 
 **Examples:**
 
@@ -228,6 +229,11 @@ fn example(a: i32 = 1, b: i32) {
 }
 example(b: 5)           // a=1, b=5
 example(10, 20)         // a=10, b=20
+
+// Outer scope capture in defaults
+let y = 10
+fn foo(x: i32 = y) { ... }  // OK: y is captured from outer scope
+fn bar(a: i32, b: i32 = a) { ... }  // ERROR: cannot reference parameter `a`
 ```
 
 **Note:** Generator functions require a return type annotation (the yielded type). See [iteration.md](iteration.md) for full generator semantics.
@@ -428,6 +434,15 @@ TraitMethod = [ "const" ] [ "unsafe" ] "fn" IDENTIFIER "(" [ ParamList ] ")" [ "
 AssociatedType = "type" IDENTIFIER [ ":" PathType { "+" PathType } ] [ ";" ] ;
 ```
 
+**Associated Type with Bounds Example:**
+
+```spl
+trait Collection {
+    type Item: Clone          // Associated type with bound
+    fn items(&self): Vec(T: Self.Item)
+}
+```
+
 **Examples:**
 
 ```spl
@@ -485,6 +500,10 @@ impl Add(RHS: Vector) for Point {
 (* Inherent impl: impl Type { ... } *)
 (* Trait impl: impl Trait for Type { ... } *)
 (* Unsafe impl required for implementing unsafe traits: unsafe impl Sync for MyType *)
+(* Note on unsafe impl:
+   - `unsafe impl` is REQUIRED when implementing an `unsafe trait`
+   - `unsafe impl` is NOT allowed for safe traits (compile error)
+   - Example: `unsafe impl Send for MyType {}` (where `Send` is an unsafe trait) *)
 ImplBlock = [ "unsafe" ] "impl" [ TypePath [ GenericArgs ] "for" ] TypePath [ GenericArgs ] [ WhereClause ] "{" { ImplItem } "}" ;
 
 ImplItem = [ "pub" ] ( FunctionDef | TypeAssignment ) ;
@@ -761,6 +780,12 @@ type Callback = extern "C" fn(i32): i32
 - `#[no_mangle]` preserves the function name for FFI
 - Variadic parameters (`...`) are only allowed in extern block declarations
 
+**Variadic Parameters:**
+- `...` must be preceded by at least one regular parameter
+- Only allowed in extern block declarations (C FFI)
+- Example: `fn printf(fmt: Ptr(T: u8), ...): i32`
+- NOT allowed: `fn foo(...)` (no parameters before `...`)
+
 ### Macros (Deferred)
 
 Macro syntax is deferred to a future version of SPL. The language will likely support:
@@ -975,6 +1000,25 @@ let value = { compute() }                     // Single expression block
 
 Without `break` or a single expression, a block's type is `()` (unit).
 
+**Multi-statement Blocks Without `break`:**
+
+A multi-statement block without `break` has type `()` (unit):
+```spl
+let x = {
+    let a = 1
+    a + 1      // Evaluated but discarded; block type is ()
+}
+// x has type (), not i32
+```
+
+To produce a value, use `break`:
+```spl
+let x = {
+    let a = 1
+    break a + 1  // Block produces i32
+}
+```
+
 ---
 
 ## 4. Expressions
@@ -1003,7 +1047,30 @@ Expressions are defined using layered production rules that encode operator prec
 | 16         | `!` `-` `*` `&` `~` (unary)  | Right         | UnaryExpr          |
 | 17 (highest)| `.` `?.` `()` `[]` `[:]` `!` | Left          | PostfixExpr        |
 
-Note: `&` serves as both a unary reference operator (prefix) and a binary bitwise AND operator; context disambiguates. Type conversions use methods (`.widen()`, `.truncate()`, `.try_into()`) rather than a cast operator.
+**Dual-use Operators:**
+
+| Operator | Unary (prefix) | Binary (infix) |
+|----------|----------------|----------------|
+| `&`      | Reference (`&x`) | Bitwise AND (`a & b`) |
+| `*`      | Dereference (`*p`) | Multiplication (`a * b`) |
+| `-`      | Negation (`-x`) | Subtraction (`a - b`) |
+
+Position determines interpretation: prefix position = unary, infix position = binary.
+
+Type conversions use methods (`.widen()`, `.truncate()`, `.try_into()`) rather than a cast operator.
+
+**Range Expression Types:**
+
+| Syntax | Type | Description |
+|--------|------|-------------|
+| `a..b` | `Range(T: T)` | Exclusive range from a to b |
+| `a..=b` | `RangeInclusive(T: T)` | Inclusive range from a to b |
+| `a..` | `RangeFrom(T: T)` | Range from a to infinity |
+| `..b` | `RangeTo(T: T)` | Range from start to b (exclusive) |
+| `..=b` | `RangeToInclusive(T: T)` | Range from start to b (inclusive) |
+| `..` | `RangeFull` | Unbounded range (all elements) |
+
+Open-ended ranges (`a..`, `..b`, `..`) are primarily used in slice indexing.
 
 ### Expression Grammar
 
@@ -1035,7 +1102,8 @@ BitwiseAndExpr = ShiftExpr { "&" ShiftExpr } ;
 
 ShiftExpr = RangeExpr { ( "<<" | ">>" ) RangeExpr } ;
 
-RangeExpr = AdditiveExpr [ ( ".." | "..=" ) [ AdditiveExpr ] ] ;
+RangeExpr = AdditiveExpr [ ( ".." | "..=" ) [ AdditiveExpr ] ]
+          | ( ".." | "..=" ) AdditiveExpr ;  (* unbounded start: ..b, ..=b *)
 
 AdditiveExpr = MultiplicativeExpr { ( "+" | "-" ) MultiplicativeExpr } ;
 
@@ -1154,9 +1222,18 @@ EnumShorthandExpr = "." UPPER_IDENT [ "(" [ ArgList ] ")" ] ;
 
 (* Note: Enum variants must start with an uppercase letter (PascalCase convention). *)
 
+(* Type Inference Requirement for Enum Shorthand:
+   Enum shorthand requires the expected type to be inferrable from context:
+   - Function parameters: `fn foo(x: Option(T: i32))` → `foo(.Some(42))` ✓
+   - Return type: `fn bar(): Option(T: i32) { .Some(42) }` ✓
+   - Variable with annotation: `let x: Option(T: i32) = .Some(42)` ✓
+   - No context: `let x = .Some(42)` ✗ (error: cannot infer type) *)
+
 (* Paths use dot separator *)
-(* Note: Self is restricted to at most one component (Self or Self.AssociatedItem),
-   matching TypePath and Rust's behavior. This avoids ambiguity about Self.Foo.Bar. *)
+(* Note: The path `Self` is restricted to at most one component (Self or Self.AssociatedItem),
+   matching TypePath and Rust's behavior. This avoids ambiguity about Self.Foo.Bar.
+   However, `Self` can be used within any Type context: `&Self`, `[Self; N]`, `fn(Self): Self`,
+   `Option(T: Self)`, etc. The restriction applies only to the TypePath portion. *)
 PathExpr = [ PathRoot ] IDENTIFIER { "." IDENTIFIER }
          | "Self" [ "." IDENTIFIER ] ;
 
@@ -1613,11 +1690,18 @@ match option {
     .Some(n) => "has value",
 }
 
-// Bindings must be consistent across alternatives
+// Or-Pattern Binding Rules:
+// All alternatives must bind the same names with compatible types.
 match point {
-    Point(x: 0, y) | Point(x: y, y: 0) => "on axis",  // ERROR: inconsistent bindings
-    Point(x, y: 0) | Point(x: 0, y: x) => ...,        // ERROR: inconsistent bindings
-    Point(x: 0, y) | Point(x, y: 0) => use_coord(y),  // OK: y bound in both
+    // OK: both alternatives bind `y` to a field value of the same type
+    Point(x: 0, y) | Point(x, y: 0) => use_coord(y),
+
+    // ERROR: `y` bound in first alternative but `x` used in arm body
+    // (x is not bound in first alternative where x: 0 is a literal match)
+    Point(x: 0, y) | Point(x, y: 0) => use_coord(x),  // x not bound in first!
+
+    // ERROR: `x` bound in .Some but not in .None
+    .Some(x) | .None => x,  // x not bound in .None alternative
 }
 ```
 
