@@ -852,11 +852,11 @@ fn trait_method(
         where_clause(p)?;
     }
 
-    // Body (block) or semicolon
+    // Body (block) or optional semicolon
     if p.at(SyntaxKind::L_BRACE) {
         expr::block(p)?;
     } else {
-        p.expect(SyntaxKind::SEMI)?;
+        stmt::eat_optional_semicolon(p);
     }
 
     Ok(m.complete(p, SyntaxKind::TraitItem))
@@ -882,7 +882,7 @@ fn associated_type(
     }
 
     // Optional semicolon
-    p.eat(SyntaxKind::SEMI);
+    stmt::eat_optional_semicolon(p);
 
     Ok(m.complete(p, SyntaxKind::AssociatedType))
 }
@@ -999,7 +999,7 @@ pub(crate) fn static_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::P
     }
 
     // Optional semicolon
-    p.eat(SyntaxKind::SEMI);
+    stmt::eat_optional_semicolon(p);
 
     Ok(m.complete(p, SyntaxKind::StaticDef))
 }
@@ -1047,7 +1047,7 @@ pub(crate) fn const_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::Pa
     }
 
     // Optional semicolon
-    p.eat(SyntaxKind::SEMI);
+    stmt::eat_optional_semicolon(p);
 
     Ok(m.complete(p, SyntaxKind::ConstDef))
 }
@@ -1092,11 +1092,8 @@ pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::P
         return Err(e);
     }
 
-    // Semicolon
-    if let Err(e) = p.expect(SyntaxKind::SEMI) {
-        m.abandon(p);
-        return Err(e);
-    }
+    // Optional semicolon
+    stmt::eat_optional_semicolon(p);
 
     Ok(m.complete(p, SyntaxKind::TypeAlias))
 }
@@ -1240,8 +1237,8 @@ fn extern_fn(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
         stmt::type_annotation(p)?;
     }
 
-    // Semicolon (no body)
-    p.expect(SyntaxKind::SEMI)?;
+    // Optional semicolon (no body)
+    stmt::eat_optional_semicolon(p);
 
     Ok(m.complete(p, SyntaxKind::ExternFn))
 }
@@ -1269,8 +1266,8 @@ pub(crate) fn use_decl(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::Par
     // Parse the use tree
     use_tree(p)?;
 
-    // Semicolon
-    p.expect(SyntaxKind::SEMI)?;
+    // Optional semicolon
+    stmt::eat_optional_semicolon(p);
 
     Ok(m.complete(p, SyntaxKind::UseDecl))
 }

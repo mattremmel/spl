@@ -31,6 +31,19 @@ fn expr_kind_name(kind: SyntaxKind) -> &'static str {
     }
 }
 
+/// Consume optional trailing semicolon.
+///
+/// Per SPL spec: "Statement terminators are inferred from newlines, but can be
+/// explicitly terminated with a semicolon. Semicolons are only required when
+/// writing multiple statements on the same line."
+///
+/// Since the lexer doesn't distinguish newlines from whitespace, we make
+/// semicolons universally optional and rely on statement-start detection
+/// for recovery.
+pub(crate) fn eat_optional_semicolon(p: &mut Parser<'_>) {
+    p.eat(SyntaxKind::SEMI);
+}
+
 /// Check if the current token can start a statement or expression.
 /// Used to distinguish between missing semicolons and block-ending expressions.
 /// Block-ending expressions (if, while, for, loop, blocks) don't need semicolons
@@ -99,10 +112,7 @@ fn let_stmt(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
         return Err(e);
     }
 
-    if let Err(e) = p.expect(SyntaxKind::SEMI) {
-        m.abandon(p);
-        return Err(e);
-    }
+    eat_optional_semicolon(p);
     Ok(m.complete(p, SyntaxKind::LetStmt))
 }
 
@@ -350,6 +360,66 @@ mod tests {
                       SEMI@16..17 ";"
                     WHITESPACE@17..18 " "
                     R_BRACE@18..19 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn let_stmt_no_semicolon() {
+        // Per spec: semicolons are optional (inferred from newlines)
+        check_expr(
+            "{ let x = 1 }",
+            &expect![[r#"
+                BlockExpr@0..13
+                  Block@0..13
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..11
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
+                      WHITESPACE@7..8 " "
+                      EQ@8..9 "="
+                      LiteralExpr@9..11
+                        WHITESPACE@9..10 " "
+                        INT_LITERAL@10..11 "1"
+                    WHITESPACE@11..12 " "
+                    R_BRACE@12..13 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn let_stmt_no_semicolon_with_type() {
+        check_expr(
+            "{ let x: i32 = 1 }",
+            &expect![[r#"
+                BlockExpr@0..18
+                  Block@0..18
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..16
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      IdentPat@5..7
+                        Name@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
+                      COLON@7..8 ":"
+                      PathType@8..12
+                        Path@8..12
+                          PathSegment@8..12
+                            NameRef@8..12
+                              WHITESPACE@8..9 " "
+                              IDENT@9..12 "i32"
+                      WHITESPACE@12..13 " "
+                      EQ@13..14 "="
+                      LiteralExpr@14..16
+                        WHITESPACE@14..15 " "
+                        INT_LITERAL@15..16 "1"
+                    WHITESPACE@16..17 " "
+                    R_BRACE@17..18 "}"
             "#]],
         );
     }

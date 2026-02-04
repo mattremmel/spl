@@ -4242,3 +4242,120 @@ fn static_def_no_semicolon() {
         "#]],
     );
 }
+
+// === Optional Semicolon Tests ===
+
+#[test]
+fn use_decl_no_semicolon() {
+    check_item(
+        "use std.io",
+        &expect![[r#"
+            UseDecl@0..10
+              USE_KW@0..3 "use"
+              UseTree@3..10
+                WHITESPACE@3..4 " "
+                IDENT@4..7 "std"
+                DOT@7..8 "."
+                IDENT@8..10 "io"
+        "#]],
+    );
+}
+
+#[test]
+fn type_alias_no_semicolon() {
+    check_item(
+        "type Int = i32",
+        &expect![[r#"
+            TypeAlias@0..14
+              TYPE_KW@0..4 "type"
+              Name@4..8
+                WHITESPACE@4..5 " "
+                IDENT@5..8 "Int"
+              WHITESPACE@8..9 " "
+              EQ@9..10 "="
+              PathType@10..14
+                Path@10..14
+                  PathSegment@10..14
+                    NameRef@10..14
+                      WHITESPACE@10..11 " "
+                      IDENT@11..14 "i32"
+        "#]],
+    );
+}
+
+#[test]
+fn trait_method_decl_no_semicolon() {
+    check_item(
+        "trait Foo { fn bar() }",
+        &expect![[r#"
+            TraitDef@0..22
+              TRAIT_KW@0..5 "trait"
+              Name@5..9
+                WHITESPACE@5..6 " "
+                IDENT@6..9 "Foo"
+              WHITESPACE@9..10 " "
+              L_BRACE@10..11 "{"
+              TraitItem@11..20
+                WHITESPACE@11..12 " "
+                FN_KW@12..14 "fn"
+                Name@14..18
+                  WHITESPACE@14..15 " "
+                  IDENT@15..18 "bar"
+                ParamList@18..20
+                  L_PAREN@18..19 "("
+                  R_PAREN@19..20 ")"
+              WHITESPACE@20..21 " "
+              R_BRACE@21..22 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn extern_fn_decl_no_semicolon() {
+    check_item(
+        "extern \"C\" { fn foo() }",
+        &expect![[r#"
+            ExternBlock@0..23
+              EXTERN_KW@0..6 "extern"
+              WHITESPACE@6..7 " "
+              STRING_LITERAL@7..10 "\"C\""
+              WHITESPACE@10..11 " "
+              L_BRACE@11..12 "{"
+              ExternFn@12..21
+                WHITESPACE@12..13 " "
+                FN_KW@13..15 "fn"
+                Name@15..19
+                  WHITESPACE@15..16 " "
+                  IDENT@16..19 "foo"
+                ParamList@19..21
+                  L_PAREN@19..20 "("
+                  R_PAREN@20..21 ")"
+              WHITESPACE@21..22 " "
+              R_BRACE@22..23 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn trait_associated_type_no_semicolon() {
+    check_item(
+        "trait Iter { type Item }",
+        &expect![[r#"
+            TraitDef@0..24
+              TRAIT_KW@0..5 "trait"
+              Name@5..10
+                WHITESPACE@5..6 " "
+                IDENT@6..10 "Iter"
+              WHITESPACE@10..11 " "
+              L_BRACE@11..12 "{"
+              AssociatedType@12..22
+                WHITESPACE@12..13 " "
+                TYPE_KW@13..17 "type"
+                Name@17..22
+                  WHITESPACE@17..18 " "
+                  IDENT@18..22 "Item"
+              WHITESPACE@22..23 " "
+              R_BRACE@23..24 "}"
+        "#]],
+    );
+}
