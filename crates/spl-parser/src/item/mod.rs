@@ -292,7 +292,7 @@ fn opt_visibility(p: &mut Parser<'_>) -> Option<CompletedMarker> {
     Some(m.complete(p, SyntaxKind::Visibility))
 }
 
-/// Parse a function definition: `[attrs] [pub] fn name(params) [: Type] [where ...] { body }`
+/// Parse a function definition: `[attrs] [pub] [const] [unsafe] fn name(params) [: Type] [where ...] { body }`
 ///
 /// Return type syntax: `fn foo(): i32 where T { ... }`
 pub(crate) fn function_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
@@ -303,6 +303,12 @@ pub(crate) fn function_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate:
 
     // Optional visibility
     opt_visibility(p);
+
+    // Optional const modifier
+    p.eat(SyntaxKind::CONST_KW);
+
+    // Optional unsafe modifier
+    p.eat(SyntaxKind::UNSAFE_KW);
 
     // fn keyword
     if let Err(e) = p.expect(SyntaxKind::FN_KW) {
@@ -326,6 +332,12 @@ pub(crate) fn function_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate:
     if p.eat(SyntaxKind::COLON)
         && let Err(e) = stmt::type_annotation(p)
     {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional throws clause
+    if let Some(Err(e)) = opt_throws_clause(p) {
         m.abandon(p);
         return Err(e);
     }
@@ -373,6 +385,27 @@ fn where_clause(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError
     }
 
     Ok(m.complete(p, SyntaxKind::WhereClause))
+}
+
+/// Parse an optional throws clause: `throws [Type]`
+fn opt_throws_clause(p: &mut Parser<'_>) -> Option<Result<CompletedMarker, crate::ParseError>> {
+    if !p.at(SyntaxKind::THROWS_KW) {
+        return None;
+    }
+
+    let m = p.start();
+    p.bump(); // throws
+
+    // Optional exception type (if not followed by where or block)
+    if !p.at(SyntaxKind::WHERE_KW)
+        && !p.at(SyntaxKind::L_BRACE)
+        && let Err(e) = stmt::type_annotation(p)
+    {
+        m.abandon(p);
+        return Some(Err(e));
+    }
+
+    Some(Ok(m.complete(p, SyntaxKind::ThrowsClause)))
 }
 
 /// Parse a type parameter in a where clause: `T` or `T: Bound + OtherBound`
@@ -507,7 +540,7 @@ fn opt_label_spec(p: &mut Parser<'_>) -> Option<CompletedMarker> {
     None
 }
 
-/// Parse a regular parameter: `[LabelSpec] name: Type`
+/// Parse a regular parameter: `[LabelSpec] name: Type [= expr]`
 fn param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
 
@@ -528,6 +561,13 @@ fn param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     if let Err(err) = stmt::type_annotation(p) {
         m.abandon(p);
         return Err(err);
+    }
+
+    // Optional default value
+    if p.eat(SyntaxKind::EQ)
+        && let Err(err) = expr::expr(p)
+    {
+        p.error(err);
     }
 
     Ok(m.complete(p, SyntaxKind::Param))
@@ -1418,6 +1458,16 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseEr
     let vis_offset = visibility_lookahead_at(p, attr_offset);
     let mut lookahead = attr_offset + vis_offset;
     let has_pub = p.peek(attr_offset) == Some(SyntaxKind::PUB_KW);
+
+    // Skip optional `const` modifier
+    if p.peek(lookahead) == Some(SyntaxKind::CONST_KW) {
+        // Check if this is `const fn` (modifier) or `const NAME` (const definition)
+        // If followed by fn or unsafe, it's a function modifier
+        let next = p.peek(lookahead + 1);
+        if next == Some(SyntaxKind::FN_KW) || next == Some(SyntaxKind::UNSAFE_KW) {
+            lookahead += 1;
+        }
+    }
 
     // Skip optional `unsafe` modifier
     if p.peek(lookahead) == Some(SyntaxKind::UNSAFE_KW) {

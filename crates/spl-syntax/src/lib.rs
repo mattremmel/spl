@@ -166,6 +166,7 @@ pub enum SyntaxKind {
     FieldList,
     FieldDef,
     WhereClause,
+    ThrowsClause,
     TypeBound,
     LabelSpec,
     /// Label for labeled loops/blocks: 'name:

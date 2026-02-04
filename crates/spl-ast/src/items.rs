@@ -1,6 +1,6 @@
 //! Item AST nodes: functions, structs, impls, type aliases.
 
-use crate::{Block, Path, Type, ast_enum, ast_node, child, children, token};
+use crate::{Block, Expr, Path, Type, ast_enum, ast_node, child, children, token};
 use spl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 
 ast_node!(SourceFile);
@@ -31,6 +31,7 @@ ast_node!(Name);
 ast_node!(NameRef);
 ast_node!(Visibility);
 ast_node!(WhereClause);
+ast_node!(ThrowsClause);
 ast_node!(TypeBound);
 ast_node!(LabelSpec);
 
@@ -79,6 +80,16 @@ impl FunctionDef {
         child(&self.0)
     }
 
+    /// Check if this function is marked `const`.
+    pub fn is_const(&self) -> bool {
+        token(&self.0, SyntaxKind::CONST_KW).is_some()
+    }
+
+    /// Check if this function is marked `unsafe`.
+    pub fn is_unsafe(&self) -> bool {
+        token(&self.0, SyntaxKind::UNSAFE_KW).is_some()
+    }
+
     pub fn fn_kw(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::FN_KW)
     }
@@ -92,6 +103,10 @@ impl FunctionDef {
     }
 
     pub fn ret_type(&self) -> Option<Type> {
+        child(&self.0)
+    }
+
+    pub fn throws_clause(&self) -> Option<ThrowsClause> {
         child(&self.0)
     }
 
@@ -461,6 +476,11 @@ impl Param {
         child(&self.0)
     }
 
+    /// Get the default value expression if present.
+    pub fn default_value(&self) -> Option<Expr> {
+        child(&self.0)
+    }
+
     /// Get the external label for this parameter.
     /// - Returns `None` if label spec is `_` (positional parameter)
     /// - Returns the explicit label if a label spec is provided
@@ -595,6 +615,18 @@ impl WhereClause {
     /// Get the type parameters with their bounds.
     pub fn type_params(&self) -> impl Iterator<Item = GenericParam> {
         children(&self.0)
+    }
+}
+
+impl ThrowsClause {
+    /// Get the `throws` keyword token.
+    pub fn throws_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::THROWS_KW)
+    }
+
+    /// Get the exception type if specified.
+    pub fn exception_type(&self) -> Option<Type> {
+        child(&self.0)
     }
 }
 

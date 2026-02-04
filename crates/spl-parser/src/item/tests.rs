@@ -4359,3 +4359,516 @@ fn trait_associated_type_no_semicolon() {
         "#]],
     );
 }
+
+// === const/unsafe function modifiers (spl-hai9) ===
+
+#[test]
+fn function_const() {
+    check_item(
+        "const fn compute(): i32 {}",
+        &expect![[r#"
+            FunctionDef@0..26
+              CONST_KW@0..5 "const"
+              WHITESPACE@5..6 " "
+              FN_KW@6..8 "fn"
+              Name@8..16
+                WHITESPACE@8..9 " "
+                IDENT@9..16 "compute"
+              ParamList@16..18
+                L_PAREN@16..17 "("
+                R_PAREN@17..18 ")"
+              COLON@18..19 ":"
+              PathType@19..23
+                Path@19..23
+                  PathSegment@19..23
+                    NameRef@19..23
+                      WHITESPACE@19..20 " "
+                      IDENT@20..23 "i32"
+              Block@23..26
+                WHITESPACE@23..24 " "
+                L_BRACE@24..25 "{"
+                R_BRACE@25..26 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn function_unsafe() {
+    check_item(
+        "unsafe fn danger() {}",
+        &expect![[r#"
+            FunctionDef@0..21
+              UNSAFE_KW@0..6 "unsafe"
+              WHITESPACE@6..7 " "
+              FN_KW@7..9 "fn"
+              Name@9..16
+                WHITESPACE@9..10 " "
+                IDENT@10..16 "danger"
+              ParamList@16..18
+                L_PAREN@16..17 "("
+                R_PAREN@17..18 ")"
+              Block@18..21
+                WHITESPACE@18..19 " "
+                L_BRACE@19..20 "{"
+                R_BRACE@20..21 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn function_const_unsafe() {
+    check_item(
+        "const unsafe fn risky(): i32 {}",
+        &expect![[r#"
+            FunctionDef@0..31
+              CONST_KW@0..5 "const"
+              WHITESPACE@5..6 " "
+              UNSAFE_KW@6..12 "unsafe"
+              WHITESPACE@12..13 " "
+              FN_KW@13..15 "fn"
+              Name@15..21
+                WHITESPACE@15..16 " "
+                IDENT@16..21 "risky"
+              ParamList@21..23
+                L_PAREN@21..22 "("
+                R_PAREN@22..23 ")"
+              COLON@23..24 ":"
+              PathType@24..28
+                Path@24..28
+                  PathSegment@24..28
+                    NameRef@24..28
+                      WHITESPACE@24..25 " "
+                      IDENT@25..28 "i32"
+              Block@28..31
+                WHITESPACE@28..29 " "
+                L_BRACE@29..30 "{"
+                R_BRACE@30..31 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn function_pub_const_unsafe() {
+    check_item(
+        "pub const unsafe fn risky() {}",
+        &expect![[r#"
+            FunctionDef@0..30
+              Visibility@0..3
+                PUB_KW@0..3 "pub"
+              WHITESPACE@3..4 " "
+              CONST_KW@4..9 "const"
+              WHITESPACE@9..10 " "
+              UNSAFE_KW@10..16 "unsafe"
+              WHITESPACE@16..17 " "
+              FN_KW@17..19 "fn"
+              Name@19..25
+                WHITESPACE@19..20 " "
+                IDENT@20..25 "risky"
+              ParamList@25..27
+                L_PAREN@25..26 "("
+                R_PAREN@26..27 ")"
+              Block@27..30
+                WHITESPACE@27..28 " "
+                L_BRACE@28..29 "{"
+                R_BRACE@29..30 "}"
+        "#]],
+    );
+}
+
+// === throws clause (spl-hai9) ===
+
+#[test]
+fn function_throws_untyped() {
+    check_item(
+        "fn may_fail() throws {}",
+        &expect![[r#"
+            FunctionDef@0..23
+              FN_KW@0..2 "fn"
+              Name@2..11
+                WHITESPACE@2..3 " "
+                IDENT@3..11 "may_fail"
+              ParamList@11..13
+                L_PAREN@11..12 "("
+                R_PAREN@12..13 ")"
+              ThrowsClause@13..20
+                WHITESPACE@13..14 " "
+                THROWS_KW@14..20 "throws"
+              Block@20..23
+                WHITESPACE@20..21 " "
+                L_BRACE@21..22 "{"
+                R_BRACE@22..23 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn function_throws_typed() {
+    check_item(
+        "fn may_fail() throws Error {}",
+        &expect![[r#"
+            FunctionDef@0..29
+              FN_KW@0..2 "fn"
+              Name@2..11
+                WHITESPACE@2..3 " "
+                IDENT@3..11 "may_fail"
+              ParamList@11..13
+                L_PAREN@11..12 "("
+                R_PAREN@12..13 ")"
+              ThrowsClause@13..26
+                WHITESPACE@13..14 " "
+                THROWS_KW@14..20 "throws"
+                PathType@20..26
+                  Path@20..26
+                    PathSegment@20..26
+                      NameRef@20..26
+                        WHITESPACE@20..21 " "
+                        IDENT@21..26 "Error"
+              Block@26..29
+                WHITESPACE@26..27 " "
+                L_BRACE@27..28 "{"
+                R_BRACE@28..29 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn function_return_and_throws() {
+    check_item(
+        "fn compute(): i32 throws Error {}",
+        &expect![[r#"
+            FunctionDef@0..33
+              FN_KW@0..2 "fn"
+              Name@2..10
+                WHITESPACE@2..3 " "
+                IDENT@3..10 "compute"
+              ParamList@10..12
+                L_PAREN@10..11 "("
+                R_PAREN@11..12 ")"
+              COLON@12..13 ":"
+              PathType@13..17
+                Path@13..17
+                  PathSegment@13..17
+                    NameRef@13..17
+                      WHITESPACE@13..14 " "
+                      IDENT@14..17 "i32"
+              ThrowsClause@17..30
+                WHITESPACE@17..18 " "
+                THROWS_KW@18..24 "throws"
+                PathType@24..30
+                  Path@24..30
+                    PathSegment@24..30
+                      NameRef@24..30
+                        WHITESPACE@24..25 " "
+                        IDENT@25..30 "Error"
+              Block@30..33
+                WHITESPACE@30..31 " "
+                L_BRACE@31..32 "{"
+                R_BRACE@32..33 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn function_throws_and_where() {
+    check_item(
+        "fn generic(x: T) throws where T {}",
+        &expect![[r#"
+            FunctionDef@0..34
+              FN_KW@0..2 "fn"
+              Name@2..10
+                WHITESPACE@2..3 " "
+                IDENT@3..10 "generic"
+              ParamList@10..16
+                L_PAREN@10..11 "("
+                Param@11..15
+                  Name@11..12
+                    IDENT@11..12 "x"
+                  COLON@12..13 ":"
+                  PathType@13..15
+                    Path@13..15
+                      PathSegment@13..15
+                        NameRef@13..15
+                          WHITESPACE@13..14 " "
+                          IDENT@14..15 "T"
+                R_PAREN@15..16 ")"
+              ThrowsClause@16..23
+                WHITESPACE@16..17 " "
+                THROWS_KW@17..23 "throws"
+              WhereClause@23..31
+                WHITESPACE@23..24 " "
+                WHERE_KW@24..29 "where"
+                GenericParam@29..31
+                  Name@29..31
+                    WHITESPACE@29..30 " "
+                    IDENT@30..31 "T"
+              Block@31..34
+                WHITESPACE@31..32 " "
+                L_BRACE@32..33 "{"
+                R_BRACE@33..34 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn function_full_signature() {
+    check_item(
+        "pub const unsafe fn process(x: T): Result throws Error where T {}",
+        &expect![[r#"
+            FunctionDef@0..65
+              Visibility@0..3
+                PUB_KW@0..3 "pub"
+              WHITESPACE@3..4 " "
+              CONST_KW@4..9 "const"
+              WHITESPACE@9..10 " "
+              UNSAFE_KW@10..16 "unsafe"
+              WHITESPACE@16..17 " "
+              FN_KW@17..19 "fn"
+              Name@19..27
+                WHITESPACE@19..20 " "
+                IDENT@20..27 "process"
+              ParamList@27..33
+                L_PAREN@27..28 "("
+                Param@28..32
+                  Name@28..29
+                    IDENT@28..29 "x"
+                  COLON@29..30 ":"
+                  PathType@30..32
+                    Path@30..32
+                      PathSegment@30..32
+                        NameRef@30..32
+                          WHITESPACE@30..31 " "
+                          IDENT@31..32 "T"
+                R_PAREN@32..33 ")"
+              COLON@33..34 ":"
+              PathType@34..41
+                Path@34..41
+                  PathSegment@34..41
+                    NameRef@34..41
+                      WHITESPACE@34..35 " "
+                      IDENT@35..41 "Result"
+              ThrowsClause@41..54
+                WHITESPACE@41..42 " "
+                THROWS_KW@42..48 "throws"
+                PathType@48..54
+                  Path@48..54
+                    PathSegment@48..54
+                      NameRef@48..54
+                        WHITESPACE@48..49 " "
+                        IDENT@49..54 "Error"
+              WhereClause@54..62
+                WHITESPACE@54..55 " "
+                WHERE_KW@55..60 "where"
+                GenericParam@60..62
+                  Name@60..62
+                    WHITESPACE@60..61 " "
+                    IDENT@61..62 "T"
+              Block@62..65
+                WHITESPACE@62..63 " "
+                L_BRACE@63..64 "{"
+                R_BRACE@64..65 "}"
+        "#]],
+    );
+}
+
+// === Default parameters (spl-hai9) ===
+
+#[test]
+fn param_with_default() {
+    check_item(
+        r#"fn greet(name: String = "World") {}"#,
+        &expect![[r#"
+            FunctionDef@0..35
+              FN_KW@0..2 "fn"
+              Name@2..8
+                WHITESPACE@2..3 " "
+                IDENT@3..8 "greet"
+              ParamList@8..32
+                L_PAREN@8..9 "("
+                Param@9..31
+                  Name@9..13
+                    IDENT@9..13 "name"
+                  COLON@13..14 ":"
+                  PathType@14..21
+                    Path@14..21
+                      PathSegment@14..21
+                        NameRef@14..21
+                          WHITESPACE@14..15 " "
+                          IDENT@15..21 "String"
+                  WHITESPACE@21..22 " "
+                  EQ@22..23 "="
+                  LiteralExpr@23..31
+                    WHITESPACE@23..24 " "
+                    STRING_LITERAL@24..31 "\"World\""
+                R_PAREN@31..32 ")"
+              Block@32..35
+                WHITESPACE@32..33 " "
+                L_BRACE@33..34 "{"
+                R_BRACE@34..35 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn param_with_numeric_default() {
+    check_item(
+        "fn count(n: i32 = 10) {}",
+        &expect![[r#"
+            FunctionDef@0..24
+              FN_KW@0..2 "fn"
+              Name@2..8
+                WHITESPACE@2..3 " "
+                IDENT@3..8 "count"
+              ParamList@8..21
+                L_PAREN@8..9 "("
+                Param@9..20
+                  Name@9..10
+                    IDENT@9..10 "n"
+                  COLON@10..11 ":"
+                  PathType@11..15
+                    Path@11..15
+                      PathSegment@11..15
+                        NameRef@11..15
+                          WHITESPACE@11..12 " "
+                          IDENT@12..15 "i32"
+                  WHITESPACE@15..16 " "
+                  EQ@16..17 "="
+                  LiteralExpr@17..20
+                    WHITESPACE@17..18 " "
+                    INT_LITERAL@18..20 "10"
+                R_PAREN@20..21 ")"
+              Block@21..24
+                WHITESPACE@21..22 " "
+                L_BRACE@22..23 "{"
+                R_BRACE@23..24 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn param_with_expression_default() {
+    check_item(
+        "fn compute(x: i32 = 2 + 3) {}",
+        &expect![[r#"
+            FunctionDef@0..29
+              FN_KW@0..2 "fn"
+              Name@2..10
+                WHITESPACE@2..3 " "
+                IDENT@3..10 "compute"
+              ParamList@10..26
+                L_PAREN@10..11 "("
+                Param@11..25
+                  Name@11..12
+                    IDENT@11..12 "x"
+                  COLON@12..13 ":"
+                  PathType@13..17
+                    Path@13..17
+                      PathSegment@13..17
+                        NameRef@13..17
+                          WHITESPACE@13..14 " "
+                          IDENT@14..17 "i32"
+                  WHITESPACE@17..18 " "
+                  EQ@18..19 "="
+                  BinExpr@19..25
+                    LiteralExpr@19..21
+                      WHITESPACE@19..20 " "
+                      INT_LITERAL@20..21 "2"
+                    WHITESPACE@21..22 " "
+                    PLUS@22..23 "+"
+                    LiteralExpr@23..25
+                      WHITESPACE@23..24 " "
+                      INT_LITERAL@24..25 "3"
+                R_PAREN@25..26 ")"
+              Block@26..29
+                WHITESPACE@26..27 " "
+                L_BRACE@27..28 "{"
+                R_BRACE@28..29 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn multiple_params_some_with_defaults() {
+    check_item(
+        "fn foo(required: i32, optional: i32 = 42) {}",
+        &expect![[r#"
+            FunctionDef@0..44
+              FN_KW@0..2 "fn"
+              Name@2..6
+                WHITESPACE@2..3 " "
+                IDENT@3..6 "foo"
+              ParamList@6..41
+                L_PAREN@6..7 "("
+                Param@7..20
+                  Name@7..15
+                    IDENT@7..15 "required"
+                  COLON@15..16 ":"
+                  PathType@16..20
+                    Path@16..20
+                      PathSegment@16..20
+                        NameRef@16..20
+                          WHITESPACE@16..17 " "
+                          IDENT@17..20 "i32"
+                COMMA@20..21 ","
+                Param@21..40
+                  Name@21..30
+                    WHITESPACE@21..22 " "
+                    IDENT@22..30 "optional"
+                  COLON@30..31 ":"
+                  PathType@31..35
+                    Path@31..35
+                      PathSegment@31..35
+                        NameRef@31..35
+                          WHITESPACE@31..32 " "
+                          IDENT@32..35 "i32"
+                  WHITESPACE@35..36 " "
+                  EQ@36..37 "="
+                  LiteralExpr@37..40
+                    WHITESPACE@37..38 " "
+                    INT_LITERAL@38..40 "42"
+                R_PAREN@40..41 ")"
+              Block@41..44
+                WHITESPACE@41..42 " "
+                L_BRACE@42..43 "{"
+                R_BRACE@43..44 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn param_with_label_and_default() {
+    check_item(
+        r#"fn greet(to name: String = "World") {}"#,
+        &expect![[r#"
+            FunctionDef@0..38
+              FN_KW@0..2 "fn"
+              Name@2..8
+                WHITESPACE@2..3 " "
+                IDENT@3..8 "greet"
+              ParamList@8..35
+                L_PAREN@8..9 "("
+                Param@9..34
+                  LabelSpec@9..11
+                    IDENT@9..11 "to"
+                  Name@11..16
+                    WHITESPACE@11..12 " "
+                    IDENT@12..16 "name"
+                  COLON@16..17 ":"
+                  PathType@17..24
+                    Path@17..24
+                      PathSegment@17..24
+                        NameRef@17..24
+                          WHITESPACE@17..18 " "
+                          IDENT@18..24 "String"
+                  WHITESPACE@24..25 " "
+                  EQ@25..26 "="
+                  LiteralExpr@26..34
+                    WHITESPACE@26..27 " "
+                    STRING_LITERAL@27..34 "\"World\""
+                R_PAREN@34..35 ")"
+              Block@35..38
+                WHITESPACE@35..36 " "
+                L_BRACE@36..37 "{"
+                R_BRACE@37..38 "}"
+        "#]],
+    );
+}
