@@ -157,9 +157,7 @@ LabelSpec = "_" | IDENTIFIER ;
 (* Unlike Rust, `where` both introduces AND constrains type parameters *)
 WhereClause = "where" TypeParam { "," TypeParam } [ "," ] ;
 
-TypeParam = IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] [ "=" Type ] ;
-
-TypeBound = TypePath [ GenericArgs ] ;
+TypeParam = IDENTIFIER [ ":" PathType { "+" PathType } ] [ "=" Type ] ;
 ```
 
 **Clause Ordering:**
@@ -407,13 +405,13 @@ enum Result{
 (* In declaration context, `: Type` specifies a default: trait Add(RHS: Self) *)
 (* Supertraits specified with : before where clause, e.g., trait Numeric: Add + Sub *)
 (* Unsafe traits have invariants the compiler cannot verify, e.g., unsafe trait Sync *)
-TraitDef = [ "unsafe" ] "trait" IDENTIFIER [ GenericArgs ] [ ":" TypeBound { "+" TypeBound } ] [ WhereClause ] "{" { TraitItem } "}" ;
+TraitDef = [ "unsafe" ] "trait" IDENTIFIER [ GenericArgs ] [ ":" PathType { "+" PathType } ] [ WhereClause ] "{" { TraitItem } "}" ;
 
 TraitItem = [ "pub" ] ( TraitMethod | AssociatedType ) ;
 
 TraitMethod = [ "const" ] [ "unsafe" ] "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ ThrowsClause ] [ WhereClause ] ( ";" | Block ) ;
 
-AssociatedType = "type" IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] [ ";" ] ;
+AssociatedType = "type" IDENTIFIER [ ":" PathType { "+" PathType } ] [ ";" ] ;
 ```
 
 **Examples:**
@@ -788,7 +786,7 @@ PathRoot = "$" "."          (* package root *)
    calling `foo()` uses the default type. *)
 GenericArgs = "(" [ TypeArg { "," TypeArg } [ "," ] ] ")" ;
 
-TypeArg = IDENTIFIER [ ":" Type ] ;   (* T: i32 or T (shorthand for T: T) *)
+TypeArg = UPPER_IDENT [ ":" Type ] ;   (* T: i32 or T (shorthand for T: T) *)
 ```
 
 ### Type Examples
@@ -874,8 +872,7 @@ Statement = LetStatement
 
 LetStatement = "let" [ "mut" ] Pattern [ ":" Type ] [ "=" Expression ] [ ";" ] ;
 
-ExpressionStatement = Expression [ ";" ]
-                    | BlockExpression [ ";" ] ;
+ExpressionStatement = Expression [ ";" ] ;
 ```
 
 Block expressions (`if`, `while`, `for`, `loop`, and bare blocks) may omit the trailing semicolon when used as statements.
@@ -1122,7 +1119,7 @@ ArrayExpr = "[" [ Expression { "," Expression } [ "," ] ] "]"
 (* Struct instantiation uses parentheses; type args and fields in same list *)
 StructExpr = StructExprPath "(" [ StructArgList ] ")" ;
 
-StructExprPath = TypePath | "Self" ;
+StructExprPath = TypePath ;
 
 StructArgList = StructArg { "," StructArg } [ "," ] ;
 
@@ -1251,11 +1248,8 @@ YieldExpr = "yield" Expression ;
 (* Throw an error in a throws function - desugars to return Err(expr) *)
 ThrowExpr = "throw" Expression ;
 
-(* Unsafe enables operations the compiler cannot verify as safe.
-   Block form: `unsafe { statements; expr }` - enables unsafe in entire block
-   Expression form: `unsafe expr` - applies to single expression only *)
-UnsafeExpr = "unsafe" Block
-           | "unsafe" UnaryExpr ;    (* binds tightly to single expression *)
+(* Unsafe enables operations the compiler cannot verify as safe *)
+UnsafeExpr = "unsafe" Block ;
 ```
 
 **Unsafe Blocks:**
@@ -1462,7 +1456,7 @@ RestPattern = ".." [ IDENTIFIER ] ;
 (* Struct patterns use parentheses *)
 StructPattern = StructPatternPath "(" [ StructPatternFields ] ")" ;
 
-StructPatternPath = TypePath | "Self" ;
+StructPatternPath = TypePath ;
 
 StructPatternFields = StructPatternField { "," StructPatternField } [ "," ] [ ".." ] ;
 
@@ -1472,7 +1466,7 @@ StructPatternField = IDENTIFIER [ ":" Pattern ] ;
 (* Enum variant patterns - supports both tuple-style and struct-style variants *)
 EnumPattern = EnumPatternPath [ "(" [ EnumPatternFields ] ")" ] ;
 
-EnumPatternPath = TypePath | "Self" ;
+EnumPatternPath = TypePath ;
 
 (* Enum variant shorthand pattern - type inferred from context.
    See EnumShorthandExpr in section 4 for the corresponding expression syntax. *)
