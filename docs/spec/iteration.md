@@ -554,7 +554,7 @@ Generators are functions that can yield multiple values lazily. They provide a c
 ### Syntax
 
 ```ebnf
-GeneratorDef = "gen" "fn" IDENTIFIER "(" [ ParamList ] ")" ":" Type [ WhereClause ] Block ;
+GeneratorDef = "gen" "fn" IDENTIFIER "(" [ ParamList ] ")" ":" Type [ ThrowsClause ] [ WhereClause ] Block ;
 
 YieldExpr = "yield" Expression ;
 ```

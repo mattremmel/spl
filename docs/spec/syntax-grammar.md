@@ -121,10 +121,10 @@ static mut GLOBAL_STATE: i32 = 0  // Requires unsafe to access
 ### Function Definitions
 
 ```ebnf
-FunctionDef = [ "unsafe" ] "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ ThrowsClause ] [ WhereClause ] Block ;
+FunctionDef = [ "const" ] [ "unsafe" ] "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ ThrowsClause ] [ WhereClause ] Block ;
 
 (* Generator functions yield multiple values lazily *)
-GeneratorDef = "gen" "fn" IDENTIFIER "(" [ ParamList ] ")" ":" Type [ WhereClause ] Block ;
+GeneratorDef = "gen" "fn" IDENTIFIER "(" [ ParamList ] ")" ":" Type [ ThrowsClause ] [ WhereClause ] Block ;
 
 (* Throws clause for functions returning Result.
    Note: `throws` intentionally precedes `where` in SPL's syntax order,
@@ -152,6 +152,25 @@ TypeParam = IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] ;
 
 TypeBound = TypePath [ GenericArgs ] ;
 ```
+
+**Clause Ordering:**
+
+SPL uses a consistent ordering for function/method signatures:
+
+| Element | Order | Example |
+|---------|-------|---------|
+| Parameters | 1st | `fn foo(x: T)` |
+| Return type | 2nd | `: ReturnType` |
+| Throws clause | 3rd | `throws Error` |
+| Where clause | 4th | `where T: Clone` |
+
+This keeps error handling adjacent to the return type it modifies, while
+generic constraints come last as they apply to the entire signature.
+
+For type/struct/enum/trait definitions, `where` follows the body delimiter:
+- `struct Point(x: T) where T`
+- `enum Option { ... } where T`
+- `trait Clone { ... }` (no where needed for simple traits)
 
 **Default Parameters:**
 
@@ -245,6 +264,13 @@ fn process(input: &str): Data throws {
     let parsed = parse(input)!
     return transform(parsed)
 }
+
+// Compile-time evaluable function
+const fn square(x: i32): i32 {
+    return x * x
+}
+
+const HUNDRED: i32 = square(10)  // Evaluated at compile time
 ```
 
 ### Struct Definitions
@@ -317,7 +343,7 @@ EnumDef = "enum" IDENTIFIER "{" [ VariantList ] "}" [ WhereClause ] ;
 VariantList = Variant { "," Variant } [ "," ] ;
 
 (* Variants can be unit, tuple-style, or struct-style *)
-Variant = IDENTIFIER [ "(" VariantFields ")" ] ;
+Variant = UPPER_IDENT [ "(" VariantFields ")" ] ;
 
 (* Type-only = tuple variant, with : = named fields *)
 (* Note: FieldList allows `pub` on fields syntactically, but visibility on
@@ -643,7 +669,10 @@ ExternParam = IDENTIFIER ":" Type ;
 (* Define SPL functions with C calling convention *)
 ExternFnDef = "extern" AbiString "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] Block ;
 
-AbiString = "\"C\"" ;
+AbiString = STRING ;
+
+(* Note: Valid ABI strings are validated semantically. Currently supported: "C".
+   Future ABIs may include "system", "stdcall", etc. *)
 ```
 
 **Examples:**
@@ -671,6 +700,14 @@ type Callback = extern "C" fn(i32): i32
 - Functions defined with `extern "C" fn` use the C calling convention
 - `#[no_mangle]` preserves the function name for FFI
 - Variadic parameters (`...`) are only allowed in extern block declarations
+
+### Macros (Deferred)
+
+Macro syntax is deferred to a future version of SPL. The language will likely support:
+- Declarative macros (pattern-based transformation)
+- Procedural macros (code generation via compiler plugins)
+
+Syntax design will be documented in a separate ADR before implementation.
 
 ---
 
@@ -703,22 +740,22 @@ TupleType = "(" [ TupleTypeElement { "," TupleTypeElement } [ "," ] ] ")" ;
 TupleTypeElement = [ IDENTIFIER ":" ] Type ;
 
 (* Function type return uses colon *)
-FnType = [ "unsafe" ] [ "extern" AbiString ] "fn" "(" [ TypeList ] ")" [ ":" Type ] ;
+FnType = [ "unsafe" ] [ "extern" AbiString ] "fn" [ LifetimeParams ] "(" [ TypeList ] ")" [ ":" Type ] ;
+
+LifetimeParams = "(" Lifetime { "," Lifetime } [ "," ] ")" ;
 
 TypeList = Type { "," Type } [ "," ] ;
 
 NeverType = "Never" ;
 
-PathType = TypePath [ GenericArgs ]
-         | SelfType ;
-
-SelfType = "Self" [ "." IDENTIFIER ] ;  (* Self or Self.AssociatedType *)
+PathType = TypePath [ GenericArgs ] ;
 
 (* Note: `Self.Item?` parses as `(Self.Item)?` — the optional `?` postfix
    applies to the entire path type, not just the final identifier. *)
 
 (* Paths use dot, not double-colon *)
-TypePath = [ PathRoot ] IDENTIFIER { "." IDENTIFIER } ;
+TypePath = [ PathRoot ] IDENTIFIER { "." IDENTIFIER }
+         | "Self" [ "." IDENTIFIER ] ;  (* Self or Self.AssociatedType *)
 
 PathRoot = "$" "."          (* package root *)
          | "super" "."      (* parent module *)
@@ -755,6 +792,7 @@ TypeArg = IDENTIFIER [ ":" Type ] ;   (* T: i32 or T (shorthand for T: T) *)
 | `()`                | Unit type                          |
 | `fn(i32): bool`     | Function type                      |
 | `fn(T, U): V`       | Generic function type              |
+| `fn('a)(&'a str): &'a Token` | Function type with lifetime parameter |
 | `fn()`              | Function type returning unit       |
 | `Never`             | Never type                         |
 | `HashMap(K: String, V: i32)` | Multi-param generic type   |
@@ -1033,11 +1071,18 @@ ClosureParams = "||"
    return type annotation syntax is provided, matching Rust's behavior. *)
 ClosureBody = Block | Expression ;
 
+(* Note: Explicit capture lists (@[...]) control whether variables are
+   captured by reference or by value. The capture expression determines
+   ownership: `@[x]` captures x by value (moves), `@[x: &x]` captures by
+   reference. See closures.md for details. *)
+
 LiteralExpr = INTEGER | FLOAT | STRING | CHAR | "true" | "false" ;
 
 (* Enum variant shorthand - type inferred from context.
    See EnumShorthandPattern in section 5 for the corresponding pattern syntax. *)
-EnumShorthandExpr = "." IDENTIFIER [ "(" [ ArgList ] ")" ] ;
+EnumShorthandExpr = "." UPPER_IDENT [ "(" [ ArgList ] ")" ] ;
+
+(* Note: Enum variants must start with an uppercase letter (PascalCase convention). *)
 
 (* Paths use dot separator *)
 PathExpr = [ PathRoot ] IDENTIFIER { "." IDENTIFIER } ;
@@ -1408,7 +1453,14 @@ LiteralPattern = [ "-" ] INTEGER
                | "true"
                | "false" ;
 
-RangePattern = LiteralPattern ( ".." | "..=" ) LiteralPattern ;
+RangePattern = RangePatternBound ( ".." | "..=" ) [ RangePatternBound ]
+             | ( ".." | "..=" ) RangePatternBound ;
+
+RangePatternBound = LiteralPattern
+                  | PathExpr ;    (* const item path *)
+
+(* Note: PathExpr in range patterns must resolve to a const item.
+   This is verified semantically. *)
 
 TuplePattern = "(" [ Pattern { "," Pattern } [ "," ] ] ")" ;
 
@@ -1435,7 +1487,9 @@ EnumPatternPath = TypePath | "Self" ;
 
 (* Enum variant shorthand pattern - type inferred from context.
    See EnumShorthandExpr in section 4 for the corresponding expression syntax. *)
-EnumShorthandPattern = "." IDENTIFIER [ "(" [ EnumPatternFields ] ")" ] ;
+EnumShorthandPattern = "." UPPER_IDENT [ "(" [ EnumPatternFields ] ")" ] ;
+
+(* Note: Enum variants must start with an uppercase letter (PascalCase convention). *)
 
 (* Pattern fields for enum variants *)
 EnumPatternFields = EnumPatternField { "," EnumPatternField } [ "," ] [ ".." ] ;
@@ -1484,6 +1538,7 @@ This works because the compiler knows `point` is a `Point` and can match tuple p
 | `0..=10`              | Match range 0-10 (inclusive end)     |
 | `'a'..'z'`            | Match characters a-y (exclusive end) |
 | `'a'..='z'`           | Match characters a-z (inclusive end) |
+| `0..MAX`              | Match range with const path as bound |
 | `(a, b)`              | Destructure tuple                    |
 | `[a, b, c]`           | Destructure fixed-size array/slice   |
 | `[first, ..]`         | Match first, ignore rest             |
@@ -1546,32 +1601,6 @@ CHAR = (* single-quoted character *) ;
 ```
 
 Boolean literals use the keywords `true` and `false`.
-
----
-
-## Operator Precedence Summary
-
-From lowest to highest precedence:
-
-| Prec | Category       | Operators                       | Assoc | Example                   |
-|------|----------------|--------------------------------|-------|---------------------------|
-| 1    | Assignment     | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | Right | `x = y = 1` |
-| 2    | Coalesce       | `??`                           | Right | `a ?? b ?? c`             |
-| 3    | Logical OR     | `\|\|`                         | Left  | `a \|\| b \|\| c`         |
-| 4    | Logical AND    | `&&`                           | Left  | `a && b && c`             |
-| 5    | Pattern Match  | `is`                           | Left  | `x is .Some(v)`           |
-| 6    | Equality       | `==` `!=`                      | Left  | `a == b != c`             |
-| 7    | Comparison     | `<` `>` `<=` `>=`              | Left  | `a < b`                   |
-| 8    | Bitwise OR     | `\|`                           | Left  | `a \| b \| c`             |
-| 9    | Bitwise XOR    | `^`                            | Left  | `a ^ b`                   |
-| 10   | Bitwise AND    | `&`                            | Left  | `a & b`                   |
-| 11   | Shift          | `<<` `>>`                      | Left  | `a << 2`                  |
-| 12   | Range          | `..` `..=`                     | Left  | `0..10`, `0..=10`         |
-| 13   | Additive       | `+` `-`                        | Left  | `a + b - c`               |
-| 14   | Multiplicative | `*` `/` `%`                    | Left  | `a * b / c`               |
-| 15   | Exponentiation | `**`                           | Right | `2 ** 3 ** 2` (= 512)     |
-| 16   | Unary          | `!` `-` `&` `&mut` `~` (bitwise NOT) | Right | `!&mut x`, `~bits`   |
-| 17   | Postfix        | `.` `?.` `()` `[]` `[:]` `!`   | Left  | `a.b()!.c[0]`             |
 
 ---
 
