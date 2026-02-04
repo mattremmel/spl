@@ -311,7 +311,7 @@ Named vs positional fields are distinguished by the presence of `:` after an ide
 
 ```ebnf
 (* Enums use braces for declarations, like structs *)
-(* Type parameters are used inline in variants and declared in where clause *)
+(* Type parameters appear in variant data types and must be declared in the where clause *)
 EnumDef = "enum" IDENTIFIER "{" [ VariantList ] "}" [ WhereClause ] ;
 
 VariantList = Variant { "," Variant } [ "," ] ;
@@ -335,7 +335,7 @@ VariantFields = FieldList           (* named fields: x: i32, y: i32 *)
 
 ```spl
 // Simple enum
-enum Color{Red, Green, Blue}
+enum Color { Red, Green, Blue }
 
 // Enum with data (type params used inline, declared in where)
 enum Option{
@@ -686,7 +686,14 @@ BaseType = ReferenceType
          | NeverType
          | PathType ;
 
-ReferenceType = "&" [ "mut" ] BaseType ;
+(* Lifetime marker - optional precision for reference provenance *)
+Lifetime = "'" IDENTIFIER ;
+
+ReferenceType = "&" [ Lifetime ] [ "mut" ] BaseType ;
+
+(* Note: Lifetime markers are optional precision, not required annotations.
+   SPL uses second-class references with intersection semantics by default.
+   See memory-model.md for details on when lifetime markers are useful. *)
 
 ArrayType = "[" Type [ ";" Expression ] "]" ;
 
@@ -696,7 +703,7 @@ TupleType = "(" [ TupleTypeElement { "," TupleTypeElement } [ "," ] ] ")" ;
 TupleTypeElement = [ IDENTIFIER ":" ] Type ;
 
 (* Function type return uses colon *)
-FnType = "fn" "(" [ TypeList ] ")" [ ":" Type ] ;
+FnType = [ "unsafe" ] [ "extern" AbiString ] "fn" "(" [ TypeList ] ")" [ ":" Type ] ;
 
 TypeList = Type { "," Type } [ "," ] ;
 
@@ -721,6 +728,9 @@ PathRoot = "$" "."          (* package root *)
 (* Case-based disambiguation: uppercase identifier = type arg, lowercase = value arg *)
 (* This is a hard rule enforced by the parser — no backtracking or semantic reinterpretation *)
 (* Shorthand: bare identifier T means T: T (type param name matches type name) *)
+(* Note: Empty generic arguments `Foo()` are syntactically valid and useful when
+   all type parameters have defaults. For example, if `struct Box(value: T = i32) where T`,
+   then `Box()` instantiates with the default. *)
 GenericArgs = "(" [ TypeArg { "," TypeArg } [ "," ] ] ")" ;
 
 TypeArg = IDENTIFIER [ ":" Type ] ;   (* T: i32 or T (shorthand for T: T) *)
@@ -788,6 +798,12 @@ let mixed: (i32, name: String) = (42, name: "hello")
 - Named fields: `tuple.field_name`
 - Positional fields: `tuple.0`, `tuple.1`, etc.
 - Both access styles work regardless of whether fields were declared with names
+
+### Trait Objects and Existential Types
+
+SPL currently uses automatic boxing for trait objects rather than explicit `dyn Trait` syntax. When a value type is used where a trait bound is expected, the compiler may automatically box it.
+
+Explicit `dyn Trait` syntax and `impl Trait` return types are deferred features. The language may add these in the future if automatic boxing proves insufficient for performance-critical code.
 
 ---
 
@@ -1214,6 +1230,24 @@ unsafe fn dangerous_operation(p: Ptr(T: i32)): i32 {
 let result = unsafe dangerous_operation(ptr)
 ```
 
+**Precedence examples:**
+
+```spl
+// unsafe binds to the immediate expression, not the entire statement
+unsafe p.read() + 1          // Parses as: (unsafe p.read()) + 1
+unsafe p.read().to_string()  // Parses as: (unsafe (p.read())).to_string()
+
+// Use parentheses for larger scopes
+unsafe (p.read() + 1)        // ERROR: parentheses don't create unsafe context
+
+// Use block form for multiple operations or larger expressions
+let sum = unsafe {
+    p1.read() + p2.read()
+}
+```
+
+This matches Rust's precedence for `unsafe` in expression position (when used without braces, it binds tightly like a unary operator).
+
 See [unsafe.md](unsafe.md) for the full list of operations that require unsafe.
 
 **Pattern Matching in Control Flow:**
@@ -1418,6 +1452,12 @@ EnumPatternField = IDENTIFIER ":" Pattern       (* explicit: field name with pat
 ReferencePattern = "&" [ "mut" ] Pattern ;
 ```
 
+**Note:** `VariantFields` (for declarations) and `EnumPatternFields` (for patterns) have different structures because they serve different purposes:
+- **Declarations** specify types: `FieldList` contains `Type` or `name: Type`
+- **Patterns** match values: `EnumPatternField` contains `Pattern` or `name: Pattern`
+
+This asymmetry mirrors the distinction between struct definitions and struct patterns throughout the grammar.
+
 **Note:** At most one `RestPattern` (`..` or `..name`) is allowed per slice pattern. This is enforced semantically, not syntactically.
 
 **Tuple Patterns for Struct Destructuring:**
@@ -1458,7 +1498,7 @@ This works because the compiler knows `point` is a `Point` and can match tuple p
 | `None`                | Match unit enum variant              |
 | `Ok(value)`           | Match Result Ok variant              |
 | `Err(e)`              | Match Result Err variant             |
-| `.Move(x, y)`         | Shorthand with field name shorthands |
+| `.Move(x, y)`         | Enum shorthand with implicit field bindings |
 | `.Move(x: a, y: b)`   | Shorthand with explicit bindings     |
 | `Message.Move(x, ..)`  | Named variant partial destructure   |
 | `&x`                  | Match reference                      |
@@ -2173,5 +2213,6 @@ fn apply(_ f: fn(i32): i32, _ x: i32): i32 {
 | Named parameters    | Not built-in              | `fn foo(to name: T)`         |
 | Default parameters  | Not supported             | `fn foo(x: i32 = 0)`         |
 | Named tuples        | Not supported             | `(x: i32, y: i32)` type and expr |
-| Type arg shorthand  | Not applicable            | `Option(T)` means `Option(T: T)` |
+| Type arg shorthand  | Not applicable            | `Option(T)` means `Option(T: T)` — parallels struct field shorthand for consistency |
 | Tuple pattern for struct | Not supported        | `let (x, y) = point` (type inferred) |
+| Concurrency model   | `async`/`await` keywords  | Go-style: `await()` is a method call, not a keyword |
