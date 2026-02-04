@@ -231,6 +231,14 @@ impl<'a> LoweringContext<'a> {
                 }
                 None
             }
+            Item::Enum(_) => {
+                // TODO: lower enum definitions to HIR
+                None
+            }
+            Item::Trait(_) => {
+                // TODO: lower trait definitions to HIR
+                None
+            }
         }
     }
 

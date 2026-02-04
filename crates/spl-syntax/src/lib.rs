@@ -139,6 +139,12 @@ pub enum SyntaxKind {
     // Items
     FunctionDef,
     StructDef,
+    EnumDef,
+    VariantList,
+    Variant,
+    TraitDef,
+    TraitItem,
+    AssociatedType,
     ImplBlock,
     TypeAlias,
     ExternBlock,

@@ -289,6 +289,8 @@ impl<'ctx> Resolver<'ctx> {
             Item::Extern(extern_block) => self.collect_extern_block(extern_block),
             Item::Use(use_decl) => self.collect_use_decl(use_decl),
             Item::Module(module_def) => self.collect_module_def(module_def),
+            // TODO: collect enum and trait definitions
+            Item::Enum(_) | Item::Trait(_) => {}
         }
     }
 
@@ -811,10 +813,10 @@ impl<'ctx> Resolver<'ctx> {
             Item::TypeAlias(type_alias) => self.resolve_type_alias(type_alias),
             Item::Impl(impl_block) => self.resolve_impl_block(impl_block),
             Item::Extern(extern_block) => self.resolve_extern_block(extern_block),
-            Item::Use(_) => {
-                // Use declarations are handled during import resolution (future)
-            }
             Item::Module(module_def) => self.resolve_module_def(module_def),
+            // Use declarations are handled during import resolution
+            // TODO: resolve enum and trait definitions
+            Item::Use(_) | Item::Enum(_) | Item::Trait(_) => {}
         }
     }
 

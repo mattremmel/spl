@@ -99,13 +99,13 @@ impl<'a> InferEngine<'a> {
                         self.collect_extern_fn_signature(&extern_fn);
                     }
                 }
-                Item::Use(_) => {
-                    // Use declarations are handled during import resolution (future)
-                }
                 Item::Module(module_def) => {
                     // Collect signatures from items inside inline modules
                     self.collect_module_signatures(module_def);
                 }
+                // Use declarations are handled during import resolution
+                // TODO: collect enum and trait type info
+                Item::Use(_) | Item::Enum(_) | Item::Trait(_) => {}
             }
         }
 
@@ -201,7 +201,8 @@ impl<'a> InferEngine<'a> {
                     // Recursively collect from nested modules
                     self.collect_module_signatures(nested);
                 }
-                Item::Use(_) => {}
+                // TODO: collect enum and trait type info
+                Item::Use(_) | Item::Enum(_) | Item::Trait(_) => {}
             }
         }
     }

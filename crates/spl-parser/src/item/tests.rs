@@ -3396,3 +3396,542 @@ fn module_mixed_items() {
         "#]],
     );
 }
+
+// === Enum Tests ===
+
+#[test]
+fn enum_empty() {
+    check_item(
+        "enum Empty {}",
+        &expect![[r#"
+            EnumDef@0..13
+              ENUM_KW@0..4 "enum"
+              Name@4..10
+                WHITESPACE@4..5 " "
+                IDENT@5..10 "Empty"
+              WHITESPACE@10..11 " "
+              L_BRACE@11..12 "{"
+              R_BRACE@12..13 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn enum_unit_variants() {
+    check_item(
+        "enum Color { Red, Green, Blue }",
+        &expect![[r#"
+            EnumDef@0..31
+              ENUM_KW@0..4 "enum"
+              Name@4..10
+                WHITESPACE@4..5 " "
+                IDENT@5..10 "Color"
+              WHITESPACE@10..11 " "
+              L_BRACE@11..12 "{"
+              VariantList@12..29
+                Variant@12..16
+                  Name@12..16
+                    WHITESPACE@12..13 " "
+                    IDENT@13..16 "Red"
+                COMMA@16..17 ","
+                Variant@17..23
+                  Name@17..23
+                    WHITESPACE@17..18 " "
+                    IDENT@18..23 "Green"
+                COMMA@23..24 ","
+                Variant@24..29
+                  Name@24..29
+                    WHITESPACE@24..25 " "
+                    IDENT@25..29 "Blue"
+              WHITESPACE@29..30 " "
+              R_BRACE@30..31 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn enum_trailing_comma() {
+    check_item(
+        "enum X { A, B, }",
+        &expect![[r#"
+            EnumDef@0..16
+              ENUM_KW@0..4 "enum"
+              Name@4..6
+                WHITESPACE@4..5 " "
+                IDENT@5..6 "X"
+              WHITESPACE@6..7 " "
+              L_BRACE@7..8 "{"
+              VariantList@8..14
+                Variant@8..10
+                  Name@8..10
+                    WHITESPACE@8..9 " "
+                    IDENT@9..10 "A"
+                COMMA@10..11 ","
+                Variant@11..13
+                  Name@11..13
+                    WHITESPACE@11..12 " "
+                    IDENT@12..13 "B"
+                COMMA@13..14 ","
+              WHITESPACE@14..15 " "
+              R_BRACE@15..16 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn enum_tuple_variant() {
+    check_item(
+        "enum Option { Some(T), None }",
+        &expect![[r#"
+            EnumDef@0..30
+              ENUM_KW@0..4 "enum"
+              Name@4..11
+                WHITESPACE@4..5 " "
+                IDENT@5..11 "Option"
+              WHITESPACE@11..12 " "
+              L_BRACE@12..13 "{"
+              VariantList@13..28
+                Variant@13..22
+                  Name@13..18
+                    WHITESPACE@13..14 " "
+                    IDENT@14..18 "Some"
+                  FieldList@18..22
+                    L_PAREN@18..19 "("
+                    FieldDef@19..21
+                      Name@19..20
+                        INT_LITERAL@19..20 "0"
+                      PathType@20..21
+                        Path@20..21
+                          PathSegment@20..21
+                            NameRef@20..21
+                              IDENT@20..21 "T"
+                    R_PAREN@21..22 ")"
+                COMMA@22..23 ","
+                Variant@23..28
+                  Name@23..28
+                    WHITESPACE@23..24 " "
+                    IDENT@24..28 "None"
+              WHITESPACE@28..29 " "
+              R_BRACE@29..30 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn enum_struct_variant() {
+    check_item(
+        "enum Msg { Move(x: i32, y: i32) }",
+        &expect![[r#"
+            EnumDef@0..33
+              ENUM_KW@0..4 "enum"
+              Name@4..8
+                WHITESPACE@4..5 " "
+                IDENT@5..8 "Msg"
+              WHITESPACE@8..9 " "
+              L_BRACE@9..10 "{"
+              VariantList@10..31
+                Variant@10..31
+                  Name@10..15
+                    WHITESPACE@10..11 " "
+                    IDENT@11..15 "Move"
+                  FieldList@15..31
+                    L_PAREN@15..16 "("
+                    FieldDef@16..22
+                      Name@16..17
+                        IDENT@16..17 "x"
+                      COLON@17..18 ":"
+                      PathType@18..22
+                        Path@18..22
+                          PathSegment@18..22
+                            NameRef@18..22
+                              WHITESPACE@18..19 " "
+                              IDENT@19..22 "i32"
+                    COMMA@22..23 ","
+                    FieldDef@23..30
+                      Name@23..25
+                        WHITESPACE@23..24 " "
+                        IDENT@24..25 "y"
+                      COLON@25..26 ":"
+                      PathType@26..30
+                        Path@26..30
+                          PathSegment@26..30
+                            NameRef@26..30
+                              WHITESPACE@26..27 " "
+                              IDENT@27..30 "i32"
+                    R_PAREN@30..31 ")"
+              WHITESPACE@31..32 " "
+              R_BRACE@32..33 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn enum_where_clause() {
+    check_item(
+        "enum Option { Some(T), None } where T",
+        &expect![[r#"
+            EnumDef@0..38
+              ENUM_KW@0..4 "enum"
+              Name@4..11
+                WHITESPACE@4..5 " "
+                IDENT@5..11 "Option"
+              WHITESPACE@11..12 " "
+              L_BRACE@12..13 "{"
+              VariantList@13..28
+                Variant@13..22
+                  Name@13..18
+                    WHITESPACE@13..14 " "
+                    IDENT@14..18 "Some"
+                  FieldList@18..22
+                    L_PAREN@18..19 "("
+                    FieldDef@19..21
+                      Name@19..20
+                        INT_LITERAL@19..20 "0"
+                      PathType@20..21
+                        Path@20..21
+                          PathSegment@20..21
+                            NameRef@20..21
+                              IDENT@20..21 "T"
+                    R_PAREN@21..22 ")"
+                COMMA@22..23 ","
+                Variant@23..28
+                  Name@23..28
+                    WHITESPACE@23..24 " "
+                    IDENT@24..28 "None"
+              WHITESPACE@28..29 " "
+              R_BRACE@29..30 "}"
+              WhereClause@30..38
+                WHITESPACE@30..31 " "
+                WHERE_KW@31..36 "where"
+                GenericParam@36..38
+                  Name@36..38
+                    WHITESPACE@36..37 " "
+                    IDENT@37..38 "T"
+        "#]],
+    );
+}
+
+#[test]
+fn enum_pub() {
+    check_item(
+        "pub enum Vis { A }",
+        &expect![[r#"
+            EnumDef@0..18
+              Visibility@0..3
+                PUB_KW@0..3 "pub"
+              WHITESPACE@3..4 " "
+              ENUM_KW@4..8 "enum"
+              Name@8..12
+                WHITESPACE@8..9 " "
+                IDENT@9..12 "Vis"
+              WHITESPACE@12..13 " "
+              L_BRACE@13..14 "{"
+              VariantList@14..16
+                Variant@14..16
+                  Name@14..16
+                    WHITESPACE@14..15 " "
+                    IDENT@15..16 "A"
+              WHITESPACE@16..17 " "
+              R_BRACE@17..18 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn enum_with_attribute() {
+    check_item(
+        "#[derive(Debug)] enum X { A }",
+        &expect![[r##"
+            EnumDef@0..29
+              Attribute@0..16
+                HASH@0..1 "#"
+                L_BRACKET@1..2 "["
+                AttrPath@2..8
+                  IDENT@2..8 "derive"
+                AttrInput@8..15
+                  L_PAREN@8..9 "("
+                  AttrArg@9..14
+                    AttrPath@9..14
+                      IDENT@9..14 "Debug"
+                  R_PAREN@14..15 ")"
+                R_BRACKET@15..16 "]"
+              WHITESPACE@16..17 " "
+              ENUM_KW@17..21 "enum"
+              Name@21..23
+                WHITESPACE@21..22 " "
+                IDENT@22..23 "X"
+              WHITESPACE@23..24 " "
+              L_BRACE@24..25 "{"
+              VariantList@25..27
+                Variant@25..27
+                  Name@25..27
+                    WHITESPACE@25..26 " "
+                    IDENT@26..27 "A"
+              WHITESPACE@27..28 " "
+              R_BRACE@28..29 "}"
+        "##]],
+    );
+}
+
+// === Trait Tests ===
+
+#[test]
+fn trait_empty() {
+    check_item(
+        "trait Empty {}",
+        &expect![[r#"
+            TraitDef@0..14
+              TRAIT_KW@0..5 "trait"
+              Name@5..11
+                WHITESPACE@5..6 " "
+                IDENT@6..11 "Empty"
+              WHITESPACE@11..12 " "
+              L_BRACE@12..13 "{"
+              R_BRACE@13..14 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn trait_method_signature() {
+    check_item(
+        "trait Clone { fn clone(&self): Self; }",
+        &expect![[r#"
+            TraitDef@0..38
+              TRAIT_KW@0..5 "trait"
+              Name@5..11
+                WHITESPACE@5..6 " "
+                IDENT@6..11 "Clone"
+              WHITESPACE@11..12 " "
+              L_BRACE@12..13 "{"
+              TraitItem@13..36
+                WHITESPACE@13..14 " "
+                FN_KW@14..16 "fn"
+                Name@16..22
+                  WHITESPACE@16..17 " "
+                  IDENT@17..22 "clone"
+                ParamList@22..29
+                  L_PAREN@22..23 "("
+                  SelfParam@23..28
+                    AMP@23..24 "&"
+                    SELF_VALUE_KW@24..28 "self"
+                  R_PAREN@28..29 ")"
+                COLON@29..30 ":"
+                PathType@30..35
+                  Path@30..35
+                    PathSegment@30..35
+                      NameRef@30..35
+                        WHITESPACE@30..31 " "
+                        SELF_TYPE_KW@31..35 "Self"
+                SEMI@35..36 ";"
+              WHITESPACE@36..37 " "
+              R_BRACE@37..38 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn trait_method_default() {
+    check_item(
+        "trait Foo { fn bar(): i32 { 0 } }",
+        &expect![[r#"
+            TraitDef@0..33
+              TRAIT_KW@0..5 "trait"
+              Name@5..9
+                WHITESPACE@5..6 " "
+                IDENT@6..9 "Foo"
+              WHITESPACE@9..10 " "
+              L_BRACE@10..11 "{"
+              TraitItem@11..31
+                WHITESPACE@11..12 " "
+                FN_KW@12..14 "fn"
+                Name@14..18
+                  WHITESPACE@14..15 " "
+                  IDENT@15..18 "bar"
+                ParamList@18..20
+                  L_PAREN@18..19 "("
+                  R_PAREN@19..20 ")"
+                COLON@20..21 ":"
+                PathType@21..25
+                  Path@21..25
+                    PathSegment@21..25
+                      NameRef@21..25
+                        WHITESPACE@21..22 " "
+                        IDENT@22..25 "i32"
+                Block@25..31
+                  WHITESPACE@25..26 " "
+                  L_BRACE@26..27 "{"
+                  LiteralExpr@27..29
+                    WHITESPACE@27..28 " "
+                    INT_LITERAL@28..29 "0"
+                  WHITESPACE@29..30 " "
+                  R_BRACE@30..31 "}"
+              WHITESPACE@31..32 " "
+              R_BRACE@32..33 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn trait_associated_type() {
+    check_item(
+        "trait Iterator { type Item; }",
+        &expect![[r#"
+            TraitDef@0..29
+              TRAIT_KW@0..5 "trait"
+              Name@5..14
+                WHITESPACE@5..6 " "
+                IDENT@6..14 "Iterator"
+              WHITESPACE@14..15 " "
+              L_BRACE@15..16 "{"
+              AssociatedType@16..27
+                WHITESPACE@16..17 " "
+                TYPE_KW@17..21 "type"
+                Name@21..26
+                  WHITESPACE@21..22 " "
+                  IDENT@22..26 "Item"
+                SEMI@26..27 ";"
+              WHITESPACE@27..28 " "
+              R_BRACE@28..29 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn trait_associated_type_bounds() {
+    check_item(
+        "trait Foo { type Output: Clone; }",
+        &expect![[r#"
+            TraitDef@0..33
+              TRAIT_KW@0..5 "trait"
+              Name@5..9
+                WHITESPACE@5..6 " "
+                IDENT@6..9 "Foo"
+              WHITESPACE@9..10 " "
+              L_BRACE@10..11 "{"
+              AssociatedType@11..31
+                WHITESPACE@11..12 " "
+                TYPE_KW@12..16 "type"
+                Name@16..23
+                  WHITESPACE@16..17 " "
+                  IDENT@17..23 "Output"
+                COLON@23..24 ":"
+                TypeBound@24..30
+                  Path@24..30
+                    PathSegment@24..30
+                      NameRef@24..30
+                        WHITESPACE@24..25 " "
+                        IDENT@25..30 "Clone"
+                SEMI@30..31 ";"
+              WHITESPACE@31..32 " "
+              R_BRACE@32..33 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn trait_supertrait() {
+    check_item(
+        "trait Eq: PartialEq {}",
+        &expect![[r#"
+            TraitDef@0..22
+              TRAIT_KW@0..5 "trait"
+              Name@5..8
+                WHITESPACE@5..6 " "
+                IDENT@6..8 "Eq"
+              COLON@8..9 ":"
+              TypeBound@9..19
+                Path@9..19
+                  PathSegment@9..19
+                    NameRef@9..19
+                      WHITESPACE@9..10 " "
+                      IDENT@10..19 "PartialEq"
+              WHITESPACE@19..20 " "
+              L_BRACE@20..21 "{"
+              R_BRACE@21..22 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn trait_multiple_supertraits() {
+    check_item(
+        "trait Ord: PartialOrd + Eq {}",
+        &expect![[r#"
+            TraitDef@0..29
+              TRAIT_KW@0..5 "trait"
+              Name@5..9
+                WHITESPACE@5..6 " "
+                IDENT@6..9 "Ord"
+              COLON@9..10 ":"
+              TypeBound@10..21
+                Path@10..21
+                  PathSegment@10..21
+                    NameRef@10..21
+                      WHITESPACE@10..11 " "
+                      IDENT@11..21 "PartialOrd"
+              WHITESPACE@21..22 " "
+              PLUS@22..23 "+"
+              TypeBound@23..26
+                Path@23..26
+                  PathSegment@23..26
+                    NameRef@23..26
+                      WHITESPACE@23..24 " "
+                      IDENT@24..26 "Eq"
+              WHITESPACE@26..27 " "
+              L_BRACE@27..28 "{"
+              R_BRACE@28..29 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn trait_where_clause() {
+    check_item(
+        "trait Add where RHS { type Output; }",
+        &expect![[r#"
+            TraitDef@0..36
+              TRAIT_KW@0..5 "trait"
+              Name@5..9
+                WHITESPACE@5..6 " "
+                IDENT@6..9 "Add"
+              WhereClause@9..19
+                WHITESPACE@9..10 " "
+                WHERE_KW@10..15 "where"
+                GenericParam@15..19
+                  Name@15..19
+                    WHITESPACE@15..16 " "
+                    IDENT@16..19 "RHS"
+              WHITESPACE@19..20 " "
+              L_BRACE@20..21 "{"
+              AssociatedType@21..34
+                WHITESPACE@21..22 " "
+                TYPE_KW@22..26 "type"
+                Name@26..33
+                  WHITESPACE@26..27 " "
+                  IDENT@27..33 "Output"
+                SEMI@33..34 ";"
+              WHITESPACE@34..35 " "
+              R_BRACE@35..36 "}"
+        "#]],
+    );
+}
+
+#[test]
+fn trait_unsafe() {
+    check_item(
+        "unsafe trait Send {}",
+        &expect![[r#"
+            TraitDef@0..20
+              UNSAFE_KW@0..6 "unsafe"
+              WHITESPACE@6..7 " "
+              TRAIT_KW@7..12 "trait"
+              Name@12..17
+                WHITESPACE@12..13 " "
+                IDENT@13..17 "Send"
+              WHITESPACE@17..18 " "
+              L_BRACE@18..19 "{"
+              R_BRACE@19..20 "}"
+        "#]],
+    );
+}

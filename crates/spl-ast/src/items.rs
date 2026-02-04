@@ -6,6 +6,12 @@ use spl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 ast_node!(SourceFile);
 ast_node!(FunctionDef);
 ast_node!(StructDef);
+ast_node!(EnumDef);
+ast_node!(VariantList);
+ast_node!(Variant);
+ast_node!(TraitDef);
+ast_node!(TraitItem);
+ast_node!(AssociatedType);
 ast_node!(ImplBlock);
 ast_node!(TypeAlias);
 ast_node!(ExternBlock);
@@ -49,10 +55,12 @@ impl SourceFile {
 }
 
 ast_enum!(
-    /// Top-level item (function, struct, impl, type alias, extern block, use decl, module).
+    /// Top-level item (function, struct, enum, trait, impl, type alias, extern block, use decl, module).
     Item {
         Function(FunctionDef),
         Struct(StructDef),
+        Enum(EnumDef),
+        Trait(TraitDef),
         Impl(ImplBlock),
         TypeAlias(TypeAlias),
         Extern(ExternBlock),
@@ -116,6 +124,129 @@ impl StructDef {
 
     pub fn where_clause(&self) -> Option<WhereClause> {
         child(&self.0)
+    }
+}
+
+impl EnumDef {
+    /// Get outer attributes on this enum.
+    pub fn attributes(&self) -> impl Iterator<Item = Attribute> {
+        children(&self.0)
+    }
+
+    pub fn visibility(&self) -> Option<Visibility> {
+        child(&self.0)
+    }
+
+    pub fn name(&self) -> Option<Name> {
+        child(&self.0)
+    }
+
+    pub fn variant_list(&self) -> Option<VariantList> {
+        child(&self.0)
+    }
+
+    pub fn where_clause(&self) -> Option<WhereClause> {
+        child(&self.0)
+    }
+}
+
+impl VariantList {
+    pub fn variants(&self) -> impl Iterator<Item = Variant> {
+        children(&self.0)
+    }
+}
+
+impl Variant {
+    pub fn name(&self) -> Option<Name> {
+        child(&self.0)
+    }
+
+    pub fn field_list(&self) -> Option<FieldList> {
+        child(&self.0)
+    }
+}
+
+impl TraitDef {
+    /// Get outer attributes on this trait.
+    pub fn attributes(&self) -> impl Iterator<Item = Attribute> {
+        children(&self.0)
+    }
+
+    pub fn visibility(&self) -> Option<Visibility> {
+        child(&self.0)
+    }
+
+    /// Check if this trait is marked `unsafe`.
+    pub fn is_unsafe(&self) -> bool {
+        token(&self.0, SyntaxKind::UNSAFE_KW).is_some()
+    }
+
+    pub fn name(&self) -> Option<Name> {
+        child(&self.0)
+    }
+
+    /// Get supertrait bounds.
+    pub fn supertraits(&self) -> impl Iterator<Item = TypeBound> {
+        children(&self.0)
+    }
+
+    pub fn where_clause(&self) -> Option<WhereClause> {
+        child(&self.0)
+    }
+
+    /// Get trait items (methods and associated types).
+    pub fn items(&self) -> impl Iterator<Item = TraitItem> {
+        children(&self.0)
+    }
+}
+
+impl TraitItem {
+    pub fn visibility(&self) -> Option<Visibility> {
+        child(&self.0)
+    }
+
+    /// Check if this is a const method.
+    pub fn is_const(&self) -> bool {
+        token(&self.0, SyntaxKind::CONST_KW).is_some()
+    }
+
+    /// Check if this is an unsafe method.
+    pub fn is_unsafe(&self) -> bool {
+        token(&self.0, SyntaxKind::UNSAFE_KW).is_some()
+    }
+
+    pub fn name(&self) -> Option<Name> {
+        child(&self.0)
+    }
+
+    pub fn param_list(&self) -> Option<ParamList> {
+        child(&self.0)
+    }
+
+    /// Get the return type for methods.
+    pub fn ret_type(&self) -> Option<Type> {
+        child(&self.0)
+    }
+
+    /// Get the body for default method implementations.
+    pub fn body(&self) -> Option<Block> {
+        child(&self.0)
+    }
+
+    /// Get the where clause if present.
+    pub fn where_clause(&self) -> Option<WhereClause> {
+        child(&self.0)
+    }
+}
+
+impl AssociatedType {
+    pub fn name(&self) -> Option<Name> {
+        child(&self.0)
+    }
+
+    /// Get type bounds on this associated type.
+    pub fn bounds(&self) -> impl Iterator<Item = TypeBound> {
+        children(&self.0)
     }
 }
 

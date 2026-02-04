@@ -80,12 +80,15 @@ fn is_item_start(kind: SyntaxKind) -> bool {
         kind,
         SyntaxKind::FN_KW
             | SyntaxKind::STRUCT_KW
+            | SyntaxKind::ENUM_KW
+            | SyntaxKind::TRAIT_KW
             | SyntaxKind::TYPE_KW
             | SyntaxKind::IMPL_KW
             | SyntaxKind::PUB_KW
             | SyntaxKind::USE_KW
             | SyntaxKind::EXTERN_KW
             | SyntaxKind::MODULE_KW
+            | SyntaxKind::UNSAFE_KW
     )
 }
 
@@ -597,6 +600,291 @@ pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::P
     Ok(m.complete(p, SyntaxKind::StructDef))
 }
 
+/// Parse an enum definition.
+///
+/// Syntax: `[attrs] [pub] enum Name { Variants } [where ...]`
+/// Note: Where clause comes AFTER closing brace per spec.
+pub(crate) fn enum_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    // Optional attributes
+    opt_attributes(p);
+
+    // Optional visibility
+    opt_visibility(p);
+
+    // enum keyword
+    if let Err(e) = p.expect(SyntaxKind::ENUM_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Enum name
+    if let Err(e) = name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Variant list in braces
+    if let Err(e) = p.expect(SyntaxKind::L_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Parse variants if not empty
+    if !p.at(SyntaxKind::R_BRACE)
+        && let Err(e) = variant_list(p)
+    {
+        p.error(e);
+        // Try to recover to closing brace
+        while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
+            p.bump();
+        }
+    }
+
+    if let Err(e) = p.expect(SyntaxKind::R_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional where clause AFTER closing brace
+    if p.at(SyntaxKind::WHERE_KW)
+        && let Err(e) = where_clause(p)
+    {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    Ok(m.complete(p, SyntaxKind::EnumDef))
+}
+
+/// Parse a variant list: `Variant { "," Variant } [ "," ]`
+fn variant_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    // Parse first variant
+    if let Err(e) = variant(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Parse remaining variants
+    while p.eat(SyntaxKind::COMMA) {
+        // Allow trailing comma
+        if p.at(SyntaxKind::R_BRACE) {
+            break;
+        }
+        if let Err(e) = variant(p) {
+            p.error(e);
+            break;
+        }
+    }
+
+    Ok(m.complete(p, SyntaxKind::VariantList))
+}
+
+/// Parse a single variant: `IDENT [ "(" VariantFields ")" ]`
+fn variant(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    // Variant name (should be UPPER_IDENT per spec, but we just use IDENT and let sema check)
+    if let Err(e) = name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional variant fields in parentheses
+    if p.at(SyntaxKind::L_PAREN)
+        && let Err(e) = variant_fields(p)
+    {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    Ok(m.complete(p, SyntaxKind::Variant))
+}
+
+/// Parse variant fields: `"(" (FieldList | TypeList) ")"`
+/// Determine if it's named fields or tuple fields by checking for `:`.
+fn variant_fields(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    // Re-use the parenthesized field list parser which handles both named and tuple fields
+    paren_field_list(p)
+}
+
+/// Parse a trait definition (stub for now).
+///
+/// Syntax: `[unsafe] trait Name [: Bounds] [where ...] { items }`
+pub(crate) fn trait_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    // Optional attributes
+    opt_attributes(p);
+
+    // Optional visibility
+    opt_visibility(p);
+
+    // Optional unsafe
+    p.eat(SyntaxKind::UNSAFE_KW);
+
+    // trait keyword
+    if let Err(e) = p.expect(SyntaxKind::TRAIT_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Trait name
+    if let Err(e) = name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional supertraits: `: PathType { "+" PathType }`
+    if p.eat(SyntaxKind::COLON) {
+        if let Err(e) = type_bound(p) {
+            m.abandon(p);
+            return Err(e);
+        }
+        while p.eat(SyntaxKind::PLUS) {
+            if let Err(e) = type_bound(p) {
+                m.abandon(p);
+                return Err(e);
+            }
+        }
+    }
+
+    // Optional where clause BEFORE opening brace (unlike enum)
+    if p.at(SyntaxKind::WHERE_KW)
+        && let Err(e) = where_clause(p)
+    {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Trait body
+    if let Err(e) = p.expect(SyntaxKind::L_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Parse trait items
+    while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
+        if let Err(err) = trait_item(p) {
+            p.recover_with_error(err, TRAIT_ITEM_RECOVERY_SET);
+        }
+    }
+
+    if let Err(e) = p.expect(SyntaxKind::R_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    Ok(m.complete(p, SyntaxKind::TraitDef))
+}
+
+/// Recovery set for trait item contents.
+const TRAIT_ITEM_RECOVERY_SET: &[SyntaxKind] = &[
+    SyntaxKind::FN_KW,
+    SyntaxKind::TYPE_KW,
+    SyntaxKind::PUB_KW,
+    SyntaxKind::CONST_KW,
+    SyntaxKind::UNSAFE_KW,
+    SyntaxKind::R_BRACE,
+];
+
+/// Parse a trait item: `[pub] (TraitMethod | AssociatedType)`
+fn trait_item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    // Optional visibility
+    opt_visibility(p);
+
+    // Determine if this is a method or associated type
+    // Skip over optional modifiers to find the keyword
+    let mut offset = 0;
+    if p.peek(offset) == Some(SyntaxKind::CONST_KW) {
+        offset += 1;
+    }
+    if p.peek(offset) == Some(SyntaxKind::UNSAFE_KW) {
+        offset += 1;
+    }
+
+    match p.peek(offset) {
+        Some(SyntaxKind::FN_KW) => {
+            // Method
+            p.eat(SyntaxKind::CONST_KW);
+            p.eat(SyntaxKind::UNSAFE_KW);
+            trait_method(p, m)
+        }
+        Some(SyntaxKind::TYPE_KW) => {
+            // Associated type
+            associated_type(p, m)
+        }
+        _ => {
+            m.abandon(p);
+            Err(p.error_at_current("expected trait item (fn or type)".to_string()))
+        }
+    }
+}
+
+/// Parse a trait method: `fn name(params) [: Type] (Block | ";")`
+fn trait_method(
+    p: &mut Parser<'_>,
+    m: crate::Marker,
+) -> Result<CompletedMarker, crate::ParseError> {
+    // fn keyword
+    p.expect(SyntaxKind::FN_KW)?;
+
+    // Method name
+    name(p)?;
+
+    // Parameter list
+    param_list(p)?;
+
+    // Optional return type
+    if p.eat(SyntaxKind::COLON) {
+        stmt::type_annotation(p)?;
+    }
+
+    // Optional where clause
+    if p.at(SyntaxKind::WHERE_KW) {
+        where_clause(p)?;
+    }
+
+    // Body (block) or semicolon
+    if p.at(SyntaxKind::L_BRACE) {
+        expr::block(p)?;
+    } else {
+        p.expect(SyntaxKind::SEMI)?;
+    }
+
+    Ok(m.complete(p, SyntaxKind::TraitItem))
+}
+
+/// Parse an associated type: `type Name [: Bounds] [";"]`
+fn associated_type(
+    p: &mut Parser<'_>,
+    m: crate::Marker,
+) -> Result<CompletedMarker, crate::ParseError> {
+    // type keyword
+    p.expect(SyntaxKind::TYPE_KW)?;
+
+    // Type name
+    name(p)?;
+
+    // Optional bounds: `: PathType { "+" PathType }`
+    if p.eat(SyntaxKind::COLON) {
+        type_bound(p)?;
+        while p.eat(SyntaxKind::PLUS) {
+            type_bound(p)?;
+        }
+    }
+
+    // Optional semicolon
+    p.eat(SyntaxKind::SEMI);
+
+    Ok(m.complete(p, SyntaxKind::AssociatedType))
+}
+
 /// Parse a parenthesized field list: `([pub] name: Type, ...)`
 /// Supports both new named fields `(x: i32)` and old tuple fields `(i32)`
 fn paren_field_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
@@ -1030,12 +1318,19 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseEr
     // Skip over attributes and visibility to find the item keyword
     let attr_offset = attribute_lookahead(p);
     let vis_offset = visibility_lookahead_at(p, attr_offset);
-    let lookahead = attr_offset + vis_offset;
+    let mut lookahead = attr_offset + vis_offset;
     let has_pub = p.peek(attr_offset) == Some(SyntaxKind::PUB_KW);
+
+    // Skip optional `unsafe` modifier
+    if p.peek(lookahead) == Some(SyntaxKind::UNSAFE_KW) {
+        lookahead += 1;
+    }
 
     match p.peek(lookahead) {
         Some(SyntaxKind::FN_KW) => function_def(p),
         Some(SyntaxKind::STRUCT_KW) => struct_def(p),
+        Some(SyntaxKind::ENUM_KW) => enum_def(p),
+        Some(SyntaxKind::TRAIT_KW) => trait_def(p),
         Some(SyntaxKind::TYPE_KW) => type_alias(p),
         Some(SyntaxKind::IMPL_KW) if !has_pub => impl_block(p),
         Some(SyntaxKind::EXTERN_KW) if !has_pub => extern_block(p),
@@ -1043,7 +1338,8 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseEr
         Some(SyntaxKind::MODULE_KW) => module_def(p),
         _ => {
             let err = p.error_at_current(
-                "expected item (fn, struct, type, impl, extern, use, or module)".to_string(),
+                "expected item (fn, struct, enum, trait, type, impl, extern, use, or module)"
+                    .to_string(),
             );
             Err(err)
         }

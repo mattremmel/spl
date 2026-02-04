@@ -47,6 +47,8 @@ impl AstPrinter {
         match item {
             Item::Function(f) => self.print_function(f),
             Item::Struct(s) => self.print_struct(s),
+            Item::Enum(e) => self.print_enum(e),
+            Item::Trait(t) => self.print_trait(t),
             Item::Impl(i) => self.print_impl(i),
             Item::TypeAlias(t) => self.print_type_alias(t),
             Item::Extern(e) => self.print_extern_block(e),
@@ -126,6 +128,56 @@ impl AstPrinter {
         self.indented(|p| {
             if let Some(fields) = s.field_list() {
                 p.print_field_list(&fields);
+            }
+        });
+    }
+
+    fn print_enum(&mut self, e: &crate::EnumDef) {
+        let name = e
+            .name()
+            .and_then(|n| n.ident_token())
+            .map(|t| t.text().to_string())
+            .unwrap_or_else(|| "?".to_string());
+
+        let vis = if e.visibility().is_some() { "pub " } else { "" };
+        self.line(&format!("{vis}EnumDef \"{name}\""));
+
+        self.indented(|p| {
+            if let Some(variants) = e.variant_list() {
+                for variant in variants.variants() {
+                    let vname = variant
+                        .name()
+                        .and_then(|n| n.ident_token())
+                        .map(|t| t.text().to_string())
+                        .unwrap_or_else(|| "?".to_string());
+                    p.line(&format!("Variant \"{vname}\""));
+                    if let Some(fields) = variant.field_list() {
+                        p.indented(|p| p.print_field_list(&fields));
+                    }
+                }
+            }
+        });
+    }
+
+    fn print_trait(&mut self, t: &crate::TraitDef) {
+        let name = t
+            .name()
+            .and_then(|n| n.ident_token())
+            .map(|t| t.text().to_string())
+            .unwrap_or_else(|| "?".to_string());
+
+        let vis = if t.visibility().is_some() { "pub " } else { "" };
+        let unsafe_kw = if t.is_unsafe() { "unsafe " } else { "" };
+        self.line(&format!("{vis}{unsafe_kw}TraitDef \"{name}\""));
+
+        self.indented(|p| {
+            for item in t.items() {
+                let item_name = item
+                    .name()
+                    .and_then(|n| n.ident_token())
+                    .map(|t| t.text().to_string())
+                    .unwrap_or_else(|| "?".to_string());
+                p.line(&format!("TraitItem \"{item_name}\""));
             }
         });
     }
