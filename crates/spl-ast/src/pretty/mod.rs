@@ -933,6 +933,8 @@ impl AstPrinter {
             Pat::Ref(r) => self.print_ref_pat(r),
             Pat::Rest(_) => self.line("RestPat \"..\""),
             Pat::EnumShorthand(e) => self.print_enum_shorthand_pat(e),
+            Pat::Or(o) => self.print_or_pat(o),
+            Pat::Grouped(g) => self.print_grouped_pat(g),
         }
     }
 
@@ -1039,6 +1041,24 @@ impl AstPrinter {
         self.line(&format!("EnumShorthandPat \".{name}\""));
         self.indented(|p| {
             for inner in pat.patterns() {
+                p.print_pattern(&inner);
+            }
+        });
+    }
+
+    fn print_or_pat(&mut self, pat: &crate::OrPat) {
+        self.line("OrPat");
+        self.indented(|p| {
+            for alt in pat.alternatives() {
+                p.print_pattern(&alt);
+            }
+        });
+    }
+
+    fn print_grouped_pat(&mut self, pat: &crate::GroupedPat) {
+        self.line("GroupedPat");
+        self.indented(|p| {
+            if let Some(inner) = pat.inner() {
                 p.print_pattern(&inner);
             }
         });

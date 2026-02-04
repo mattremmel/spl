@@ -14,6 +14,8 @@ ast_node!(RefPat);
 ast_node!(RestPat);
 ast_node!(StructPatField);
 ast_node!(EnumShorthandPat);
+ast_node!(OrPat);
+ast_node!(GroupedPat);
 
 ast_enum!(
     /// Pattern enum - all pattern variants.
@@ -28,6 +30,8 @@ ast_enum!(
         Ref(RefPat),
         Rest(RestPat),
         EnumShorthand(EnumShorthandPat),
+        Or(OrPat),
+        Grouped(GroupedPat),
     }
 );
 
@@ -161,6 +165,20 @@ impl EnumShorthandPat {
     /// Get the inner patterns, if any.
     pub fn patterns(&self) -> impl Iterator<Item = Pat> {
         children(&self.0)
+    }
+}
+
+impl OrPat {
+    /// All pattern alternatives (A, B, C in `A | B | C`).
+    pub fn alternatives(&self) -> impl Iterator<Item = Pat> {
+        children(&self.0)
+    }
+}
+
+impl GroupedPat {
+    /// The inner pattern.
+    pub fn inner(&self) -> Option<Pat> {
+        child(&self.0)
     }
 }
 
@@ -330,5 +348,25 @@ mod tests {
         let pat: LiteralPat = parse_pat("fn main() { match x { true => {} } }");
         let tok = pat.token().expect("expected token");
         assert_eq!(tok.text(), "true");
+    }
+
+    // =========================================================================
+    // OrPat Tests
+    // =========================================================================
+
+    #[test]
+    fn or_pat_alternatives() {
+        let pat: OrPat = parse_pat("fn main() { let A | B | C = x; }");
+        assert_eq!(pat.alternatives().count(), 3);
+    }
+
+    // =========================================================================
+    // GroupedPat Tests
+    // =========================================================================
+
+    #[test]
+    fn grouped_pat_inner() {
+        let pat: GroupedPat = parse_pat("fn main() { let (x) = y; }");
+        assert!(pat.inner().is_some());
     }
 }

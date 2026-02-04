@@ -222,6 +222,8 @@ pub enum SyntaxKind {
     RestPat,
     StructPatField,
     EnumShorthandPat,
+    OrPat,
+    GroupedPat,
 
     // Names & Paths
     Name,

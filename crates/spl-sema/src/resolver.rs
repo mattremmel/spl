@@ -1400,6 +1400,18 @@ impl<'ctx> Resolver<'ctx> {
                     self.resolve_pattern_types(&inner);
                 }
             }
+            // Or-pattern: A | B | C
+            Pat::Or(or_pat) => {
+                for alt in or_pat.alternatives() {
+                    self.resolve_pattern_types(&alt);
+                }
+            }
+            // Grouped pattern: (pattern)
+            Pat::Grouped(grouped_pat) => {
+                if let Some(inner) = grouped_pat.inner() {
+                    self.resolve_pattern_types(&inner);
+                }
+            }
             Pat::Ident(_) | Pat::Wildcard(_) | Pat::Literal(_) | Pat::Rest(_) | Pat::Range(_) => {}
         }
     }
@@ -1460,6 +1472,21 @@ impl<'ctx> Resolver<'ctx> {
             // Enum shorthand pattern: .Variant or .Variant(patterns)
             Pat::EnumShorthand(shorthand) => {
                 for inner in shorthand.patterns() {
+                    self.define_pattern(&inner, outer_mutable);
+                }
+            }
+            // Or-pattern: A | B | C
+            // Note: All alternatives must bind the same variables with the same types.
+            // For now, we define the bindings from the first alternative only.
+            // Type checking will verify all alternatives are consistent.
+            Pat::Or(or_pat) => {
+                if let Some(first) = or_pat.alternatives().next() {
+                    self.define_pattern(&first, outer_mutable);
+                }
+            }
+            // Grouped pattern: (pattern) - just unwrap the inner pattern
+            Pat::Grouped(grouped_pat) => {
+                if let Some(inner) = grouped_pat.inner() {
                     self.define_pattern(&inner, outer_mutable);
                 }
             }

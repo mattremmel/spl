@@ -5,17 +5,38 @@
 use crate::{CompletedMarker, ParseError, Parser};
 use spl_syntax::SyntaxKind;
 
-/// Parse a pattern.
+/// Parse a pattern (possibly an or-pattern).
 ///
 /// ```text
-/// pattern = ref_pat | tuple_pat | slice_pat | wildcard_pat | literal_or_range_pat | rest_pat | ident_pat
+/// pattern = single_pattern { "|" single_pattern }
 /// ```
 pub fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+    let first = single_pattern(p)?;
+
+    // Check for or-pattern continuation
+    if !p.at(SyntaxKind::PIPE) {
+        return Ok(first);
+    }
+
+    // Wrap in OrPat and parse remaining alternatives
+    let m = first.precede(p);
+    while p.eat(SyntaxKind::PIPE) {
+        single_pattern(p)?;
+    }
+    Ok(m.complete(p, SyntaxKind::OrPat))
+}
+
+/// Parse a single pattern (no or-alternation at this level).
+///
+/// ```text
+/// single_pattern = ref_pat | tuple_or_grouped_pat | slice_pat | wildcard_pat | literal_or_range_pat | rest_pat | ident_pat
+/// ```
+fn single_pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     match_token!(p, {
         // Reference pattern: &x, &mut x
         AMP => ref_pat(p),
-        // Tuple pattern: (a, b)
-        L_PAREN => tuple_pat(p),
+        // Tuple or grouped pattern: (a, b) or (a)
+        L_PAREN => tuple_or_grouped_pat(p),
         // Slice pattern: [a, b]
         L_BRACKET => slice_pat(p),
         // Wildcard, identifier, or struct pattern
@@ -269,14 +290,39 @@ fn literal_or_range_pat(p: &mut Parser<'_>) -> CompletedMarker {
     }
 }
 
-/// Parse a tuple pattern: `(a, b)`, `(a,)`, `()`
-fn tuple_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+/// Parse a tuple or grouped pattern.
+///
+/// Distinguishes:
+/// - `()` = empty tuple
+/// - `(a,)` = single-element tuple
+/// - `(a, b)` = multi-element tuple
+/// - `(a)` = grouped pattern (single pattern, no comma)
+fn tuple_or_grouped_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     p.bump(); // consume `(`
-    p.parse_delimited(SyntaxKind::R_PAREN, |p| {
+
+    if p.at(SyntaxKind::R_PAREN) {
+        // Empty tuple: ()
+        p.bump();
+        return Ok(m.complete(p, SyntaxKind::TuplePat));
+    }
+
+    // Parse first pattern
+    pattern(p)?;
+
+    if p.at(SyntaxKind::R_PAREN) {
+        // Single pattern without comma = grouped pattern
+        p.bump();
+        return Ok(m.complete(p, SyntaxKind::GroupedPat));
+    }
+
+    // Has comma = tuple pattern
+    while p.eat(SyntaxKind::COMMA) {
+        if p.at(SyntaxKind::R_PAREN) {
+            break; // trailing comma
+        }
         pattern(p)?;
-        Ok(())
-    })?;
+    }
     p.expect(SyntaxKind::R_PAREN)?;
     Ok(m.complete(p, SyntaxKind::TuplePat))
 }
@@ -635,6 +681,261 @@ mod tests {
                             IDENT@34..35 "v"
                   WHITESPACE@35..36 " "
                   R_BRACE@36..37 "}"
+            "#]],
+        );
+    }
+
+    // === Or-Pattern Tests ===
+
+    #[test]
+    fn or_pattern_simple() {
+        // A | B in let binding
+        check_expr(
+            "{ let A | B = x; }",
+            &expect![[r#"
+                BlockExpr@0..18
+                  Block@0..18
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..16
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      OrPat@5..11
+                        IdentPat@5..7
+                          Name@5..7
+                            WHITESPACE@5..6 " "
+                            IDENT@6..7 "A"
+                        WHITESPACE@7..8 " "
+                        PIPE@8..9 "|"
+                        IdentPat@9..11
+                          Name@9..11
+                            WHITESPACE@9..10 " "
+                            IDENT@10..11 "B"
+                      WHITESPACE@11..12 " "
+                      EQ@12..13 "="
+                      PathExpr@13..15
+                        Path@13..15
+                          PathSegment@13..15
+                            NameRef@13..15
+                              WHITESPACE@13..14 " "
+                              IDENT@14..15 "x"
+                      SEMI@15..16 ";"
+                    WHITESPACE@16..17 " "
+                    R_BRACE@17..18 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn or_pattern_triple() {
+        // A | B | C (multiple alternatives)
+        check_expr(
+            "{ let A | B | C = x; }",
+            &expect![[r#"
+                BlockExpr@0..22
+                  Block@0..22
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..20
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      OrPat@5..15
+                        IdentPat@5..7
+                          Name@5..7
+                            WHITESPACE@5..6 " "
+                            IDENT@6..7 "A"
+                        WHITESPACE@7..8 " "
+                        PIPE@8..9 "|"
+                        IdentPat@9..11
+                          Name@9..11
+                            WHITESPACE@9..10 " "
+                            IDENT@10..11 "B"
+                        WHITESPACE@11..12 " "
+                        PIPE@12..13 "|"
+                        IdentPat@13..15
+                          Name@13..15
+                            WHITESPACE@13..14 " "
+                            IDENT@14..15 "C"
+                      WHITESPACE@15..16 " "
+                      EQ@16..17 "="
+                      PathExpr@17..19
+                        Path@17..19
+                          PathSegment@17..19
+                            NameRef@17..19
+                              WHITESPACE@17..18 " "
+                              IDENT@18..19 "x"
+                      SEMI@19..20 ";"
+                    WHITESPACE@20..21 " "
+                    R_BRACE@21..22 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn or_pattern_in_match() {
+        // Or-pattern in match arm
+        check_expr(
+            "match x { A | B => 1 }",
+            &expect![[r#"
+                MatchExpr@0..22
+                  MATCH_KW@0..5 "match"
+                  PathExpr@5..7
+                    Path@5..7
+                      PathSegment@5..7
+                        NameRef@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
+                  WHITESPACE@7..8 " "
+                  L_BRACE@8..9 "{"
+                  MatchArm@9..20
+                    OrPat@9..15
+                      IdentPat@9..11
+                        Name@9..11
+                          WHITESPACE@9..10 " "
+                          IDENT@10..11 "A"
+                      WHITESPACE@11..12 " "
+                      PIPE@12..13 "|"
+                      IdentPat@13..15
+                        Name@13..15
+                          WHITESPACE@13..14 " "
+                          IDENT@14..15 "B"
+                    WHITESPACE@15..16 " "
+                    FAT_ARROW@16..18 "=>"
+                    LiteralExpr@18..20
+                      WHITESPACE@18..19 " "
+                      INT_LITERAL@19..20 "1"
+                  WHITESPACE@20..21 " "
+                  R_BRACE@21..22 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn or_pattern_enum_shorthand() {
+        // .None | .Some(_)
+        check_expr(
+            "match x { .None | .Some(_) => 1 }",
+            &expect![[r#"
+                MatchExpr@0..33
+                  MATCH_KW@0..5 "match"
+                  PathExpr@5..7
+                    Path@5..7
+                      PathSegment@5..7
+                        NameRef@5..7
+                          WHITESPACE@5..6 " "
+                          IDENT@6..7 "x"
+                  WHITESPACE@7..8 " "
+                  L_BRACE@8..9 "{"
+                  MatchArm@9..31
+                    OrPat@9..26
+                      EnumShorthandPat@9..15
+                        WHITESPACE@9..10 " "
+                        DOT@10..11 "."
+                        Name@11..15
+                          IDENT@11..15 "None"
+                      WHITESPACE@15..16 " "
+                      PIPE@16..17 "|"
+                      EnumShorthandPat@17..26
+                        WHITESPACE@17..18 " "
+                        DOT@18..19 "."
+                        Name@19..23
+                          IDENT@19..23 "Some"
+                        L_PAREN@23..24 "("
+                        WildcardPat@24..25
+                          IDENT@24..25 "_"
+                        R_PAREN@25..26 ")"
+                    WHITESPACE@26..27 " "
+                    FAT_ARROW@27..29 "=>"
+                    LiteralExpr@29..31
+                      WHITESPACE@29..30 " "
+                      INT_LITERAL@30..31 "1"
+                  WHITESPACE@31..32 " "
+                  R_BRACE@32..33 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn or_pattern_nested() {
+        // (A | B, C | D) - or-patterns inside tuple
+        check_expr(
+            "{ let (A | B, C | D) = x; }",
+            &expect![[r#"
+                BlockExpr@0..27
+                  Block@0..27
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..25
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      TuplePat@5..20
+                        WHITESPACE@5..6 " "
+                        L_PAREN@6..7 "("
+                        OrPat@7..12
+                          IdentPat@7..8
+                            Name@7..8
+                              IDENT@7..8 "A"
+                          WHITESPACE@8..9 " "
+                          PIPE@9..10 "|"
+                          IdentPat@10..12
+                            Name@10..12
+                              WHITESPACE@10..11 " "
+                              IDENT@11..12 "B"
+                        COMMA@12..13 ","
+                        OrPat@13..19
+                          IdentPat@13..15
+                            Name@13..15
+                              WHITESPACE@13..14 " "
+                              IDENT@14..15 "C"
+                          WHITESPACE@15..16 " "
+                          PIPE@16..17 "|"
+                          IdentPat@17..19
+                            Name@17..19
+                              WHITESPACE@17..18 " "
+                              IDENT@18..19 "D"
+                        R_PAREN@19..20 ")"
+                      WHITESPACE@20..21 " "
+                      EQ@21..22 "="
+                      PathExpr@22..24
+                        Path@22..24
+                          PathSegment@22..24
+                            NameRef@22..24
+                              WHITESPACE@22..23 " "
+                              IDENT@23..24 "x"
+                      SEMI@24..25 ";"
+                    WHITESPACE@25..26 " "
+                    R_BRACE@26..27 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn grouped_pattern() {
+        // (pattern) for explicit grouping
+        check_expr(
+            "{ let (x) = y; }",
+            &expect![[r#"
+                BlockExpr@0..16
+                  Block@0..16
+                    L_BRACE@0..1 "{"
+                    LetStmt@1..14
+                      WHITESPACE@1..2 " "
+                      LET_KW@2..5 "let"
+                      GroupedPat@5..9
+                        WHITESPACE@5..6 " "
+                        L_PAREN@6..7 "("
+                        IdentPat@7..8
+                          Name@7..8
+                            IDENT@7..8 "x"
+                        R_PAREN@8..9 ")"
+                      WHITESPACE@9..10 " "
+                      EQ@10..11 "="
+                      PathExpr@11..13
+                        Path@11..13
+                          PathSegment@11..13
+                            NameRef@11..13
+                              WHITESPACE@11..12 " "
+                              IDENT@12..13 "y"
+                      SEMI@13..14 ";"
+                    WHITESPACE@14..15 " "
+                    R_BRACE@15..16 "}"
             "#]],
         );
     }

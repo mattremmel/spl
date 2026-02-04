@@ -768,7 +768,20 @@ impl<'a> LoweringContext<'a> {
                 };
                 self.db.alloc_pat(hir_pat)
             }
-            Pat::Slice(_) | Pat::Range(_) | Pat::Rest(_) | Pat::EnumShorthand(_) => {
+            Pat::Grouped(grouped_pat) => {
+                // Grouped pattern just unwraps to its inner pattern
+                if let Some(inner) = grouped_pat.inner() {
+                    self.lower_pattern(&inner, outer_mutable)
+                } else {
+                    let hir_pat = HirPat {
+                        kind: HirPatKind::Missing,
+                        ty: self.error_type(),
+                        span,
+                    };
+                    self.db.alloc_pat(hir_pat)
+                }
+            }
+            Pat::Slice(_) | Pat::Range(_) | Pat::Rest(_) | Pat::EnumShorthand(_) | Pat::Or(_) => {
                 // TODO: implement these patterns
                 let hir_pat = HirPat {
                     kind: HirPatKind::Missing,
