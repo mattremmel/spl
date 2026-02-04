@@ -45,7 +45,7 @@ SPL reserves 37 keywords that cannot be used as identifiers:
 | `module`   | Module declaration (inline or ref)   |
 | `super`    | Parent module reference              |
 | `where`    | Generic type constraints             |
-| `is`       | Pattern matching operator            |
+| `is`       | Pattern matching operator (infix)    |
 | `match`    | Match expression                     |
 | `extern`   | External function declaration        |
 | `const`    | Compile-time constant                |
@@ -180,10 +180,12 @@ Integer literals may have a type suffix: `i8`, `i16`, `i32`, `i64`, `i128`, `u8`
 
 **Regex:**
 ```
-INTEGER = 0[xX][0-9a-fA-F][0-9a-fA-F_]*
-        | 0[bB][01][01_]*
-        | 0[oO][0-7][0-7_]*
-        | [0-9][0-9_]*
+INTEGER = 0[xX][0-9a-fA-F][0-9a-fA-F_]* INTEGER_SUFFIX?
+        | 0[bB][01][01_]* INTEGER_SUFFIX?
+        | 0[oO][0-7][0-7_]* INTEGER_SUFFIX?
+        | [0-9][0-9_]* INTEGER_SUFFIX?
+
+INTEGER_SUFFIX = [iu](8|16|32|64|128|size) | bigint
 ```
 
 ### Floating-Point Literals
@@ -210,8 +212,10 @@ The `decimal` suffix creates an exact decimal floating-point value, avoiding bin
 
 **Regex:**
 ```
-FLOAT = [0-9][0-9_]*\.[0-9][0-9_]*([eE][+-]?[0-9][0-9_]*)?
-      | [0-9][0-9_]*[eE][+-]?[0-9][0-9_]*
+FLOAT = [0-9][0-9_]*\.[0-9][0-9_]*([eE][+-]?[0-9][0-9_]*)? FLOAT_SUFFIX?
+      | [0-9][0-9_]*[eE][+-]?[0-9][0-9_]* FLOAT_SUFFIX?
+
+FLOAT_SUFFIX = f32 | f64 | decimal
 ```
 
 ### String Literals
@@ -253,6 +257,16 @@ RAW_STRING = 'r"' [^"]* '"'
 - Start with `r"` and end with `"`
 - Or use `r#"` ... `"#` to allow `"` inside the string
 - Add more `#` characters for nesting: `r##"..."##`
+
+**Lexer Algorithm:**
+
+Raw strings require stateful lexing: the lexer counts the number of `#` characters after `r` in the opening delimiter, then scans for a closing `"` followed by exactly that many `#` characters. The content between delimiters is taken literally without escape processing.
+
+```
+r"..."      → 0 hashes, ends at first "
+r#"..."#    → 1 hash, ends at first "# sequence
+r##"..."##  → 2 hashes, ends at first "## sequence
+```
 
 **Examples:**
 ```spl
@@ -347,17 +361,21 @@ Boolean values use the keywords `true` and `false`.
 Identifiers name variables, functions, types, and other entities.
 
 **Rules:**
-- Must start with a letter (`a-z`, `A-Z`) or underscore (`_`)
-- May contain letters, digits (`0-9`), and underscores
+- Must start with a Unicode XID_Start character or underscore (`_`)
+- May continue with Unicode XID_Continue characters
 - Case-sensitive (`foo` and `Foo` are different)
 - Cannot be a keyword
 
+XID_Start and XID_Continue are Unicode character properties defined in [UAX #31](https://unicode.org/reports/tr31/). This includes ASCII letters and digits as a subset, plus letters and combining marks from other scripts.
+
+**Note:** The lexer produces a single `IDENTIFIER` token regardless of case. Case-based disambiguation (uppercase for types, lowercase for values) is handled by the parser.
+
 **Regex:**
 ```
-IDENTIFIER = [a-zA-Z_][a-zA-Z0-9_]*
+IDENTIFIER = [\p{XID_Start}_]\p{XID_Continue}*
 ```
 
-**Examples:** `x`, `foo_bar`, `Point2D`, `_private`, `__internal`
+**Examples:** `x`, `foo_bar`, `Point2D`, `_private`, `café`, `日本語`, `αβγ`
 
 ---
 
@@ -412,7 +430,7 @@ Whitespace is not significant except to separate tokens that would otherwise mer
 | Float       | `3.14`, `1e10`, `2.5e-3`                    |
 | String      | `"hello"`, `"line\nbreak"`                  |
 | Char        | `'a'`, `'\n'`                               |
-| Operator    | `+`, `**`, `==`, `&&`, `.`, `is`            |
+| Operator    | `+`, `**`, `==`, `&&`, `.`                  |
 | Delimiter   | `(`, `)`, `{`, `}`, `;`, `,`                |
 | Comment     | `// ...`, `/* ... */`                       |
 

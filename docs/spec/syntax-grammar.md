@@ -35,10 +35,10 @@ Trailing commas are allowed in all comma-separated lists.
 
 | Token | Meaning |
 |-------|---------|
-| `UPPER_IDENT` | Identifier starting with A-Z (type parameters, enum variants) |
-| `LOWER_IDENT` | Identifier starting with a-z or _ (value parameters, field names) |
+| `UPPER_IDENT` | Identifier starting with uppercase letter (type parameters, enum variants) |
+| `LOWER_IDENT` | Identifier starting with lowercase letter or _ (value parameters, field names) |
 
-The lexer produces a single `IDENTIFIER` token. The parser checks the first character to select the appropriate grammar alternative. This case-based disambiguation is a hard rule—no backtracking occurs.
+The lexer produces a single `IDENTIFIER` token using Unicode XID_Start/XID_Continue properties. The parser checks the first character's case (using Unicode case properties) to select the appropriate grammar alternative. This case-based disambiguation is a hard rule—no backtracking occurs. Identifiers starting with non-cased Unicode characters (e.g., `日本語`) are treated as lowercase by convention.
 
 **Semicolons in the Grammar:** Per the optional semicolons design principle, semicolons are inferred from newlines and only required when multiple statements appear on the same line. Productions that include `[ ";" ]` indicate where an explicit semicolon is syntactically permitted, not where it is required. Productions ending with clear delimiters (blocks `{}`, parenthesized fields `()`) omit `[ ";" ]` since the delimiter itself terminates the construct.
 
