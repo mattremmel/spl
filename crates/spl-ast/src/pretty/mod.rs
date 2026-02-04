@@ -398,6 +398,7 @@ impl AstPrinter {
             Expr::Match(m) => self.print_match_expr(m),
             Expr::EnumShorthand(e) => self.print_enum_shorthand_expr(e),
             Expr::Try(t) => self.print_try_expr(t),
+            Expr::Closure(c) => self.print_closure_expr(c),
         }
     }
 
@@ -406,6 +407,55 @@ impl AstPrinter {
         self.indented(|p| {
             if let Some(inner) = expr.expr() {
                 p.print_expr(&inner);
+            }
+        });
+    }
+
+    fn print_closure_expr(&mut self, expr: &crate::ClosureExpr) {
+        self.line("ClosureExpr");
+        self.indented(|p| {
+            if let Some(captures) = expr.capture_list() {
+                p.line("CaptureList");
+                p.indented(|pp| {
+                    for capture in captures.captures() {
+                        let name = capture
+                            .name()
+                            .and_then(|n| n.ident_token())
+                            .map(|t| t.text().to_string())
+                            .unwrap_or_else(|| "?".to_string());
+                        if let Some(cap_expr) = capture.expr() {
+                            pp.line(&format!("Capture \"{name}\" ="));
+                            pp.indented(|ppp| {
+                                ppp.print_expr(&cap_expr);
+                            });
+                        } else {
+                            pp.line(&format!("Capture \"{name}\""));
+                        }
+                    }
+                });
+            }
+            if let Some(params) = expr.params() {
+                p.line("ClosureParams");
+                p.indented(|pp| {
+                    for param in params.params() {
+                        let name = param
+                            .name()
+                            .and_then(|n| n.ident_token())
+                            .map(|t| t.text().to_string())
+                            .unwrap_or_else(|| "?".to_string());
+                        if let Some(ty) = param.ty() {
+                            pp.line(&format!("Param \"{name}\": {}", ty.syntax()));
+                        } else {
+                            pp.line(&format!("Param \"{name}\""));
+                        }
+                    }
+                });
+            }
+            if let Some(body) = expr.body() {
+                p.line("Body:");
+                p.indented(|pp| {
+                    pp.print_expr(&body);
+                });
             }
         });
     }

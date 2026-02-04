@@ -1292,6 +1292,46 @@ impl<'ctx> Resolver<'ctx> {
                     self.resolve_expr(&inner);
                 }
             }
+            // Closure expression: |params| body or @[captures] |params| body
+            Expr::Closure(closure_expr) => {
+                // Resolve capture expressions (they reference outer scope, before entering closure scope)
+                if let Some(captures) = closure_expr.capture_list() {
+                    for capture in captures.captures() {
+                        if let Some(expr) = capture.expr() {
+                            self.resolve_expr(&expr);
+                        }
+                    }
+                }
+
+                // Create a new scope for closure parameters
+                self.ctx.enter_scope(ScopeKind::Block);
+
+                // Define closure parameters in the closure scope
+                if let Some(params) = closure_expr.params() {
+                    for param in params.params() {
+                        // Define the parameter name - parameters are immutable by default
+                        if let Some(name) = param.name() {
+                            self.define_name(
+                                &name,
+                                SymbolKind::Parameter,
+                                Visibility::Private,
+                                false,
+                            );
+                        }
+                        // Resolve parameter types
+                        if let Some(ty) = param.ty() {
+                            self.resolve_type(&ty);
+                        }
+                    }
+                }
+
+                // Resolve the closure body
+                if let Some(body) = closure_expr.body() {
+                    self.resolve_expr(&body);
+                }
+
+                self.ctx.exit_scope();
+            }
         }
     }
 

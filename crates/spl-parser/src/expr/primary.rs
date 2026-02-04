@@ -57,8 +57,162 @@ pub(super) fn primary_expr(
         YIELD_KW => yield_expr(p),
         // Match expression
         MATCH_KW => match_expr(p),
+        // Closure expressions: || body, |params| body
+        PIPE | OR_OR => closure_expr(p),
+        // Closure with capture list: @[captures] |params| body
+        AT => {
+            if p.peek(1) == Some(SyntaxKind::L_BRACKET) {
+                closure_expr(p)
+            } else {
+                Ok(None)
+            }
+        },
         _ => Ok(None),
     })
+}
+
+/// Parse a closure expression.
+///
+/// Grammar:
+/// ```ebnf
+/// ClosureExpr = [ "@" CaptureList ] ClosureParams ClosureBody ;
+/// CaptureList = "[" [ Capture { "," Capture } [ "," ] ] "]" ;
+/// Capture = IDENTIFIER | IDENTIFIER ":" Expression ;
+/// ClosureParams = "||" | "|" [ ParamList ] "|" ;
+/// ClosureBody = Block | Expression ;
+/// ```
+fn closure_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    let m = p.start();
+
+    // Optional capture list: @[captures]
+    if p.at(SyntaxKind::AT)
+        && let Err(e) = capture_list(p)
+    {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Closure params: || or |params|
+    if let Err(e) = closure_params(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Closure body: block or expression
+    if let Err(e) = expr(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    Ok(Some(m.complete(p, SyntaxKind::ClosureExpr)))
+}
+
+/// Parse a capture list: @[x, y, val: expr]
+fn capture_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    if let Err(e) = p.expect(SyntaxKind::AT) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    if let Err(e) = p.expect(SyntaxKind::L_BRACKET) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    while !p.at(SyntaxKind::R_BRACKET) && p.current().is_some() {
+        if let Err(e) = capture(p) {
+            m.abandon(p);
+            return Err(e);
+        }
+        if !p.at(SyntaxKind::R_BRACKET) && !p.eat(SyntaxKind::COMMA) {
+            break;
+        }
+    }
+
+    if let Err(e) = p.expect(SyntaxKind::R_BRACKET) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    Ok(m.complete(p, SyntaxKind::CaptureList))
+}
+
+/// Parse a single capture: identifier or identifier: expr
+fn capture(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    // Parse name
+    if let Err(e) = crate::item::name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional: expression
+    if p.eat(SyntaxKind::COLON)
+        && let Err(e) = expr(p)
+    {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    Ok(m.complete(p, SyntaxKind::Capture))
+}
+
+/// Parse closure params: || or |param, param, ...|
+fn closure_params(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    // Handle || (empty params)
+    if p.eat(SyntaxKind::OR_OR) {
+        return Ok(m.complete(p, SyntaxKind::ClosureParams));
+    }
+
+    // Otherwise we expect |params|
+    if let Err(e) = p.expect(SyntaxKind::PIPE) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Parse parameters
+    while !p.at(SyntaxKind::PIPE) && p.current().is_some() {
+        if let Err(e) = closure_param(p) {
+            m.abandon(p);
+            return Err(e);
+        }
+        if !p.at(SyntaxKind::PIPE) && !p.eat(SyntaxKind::COMMA) {
+            break;
+        }
+    }
+
+    if let Err(e) = p.expect(SyntaxKind::PIPE) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    Ok(m.complete(p, SyntaxKind::ClosureParams))
+}
+
+/// Parse a single closure parameter: name or name: type
+fn closure_param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let m = p.start();
+
+    // Parse name
+    if let Err(e) = crate::item::name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Optional type annotation
+    if p.eat(SyntaxKind::COLON)
+        && let Err(e) = crate::stmt::type_annotation(p)
+    {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    Ok(m.complete(p, SyntaxKind::ClosureParam))
 }
 
 /// Parse an enum shorthand expression: `.Variant` or `.Variant(args)`
@@ -1213,6 +1367,328 @@ mod tests {
                   WHITESPACE@19..20 " "
                   R_BRACE@20..21 "}"
             "#]],
+        );
+    }
+
+    // === Closure Expressions ===
+
+    #[test]
+    fn closure_empty_params() {
+        check_expr(
+            "|| 42",
+            &expect![[r#"
+            ClosureExpr@0..5
+              ClosureParams@0..2
+                OR_OR@0..2 "||"
+              LiteralExpr@2..5
+                WHITESPACE@2..3 " "
+                INT_LITERAL@3..5 "42"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn closure_single_param() {
+        check_expr(
+            "|x| x",
+            &expect![[r#"
+            ClosureExpr@0..5
+              ClosureParams@0..3
+                PIPE@0..1 "|"
+                ClosureParam@1..2
+                  Name@1..2
+                    IDENT@1..2 "x"
+                PIPE@2..3 "|"
+              PathExpr@3..5
+                Path@3..5
+                  PathSegment@3..5
+                    NameRef@3..5
+                      WHITESPACE@3..4 " "
+                      IDENT@4..5 "x"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn closure_multiple_params() {
+        check_expr(
+            "|a, b| a + b",
+            &expect![[r#"
+            ClosureExpr@0..12
+              ClosureParams@0..6
+                PIPE@0..1 "|"
+                ClosureParam@1..2
+                  Name@1..2
+                    IDENT@1..2 "a"
+                COMMA@2..3 ","
+                ClosureParam@3..5
+                  Name@3..5
+                    WHITESPACE@3..4 " "
+                    IDENT@4..5 "b"
+                PIPE@5..6 "|"
+              BinExpr@6..12
+                PathExpr@6..8
+                  Path@6..8
+                    PathSegment@6..8
+                      NameRef@6..8
+                        WHITESPACE@6..7 " "
+                        IDENT@7..8 "a"
+                WHITESPACE@8..9 " "
+                PLUS@9..10 "+"
+                PathExpr@10..12
+                  Path@10..12
+                    PathSegment@10..12
+                      NameRef@10..12
+                        WHITESPACE@10..11 " "
+                        IDENT@11..12 "b"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn closure_typed_param() {
+        check_expr(
+            "|x: i32| x",
+            &expect![[r#"
+            ClosureExpr@0..10
+              ClosureParams@0..8
+                PIPE@0..1 "|"
+                ClosureParam@1..7
+                  Name@1..2
+                    IDENT@1..2 "x"
+                  COLON@2..3 ":"
+                  PathType@3..7
+                    Path@3..7
+                      PathSegment@3..7
+                        NameRef@3..7
+                          WHITESPACE@3..4 " "
+                          IDENT@4..7 "i32"
+                PIPE@7..8 "|"
+              PathExpr@8..10
+                Path@8..10
+                  PathSegment@8..10
+                    NameRef@8..10
+                      WHITESPACE@8..9 " "
+                      IDENT@9..10 "x"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn closure_block_body() {
+        check_expr(
+            "|x| { x + 1 }",
+            &expect![[r#"
+            ClosureExpr@0..13
+              ClosureParams@0..3
+                PIPE@0..1 "|"
+                ClosureParam@1..2
+                  Name@1..2
+                    IDENT@1..2 "x"
+                PIPE@2..3 "|"
+              BlockExpr@3..13
+                Block@3..13
+                  WHITESPACE@3..4 " "
+                  L_BRACE@4..5 "{"
+                  BinExpr@5..11
+                    PathExpr@5..7
+                      Path@5..7
+                        PathSegment@5..7
+                          NameRef@5..7
+                            WHITESPACE@5..6 " "
+                            IDENT@6..7 "x"
+                    WHITESPACE@7..8 " "
+                    PLUS@8..9 "+"
+                    LiteralExpr@9..11
+                      WHITESPACE@9..10 " "
+                      INT_LITERAL@10..11 "1"
+                  WHITESPACE@11..12 " "
+                  R_BRACE@12..13 "}"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn closure_capture_list() {
+        check_expr(
+            "@[x, y] |a| a + x",
+            &expect![[r#"
+            ClosureExpr@0..17
+              CaptureList@0..7
+                AT@0..1 "@"
+                L_BRACKET@1..2 "["
+                Capture@2..3
+                  Name@2..3
+                    IDENT@2..3 "x"
+                COMMA@3..4 ","
+                Capture@4..6
+                  Name@4..6
+                    WHITESPACE@4..5 " "
+                    IDENT@5..6 "y"
+                R_BRACKET@6..7 "]"
+              ClosureParams@7..11
+                WHITESPACE@7..8 " "
+                PIPE@8..9 "|"
+                ClosureParam@9..10
+                  Name@9..10
+                    IDENT@9..10 "a"
+                PIPE@10..11 "|"
+              BinExpr@11..17
+                PathExpr@11..13
+                  Path@11..13
+                    PathSegment@11..13
+                      NameRef@11..13
+                        WHITESPACE@11..12 " "
+                        IDENT@12..13 "a"
+                WHITESPACE@13..14 " "
+                PLUS@14..15 "+"
+                PathExpr@15..17
+                  Path@15..17
+                    PathSegment@15..17
+                      NameRef@15..17
+                        WHITESPACE@15..16 " "
+                        IDENT@16..17 "x"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn closure_capture_expr() {
+        check_expr(
+            "@[val: foo()] || val",
+            &expect![[r#"
+            ClosureExpr@0..20
+              CaptureList@0..13
+                AT@0..1 "@"
+                L_BRACKET@1..2 "["
+                Capture@2..12
+                  Name@2..5
+                    IDENT@2..5 "val"
+                  COLON@5..6 ":"
+                  CallExpr@6..12
+                    PathExpr@6..10
+                      Path@6..10
+                        PathSegment@6..10
+                          NameRef@6..10
+                            WHITESPACE@6..7 " "
+                            IDENT@7..10 "foo"
+                    L_PAREN@10..11 "("
+                    R_PAREN@11..12 ")"
+                R_BRACKET@12..13 "]"
+              ClosureParams@13..16
+                WHITESPACE@13..14 " "
+                OR_OR@14..16 "||"
+              PathExpr@16..20
+                Path@16..20
+                  PathSegment@16..20
+                    NameRef@16..20
+                      WHITESPACE@16..17 " "
+                      IDENT@17..20 "val"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn closure_nested() {
+        check_expr(
+            "|x| |y| x + y",
+            &expect![[r#"
+            ClosureExpr@0..13
+              ClosureParams@0..3
+                PIPE@0..1 "|"
+                ClosureParam@1..2
+                  Name@1..2
+                    IDENT@1..2 "x"
+                PIPE@2..3 "|"
+              ClosureExpr@3..13
+                ClosureParams@3..7
+                  WHITESPACE@3..4 " "
+                  PIPE@4..5 "|"
+                  ClosureParam@5..6
+                    Name@5..6
+                      IDENT@5..6 "y"
+                  PIPE@6..7 "|"
+                BinExpr@7..13
+                  PathExpr@7..9
+                    Path@7..9
+                      PathSegment@7..9
+                        NameRef@7..9
+                          WHITESPACE@7..8 " "
+                          IDENT@8..9 "x"
+                  WHITESPACE@9..10 " "
+                  PLUS@10..11 "+"
+                  PathExpr@11..13
+                    Path@11..13
+                      PathSegment@11..13
+                        NameRef@11..13
+                          WHITESPACE@11..12 " "
+                          IDENT@12..13 "y"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn closure_as_arg() {
+        check_expr(
+            "map(|x| x + 1)",
+            &expect![[r#"
+            CallExpr@0..14
+              PathExpr@0..3
+                Path@0..3
+                  PathSegment@0..3
+                    NameRef@0..3
+                      IDENT@0..3 "map"
+              L_PAREN@3..4 "("
+              CallArg@4..13
+                ClosureExpr@4..13
+                  ClosureParams@4..7
+                    PIPE@4..5 "|"
+                    ClosureParam@5..6
+                      Name@5..6
+                        IDENT@5..6 "x"
+                    PIPE@6..7 "|"
+                  BinExpr@7..13
+                    PathExpr@7..9
+                      Path@7..9
+                        PathSegment@7..9
+                          NameRef@7..9
+                            WHITESPACE@7..8 " "
+                            IDENT@8..9 "x"
+                    WHITESPACE@9..10 " "
+                    PLUS@10..11 "+"
+                    LiteralExpr@11..13
+                      WHITESPACE@11..12 " "
+                      INT_LITERAL@12..13 "1"
+              R_PAREN@13..14 ")"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn closure_trailing_comma() {
+        check_expr(
+            "|a, b,| a",
+            &expect![[r#"
+            ClosureExpr@0..9
+              ClosureParams@0..7
+                PIPE@0..1 "|"
+                ClosureParam@1..2
+                  Name@1..2
+                    IDENT@1..2 "a"
+                COMMA@2..3 ","
+                ClosureParam@3..5
+                  Name@3..5
+                    WHITESPACE@3..4 " "
+                    IDENT@4..5 "b"
+                COMMA@5..6 ","
+                PIPE@6..7 "|"
+              PathExpr@7..9
+                Path@7..9
+                  PathSegment@7..9
+                    NameRef@7..9
+                      WHITESPACE@7..8 " "
+                      IDENT@8..9 "a"
+        "#]],
         );
     }
 }

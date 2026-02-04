@@ -336,6 +336,24 @@ impl<'a> InferEngine<'a> {
                 // For now, return error - proper inference requires Result type handling
                 self.types.error()
             }
+            // Closure expression: |params| body or @[captures] |params| body
+            // TODO: Implement proper closure type inference
+            Expr::Closure(closure_expr) => {
+                // Synthesize capture expressions
+                if let Some(captures) = closure_expr.capture_list() {
+                    for capture in captures.captures() {
+                        if let Some(expr) = capture.expr() {
+                            self.synth_expr(&expr);
+                        }
+                    }
+                }
+                // Synthesize the body
+                if let Some(body) = closure_expr.body() {
+                    self.synth_expr(&body);
+                }
+                // For now, return error - proper closure type requires FnOnce/FnMut/Fn trait handling
+                self.types.error()
+            }
         };
         self.results.expr_types.insert(span, type_id);
         type_id

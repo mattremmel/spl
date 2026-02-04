@@ -33,6 +33,11 @@ ast_node!(MatchExpr);
 ast_node!(MatchArm);
 ast_node!(EnumShorthandExpr);
 ast_node!(TryExpr);
+ast_node!(ClosureExpr);
+ast_node!(CaptureList);
+ast_node!(Capture);
+ast_node!(ClosureParams);
+ast_node!(ClosureParam);
 ast_node!(Path);
 ast_node!(PathSegment);
 
@@ -66,6 +71,7 @@ ast_enum!(
         Match(MatchExpr),
         EnumShorthand(EnumShorthandExpr),
         Try(TryExpr),
+        Closure(ClosureExpr),
     }
 );
 
@@ -499,6 +505,61 @@ impl TryExpr {
     /// Get the `!` token.
     pub fn bang_token(&self) -> Option<SyntaxToken> {
         token(&self.0, SyntaxKind::BANG)
+    }
+}
+
+impl ClosureExpr {
+    /// Get the capture list, if present.
+    pub fn capture_list(&self) -> Option<CaptureList> {
+        child(&self.0)
+    }
+
+    /// Get the closure parameters.
+    pub fn params(&self) -> Option<ClosureParams> {
+        child(&self.0)
+    }
+
+    /// Get the closure body expression.
+    pub fn body(&self) -> Option<Expr> {
+        child(&self.0)
+    }
+}
+
+impl CaptureList {
+    /// Get all captures in the list.
+    pub fn captures(&self) -> impl Iterator<Item = Capture> {
+        children(&self.0)
+    }
+}
+
+impl Capture {
+    /// Get the capture name.
+    pub fn name(&self) -> Option<crate::Name> {
+        child(&self.0)
+    }
+
+    /// Get the capture expression, if present (for `name: expr` syntax).
+    pub fn expr(&self) -> Option<Expr> {
+        child(&self.0)
+    }
+}
+
+impl ClosureParams {
+    /// Get all parameters.
+    pub fn params(&self) -> impl Iterator<Item = ClosureParam> {
+        children(&self.0)
+    }
+}
+
+impl ClosureParam {
+    /// Get the parameter name.
+    pub fn name(&self) -> Option<crate::Name> {
+        child(&self.0)
+    }
+
+    /// Get the parameter type, if present.
+    pub fn ty(&self) -> Option<Type> {
+        child(&self.0)
     }
 }
 

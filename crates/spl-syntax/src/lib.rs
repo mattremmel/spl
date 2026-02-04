@@ -200,6 +200,11 @@ pub enum SyntaxKind {
     MatchArm,
     EnumShorthandExpr,
     TryExpr,
+    ClosureExpr,
+    CaptureList,
+    Capture,
+    ClosureParams,
+    ClosureParam,
 
     // Types
     RefType,
