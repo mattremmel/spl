@@ -179,7 +179,7 @@ For struct/enum definitions, `where` follows the body delimiter:
 - `enum Option { ... } where T`
 
 For trait/impl definitions, `where` precedes the body:
-- `trait Clone where T { ... }`
+- `trait Add where RHS = Self { ... }`
 - `impl Trait for Type where T { ... }`
 
 **Default Parameters:**
@@ -416,11 +416,10 @@ enum Result{
 
 ```ebnf
 (* Traits use braces for their body *)
-(* Generic args on trait name for input type parameters, e.g., trait Add(RHS) *)
-(* In declaration context, `: Type` specifies a default: trait Add(RHS: Self) *)
-(* Supertraits specified with : before where clause, e.g., trait Numeric: Add + Sub *)
+(* Type parameters declared in where clause: trait Add where RHS = Self *)
+(* Supertraits specified with : after name, e.g., trait Numeric: Add + Sub *)
 (* Unsafe traits have invariants the compiler cannot verify, e.g., unsafe trait Sync *)
-TraitDef = [ "unsafe" ] "trait" IDENTIFIER [ GenericArgs ] [ ":" PathType { "+" PathType } ] [ WhereClause ] "{" { TraitItem } "}" ;
+TraitDef = [ "unsafe" ] "trait" IDENTIFIER [ ":" PathType { "+" PathType } ] [ WhereClause ] "{" { TraitItem } "}" ;
 
 TraitItem = [ "pub" ] ( TraitMethod | AssociatedType ) ;
 
@@ -432,7 +431,7 @@ AssociatedType = "type" IDENTIFIER [ ":" PathType { "+" PathType } ] [ ";" ] ;
 **Examples:**
 
 ```spl
-// Simple trait
+// Simple trait (no type params)
 trait Clone {
     fn clone(&self): Self
 }
@@ -448,16 +447,22 @@ trait Default {
     fn default(): Self
 }
 
-// Trait with bounds
+// Trait with bounds (supertraits)
 trait Numeric: Add + Sub + Mul + Div {
     fn zero(): Self
     fn one(): Self
 }
 
-// Trait with default type parameter (RHS defaults to Self)
-trait Add(RHS: Self) {
+// Trait with default type parameter
+trait Add where RHS = Self {
     type Output
     fn add(self, rhs: RHS): Self.Output
+}
+
+// Trait with constrained type parameter
+trait Container where T: Clone {
+    fn get(&self): &T
+    fn set(&mut self, value: T)
 }
 
 // Implementation using default (RHS = Self)
@@ -607,9 +612,8 @@ GenericParam = IDENTIFIER [ "=" Type ] ;
 | Context | Syntax | Example | Purpose |
 |---------|--------|---------|---------|
 | `GenericParams` | Identifier with optional default | `type MyResult(T, E = Error) = ...` | Declare type alias parameters |
-| `GenericArgs` | Named type args | `Result(T: i32, E: String)` | Instantiate with concrete types |
-| `GenericArgs` (in trait declaration) | Named type args | `trait Add(RHS: Self)` | Declare input type params with defaults |
-| `WhereClause` | Type param with bounds | `where T: Clone` | Declare AND constrain params (structs/fns/impls) OR just constrain (type aliases) |
+| `GenericArgs` | Named type args | `Result(T: i32, E: String)` | Instantiate types / impl trait params |
+| `WhereClause` | Type param with bounds/defaults | `where T: Clone = Default` | Declare params for structs/enums/traits/functions |
 
 `GenericParams` appears in type alias declarations to introduce type parameter names with optional defaults. The LHS params define the alias's interface—users can see exactly which type parameters the alias accepts. Bounds go in the `where` clause for consistency with other constructs.
 
@@ -2268,6 +2272,7 @@ fn apply(_ f: fn(i32): i32, _ x: i32): i32 {
 | Return type         | `-> T`                    | `: T`                        |
 | Generic declaration | `fn foo<T>() {}`          | `fn foo() where T {}`        |
 | Where clause        | Constrains only, after `<T>` | Declares AND constrains; struct/enum: after body, trait/impl: before body |
+| Trait type params   | `trait Add<RHS = Self>`   | `trait Add where RHS = Self` |
 | Impl block generics | `impl<T> Vec<T>`          | `impl Vec(T: T) where T`     |
 | Concrete impl       | `impl Vec<u32>`           | `impl Vec(T: u32)`           |
 | Named struct decl   | `struct Point { x: i32 }` | `struct Point(x: i32)`       |
