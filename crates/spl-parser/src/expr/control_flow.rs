@@ -27,7 +27,9 @@ fn try_parse_label(p: &mut Parser<'_>) -> bool {
 
 /// Parse a labeled expression: 'label: loop/while/for/block
 /// Called from primary.rs when we see a TICK token.
-pub(super) fn labeled_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+pub(super) fn labeled_expr(
+    p: &mut Parser<'_>,
+) -> Result<Option<CompletedMarker>, crate::ParseError> {
     // We already know we're at TICK, so start the outer marker for the loop/block
     let m = p.start();
 
@@ -301,6 +303,36 @@ pub(super) fn yield_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, 
     }
 
     Ok(Some(m.complete(p, SyntaxKind::YieldExpr)))
+}
+
+/// Parse an unsafe expression: `unsafe { ... }`
+pub(super) fn unsafe_expr(
+    p: &mut Parser<'_>,
+) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    let m = p.start();
+    if let Err(e) = p.expect(SyntaxKind::UNSAFE_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = block(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+    Ok(Some(m.complete(p, SyntaxKind::UnsafeExpr)))
+}
+
+/// Parse a throw expression: `throw expr`
+pub(super) fn throw_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    let m = p.start();
+    if let Err(e) = p.expect(SyntaxKind::THROW_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
+    if let Err(e) = expr(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+    Ok(Some(m.complete(p, SyntaxKind::ThrowExpr)))
 }
 
 #[cfg(test)]
@@ -1253,6 +1285,167 @@ mod tests {
                     WHITESPACE@18..19 " "
                     R_BRACE@19..20 "}"
             "#]],
+        );
+    }
+
+    // === Unsafe Expression Tests ===
+
+    #[test]
+    fn unsafe_expr_simple() {
+        check_expr(
+            "unsafe { 42 }",
+            &expect![[r#"
+            UnsafeExpr@0..13
+              UNSAFE_KW@0..6 "unsafe"
+              Block@6..13
+                WHITESPACE@6..7 " "
+                L_BRACE@7..8 "{"
+                LiteralExpr@8..11
+                  WHITESPACE@8..9 " "
+                  INT_LITERAL@9..11 "42"
+                WHITESPACE@11..12 " "
+                R_BRACE@12..13 "}"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn unsafe_expr_with_statements() {
+        check_expr(
+            "unsafe { let x = 1; x }",
+            &expect![[r#"
+            UnsafeExpr@0..23
+              UNSAFE_KW@0..6 "unsafe"
+              Block@6..23
+                WHITESPACE@6..7 " "
+                L_BRACE@7..8 "{"
+                LetStmt@8..19
+                  WHITESPACE@8..9 " "
+                  LET_KW@9..12 "let"
+                  IdentPat@12..14
+                    Name@12..14
+                      WHITESPACE@12..13 " "
+                      IDENT@13..14 "x"
+                  WHITESPACE@14..15 " "
+                  EQ@15..16 "="
+                  LiteralExpr@16..18
+                    WHITESPACE@16..17 " "
+                    INT_LITERAL@17..18 "1"
+                  SEMI@18..19 ";"
+                PathExpr@19..21
+                  Path@19..21
+                    PathSegment@19..21
+                      NameRef@19..21
+                        WHITESPACE@19..20 " "
+                        IDENT@20..21 "x"
+                WHITESPACE@21..22 " "
+                R_BRACE@22..23 "}"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn unsafe_expr_nested() {
+        check_expr(
+            "if true { unsafe { 1 } } else { 0 }",
+            &expect![[r#"
+            IfExpr@0..35
+              IF_KW@0..2 "if"
+              LiteralExpr@2..7
+                WHITESPACE@2..3 " "
+                TRUE_KW@3..7 "true"
+              Block@7..24
+                WHITESPACE@7..8 " "
+                L_BRACE@8..9 "{"
+                UnsafeExpr@9..22
+                  WHITESPACE@9..10 " "
+                  UNSAFE_KW@10..16 "unsafe"
+                  Block@16..22
+                    WHITESPACE@16..17 " "
+                    L_BRACE@17..18 "{"
+                    LiteralExpr@18..20
+                      WHITESPACE@18..19 " "
+                      INT_LITERAL@19..20 "1"
+                    WHITESPACE@20..21 " "
+                    R_BRACE@21..22 "}"
+                WHITESPACE@22..23 " "
+                R_BRACE@23..24 "}"
+              WHITESPACE@24..25 " "
+              ELSE_KW@25..29 "else"
+              Block@29..35
+                WHITESPACE@29..30 " "
+                L_BRACE@30..31 "{"
+                LiteralExpr@31..33
+                  WHITESPACE@31..32 " "
+                  INT_LITERAL@32..33 "0"
+                WHITESPACE@33..34 " "
+                R_BRACE@34..35 "}"
+        "#]],
+        );
+    }
+
+    // === Throw Expression Tests ===
+
+    #[test]
+    fn throw_expr_simple() {
+        check_expr(
+            "throw error",
+            &expect![[r#"
+            ThrowExpr@0..11
+              THROW_KW@0..5 "throw"
+              PathExpr@5..11
+                Path@5..11
+                  PathSegment@5..11
+                    NameRef@5..11
+                      WHITESPACE@5..6 " "
+                      IDENT@6..11 "error"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn throw_expr_enum_shorthand() {
+        check_expr(
+            "throw .NotFound",
+            &expect![[r#"
+            ThrowExpr@0..15
+              THROW_KW@0..5 "throw"
+              EnumShorthandExpr@5..15
+                WHITESPACE@5..6 " "
+                DOT@6..7 "."
+                Name@7..15
+                  IDENT@7..15 "NotFound"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn throw_expr_with_call() {
+        check_expr(
+            "throw Error.new(msg)",
+            &expect![[r#"
+            ThrowExpr@0..20
+              THROW_KW@0..5 "throw"
+              CallExpr@5..20
+                PathExpr@5..15
+                  Path@5..15
+                    PathSegment@5..11
+                      NameRef@5..11
+                        WHITESPACE@5..6 " "
+                        IDENT@6..11 "Error"
+                    DOT@11..12 "."
+                    PathSegment@12..15
+                      NameRef@12..15
+                        IDENT@12..15 "new"
+                L_PAREN@15..16 "("
+                CallArg@16..19
+                  PathExpr@16..19
+                    Path@16..19
+                      PathSegment@16..19
+                        NameRef@16..19
+                          IDENT@16..19 "msg"
+                R_PAREN@19..20 ")"
+        "#]],
         );
     }
 }

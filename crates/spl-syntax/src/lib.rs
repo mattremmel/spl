@@ -215,6 +215,8 @@ pub enum SyntaxKind {
     Capture,
     ClosureParams,
     ClosureParam,
+    UnsafeExpr,
+    ThrowExpr,
 
     // Types
     RefType,

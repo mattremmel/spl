@@ -1852,7 +1852,10 @@ fn tick_in_break_label() {
 fn tick_vs_char_disambiguation() {
     // 'a' is a char, 'a is tick + ident
     check("'a'", &[(Token::Char, "'a'")]);
-    check("'a:", &[(Token::Tick, "'"), (Token::Ident, "a"), (Token::Colon, ":")]);
+    check(
+        "'a:",
+        &[(Token::Tick, "'"), (Token::Ident, "a"), (Token::Colon, ":")],
+    );
 }
 
 // ============================================================

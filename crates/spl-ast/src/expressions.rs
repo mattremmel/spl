@@ -40,6 +40,8 @@ ast_node!(CaptureList);
 ast_node!(Capture);
 ast_node!(ClosureParams);
 ast_node!(ClosureParam);
+ast_node!(UnsafeExpr);
+ast_node!(ThrowExpr);
 ast_node!(Path);
 ast_node!(PathSegment);
 ast_node!(Label);
@@ -77,6 +79,8 @@ ast_enum!(
         OptionalField(OptionalFieldExpr),
         Dollar(DollarExpr),
         Closure(ClosureExpr),
+        Unsafe(UnsafeExpr),
+        Throw(ThrowExpr),
     }
 );
 
@@ -638,6 +642,30 @@ impl Label {
     }
 }
 
+impl UnsafeExpr {
+    /// Get the `unsafe` keyword token.
+    pub fn unsafe_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::UNSAFE_KW)
+    }
+
+    /// Get the block containing the unsafe code.
+    pub fn block(&self) -> Option<Block> {
+        child(&self.0)
+    }
+}
+
+impl ThrowExpr {
+    /// Get the `throw` keyword token.
+    pub fn throw_kw(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::THROW_KW)
+    }
+
+    /// Get the expression being thrown.
+    pub fn expr(&self) -> Option<Expr> {
+        child(&self.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1122,10 +1150,7 @@ mod tests {
         assert!(loop_expr.label().is_some());
         let label = loop_expr.label().unwrap();
         assert!(label.name().is_some());
-        assert_eq!(
-            label.name().unwrap().ident_token().unwrap().text(),
-            "outer"
-        );
+        assert_eq!(label.name().unwrap().ident_token().unwrap().text(), "outer");
         assert!(loop_expr.body().is_some());
     }
 
@@ -1141,10 +1166,7 @@ mod tests {
         let while_expr: WhileExpr = parse_expr("fn main() { 'outer: while true { } }");
         assert!(while_expr.label().is_some());
         let label = while_expr.label().unwrap();
-        assert_eq!(
-            label.name().unwrap().ident_token().unwrap().text(),
-            "outer"
-        );
+        assert_eq!(label.name().unwrap().ident_token().unwrap().text(), "outer");
         assert!(while_expr.condition().is_some());
         assert!(while_expr.body().is_some());
     }
@@ -1154,10 +1176,7 @@ mod tests {
         let for_expr: ForExpr = parse_expr("fn main() { 'outer: for i in items { } }");
         assert!(for_expr.label().is_some());
         let label = for_expr.label().unwrap();
-        assert_eq!(
-            label.name().unwrap().ident_token().unwrap().text(),
-            "outer"
-        );
+        assert_eq!(label.name().unwrap().ident_token().unwrap().text(), "outer");
         assert!(for_expr.pat().is_some());
         assert!(for_expr.iterable().is_some());
         assert!(for_expr.body().is_some());
@@ -1168,10 +1187,7 @@ mod tests {
         let block_expr: BlockExpr = parse_expr("fn main() { 'outer: { 42 } }");
         assert!(block_expr.label().is_some());
         let label = block_expr.label().unwrap();
-        assert_eq!(
-            label.name().unwrap().ident_token().unwrap().text(),
-            "outer"
-        );
+        assert_eq!(label.name().unwrap().ident_token().unwrap().text(), "outer");
         assert!(block_expr.block().is_some());
     }
 
@@ -1186,9 +1202,6 @@ mod tests {
     fn continue_with_label() {
         let cont: ContinueExpr = parse_expr("fn main() { loop { continue 'outer; } }");
         assert!(cont.label().is_some());
-        assert_eq!(
-            cont.label().unwrap().ident_token().unwrap().text(),
-            "outer"
-        );
+        assert_eq!(cont.label().unwrap().ident_token().unwrap().text(), "outer");
     }
 }

@@ -401,6 +401,8 @@ impl AstPrinter {
             Expr::OptionalField(o) => self.print_optional_field_expr(o),
             Expr::Dollar(_) => self.line("DollarExpr"),
             Expr::Closure(c) => self.print_closure_expr(c),
+            Expr::Unsafe(u) => self.print_unsafe_expr(u),
+            Expr::Throw(t) => self.print_throw_expr(t),
         }
     }
 
@@ -470,6 +472,24 @@ impl AstPrinter {
                 p.indented(|pp| {
                     pp.print_expr(&body);
                 });
+            }
+        });
+    }
+
+    fn print_unsafe_expr(&mut self, expr: &crate::UnsafeExpr) {
+        self.line("UnsafeExpr");
+        self.indented(|p| {
+            if let Some(block) = expr.block() {
+                p.print_block(&block);
+            }
+        });
+    }
+
+    fn print_throw_expr(&mut self, expr: &crate::ThrowExpr) {
+        self.line("ThrowExpr");
+        self.indented(|p| {
+            if let Some(inner) = expr.expr() {
+                p.print_expr(&inner);
             }
         });
     }

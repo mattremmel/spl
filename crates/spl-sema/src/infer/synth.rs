@@ -371,6 +371,25 @@ impl<'a> InferEngine<'a> {
                 // $ is usize (array length), but needs context to validate
                 self.types.primitive(PrimitiveKind::Usize)
             }
+            // Unsafe expression: unsafe { ... }
+            // The type is the type of the block's final expression
+            Expr::Unsafe(unsafe_expr) => {
+                if let Some(block) = unsafe_expr.block() {
+                    self.synth_block(&block)
+                } else {
+                    self.types.unit()
+                }
+            }
+            // Throw expression: throw expr
+            // Throw always diverges (never type), similar to return/break
+            Expr::Throw(throw_expr) => {
+                // Synthesize the thrown expression to type-check it
+                if let Some(inner) = throw_expr.expr() {
+                    self.synth_expr(&inner);
+                }
+                // throw diverges - returns Never type
+                self.types.never()
+            }
         };
         self.results.expr_types.insert(span, type_id);
         type_id

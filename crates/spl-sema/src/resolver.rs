@@ -1340,6 +1340,20 @@ impl<'ctx> Resolver<'ctx> {
 
                 self.ctx.exit_scope();
             }
+            // Unsafe expression: unsafe { ... }
+            // Resolve the block contents
+            Expr::Unsafe(unsafe_expr) => {
+                if let Some(block) = unsafe_expr.block() {
+                    self.resolve_block(&block);
+                }
+            }
+            // Throw expression: throw expr
+            // Resolve the thrown expression
+            Expr::Throw(throw_expr) => {
+                if let Some(inner) = throw_expr.expr() {
+                    self.resolve_expr(&inner);
+                }
+            }
         }
     }
 

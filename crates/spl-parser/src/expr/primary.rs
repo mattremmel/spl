@@ -5,7 +5,7 @@ use spl_syntax::SyntaxKind;
 
 use super::control_flow::{
     block_expr, break_expr, continue_expr, for_expr, if_expr, labeled_expr, loop_expr, return_expr,
-    while_expr, yield_expr,
+    throw_expr, unsafe_expr, while_expr, yield_expr,
 };
 use super::expr;
 
@@ -55,6 +55,10 @@ pub(super) fn primary_expr(
         CONTINUE_KW => continue_expr(p),
         RETURN_KW => return_expr(p),
         YIELD_KW => yield_expr(p),
+        // Unsafe block
+        UNSAFE_KW => unsafe_expr(p),
+        // Throw expression
+        THROW_KW => throw_expr(p),
         // Match expression
         MATCH_KW => match_expr(p),
         // Closure expressions: || body, |params| body
