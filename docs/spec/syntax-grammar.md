@@ -144,7 +144,7 @@ ParamList = Param { "," Param } [ "," ] ;
 
 Param = SelfParam | TypedParam ;
 
-SelfParam = [ "&" [ "mut" ] ] "self" ;
+SelfParam = [ "&" [ "mut" ] ] [ "mut" ] "self" ;
 
 (* Parameters with optional labels and optional default values *)
 TypedParam = [ LabelSpec ] [ "mut" ] IDENTIFIER ":" Type [ "=" Expression ] ;
@@ -157,7 +157,7 @@ LabelSpec = "_" | IDENTIFIER ;
 (* Unlike Rust, `where` both introduces AND constrains type parameters *)
 WhereClause = "where" TypeParam { "," TypeParam } [ "," ] ;
 
-TypeParam = IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] ;
+TypeParam = IDENTIFIER [ ":" TypeBound { "+" TypeBound } ] [ "=" Type ] ;
 
 TypeBound = TypePath [ GenericArgs ] ;
 ```
@@ -176,10 +176,13 @@ SPL uses a consistent ordering for function/method signatures:
 This keeps error handling adjacent to the return type it modifies, while
 generic constraints come last as they apply to the entire signature.
 
-For type/struct/enum/trait definitions, `where` follows the body delimiter:
+For struct/enum definitions, `where` follows the body delimiter:
 - `struct Point(x: T) where T`
 - `enum Option { ... } where T`
-- `trait Clone { ... }` (no where needed for simple traits)
+
+For trait/impl definitions, `where` precedes the body:
+- `trait Clone where T { ... }`
+- `impl Trait for Type where T { ... }`
 
 **Default Parameters:**
 
@@ -359,9 +362,10 @@ Variant = UPPER_IDENT [ "(" VariantFields ")" ] ;
    enum variant fields is a semantic error — all variant fields are implicitly
    public with the variant's visibility. *)
 (* IMPORTANT: A variant's fields must be consistently ALL named or ALL positional.
-   The parser attempts FieldList first; if no `:` separators are found, it falls
-   back to TypeList. Mixing named and positional fields in a single variant is
-   a semantic error. *)
+   Parsing strategy: If ANY field contains `:` (name: Type syntax), parse as FieldList
+   for struct-style variant. Otherwise, parse as TypeList for tuple-style variant.
+   The `pub` modifier is only valid in FieldList context.
+   Mixing named and positional fields in a single variant is a semantic error. *)
 VariantFields = FieldList           (* named fields: x: i32, y: i32 *)
               | TypeList ;          (* tuple fields: i32, String *)
 
@@ -750,7 +754,10 @@ TupleType = "(" [ TupleTypeElement { "," TupleTypeElement } [ "," ] ] ")" ;
 
 TupleTypeElement = [ IDENTIFIER ":" ] Type ;
 
-(* Function type return uses colon *)
+(* Function type return uses colon.
+   Note: Function types do not have throws clauses. The `throws` keyword in
+   function definitions is syntactic sugar that desugars to a Result return type.
+   For example, `fn foo(): String throws Error` has type `fn(): Result(T: String, E: Error)`. *)
 FnType = [ "unsafe" ] [ "extern" AbiString ] "fn" [ LifetimeParams ] "(" [ TypeList ] ")" [ ":" Type ] ;
 
 LifetimeParams = "(" Lifetime { "," Lifetime } [ "," ] ")" ;
@@ -777,8 +784,8 @@ PathRoot = "$" "."          (* package root *)
 (* This is a hard rule enforced by the parser — no backtracking or semantic reinterpretation *)
 (* Shorthand: bare identifier T means T: T (type param name matches type name) *)
 (* Note: Empty generic arguments `Foo()` are syntactically valid and useful when
-   all type parameters have defaults. For example, if `struct Box(value: T = i32) where T`,
-   then `Box()` instantiates with the default. *)
+   all type parameters have defaults. For example, with `fn foo() where T = i32`,
+   calling `foo()` uses the default type. *)
 GenericArgs = "(" [ TypeArg { "," TypeArg } [ "," ] ] ")" ;
 
 TypeArg = IDENTIFIER [ ":" Type ] ;   (* T: i32 or T (shorthand for T: T) *)
@@ -1099,7 +1106,8 @@ EnumShorthandExpr = "." UPPER_IDENT [ "(" [ ArgList ] ")" ] ;
 (* Note: Enum variants must start with an uppercase letter (PascalCase convention). *)
 
 (* Paths use dot separator *)
-PathExpr = [ PathRoot ] IDENTIFIER { "." IDENTIFIER } ;
+PathExpr = [ PathRoot ] IDENTIFIER { "." IDENTIFIER }
+         | "Self" { "." IDENTIFIER } ;
 
 GroupedExpr = "(" Expression ")" ;
 
@@ -1250,27 +1258,20 @@ UnsafeExpr = "unsafe" Block
            | "unsafe" UnaryExpr ;    (* binds tightly to single expression *)
 ```
 
-**Unsafe Blocks and Expressions:**
+**Unsafe Blocks:**
 
-The `unsafe` keyword enables operations that the compiler cannot verify as safe. There are two forms:
-
-| Form | Syntax | Scope |
-|------|--------|-------|
-| Block | `unsafe { ... }` | All code within the block can perform unsafe operations |
-| Expression | `unsafe expr` | Only the immediately following expression is unsafe |
-
-The expression form uses `UnaryExpr` precedence, meaning it binds tightly to the next expression.
+The `unsafe` keyword enables operations that the compiler cannot verify as safe. Like Rust, SPL only allows `unsafe` with block syntax:
 
 ```spl
-// Block form - multiple unsafe operations
+// Unsafe block - enables unsafe operations within the block
 let values = unsafe {
     let a = p1.read()
     let b = p2.read()
     (a, b)
 }
 
-// Expression form - single unsafe operation
-let value = unsafe p.read()
+// Single unsafe operation still uses block syntax
+let value = unsafe { p.read() }
 
 // Unsafe function definition
 unsafe fn dangerous_operation(p: Ptr(T: i32)): i32 {
@@ -1278,26 +1279,8 @@ unsafe fn dangerous_operation(p: Ptr(T: i32)): i32 {
 }
 
 // Calling unsafe function requires unsafe context
-let result = unsafe dangerous_operation(ptr)
+let result = unsafe { dangerous_operation(ptr) }
 ```
-
-**Precedence examples:**
-
-```spl
-// unsafe binds to the immediate expression, not the entire statement
-unsafe p.read() + 1          // Parses as: (unsafe p.read()) + 1
-unsafe p.read().to_string()  // Parses as: (unsafe (p.read())).to_string()
-
-// Use parentheses for larger scopes
-unsafe (p.read() + 1)        // ERROR: parentheses don't create unsafe context
-
-// Use block form for multiple operations or larger expressions
-let sum = unsafe {
-    p1.read() + p2.read()
-}
-```
-
-This matches Rust's precedence for `unsafe` in expression position (when used without braces, it binds tightly like a unary operator).
 
 See [unsafe.md](unsafe.md) for the full list of operations that require unsafe.
 
@@ -2104,9 +2087,12 @@ fn main() {
     let mut origin = Point.new(0.0, 0.0)
     let target = Point(x: 3.0, y: 4.0)
 
+    // Type alias for demonstration
+    type T = i32
+
     // Associated functions on generic types (with shorthand and explicit forms)
     let numbers: Vec(T: i32) = Vec(T: i32).new()  // Explicit type args
-    let items: Vec(T) = Vec(T).new()              // Shorthand: T means T: T
+    let items: Vec(T) = Vec(T).new()              // Shorthand: T means T: T (where T is a type in scope)
     let map = HashMap(K: String, V: i32).new()    // Explicit when types differ
 
     // Named arguments at call site
@@ -2235,7 +2221,7 @@ fn apply(_ f: fn(i32): i32, _ x: i32): i32 {
 | Type vs value args  | Context-dependent         | Case-based (hard rule): `T:` = type, `x:` = value |
 | Return type         | `-> T`                    | `: T`                        |
 | Generic declaration | `fn foo<T>() {}`          | `fn foo() where T {}`        |
-| Where clause        | Constrains only           | Declares AND constrains      |
+| Where clause        | Constrains only, after `<T>` | Declares AND constrains; struct/enum: after body, trait/impl: before body |
 | Impl block generics | `impl<T> Vec<T>`          | `impl Vec(T: T) where T`     |
 | Concrete impl       | `impl Vec<u32>`           | `impl Vec(T: u32)`           |
 | Named struct decl   | `struct Point { x: i32 }` | `struct Point(x: i32)`       |
