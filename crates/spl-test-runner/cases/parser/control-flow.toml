@@ -188,3 +188,17 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "labeled_block_with_complex_break"
+source = """
+fn f() {
+    let result = 'block: {
+        if cond {
+            break 'block val1
+        } else {
+            break 'block val2
+        }
+    }
+}
+"""

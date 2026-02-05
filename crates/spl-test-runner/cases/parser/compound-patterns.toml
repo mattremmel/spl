@@ -296,3 +296,25 @@ impl Foo {
     }
 }
 """
+
+[[case]]
+name = "pat_enum_shorthand_unit"
+source = """
+fn f() {
+    match opt {
+        .None => 0,
+        .Some(x) => x,
+    }
+}
+"""
+
+[[case]]
+name = "pat_nested_or_in_tuple"
+source = """
+fn f() {
+    match pair {
+        (1 | 2, 3 | 4) => true,
+        _ => false,
+    }
+}
+"""

@@ -130,3 +130,11 @@ source = "fn f() { x is 0..10 }"
 [[case]]
 name = "is_negated"
 source = "fn f() { if !(x is .None) {} }"
+
+[[case]]
+name = "is_with_and_chain"
+source = "fn f() { x is .Some(v) && v > 0 && v < 100 }"
+
+[[case]]
+name = "is_in_while_condition"
+source = "fn f() { while queue.pop() is .Some(item) { process(item) } }"

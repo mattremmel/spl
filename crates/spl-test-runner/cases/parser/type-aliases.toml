@@ -65,3 +65,7 @@ source = "type Callback = fn(i32, i32): i32"
 [[case]]
 name = "type_alias_ref_type"
 source = "type StrRef = &str"
+
+[[case]]
+name = "type_alias_generic_params_bounds_defaults"
+source = "type MyResult(T, E) = Result(T: T, E: E) where T, E: Debug = Error"

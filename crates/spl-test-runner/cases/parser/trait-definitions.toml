@@ -189,3 +189,13 @@ trait Foo {
     unsafe fn dangerous(&self)
 }
 """
+
+[[case]]
+name = "trait_method_default_body_and_where"
+source = """
+trait Converter {
+    fn convert(&self): U where U: From(T: Self) {
+        U.from(self)
+    }
+}
+"""

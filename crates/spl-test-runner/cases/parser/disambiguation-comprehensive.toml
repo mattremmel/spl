@@ -70,3 +70,15 @@ source = "fn f() { foo(.Some(42)) }"
 [[case]]
 name = "disambiguation_is_vs_comparison"
 source = "fn f() { x > 0 && y is .Some(v) }"
+
+[[case]]
+name = "disambiguation_tuple_single_trailing_comma"
+source = "fn f() { let a = (1,); let b = (1) }"
+
+[[case]]
+name = "disambiguation_named_single_element"
+source = "fn f() { let t = (x: 1) }"
+
+[[case]]
+name = "disambiguation_type_method_chain_push"
+source = "fn f() { Vec(T: i32).with_capacity(10).push(1) }"

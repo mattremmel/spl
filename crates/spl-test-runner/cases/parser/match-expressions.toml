@@ -235,3 +235,14 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "match_enum_shorthand_unit_variant"
+source = """
+fn f() {
+    match opt {
+        .Some(x) => x,
+        .None => 0,
+    }
+}
+"""

@@ -213,3 +213,16 @@ source = "fn foo(x: &'a T): &'a T where T {}"
 [[case]]
 name = "fn_all_modifiers"
 source = "const unsafe fn foo() {}"
+
+[[case]]
+name = "fn_all_features_combined"
+source = """
+#[inline]
+pub const unsafe fn transform(from input: T, _ scale: f64 = 1.0): Output throws ConvertError where T: Clone, Output = Vec(T: i32) {
+    return input
+}
+"""
+
+[[case]]
+name = "fn_extern_with_where"
+source = """extern "C" fn convert(x: T): i32 where T: Into(T: i32) { x }"""

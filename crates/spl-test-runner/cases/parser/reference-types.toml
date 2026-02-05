@@ -70,3 +70,11 @@ source = "fn f(x: &i32?) {}"
 [[case]]
 name = "ref_to_fn_type_complex"
 source = "fn f(x: &fn(i32): bool) {}"
+
+[[case]]
+name = "ref_double_mut"
+source = "fn f(x: &mut &mut i32) {}"
+
+[[case]]
+name = "ref_triple_nested"
+source = "fn f(x: &&&i32) {}"

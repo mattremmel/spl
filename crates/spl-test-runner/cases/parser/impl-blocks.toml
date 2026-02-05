@@ -159,3 +159,9 @@ impl Foo {
     fn convert(&self): U where U {}
 }
 """
+
+[[case]]
+name = "impl_unsafe_trait_for_generic_with_where"
+source = """
+unsafe impl Send for Box(T: T) where T: Send {}
+"""

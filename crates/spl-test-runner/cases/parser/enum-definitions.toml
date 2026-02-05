@@ -122,3 +122,22 @@ source = "enum Container { Item(T), Empty } where T: Clone = i32"
 [[case]]
 name = "enum_single_variant_tuple"
 source = "enum Wrapper { Value(i32) }"
+
+[[case]]
+name = "enum_all_variant_styles_with_where"
+source = """
+enum Shape {
+    Circle(f64),
+    Rectangle(width: f64, height: f64),
+    Empty,
+} where T: Clone
+"""
+
+[[case]]
+name = "enum_variant_multiple_named_fields"
+source = """
+enum Event {
+    MouseMove(x: i32, y: i32, button: i32),
+    KeyPress(code: i32, shift: bool, ctrl: bool),
+}
+"""

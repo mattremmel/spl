@@ -79,3 +79,11 @@ source = "struct Foo(pub x: i32, y: i32, pub z: i32)"
 [[case]]
 name = "struct_generic_multiple_bounds"
 source = "struct S(val: T) where T: Clone + Debug"
+
+[[case]]
+name = "struct_mixed_named_positional"
+source = "struct Mixed(i32, name: String)"
+
+[[case]]
+name = "struct_positional_with_pub"
+source = "pub struct Wrapper(pub i32)"

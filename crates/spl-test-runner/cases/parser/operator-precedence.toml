@@ -206,3 +206,48 @@ source = "fn f() { !-*&x }"
 [[case]]
 name = "precedence_range_in_arithmetic"
 source = "fn f() { 1 + 2..3 + 4 }"
+
+[[case]]
+name = "assign_bitwise_and_eq"
+source = "fn f() { x &= 1 }"
+
+[[case]]
+name = "assign_bitwise_or_eq"
+source = "fn f() { x |= 1 }"
+
+[[case]]
+name = "assign_bitwise_xor_eq"
+source = "fn f() { x ^= 1 }"
+
+[[case]]
+name = "assign_shl_eq"
+source = "fn f() { x <<= 1 }"
+
+[[case]]
+name = "assign_shr_eq"
+source = "fn f() { x >>= 1 }"
+
+[[case]]
+name = "assign_add_eq"
+source = "fn f() { x += 1 }"
+
+[[case]]
+name = "assign_sub_eq"
+source = "fn f() { x -= 1 }"
+
+[[case]]
+name = "assign_mul_eq"
+source = "fn f() { x *= 1 }"
+
+[[case]]
+name = "assign_div_eq"
+source = "fn f() { x /= 1 }"
+
+[[case]]
+name = "assign_mod_eq"
+source = "fn f() { x %= 1 }"
+
+[[case]]
+name = "assign_exp_eq"
+expect_error = "expected"
+source = "fn f() { x **= 2 }"

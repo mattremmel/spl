@@ -92,3 +92,18 @@ source = "fn f() { @[] |x| x + 1 }"
 [[case]]
 name = "closure_multi_capture_mixed"
 source = "fn f() { @[a, b: &b] || a + b }"
+
+[[case]]
+name = "closure_capture_with_clone_expr"
+source = "fn f() { @[x: &x, y: clone(y)] |z| x + y + z }"
+
+[[case]]
+name = "closure_nested_in_closure"
+source = """
+fn f() {
+    let outer = |x| {
+        let inner = |y| x + y
+        inner(1)
+    }
+}
+"""
