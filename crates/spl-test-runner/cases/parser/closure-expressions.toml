@@ -111,3 +111,15 @@ fn f() {
 [[case]]
 name = "closure_in_long_chain"
 source = "fn f() { items.filter(|x| x > 0).map(|x| x * 2).collect() }"
+
+[[case]]
+name = "closure_capture_clone_expr"
+source = "fn f() { @[x: x.clone(), y] |z| x + y + z }"
+
+[[case]]
+name = "closure_empty_body"
+source = "fn f() { || {} }"
+
+[[case]]
+name = "closure_in_method_chain_complex"
+source = "fn f() { items.map(|x| x * 2).filter(|x| x > 0).collect() }"

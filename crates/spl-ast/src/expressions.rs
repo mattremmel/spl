@@ -26,7 +26,6 @@ ast_node!(ContinueExpr);
 ast_node!(ReturnExpr);
 ast_node!(YieldExpr);
 ast_node!(BlockExpr);
-ast_node!(CastExpr);
 ast_node!(RangeExpr);
 ast_node!(IsExpr);
 ast_node!(MatchExpr);
@@ -70,7 +69,6 @@ ast_enum!(
         Return(ReturnExpr),
         Yield(YieldExpr),
         Block(BlockExpr),
-        Cast(CastExpr),
         Range(RangeExpr),
         Is(IsExpr),
         Match(MatchExpr),
@@ -411,16 +409,6 @@ impl BlockExpr {
     }
 
     pub fn block(&self) -> Option<Block> {
-        child(&self.0)
-    }
-}
-
-impl CastExpr {
-    pub fn expr(&self) -> Option<Expr> {
-        child(&self.0)
-    }
-
-    pub fn ty(&self) -> Option<Type> {
         child(&self.0)
     }
 }

@@ -282,3 +282,39 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "match_tuple"
+source = """
+fn f() {
+    match (a, b) {
+        (0, 0) => 0,
+        (x, y) => x + y,
+    }
+}
+"""
+
+[[case]]
+name = "match_wildcard_guard"
+source = """
+fn f() {
+    match x {
+        _ if x > 0 => 1,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_block_arm_body"
+source = """
+fn f() {
+    match x {
+        1 => {
+            let y = 2
+            y
+        },
+        _ => 0,
+    }
+}
+"""

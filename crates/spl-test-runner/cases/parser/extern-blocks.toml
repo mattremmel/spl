@@ -115,3 +115,27 @@ extern "C" {
     fn exit(code: i32);
 }
 """
+
+[[case]]
+name = "extern_attr_on_fn"
+source = """
+extern "C" {
+    #[link_name = "c_foo"]
+    fn bar(): i32;
+}
+"""
+
+[[case]]
+name = "extern_multiple_blocks"
+source = """
+extern "C" {
+    fn foo(): i32;
+}
+extern "C" {
+    fn bar(): i32;
+}
+"""
+
+[[case]]
+name = "extern_fn_def_all_features"
+source = """pub extern "C" fn callback(x: i32, y: i32): i32 { x + y }"""

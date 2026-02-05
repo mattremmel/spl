@@ -98,3 +98,23 @@ source = "fn f() { let r: Result(T: i32, E: Error) = .Ok(42) }"
 [[case]]
 name = "disambiguation_shorthand_comparison"
 source = "fn f() { x == .None }"
+
+[[case]]
+name = "disambiguation_method_with_type_args"
+source = "fn f() { obj.method(T: i32, x: 1) }"
+
+[[case]]
+name = "disambiguation_enum_shorthand_in_array"
+source = "fn f() { let arr = [.Red, .Green, .Blue] }"
+
+[[case]]
+name = "disambiguation_enum_shorthand_in_return"
+source = "fn f(): Option(T: i32) { return .Some(42) }"
+
+[[case]]
+name = "disambiguation_struct_update"
+source = "fn f() { Point(x: 1, ..default) }"
+
+[[case]]
+name = "disambiguation_char_vs_label"
+source = "fn f() { let x = 'a'; 'b: loop { break 'b } }"

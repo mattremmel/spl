@@ -141,3 +141,29 @@ enum Event {
     KeyPress(code: i32, shift: bool, ctrl: bool),
 }
 """
+
+[[case]]
+name = "enum_single_named_field"
+source = "enum Wrapper { Named(value: i32) }"
+
+[[case]]
+name = "enum_nested_generic"
+source = """
+enum Tree {
+    Leaf(T),
+    Node(Box(T: Tree), Box(T: Tree)),
+} where T
+"""
+
+[[case]]
+name = "enum_many_variants"
+source = """
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+    Up,
+    Down,
+}
+"""

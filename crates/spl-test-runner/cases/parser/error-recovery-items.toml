@@ -1,0 +1,62 @@
+[section]
+id = "misc.error_recovery_items"
+spec_chapter = "0"
+name = "Error Recovery Items"
+
+[[case]]
+name = "missing_close_paren_struct"
+expect_error = "expected"
+source = "struct Foo(x: i32"
+
+[[case]]
+name = "missing_close_brace_enum"
+expect_error = "expected"
+source = "enum Color { Red, Green"
+
+[[case]]
+name = "missing_eq_const"
+expect_error = "expected"
+source = "const X: i32 42"
+
+[[case]]
+name = "missing_type_static"
+expect_error = "expected"
+source = "static X = 0"
+
+[[case]]
+name = "missing_fn_body"
+expect_error = "expected"
+source = "fn foo()"
+
+[[case]]
+name = "recovery_after_bad_item"
+expect_error = "expected"
+source = """
+fn good1() {}
+@@@ bad item
+fn good2() {}
+"""
+
+[[case]]
+name = "extra_comma_in_params"
+source = "fn foo(a: i32,, b: i32) {}"
+expect_error = "expected"
+
+[[case]]
+name = "missing_variant_comma"
+expect_error = "expected"
+source = """
+enum Bad {
+    A B C
+}
+"""
+
+[[case]]
+name = "unterminated_string_in_fn"
+expect_error = "expected"
+source = """fn f() { let x = "unterminated }"""
+
+[[case]]
+name = "double_return_type"
+expect_error = "expected"
+source = "fn foo(): i32: String {}"

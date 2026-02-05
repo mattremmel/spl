@@ -69,3 +69,23 @@ source = "type StrRef = &str"
 [[case]]
 name = "type_alias_generic_params_bounds_defaults"
 source = "type MyResult(T, E) = Result(T: T, E: E) where T, E: Debug = Error"
+
+[[case]]
+name = "type_alias_pub"
+source = "pub type Int = i32"
+
+[[case]]
+name = "type_alias_pub_super"
+source = "pub(super) type Internal = i32"
+
+[[case]]
+name = "type_alias_optional_type"
+source = "type MaybeInt = i32?"
+
+[[case]]
+name = "type_alias_tuple_type"
+source = "type Pair(T) = (T, T) where T"
+
+[[case]]
+name = "type_alias_slice_type"
+source = "type IntSlice = [i32]"

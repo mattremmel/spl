@@ -87,3 +87,19 @@ source = "struct Mixed(i32, name: String)"
 [[case]]
 name = "struct_positional_with_pub"
 source = "pub struct Wrapper(pub i32)"
+
+[[case]]
+name = "struct_pub_super_field"
+source = "struct Foo(pub(super) x: i32, y: i32)"
+
+[[case]]
+name = "struct_pub_dollar_field"
+source = "struct Bar(pub($) data: String)"
+
+[[case]]
+name = "struct_with_attribute"
+source = "#[derive(Clone)] struct Point(x: i32, y: i32)"
+
+[[case]]
+name = "struct_many_fields"
+source = "struct Record(a: i32, b: i32, c: i32, d: i32, e: i32)"

@@ -54,3 +54,27 @@ impl Widget {
     pub fn destroy(self) {}
 }
 """
+
+[[case]]
+name = "self_with_other_params"
+source = """
+impl Foo {
+    fn method(&self, x: i32, y: i32): i32 { x + y }
+}
+"""
+
+[[case]]
+name = "self_in_gen_fn"
+source = """
+impl Collection {
+    gen fn iter(&self): i32 { yield 0 }
+}
+"""
+
+[[case]]
+name = "self_mut_with_return"
+source = """
+impl Stack {
+    fn pop(&mut self): i32 { 0 }
+}
+"""

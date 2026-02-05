@@ -6,7 +6,7 @@ use crate::{SymbolKind, Visibility};
 use rowan::ast::AstNode;
 use rustc_hash::FxHashMap;
 use spl_ast::{
-    ArrayExpr, BinExpr, BlockExpr, BreakExpr, CallExpr, CastExpr, ContinueExpr, Expr, FieldExpr,
+    ArrayExpr, BinExpr, BlockExpr, BreakExpr, CallExpr, ContinueExpr, Expr, FieldExpr,
     ForExpr, IfExpr, IndexExpr, IsExpr, LoopExpr, MatchExpr, ParenExpr, Pat, PathExpr, PrefixExpr,
     RangeExpr, RefExpr, ReturnExpr, SliceExpr, TupleExpr, WhileExpr, YieldExpr,
 };
@@ -310,7 +310,7 @@ impl<'a> InferEngine<'a> {
             // TODO: yield expression type inference requires block context tracking
             Expr::Yield(yield_expr) => self.synth_yield(yield_expr),
             Expr::Block(block_expr) => self.synth_block_expr(block_expr),
-            Expr::Cast(cast) => self.synth_cast(cast),
+
             Expr::Range(range) => self.synth_range(range),
             Expr::Is(is_expr) => self.synth_is(is_expr),
             Expr::Match(match_expr) => self.synth_match(match_expr),
@@ -2767,64 +2767,6 @@ impl<'a> InferEngine<'a> {
                 }
             }
             None => self.types.unit(),
-        }
-    }
-
-    fn synth_cast(&mut self, cast: &CastExpr) -> TypeId {
-        // Synthesize the source expression
-        let source_ty = match cast.expr() {
-            Some(expr) => self.synth_expr(&expr),
-            None => return self.types.error(),
-        };
-
-        // Get the target type
-        let target_ty = match cast.ty() {
-            Some(ty) => self.ast_type_to_type_id(&ty),
-            None => return self.types.error(),
-        };
-
-        // Validate the cast
-        let resolved_source = self.resolve_type(source_ty);
-        let resolved_target = self.resolve_type(target_ty);
-
-        if !self.is_valid_cast(resolved_source, resolved_target) {
-            let span = text_range_to_span(cast.syntax().text_range());
-            let source_str = self.type_to_string(resolved_source);
-            let target_str = self.type_to_string(resolved_target);
-            self.diagnostics.push(
-                Diagnostic::error(format!(
-                    "invalid cast from `{source_str}` to `{target_str}`"
-                ))
-                .with_label(span, "invalid cast"),
-            );
-        }
-
-        target_ty
-    }
-
-    /// Check if a cast from source type to target type is valid.
-    fn is_valid_cast(&self, source: TypeId, target: TypeId) -> bool {
-        let source_ty = self.types.get(source);
-        let target_ty = self.types.get(target);
-
-        match (source_ty, target_ty) {
-            // Error types, type variables allowed (to avoid cascading errors, inference not complete)
-            (Type::Error, _)
-            | (_, Type::Error)
-            | (Type::Infer(_, _), _)
-            | (_, Type::Infer(_, _)) => true,
-
-            // Numeric types can be cast to each other
-            (Type::Primitive(s), Type::Primitive(t)) => is_numeric_type(*s) && is_numeric_type(*t),
-
-            // Raw pointers can be cast to integers (for FFI, pointer arithmetic, etc.)
-            // Integers can be cast to raw pointers
-            (Type::RawPtr(_, _), Type::Primitive(t)) | (Type::Primitive(t), Type::RawPtr(_, _)) => {
-                is_numeric_type(*t)
-            }
-
-            // All other casts are invalid
-            _ => false,
         }
     }
 

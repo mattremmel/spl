@@ -53,7 +53,7 @@ mod tests;
 pub use folding::try_lower_expr;
 
 use crate::ast::{
-    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, CastExpr, Expr, ExternFn, FieldExpr,
+    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, Expr, ExternFn, FieldExpr,
     ForExpr, FunctionDef, IfExpr, IndexExpr, IsExpr, Item, LetStmt, LiteralExpr, LoopExpr,
     MatchExpr, ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt,
     TupleExpr, WhileExpr, YieldExpr,
@@ -836,7 +836,7 @@ impl<'a> LoweringContext<'a> {
             Expr::Continue(_) => self.lower_continue_expr(span),
             Expr::Return(return_expr) => self.lower_return_expr(return_expr, span),
             Expr::Block(block_expr) => self.lower_block_expr(block_expr),
-            Expr::Cast(cast) => self.lower_cast_expr(cast, span, ty),
+
             Expr::Is(is_expr) => self.lower_is_expr(is_expr, span, ty),
             Expr::Match(match_expr) => self.lower_match_expr(match_expr, span, ty),
         }
@@ -1982,23 +1982,6 @@ impl<'a> LoweringContext<'a> {
                 let span = Self::text_range_to_span(block_expr.syntax().text_range());
                 self.lower_missing(span)
             })
-    }
-
-    fn lower_cast_expr(&mut self, cast: &CastExpr, span: Span, ty: TypeId) -> ExprId {
-        let inner = cast
-            .expr()
-            .map(|e| self.lower_expr(&e))
-            .unwrap_or_else(|| self.lower_missing(span.clone()));
-
-        let expr = HirExpr {
-            kind: HirExprKind::Cast {
-                expr: inner,
-                target_ty: ty,
-            },
-            ty,
-            span,
-        };
-        self.db.alloc_expr(expr)
     }
 
     fn lower_is_expr(&mut self, is_expr: &IsExpr, span: Span, ty: TypeId) -> ExprId {

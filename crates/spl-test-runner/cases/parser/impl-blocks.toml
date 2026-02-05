@@ -189,3 +189,23 @@ impl Wrapper(T: R) where R {
     fn get(&self): &R { &self.inner }
 }
 """
+
+[[case]]
+name = "impl_gen_fn"
+source = """
+impl Collection {
+    gen fn iter(&self): i32 { yield 0 }
+}
+"""
+
+[[case]]
+name = "impl_empty_inherent"
+source = "impl Foo {}"
+
+[[case]]
+name = "impl_const_fn_method"
+source = """
+impl Config {
+    const fn default(): Config { Config(value: 0) }
+}
+"""

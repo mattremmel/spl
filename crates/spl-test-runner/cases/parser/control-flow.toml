@@ -202,3 +202,27 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "for_complex_pattern"
+source = "fn f() { for (key, value) in map.entries() {} }"
+
+[[case]]
+name = "labeled_for_break_value"
+source = "fn f() { let x = 'outer: for item in items { break 'outer item } }"
+
+[[case]]
+name = "nested_labeled_loops_continue"
+source = """
+fn f() {
+    'a: loop {
+        'b: loop {
+            continue 'a
+        }
+    }
+}
+"""
+
+[[case]]
+name = "if_else_if_chain"
+source = "fn f() { if a { 1 } else if b { 2 } else if c { 3 } else { 4 } }"

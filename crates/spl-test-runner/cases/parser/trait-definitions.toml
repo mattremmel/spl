@@ -234,3 +234,28 @@ trait Convert where T: Clone, U: Debug = String {
     fn convert(&self): U
 }
 """
+
+[[case]]
+name = "trait_gen_fn_method"
+expect_error = "expected"
+source = """
+trait Producer {
+    gen fn items(&self): i32
+}
+"""
+
+[[case]]
+name = "trait_supertrait_where_default"
+source = """
+trait Foo: Clone where T: Debug = String {
+    fn process(&self): T { self.clone() }
+}
+"""
+
+[[case]]
+name = "trait_unsafe_method_throws"
+source = """
+trait Dangerous {
+    unsafe fn risky(&self): i32 throws Error
+}
+"""

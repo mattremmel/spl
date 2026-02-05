@@ -63,3 +63,19 @@ source = "use std.io.{Read, *}"
 [[case]]
 name = "use_renamed_grouped"
 source = "use std.collections.{HashMap as Map, HashSet as Set}"
+
+[[case]]
+name = "use_pub_reexport"
+source = "pub use std.vec.Vec"
+
+[[case]]
+name = "use_pub_super"
+source = "pub(super) use std.io.Read"
+
+[[case]]
+name = "use_self_in_group"
+source = "use std.{self, vec.Vec}"
+
+[[case]]
+name = "use_glob_in_nested"
+source = "use std.{io.*, collections.HashMap}"

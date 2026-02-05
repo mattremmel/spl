@@ -250,3 +250,23 @@ source = "fn f() { x %= 1 }"
 [[case]]
 name = "assign_exp_eq"
 source = "fn f() { x **= 2 }"
+
+[[case]]
+name = "precedence_bitwise_and_vs_equality"
+source = "fn f() { a & b == c }"
+
+[[case]]
+name = "precedence_coalesce_right_assoc"
+source = "fn f() { let x = a ?? b ?? c }"
+
+[[case]]
+name = "precedence_assign_right_assoc"
+source = "fn f() { a = b = c }"
+
+[[case]]
+name = "precedence_mixed_bitwise"
+source = "fn f() { a | b ^ c & d }"
+
+[[case]]
+name = "precedence_shift_vs_add"
+source = "fn f() { a + b << c }"

@@ -1219,14 +1219,6 @@ impl<'ctx> Resolver<'ctx> {
                     self.resolve_block(&block);
                 }
             }
-            Expr::Cast(cast_expr) => {
-                if let Some(inner) = cast_expr.expr() {
-                    self.resolve_expr(&inner);
-                }
-                if let Some(ty) = cast_expr.ty() {
-                    self.resolve_type(&ty);
-                }
-            }
             Expr::Range(range_expr) => {
                 if let Some(start) = range_expr.start() {
                     self.resolve_expr(&start);

@@ -421,7 +421,7 @@ impl AstPrinter {
             Expr::Return(r) => self.print_return_expr(r),
             Expr::Yield(y) => self.print_yield_expr(y),
             Expr::Block(b) => self.print_block_expr(b),
-            Expr::Cast(c) => self.print_cast_expr(c),
+
             Expr::Range(r) => self.print_range_expr(r),
             Expr::Is(i) => self.print_is_expr(i),
             Expr::Match(m) => self.print_match_expr(m),
@@ -911,19 +911,6 @@ impl AstPrinter {
         self.indented(|p| {
             if let Some(block) = block_expr.block() {
                 p.print_block(&block);
-            }
-        });
-    }
-
-    fn print_cast_expr(&mut self, cast: &CastExpr) {
-        self.line("CastExpr");
-        self.indented(|p| {
-            if let Some(expr) = cast.expr() {
-                p.print_expr(&expr);
-            }
-            if let Some(ty) = cast.ty() {
-                p.line("TargetType");
-                p.indented(|p| p.print_type(&ty));
             }
         });
     }

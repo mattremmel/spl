@@ -205,7 +205,6 @@ pub enum SyntaxKind {
     ReturnExpr,
     YieldExpr,
     BlockExpr,
-    CastExpr,
     RangeExpr,
     IsExpr,
     MatchExpr,

@@ -67,3 +67,11 @@ source = "const DEBUG: bool = false"
 [[case]]
 name = "static_with_semicolon"
 source = "static INSTANCE: Config = Config.default();"
+
+[[case]]
+name = "pub_dollar_const"
+source = "pub($) const INTERNAL: i32 = 42"
+
+[[case]]
+name = "static_nested_generic_type"
+source = "static CACHE: HashMap(K: String, V: Vec(T: i32)) = HashMap.new()"

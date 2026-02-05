@@ -1,0 +1,80 @@
+[section]
+id = "expr.literals.edge_cases"
+spec_chapter = "3"
+name = "Literal Edge Cases"
+
+[[case]]
+name = "raw_string_basic"
+expect_error = "expected"
+source = """fn f() { let s = r"hello world" }"""
+
+[[case]]
+name = "byte_string"
+expect_error = "expected"
+source = """fn f() { let b = b"bytes" }"""
+
+[[case]]
+name = "c_string"
+expect_error = "expected"
+source = """fn f() { let c = c"c_string" }"""
+
+[[case]]
+name = "byte_char"
+expect_error = "expected"
+source = """fn f() { let b = b'x' }"""
+
+[[case]]
+name = "int_suffix_i32"
+source = "fn f() { let x = 42i32 }"
+
+[[case]]
+name = "int_suffix_u64"
+source = "fn f() { let x = 100u64 }"
+
+[[case]]
+name = "int_hex_suffix"
+source = "fn f() { let x = 0xFFu8 }"
+
+[[case]]
+name = "int_binary"
+source = "fn f() { let x = 0b1010_0101 }"
+
+[[case]]
+name = "float_suffix_f32"
+source = "fn f() { let x = 3.14f32 }"
+
+[[case]]
+name = "float_suffix_f64"
+source = "fn f() { let x = 1.0f64 }"
+
+[[case]]
+name = "numeric_separators"
+source = "fn f() { let x = 1_000_000; let y = 0xFF_FF }"
+
+[[case]]
+name = "negative_float"
+source = "fn f() { let x = -3.14 }"
+
+[[case]]
+name = "int_octal"
+source = "fn f() { let x = 0o777 }"
+
+[[case]]
+name = "char_escape"
+source = "fn f() { let c = '\\n' }"
+
+[[case]]
+name = "string_escape"
+source = """fn f() { let s = "hello\\nworld" }"""
+
+[[case]]
+name = "int_hex_upper"
+source = "fn f() { let x = 0xDEAD_BEEF }"
+
+[[case]]
+name = "float_no_leading_digit"
+source = "fn f() { let x = 0.5 }"
+
+[[case]]
+name = "int_max_suffix"
+source = "fn f() { let x = 255u8; let y = 65535u16 }"

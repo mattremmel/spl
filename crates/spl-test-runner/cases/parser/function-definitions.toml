@@ -246,3 +246,35 @@ fn transform(input: T): Output throws ConvertError where T: Clone, Output {
     return input
 }
 """
+
+[[case]]
+name = "fn_pub_const_unsafe"
+source = "pub const unsafe fn danger(): i32 { 0 }"
+
+[[case]]
+name = "fn_pub_super_const"
+source = "pub(super) const fn compute(): i32 { 42 }"
+
+[[case]]
+name = "fn_gen_with_throws"
+source = "gen fn items(): i32 throws Error { yield 1 }"
+
+[[case]]
+name = "fn_lifetime_params_ref_return"
+source = "fn borrow(s: &'a str): &'a str { s }"
+
+[[case]]
+name = "fn_empty_where"
+source = "fn f() where T {}"
+
+[[case]]
+name = "fn_pub_dollar_vis"
+source = "pub($) fn internal() {}"
+
+[[case]]
+name = "fn_multiple_default_with_labels"
+source = """fn connect(to host: String = "localhost", on port: i32 = 8080) {}"""
+
+[[case]]
+name = "fn_nested_generic_return"
+source = "fn wrap(x: T): Option(T: Vec(T: T)) where T { .Some(Vec.new()) }"

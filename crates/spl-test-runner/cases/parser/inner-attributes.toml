@@ -1,0 +1,57 @@
+[section]
+id = "items.inner_attributes"
+spec_chapter = "1.1"
+name = "Inner Attributes"
+
+[[case]]
+name = "inner_attr_file_level"
+source = """
+#![allow(unused)]
+fn foo() {}
+"""
+
+[[case]]
+name = "inner_attr_in_module"
+expect_error = "expected"
+source = """
+module foo {
+    #![feature(test)]
+    fn bar() {}
+}
+"""
+
+[[case]]
+name = "inner_attr_in_impl"
+expect_error = "expected"
+source = """
+impl Foo {
+    #![allow(dead_code)]
+    fn bar() {}
+}
+"""
+
+[[case]]
+name = "inner_attr_multiple"
+source = """
+#![allow(unused)]
+#![feature(test)]
+#![cfg(target_os = "linux")]
+fn foo() {}
+"""
+
+[[case]]
+name = "inner_attr_complex_args"
+source = """
+#![cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn foo() {}
+"""
+
+[[case]]
+name = "inner_and_outer_attrs_mixed"
+source = """
+#![allow(unused)]
+#[inline]
+fn foo() {}
+#[test]
+fn bar() {}
+"""

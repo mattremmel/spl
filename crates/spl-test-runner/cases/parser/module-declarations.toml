@@ -67,3 +67,58 @@ module inner {
     fn new(): Point { Point(x: 0) }
 }
 """
+
+[[case]]
+name = "module_pub_super"
+source = """
+pub(super) module internal {
+    fn helper() {}
+}
+"""
+
+[[case]]
+name = "module_pub_dollar"
+source = """
+pub($) module crate_internal {
+    fn helper() {}
+}
+"""
+
+[[case]]
+name = "module_all_item_types"
+source = """
+module everything {
+    struct Point(x: i32)
+    enum Color { Red }
+    trait Foo { fn bar(&self) }
+    impl Point { fn new(): Point { Point(x: 0) } }
+    const MAX: i32 = 100
+    use super.Bar
+}
+"""
+
+[[case]]
+name = "module_deeply_nested"
+source = """
+module a {
+    module b {
+        module c {
+            fn deep() {}
+        }
+    }
+}
+"""
+
+[[case]]
+name = "module_ref_with_attr"
+source = "#[cfg(test)] module tests;"
+
+[[case]]
+name = "module_with_inner_attr"
+expect_error = "expected"
+source = """
+module foo {
+    #![allow(unused)]
+    fn bar() {}
+}
+"""
