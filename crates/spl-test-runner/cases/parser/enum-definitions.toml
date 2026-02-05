@@ -77,3 +77,31 @@ enum Msg {
     Move(x: i32, y: i32,),
 }
 """
+
+[[case]]
+name = "enum_where_multiple_bounds"
+source = """
+enum Container {
+    Item(T),
+    Empty,
+} where T: Clone + Debug
+"""
+
+[[case]]
+name = "enum_pub_with_attributes"
+source = """
+#[repr(C)]
+pub enum Color { Red, Green, Blue }
+"""
+
+[[case]]
+name = "enum_single_variant"
+source = """
+enum Unit { Only }
+"""
+
+[[case]]
+name = "enum_variant_single_tuple_field"
+source = """
+enum Wrapper { Value(T) } where T
+"""

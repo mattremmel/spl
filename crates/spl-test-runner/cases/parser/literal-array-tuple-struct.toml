@@ -88,3 +88,19 @@ source = "fn f() { [] }"
 [[case]]
 name = "struct_with_type_args"
 source = "fn f() { Box(T: i32, value: 42) }"
+
+[[case]]
+name = "struct_with_type_and_value_args"
+source = "fn f() { Container(T: i32, value: 42) }"
+
+[[case]]
+name = "enum_shorthand_in_context"
+source = "fn f() { let x = .Ok(42) }"
+
+[[case]]
+name = "named_tuple_mixed"
+source = "fn f() { (1, name: 2) }"
+
+[[case]]
+name = "array_repeat_expr"
+source = "fn f() { [x + 1; count * 2] }"

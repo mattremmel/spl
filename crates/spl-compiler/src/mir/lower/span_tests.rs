@@ -503,39 +503,6 @@ fn unary_not_span_preserved() {
     );
 }
 
-// ========== Test 13: Cast expressions ==========
-
-#[test]
-fn cast_span_preserved() {
-    let source = "fn main() { let x = 42 as i64; }";
-    let bodies = lower_source(source);
-    let body = &bodies[0];
-
-    // Find the Cast rvalue
-    let cast_stmt = body
-        .basic_blocks
-        .iter()
-        .flat_map(|bb| bb.statements.iter())
-        .find(|s| {
-            matches!(
-                &s.kind,
-                crate::mir::StatementKind::Assign(_, crate::mir::Rvalue::Cast(..))
-            )
-        })
-        .expect("should have cast");
-
-    assert!(
-        cast_stmt.span.end <= source.len(),
-        "Cast span should be within source bounds"
-    );
-
-    let span_text = span_to_source(source, &cast_stmt.span);
-    assert!(
-        span_text.contains("as") || span_text.contains("42"),
-        "Cast span should reference the cast expression, got '{span_text}'",
-    );
-}
-
 // ========== Test 14: Break/Continue spans ==========
 
 #[test]

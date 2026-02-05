@@ -6,7 +6,7 @@
 //!
 //! # Prefix Operators
 //!
-//! Prefix operators (`!`, `-`, `+`, `*`, `&`, `..`) bind to the expression that follows.
+//! Prefix operators (`!`, `-`, `*`, `&`, `~`, `..`) bind to the expression that follows.
 //! Special cases:
 //! - `&` may be followed by `mut` to form `&mut expr`
 //! - `..` creates a range-from expression (`..end`)
@@ -16,7 +16,7 @@
 //! Binary operators with an operand on each side. The `r_bp` (right binding power)
 //! passed from `expr_bp` determines what can be parsed as the right operand.
 //! Special cases:
-//! - `as` parses a type on the right side, not an expression
+//! - `is` parses a pattern on the right side, not an expression
 //! - `..` creates a range expression (`start..end`)
 //!
 //! # Postfix Operators
@@ -78,11 +78,9 @@ pub(super) fn prefix_expr(
     }
 
     let kind = match op {
-        SyntaxKind::BANG
-        | SyntaxKind::MINUS
-        | SyntaxKind::PLUS
-        | SyntaxKind::STAR
-        | SyntaxKind::TILDE => SyntaxKind::PrefixExpr,
+        SyntaxKind::BANG | SyntaxKind::MINUS | SyntaxKind::STAR | SyntaxKind::TILDE => {
+            SyntaxKind::PrefixExpr
+        }
         _ => unreachable!("unexpected prefix operator: {:?}", op),
     };
 
@@ -101,17 +99,6 @@ pub(super) fn infix_expr(
 ) -> Result<CompletedMarker, crate::ParseError> {
     let m = lhs.precede(p);
     let op = p.current().unwrap();
-
-    // Handle 'as' cast specially
-    if op == SyntaxKind::AS_KW {
-        p.bump();
-        // Parse type (simplified: just an identifier for now)
-        if let Err(e) = type_expr(p) {
-            m.abandon(p);
-            return Err(e);
-        }
-        return Ok(m.complete(p, SyntaxKind::CastExpr));
-    }
 
     // Handle 'is' pattern matching specially: `expr is Pattern`
     // Note: 'is not' syntax was removed - use `!(expr is Pattern)` instead
@@ -289,25 +276,6 @@ fn field_or_method_expr(
         m.abandon(p);
         Err(p.error_at_current("expected identifier or integer after '.'".to_string()))
     }
-}
-
-/// Parse a type expression (simplified for cast).
-fn type_expr(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
-    let m = p.start();
-
-    // Simplified: just parse an identifier path (no generics for now)
-    if !p.at(SyntaxKind::IDENT) {
-        m.abandon(p);
-        return Err(p.error_at_current("expected type".to_string()));
-    }
-
-    // Use structured path parsing (no generics for cast expressions)
-    if let Err(e) = crate::path::path_no_generics(p) {
-        m.abandon(p);
-        return Err(e);
-    }
-
-    Ok(m.complete(p, SyntaxKind::PathType))
 }
 
 #[cfg(test)]
@@ -971,58 +939,6 @@ mod tests {
     }
 
     #[test]
-    fn cast_expr() {
-        check_expr(
-            "42 as f64",
-            &expect![[r#"
-                CastExpr@0..9
-                  LiteralExpr@0..2
-                    INT_LITERAL@0..2 "42"
-                  WHITESPACE@2..3 " "
-                  AS_KW@3..5 "as"
-                  PathType@5..9
-                    Path@5..9
-                      PathSegment@5..9
-                        NameRef@5..9
-                          WHITESPACE@5..6 " "
-                          IDENT@6..9 "f64"
-            "#]],
-        );
-    }
-
-    #[test]
-    fn precedence_cast_vs_arithmetic() {
-        check_expr(
-            "a as i32 + b",
-            &expect![[r#"
-                BinExpr@0..12
-                  CastExpr@0..8
-                    PathExpr@0..1
-                      Path@0..1
-                        PathSegment@0..1
-                          NameRef@0..1
-                            IDENT@0..1 "a"
-                    WHITESPACE@1..2 " "
-                    AS_KW@2..4 "as"
-                    PathType@4..8
-                      Path@4..8
-                        PathSegment@4..8
-                          NameRef@4..8
-                            WHITESPACE@4..5 " "
-                            IDENT@5..8 "i32"
-                  WHITESPACE@8..9 " "
-                  PLUS@9..10 "+"
-                  PathExpr@10..12
-                    Path@10..12
-                      PathSegment@10..12
-                        NameRef@10..12
-                          WHITESPACE@10..11 " "
-                          IDENT@11..12 "b"
-            "#]],
-        );
-    }
-
-    #[test]
     fn logical_or_expr() {
         check_expr(
             "a || b",
@@ -1488,39 +1404,6 @@ mod tests {
                     LiteralExpr@5..6
                       INT_LITERAL@5..6 "0"
                     R_BRACKET@6..7 "]"
-            "#]],
-        );
-    }
-
-    #[test]
-    fn precedence_cast_chain() {
-        // Cast chains left to right: a as i32 as f64
-        check_expr(
-            "a as i32 as f64",
-            &expect![[r#"
-                CastExpr@0..15
-                  CastExpr@0..8
-                    PathExpr@0..1
-                      Path@0..1
-                        PathSegment@0..1
-                          NameRef@0..1
-                            IDENT@0..1 "a"
-                    WHITESPACE@1..2 " "
-                    AS_KW@2..4 "as"
-                    PathType@4..8
-                      Path@4..8
-                        PathSegment@4..8
-                          NameRef@4..8
-                            WHITESPACE@4..5 " "
-                            IDENT@5..8 "i32"
-                  WHITESPACE@8..9 " "
-                  AS_KW@9..11 "as"
-                  PathType@11..15
-                    Path@11..15
-                      PathSegment@11..15
-                        NameRef@11..15
-                          WHITESPACE@11..12 " "
-                          IDENT@12..15 "f64"
             "#]],
         );
     }

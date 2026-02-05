@@ -1,0 +1,38 @@
+[section]
+id = "types.tuples.named"
+spec_chapter = "2.5"
+name = "Named Tuples"
+
+[[case]]
+name = "named_tuple_type_simple"
+source = "fn f(p: (x: i32, y: i32)) {}"
+
+[[case]]
+name = "named_tuple_type_mixed"
+source = "fn f(p: (i32, name: String)) {}"
+
+[[case]]
+name = "named_tuple_expr_simple"
+source = "fn f() { (x: 1, y: 2) }"
+
+[[case]]
+name = "named_tuple_expr_mixed"
+source = """fn f() { (1, name: "hello") }"""
+
+[[case]]
+name = "named_tuple_in_fn_return"
+source = "fn divide(a: i32, b: i32): (quotient: i32, remainder: i32) { (quotient: a / b, remainder: a % b) }"
+
+[[case]]
+name = "named_tuple_field_access"
+source = """
+fn f() {
+    let t = (x: 1, y: 2)
+    t.x
+    t.0
+}
+"""
+
+[[case]]
+name = "named_tuple_single_element"
+source = "fn f() { (x: 1) }"

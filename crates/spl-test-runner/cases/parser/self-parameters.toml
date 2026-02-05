@@ -1,0 +1,56 @@
+[section]
+id = "items.functions.self"
+spec_chapter = "1.3.1"
+name = "Self Parameters"
+
+[[case]]
+name = "self_by_value"
+source = """
+impl Foo {
+    fn consume(self) {}
+}
+"""
+
+[[case]]
+name = "self_mut_by_value"
+source = """
+impl Foo {
+    fn take(mut self) {}
+}
+"""
+
+[[case]]
+name = "self_by_ref"
+source = """
+impl Foo {
+    fn inspect(&self): i32 { 0 }
+}
+"""
+
+[[case]]
+name = "self_by_mut_ref"
+source = """
+impl Foo {
+    fn update(&mut self) {}
+}
+"""
+
+[[case]]
+name = "self_in_trait_method"
+source = """
+trait Consumable {
+    fn consume(self)
+    fn inspect(&self): bool
+    fn mutate(&mut self)
+}
+"""
+
+[[case]]
+name = "self_in_impl_method"
+source = """
+impl Widget {
+    pub fn render(&self): String { "widget".to_string() }
+    pub fn resize(&mut self, w: i32, h: i32) {}
+    pub fn destroy(self) {}
+}
+"""

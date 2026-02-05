@@ -53,3 +53,26 @@ source = "fn f() { |mut x: i32| x }"
 [[case]]
 name = "closure_trailing_comma"
 source = "fn f() { |a: i32, b: i32,| a + b }"
+
+[[case]]
+name = "closure_block_multi_stmt"
+source = """
+fn f() {
+    let add = |a: i32, b: i32| {
+        let sum = a + b
+        sum
+    }
+}
+"""
+
+[[case]]
+name = "closure_capture_by_ref"
+source = """fn f() { let c = @[x: &x]|y| x + y }"""
+
+[[case]]
+name = "closure_as_argument"
+source = """fn f() { items.map(|x| x + 1) }"""
+
+[[case]]
+name = "closure_nested"
+source = """fn f() { let f = |x| |y| x + y }"""

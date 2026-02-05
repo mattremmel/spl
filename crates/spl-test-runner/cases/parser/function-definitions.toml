@@ -123,3 +123,73 @@ source = "fn foo(a: i32, b: i32,) {}"
 [[case]]
 name = "fn_mixed_label_styles"
 source = "fn foo(to name: String, _ x: i32, y: i32) {}"
+
+[[case]]
+name = "fn_ref_self"
+source = """
+impl Foo {
+    fn method(&self): i32 { 0 }
+}
+"""
+
+[[case]]
+name = "fn_ref_mut_self"
+source = """
+impl Foo {
+    fn mutate(&mut self) {}
+}
+"""
+
+[[case]]
+name = "fn_self_by_value_plain"
+source = """
+impl Foo {
+    fn consume(self) {}
+}
+"""
+
+[[case]]
+name = "fn_self_by_value_mut"
+source = """
+impl Foo {
+    fn take(mut self) {}
+}
+"""
+
+[[case]]
+name = "fn_label_spec_identifier"
+source = "fn send(to recipient: String) {}"
+
+[[case]]
+name = "fn_multiple_labeled_params"
+source = "fn move_to(from start: Point, to end: Point) {}"
+
+[[case]]
+name = "fn_default_with_label"
+source = """fn greet(to name: String = "World") {}"""
+
+[[case]]
+name = "fn_where_default_and_bounds"
+source = """
+fn convert(): T where T: Clone = i32 {}
+"""
+
+[[case]]
+name = "fn_where_multiple_bounds_plus"
+source = """
+fn process(): T where T: Clone + Debug + Send {}
+"""
+
+[[case]]
+name = "fn_throws_typed_and_where"
+source = """
+fn fetch(): Data throws Error where Data: Clone, Error: Debug {}
+"""
+
+[[case]]
+name = "fn_extern_fn_def"
+source = """extern "C" fn callback(x: i32): i32 { x }"""
+
+[[case]]
+name = "fn_extern_bare_fn_def"
+source = """extern fn my_fn(x: i32): i32 { x }"""

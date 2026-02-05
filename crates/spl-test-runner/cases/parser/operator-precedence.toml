@@ -158,3 +158,23 @@ source = "fn f() { a || b || c }"
 [[case]]
 name = "precedence_mixed_logical"
 source = "fn f() { a || b && c }"
+
+[[case]]
+name = "exponentiation_right_assoc_explicit"
+source = "fn f() { let x = a ** b ** c }"
+
+[[case]]
+name = "coalesce_vs_logical"
+source = "fn f() { let x = a ?? b || c }"
+
+[[case]]
+name = "is_vs_and"
+source = "fn f() { if a is .Some(x) && x > 0 {} }"
+
+[[case]]
+name = "range_in_for"
+source = "fn f() { for i in 0..10 {} }"
+
+[[case]]
+name = "bitwise_complement_precedence"
+source = "fn f() { let x = ~a & b }"

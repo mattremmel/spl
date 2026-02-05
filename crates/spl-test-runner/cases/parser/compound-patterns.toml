@@ -193,3 +193,57 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "pat_grouped_or"
+source = """
+fn f() {
+    match x {
+        (1 | 2 | 3) => "small",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "pat_enum_shorthand_with_rest"
+source = """
+fn f() {
+    match msg {
+        .Move(x, ..) => x,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_slice_empty_rest"
+source = """
+fn f() {
+    match items {
+        [..] => "any",
+    }
+}
+"""
+
+[[case]]
+name = "pat_nested_deep"
+source = """
+fn f() {
+    match data {
+        .Some((Point(x, _), [first, ..])) => x + first,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_or_with_bindings"
+source = """
+fn f() {
+    match opt {
+        .Some(x) | .Other(x) => x,
+        _ => 0,
+    }
+}
+"""

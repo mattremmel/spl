@@ -1078,24 +1078,6 @@ mod expressions {
         );
     }
 
-    #[test]
-    fn cast_expr() {
-        check(
-            "fn main() { x as i64 }",
-            &expect![[r#"
-                SourceFile
-                  FunctionDef "main"
-                    ParamList
-                    Block
-                      TailExpr
-                        CastExpr
-                          Path "x"
-                          TargetType
-                            Path "i64"
-            "#]],
-        );
-    }
-
     /// `RangeFull` expression: `..`
     #[test]
     fn range_full() {

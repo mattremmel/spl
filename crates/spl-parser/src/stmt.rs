@@ -257,7 +257,11 @@ fn base_type(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
 
     // Path type: identifier, Self, super, or path::to::Type<Args>
     // Note: 'crate' keyword was removed - use '$' for package root
-    if !p.at(SyntaxKind::IDENT) && !p.at(SyntaxKind::SELF_TYPE_KW) && !p.at(SyntaxKind::SUPER_KW) && !p.at(SyntaxKind::DOLLAR) {
+    if !p.at(SyntaxKind::IDENT)
+        && !p.at(SyntaxKind::SELF_TYPE_KW)
+        && !p.at(SyntaxKind::SUPER_KW)
+        && !p.at(SyntaxKind::DOLLAR)
+    {
         let err = p.error_at_current("expected type".to_string());
         m.abandon(p);
         return Err(err);

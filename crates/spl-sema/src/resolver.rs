@@ -1990,25 +1990,7 @@ mod tests {
         );
     }
 
-    // ===== Cast, prefix, ref expressions =====
-
-    #[test]
-    fn resolve_cast_expr() {
-        check_ok("fn main() { let x = 1; x as i64; }");
-    }
-
-    #[test]
-    fn resolve_cast_to_defined_type() {
-        check_ok("struct Foo; fn main() { let x = 1; x as Foo; }");
-    }
-
-    #[test]
-    fn resolve_cast_to_undefined_type() {
-        check_err(
-            "fn main() { let x = 1; x as Undefined; }",
-            &["cannot find `Undefined`"],
-        );
-    }
+    // ===== Prefix, ref expressions =====
 
     #[test]
     fn resolve_prefix_not() {

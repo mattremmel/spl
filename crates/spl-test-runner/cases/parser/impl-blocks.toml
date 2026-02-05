@@ -86,3 +86,43 @@ impl Vec where T {
     fn convert(&self): i32 where U {}
 }
 """
+
+[[case]]
+name = "impl_concrete_type_arg"
+source = """
+impl Vec(T: u32) {
+    fn sum(&self): u32 { 0 }
+}
+"""
+
+[[case]]
+name = "impl_method_level_where"
+source = """
+impl Container(T) {
+    fn convert(&self): U where U: From(T) { U.from(self.value) }
+}
+"""
+
+[[case]]
+name = "impl_trait_with_generic_args"
+source = """
+impl Clone for Option(T: T) where T: Clone {
+    fn clone(&self): Self { self }
+}
+"""
+
+[[case]]
+name = "impl_unsafe_trait"
+source = """
+unsafe impl Send for MyType {}
+"""
+
+[[case]]
+name = "impl_multiple_methods_with_vis"
+source = """
+impl Foo {
+    pub fn public_method(&self) {}
+    fn private_method(&self) {}
+    pub fn another_public(&mut self) {}
+}
+"""

@@ -1,0 +1,73 @@
+[section]
+id = "error-recovery.comprehensive"
+spec_chapter = "1.1"
+name = "Error Recovery Comprehensive"
+
+[[case]]
+name = "missing_closing_brace"
+source = """
+fn foo() {
+    let x = 1
+"""
+expect_error = "expected"
+
+[[case]]
+name = "missing_closing_paren_fn"
+source = """
+fn foo(a: i32, b: i32 {
+    a + b
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "invalid_pattern"
+source = """
+fn foo() {
+    let + = 1
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "missing_match_brace"
+source = """
+fn foo() {
+    match x {
+        1 => "one",
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "missing_enum_brace"
+source = """
+enum Color { Red, Green,
+"""
+expect_error = "expected"
+
+[[case]]
+name = "extra_comma_in_params"
+source = """
+fn foo(a: i32,, b: i32) {}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "missing_type_in_let"
+source = """
+fn foo() {
+    let x: = 1
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "fn_body_recovery"
+source = """
+fn broken() {
+    let x = @@@
+}
+fn valid() {}
+"""
+expect_error = "expected"

@@ -70,3 +70,23 @@ source = "fn f() { arr[1:$-1] }"
 [[case]]
 name = "try_propagate"
 source = "fn f() { result! }"
+
+[[case]]
+name = "slice_dollar_end"
+source = "fn f() { arr[1:$] }"
+
+[[case]]
+name = "slice_dollar_minus"
+source = "fn f() { arr[1:$-1] }"
+
+[[case]]
+name = "slice_dollar_both"
+source = "fn f() { arr[$-2:$-1] }"
+
+[[case]]
+name = "index_nested_dollar"
+source = "fn f() { matrix[$-1][$-1] }"
+
+[[case]]
+name = "method_chain_long"
+source = "fn f() { a.b().c.d().e }"

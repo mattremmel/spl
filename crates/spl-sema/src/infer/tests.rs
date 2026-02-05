@@ -2019,98 +2019,7 @@ fn error_parenthesized_u8_negative() {
 // =============================================================================
 // 4.1 SEMA-5.2: Cast Validity Checking
 // =============================================================================
-
-// Valid numeric casts
-
-#[test]
-fn cast_i32_to_i64() {
-    check("fn main() { let x: i32 = 42; let y = x as i64; }", "i64");
-}
-
-#[test]
-fn cast_i64_to_i32() {
-    check("fn main() { let x: i64 = 42; let y = x as i32; }", "i32");
-}
-
-#[test]
-fn cast_u8_to_u32() {
-    check("fn main() { let x: u8 = 42; let y = x as u32; }", "u32");
-}
-
-#[test]
-fn cast_i32_to_u32() {
-    check("fn main() { let x: i32 = 42; let y = x as u32; }", "u32");
-}
-
-#[test]
-fn cast_int_to_float() {
-    check("fn main() { let x: i32 = 42; let y = x as f64; }", "f64");
-}
-
-#[test]
-fn cast_float_to_int() {
-    check("fn main() { let x: f64 = 3.14; let y = x as i32; }", "i32");
-}
-
-#[test]
-fn cast_f32_to_f64() {
-    check("fn main() { let x: f32 = 3.14; let y = x as f64; }", "f64");
-}
-
-#[test]
-fn cast_f64_to_f32() {
-    check("fn main() { let x: f64 = 3.14; let y = x as f32; }", "f32");
-}
-
-// Invalid casts
-
-#[test]
-fn error_bool_to_int() {
-    check_err(
-        "fn main() { let x = true; let y = x as i32; }",
-        &["invalid cast"],
-    );
-}
-
-#[test]
-fn error_int_to_bool() {
-    check_err(
-        "fn main() { let x: i32 = 1; let y = x as bool; }",
-        &["invalid cast"],
-    );
-}
-
-#[test]
-fn error_struct_to_int() {
-    check_err(
-        "struct S() fn main() { let s = S(); let x = s as i32; }",
-        &["invalid cast"],
-    );
-}
-
-#[test]
-fn error_int_to_struct() {
-    check_err(
-        "struct S() fn main() { let x: i32 = 1; let s = x as S; }",
-        &["invalid cast"],
-    );
-}
-
-#[test]
-fn error_tuple_to_int() {
-    check_err(
-        "fn main() { let t = (1, 2); let x = t as i32; }",
-        &["invalid cast"],
-    );
-}
-
-#[test]
-fn error_array_to_int() {
-    check_err(
-        "fn main() { let a = [1, 2, 3]; let x = a as i32; }",
-        &["invalid cast"],
-    );
-}
+// NOTE: Cast operator (`as`) has been removed from the language
 
 // =============================================================================
 // 4.2 SEMA-5.3: Recursive Type Detection
@@ -2409,21 +2318,7 @@ fn warn_first_unreachable_only() {
 // -----------------------------------------------------------------------------
 // 5.5 Additional Cast Tests
 // -----------------------------------------------------------------------------
-
-#[test]
-fn cast_u8_to_i32() {
-    check("fn main() { let x: u8 = 1; let y = x as i32; }", "i32");
-}
-
-#[test]
-fn cast_u32_to_i32() {
-    check("fn main() { let x: u32 = 1; let y = x as i32; }", "i32");
-}
-
-#[test]
-fn error_unit_to_int() {
-    check_err("fn main() { let x = () as i32; }", &["invalid cast"]);
-}
+// NOTE: Cast operator (`as`) has been removed from the language
 
 // -----------------------------------------------------------------------------
 // 5.6 Additional Array Bounds Tests
@@ -4260,11 +4155,6 @@ fn complex_deeply_nested_parens() {
 }
 
 #[test]
-fn complex_nested_cast_in_binary() {
-    check("fn main() { let x = (1 as i64) + (2 as i64); }", "i64");
-}
-
-#[test]
 fn complex_nested_ref_and_deref() {
     check(
         r#"
@@ -4366,47 +4256,7 @@ fn method_chain_with_field_access() {
 // =============================================================================
 // Edge Cases in Casting
 // =============================================================================
-
-#[test]
-fn cast_chain() {
-    // Cast from one type to another and then to a third
-    check("fn main() { let x = 42 as i8 as i64; }", "i64");
-}
-
-#[test]
-fn cast_in_function_call() {
-    check(
-        r#"
-        fn take_i64(n: i64): i64 { n }
-        fn main() { let x = take_i64(n: 42 as i64); }
-        "#,
-        "i64",
-    );
-}
-
-#[test]
-fn cast_float_to_different_sizes() {
-    check("fn main() { let x = 3.14f64 as f32; }", "f32");
-}
-
-#[test]
-fn cast_in_comparison() {
-    check("fn main() { let x = (1 as i64) == (2 as i64); }", "bool");
-}
-
-#[test]
-fn cast_in_array_index() {
-    check(
-        r#"
-        fn main() {
-            let arr = [1, 2, 3];
-            let idx: i64 = 1;
-            let x = arr[idx as i32];
-        }
-        "#,
-        "i32",
-    );
-}
+// NOTE: Cast operator (`as`) has been removed from the language
 
 // =============================================================================
 // Generic Functions with Multiple Type Parameters

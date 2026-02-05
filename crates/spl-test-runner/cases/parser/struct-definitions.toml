@@ -59,3 +59,11 @@ source = "struct Foo(pub x: i32, y: i32)"
 [[case]]
 name = "struct_pub_positional_field"
 source = "pub struct Newtype(pub i32)"
+
+[[case]]
+name = "struct_where_multiple_bounds_plus"
+source = "struct Table(k: K, v: V) where K: Hash + Eq, V"
+
+[[case]]
+name = "struct_generic_positional_where_bounds"
+source = "struct Wrapper(T) where T: Clone"

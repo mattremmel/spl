@@ -1,7 +1,5 @@
-mode = "run-pass"
-
-[expect.run]
-return = 42
+# `as` casts removed per spec: use .widen()/.truncate()/.try_into() instead
+mode = "compile-fail"
 
 [source]
 inline = """

@@ -156,7 +156,6 @@ const BP_RANGE: (u8, u8) = (23, 24);
 const BP_ADDITIVE: (u8, u8) = (25, 26);
 const BP_MULTIPLICATIVE: (u8, u8) = (27, 28);
 const BP_EXPONENTIATION: (u8, u8) = (30, 29); // right-associative: l_bp > r_bp
-const BP_CAST: (u8, u8) = (31, 32);
 const BP_PREFIX: u8 = 33;
 const BP_POSTFIX: u8 = 35;
 
@@ -169,7 +168,6 @@ fn prefix_bp(op: SyntaxKind) -> Option<((), u8)> {
     match op {
         SyntaxKind::BANG
         | SyntaxKind::MINUS
-        | SyntaxKind::PLUS
         | SyntaxKind::STAR
         | SyntaxKind::TILDE
         | SyntaxKind::AMP => Some(((), BP_PREFIX)),
@@ -186,7 +184,6 @@ fn infix_bp(op: SyntaxKind) -> Option<(u8, u8)> {
         | SyntaxKind::PLUS_EQ
         | SyntaxKind::MINUS_EQ
         | SyntaxKind::STAR_EQ
-        | SyntaxKind::STAR_STAR_EQ
         | SyntaxKind::SLASH_EQ
         | SyntaxKind::PERCENT_EQ
         | SyntaxKind::PIPE_EQ
@@ -236,9 +233,6 @@ fn infix_bp(op: SyntaxKind) -> Option<(u8, u8)> {
 
         // Exponentiation (right-associative)
         SyntaxKind::STAR_STAR => Some(BP_EXPONENTIATION),
-
-        // Cast (left-associative)
-        SyntaxKind::AS_KW => Some(BP_CAST),
 
         _ => None,
     }
@@ -783,27 +777,6 @@ mod tests {
     }
 
     #[test]
-    fn expr_double_operator_prefix_after_infix() {
-        // "1 + + 2" - second + is unary plus (prefix), parses as: 1 + (+2)
-        check_expr(
-            "1 + + 2",
-            &expect![[r#"
-                BinExpr@0..7
-                  LiteralExpr@0..1
-                    INT_LITERAL@0..1 "1"
-                  WHITESPACE@1..2 " "
-                  PLUS@2..3 "+"
-                  PrefixExpr@3..7
-                    WHITESPACE@3..4 " "
-                    PLUS@4..5 "+"
-                    LiteralExpr@5..7
-                      WHITESPACE@5..6 " "
-                      INT_LITERAL@6..7 "2"
-            "#]],
-        );
-    }
-
-    #[test]
     fn expr_double_minus_as_subtract_negate() {
         // "1 - - 2" parses as 1 - (-2)
         check_expr(
@@ -857,39 +830,6 @@ mod tests {
                           NameRef@8..10
                             WHITESPACE@8..9 " "
                             IDENT@9..10 "c"
-            "#]],
-        );
-    }
-
-    #[test]
-    fn precedence_cast_vs_arithmetic() {
-        // "a as i32 + b" parses as "(a as i32) + b" since cast binds tighter
-        check_expr(
-            "a as i32 + b",
-            &expect![[r#"
-                BinExpr@0..12
-                  CastExpr@0..8
-                    PathExpr@0..1
-                      Path@0..1
-                        PathSegment@0..1
-                          NameRef@0..1
-                            IDENT@0..1 "a"
-                    WHITESPACE@1..2 " "
-                    AS_KW@2..4 "as"
-                    PathType@4..8
-                      Path@4..8
-                        PathSegment@4..8
-                          NameRef@4..8
-                            WHITESPACE@4..5 " "
-                            IDENT@5..8 "i32"
-                  WHITESPACE@8..9 " "
-                  PLUS@9..10 "+"
-                  PathExpr@10..12
-                    Path@10..12
-                      PathSegment@10..12
-                        NameRef@10..12
-                          WHITESPACE@10..11 " "
-                          IDENT@11..12 "b"
             "#]],
         );
     }
@@ -989,116 +929,6 @@ mod tests {
                     LiteralExpr@7..9
                       WHITESPACE@7..8 " "
                       INT_LITERAL@8..9 "1"
-            "#]],
-        );
-    }
-
-    // =========================================================================
-    // Cast with Unary Precedence Tests
-    // =========================================================================
-
-    #[test]
-    fn cast_after_negation() {
-        // "-x as i32" should parse as "(-x) as i32" since unary binds tighter than cast
-        check_expr(
-            "-x as i32",
-            &expect![[r#"
-                CastExpr@0..9
-                  PrefixExpr@0..2
-                    MINUS@0..1 "-"
-                    PathExpr@1..2
-                      Path@1..2
-                        PathSegment@1..2
-                          NameRef@1..2
-                            IDENT@1..2 "x"
-                  WHITESPACE@2..3 " "
-                  AS_KW@3..5 "as"
-                  PathType@5..9
-                    Path@5..9
-                      PathSegment@5..9
-                        NameRef@5..9
-                          WHITESPACE@5..6 " "
-                          IDENT@6..9 "i32"
-            "#]],
-        );
-    }
-
-    #[test]
-    fn cast_after_not() {
-        // "!x as i32" should parse as "(!x) as i32"
-        check_expr(
-            "!x as i32",
-            &expect![[r#"
-                CastExpr@0..9
-                  PrefixExpr@0..2
-                    BANG@0..1 "!"
-                    PathExpr@1..2
-                      Path@1..2
-                        PathSegment@1..2
-                          NameRef@1..2
-                            IDENT@1..2 "x"
-                  WHITESPACE@2..3 " "
-                  AS_KW@3..5 "as"
-                  PathType@5..9
-                    Path@5..9
-                      PathSegment@5..9
-                        NameRef@5..9
-                          WHITESPACE@5..6 " "
-                          IDENT@6..9 "i32"
-            "#]],
-        );
-    }
-
-    #[test]
-    fn cast_after_deref() {
-        // "*x as i32" should parse as "(*x) as i32"
-        check_expr(
-            "*x as i32",
-            &expect![[r#"
-                CastExpr@0..9
-                  PrefixExpr@0..2
-                    STAR@0..1 "*"
-                    PathExpr@1..2
-                      Path@1..2
-                        PathSegment@1..2
-                          NameRef@1..2
-                            IDENT@1..2 "x"
-                  WHITESPACE@2..3 " "
-                  AS_KW@3..5 "as"
-                  PathType@5..9
-                    Path@5..9
-                      PathSegment@5..9
-                        NameRef@5..9
-                          WHITESPACE@5..6 " "
-                          IDENT@6..9 "i32"
-            "#]],
-        );
-    }
-
-    #[test]
-    fn cast_after_double_unary() {
-        // "-*x as i32" should parse as "((-(*x))) as i32"
-        check_expr(
-            "-*x as i32",
-            &expect![[r#"
-                CastExpr@0..10
-                  PrefixExpr@0..3
-                    MINUS@0..1 "-"
-                    PrefixExpr@1..3
-                      STAR@1..2 "*"
-                      PathExpr@2..3
-                        Path@2..3
-                          PathSegment@2..3
-                            NameRef@2..3
-                              IDENT@2..3 "x"
-                  WHITESPACE@3..4 " "
-                  AS_KW@4..6 "as"
-                  PathType@6..10
-                    Path@6..10
-                      PathSegment@6..10
-                        NameRef@6..10
-                          WHITESPACE@6..7 " "
-                          IDENT@7..10 "i32"
             "#]],
         );
     }
@@ -1653,26 +1483,6 @@ mod tests {
                   LiteralExpr@5..7
                     WHITESPACE@5..6 " "
                     INT_LITERAL@6..7 "1"
-            "#]],
-        );
-    }
-
-    #[test]
-    fn compound_star_star_eq() {
-        check_expr(
-            "x **= 2",
-            &expect![[r#"
-                BinExpr@0..7
-                  PathExpr@0..1
-                    Path@0..1
-                      PathSegment@0..1
-                        NameRef@0..1
-                          IDENT@0..1 "x"
-                  WHITESPACE@1..2 " "
-                  STAR_STAR_EQ@2..5 "**="
-                  LiteralExpr@5..7
-                    WHITESPACE@5..6 " "
-                    INT_LITERAL@6..7 "2"
             "#]],
         );
     }

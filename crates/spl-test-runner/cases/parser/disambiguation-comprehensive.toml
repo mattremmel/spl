@@ -1,0 +1,56 @@
+[section]
+id = "disambiguation"
+spec_chapter = "4"
+name = "Disambiguation Comprehensive"
+
+[[case]]
+name = "struct_vs_call_named_fields"
+source = "fn f() { Point(x: 1, y: 2) }"
+
+[[case]]
+name = "type_application_method"
+source = "fn f() { Vec(T: i32).new() }"
+
+[[case]]
+name = "type_vs_value_arg_uppercase"
+source = "fn f() { identity(T: i32, 42) }"
+
+[[case]]
+name = "type_vs_value_arg_lowercase"
+source = "fn f() { add(1, 2) }"
+
+[[case]]
+name = "tuple_vs_grouped_trailing_comma"
+source = "fn f() { let t = (1,) }"
+
+[[case]]
+name = "named_tuple_always_tuple"
+source = "fn f() { let t = (x: 1) }"
+
+[[case]]
+name = "struct_shorthand_field"
+source = "fn f() { Point(x, y) }"
+
+[[case]]
+name = "type_arg_shorthand"
+source = "fn f() { Option(T).unwrap() }"
+
+[[case]]
+name = "tuple_pattern_struct_destr"
+source = "fn f() { let (x, y) = point }"
+
+[[case]]
+name = "index_vs_slice"
+source = "fn f() { arr[0]; arr[0:2] }"
+
+[[case]]
+name = "associated_fn_generic"
+source = "fn f() { Vec(T: i32).with_capacity(10) }"
+
+[[case]]
+name = "is_operator_binding"
+source = "fn f() { if x is .Some(v) && v > 0 {} }"
+
+[[case]]
+name = "enum_variant_vs_type"
+source = "fn f() { Option.Some(42) }"

@@ -79,3 +79,15 @@ extern {
     fn foo(): i32;
 }
 """
+
+[[case]]
+name = "extern_variadic_multiple_params"
+source = """
+extern "C" {
+    fn printf(fmt: Ptr(T: u8), ...): i32
+}
+"""
+
+[[case]]
+name = "extern_fn_def_with_body"
+source = """extern "C" fn handler(code: i32): i32 { code + 1 }"""

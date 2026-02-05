@@ -38,3 +38,19 @@ source = "fn f() { convert(From: i32, To: f64, value: 100) }"
 [[case]]
 name = "call_method_type_arg"
 source = "fn f() { obj.method(T: i32, x: 1) }"
+
+[[case]]
+name = "call_struct_instantiation_named"
+source = "fn f() { Point(x: 1, y: 2) }"
+
+[[case]]
+name = "call_type_expr_method"
+source = "fn f() { Vec(T: i32).new() }"
+
+[[case]]
+name = "call_mixed_type_value_args"
+source = "fn f() { parse(T: Config, input: text) }"
+
+[[case]]
+name = "call_shorthand_struct_fields"
+source = "fn f() { Point(x, y) }"

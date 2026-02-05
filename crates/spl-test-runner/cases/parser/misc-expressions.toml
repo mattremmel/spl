@@ -74,3 +74,35 @@ source = "fn f() { !!a }"
 [[case]]
 name = "ref_mut_expr"
 source = "fn f() { &mut x }"
+
+[[case]]
+name = "coalesce_operator"
+source = "fn f() { a ?? b }"
+
+[[case]]
+name = "coalesce_chained"
+source = "fn f() { a ?? b ?? c }"
+
+[[case]]
+name = "bitwise_complement"
+source = "fn f() { ~x }"
+
+[[case]]
+name = "range_prefix_exclusive"
+source = "fn f() { ..end }"
+
+[[case]]
+name = "range_prefix_inclusive"
+source = "fn f() { ..=end }"
+
+[[case]]
+name = "range_full_standalone"
+source = "fn f() { .. }"
+
+[[case]]
+name = "dollar_expr_subtract"
+source = "fn f() { arr[$-1] }"
+
+[[case]]
+name = "exponentiation_right_assoc"
+source = "fn f() { 2 ** 3 ** 2 }"

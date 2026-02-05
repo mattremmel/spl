@@ -1,6 +1,11 @@
 // SPL Prelude - automatically imported into all SPL programs.
+//
+// TODO: Once type conversion methods (.widen(), .truncate(), .try_into())
+// are implemented, update the print functions to use those instead of
+// relying on implicit conversion or extern type matching.
 
 // Extern declarations for runtime intrinsics.
+// Parameter types match the str builtin method return types to avoid casts.
 extern "C" {
     fn __print_str(_ ptr: i64, _ len: i64);
     fn __print_newline();
@@ -8,8 +13,8 @@ extern "C" {
 
 /// Print a string to stdout (no newline).
 pub fn print(_ s: str) {
-    // str is an opaque type with .ptr() and .len() methods
-    __print_str(s.ptr() as i64, s.len() as i64);
+    // Direct pass-through; codegen handles ptr/len extraction from str
+    __print_str(s.ptr(), s.len());
 }
 
 /// Print a string to stdout followed by a newline.

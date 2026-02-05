@@ -138,3 +138,20 @@ trait Add where RHS = Self {
     fn add(self): Self
 }
 """
+
+[[case]]
+name = "trait_method_with_default_body"
+source = """
+trait Describable {
+    fn describe(&self): String { "unknown".to_string() }
+}
+"""
+
+[[case]]
+name = "trait_where_with_default"
+source = """
+trait Add where RHS = Self {
+    type Output
+    fn add(&self, rhs: RHS): Self.Output
+}
+"""

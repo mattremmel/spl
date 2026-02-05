@@ -54,11 +54,10 @@ pub fn run_spec_test_file(path: &Path, file: &SpecTestFile) -> Result<(), String
             } else {
                 // Check each expected pattern is found in some error
                 for pattern in &expected_patterns {
-                    let found = parse.errors().iter().any(|e| {
-                        e.message
-                            .to_lowercase()
-                            .contains(&pattern.to_lowercase())
-                    });
+                    let found = parse
+                        .errors()
+                        .iter()
+                        .any(|e| e.message.to_lowercase().contains(&pattern.to_lowercase()));
                     if !found {
                         let errors: Vec<_> = parse
                             .errors()

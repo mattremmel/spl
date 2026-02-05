@@ -111,10 +111,9 @@ pub(crate) fn is_nested_item_start(kind: SyntaxKind, p: &mut Parser<'_>) -> bool
         ),
 
         // `const` can be item (const X: T = ..., const fn ...) or could be const expr in future
-        SyntaxKind::CONST_KW => matches!(
-            p.peek(1),
-            Some(SyntaxKind::IDENT) | Some(SyntaxKind::FN_KW)
-        ),
+        SyntaxKind::CONST_KW => {
+            matches!(p.peek(1), Some(SyntaxKind::IDENT) | Some(SyntaxKind::FN_KW))
+        }
 
         // `#[...]` attributes before items
         SyntaxKind::HASH => {

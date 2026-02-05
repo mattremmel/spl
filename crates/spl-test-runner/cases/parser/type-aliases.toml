@@ -43,3 +43,13 @@ source = "type MyResult(T, E) = i32 where T, E = Error"
 [[case]]
 name = "type_alias_bounds_and_default"
 source = "type StringMap(V, K) = i32 where V, K: Hash + Eq = String"
+
+[[case]]
+name = "type_alias_no_params_no_where"
+source = "type Int = i32"
+
+[[case]]
+name = "type_alias_multiple_params_mixed"
+source = """
+type StringMap(V) = HashMap(K: String, V: V) where V: Clone
+"""

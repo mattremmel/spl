@@ -133,3 +133,49 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "match_range_pattern"
+source = """
+fn f() {
+    match x {
+        0..10 => "small",
+        10..100 => "medium",
+        _ => "large",
+    }
+}
+"""
+
+[[case]]
+name = "match_negative_literal"
+source = """
+fn f() {
+    match x {
+        -1 => "neg one",
+        0 => "zero",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "match_multiple_or_patterns"
+source = """
+fn f() {
+    match x {
+        1 | 2 | 3 => "small",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "match_nested_enum_shorthand"
+source = """
+fn f() {
+    match value {
+        .Some(.Inner(x)) => x,
+        _ => 0,
+    }
+}
+"""

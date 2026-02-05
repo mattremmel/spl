@@ -1375,18 +1375,6 @@ fn lower_return_without_value() {
 }
 
 #[test]
-fn lower_cast_expr() {
-    let db = lower("fn main() { let x = 1i32 as i64; }");
-
-    for (_, expr) in db.exprs.iter() {
-        if let HirExprKind::Cast { .. } = &expr.kind {
-            return;
-        }
-    }
-    panic!("Did not find cast expression");
-}
-
-#[test]
 fn lower_block_with_tail() {
     let db = lower("fn main() { let x = { 1; 2 }; }");
 

@@ -110,3 +110,53 @@ source = "fn f() throws { throw err }"
 [[case]]
 name = "unsafe_block"
 source = "fn f() { unsafe { danger() } }"
+
+[[case]]
+name = "while_is_pattern_complex"
+source = """
+fn f() {
+    while queue.pop() is .Some(item) {
+        process(item)
+    }
+}
+"""
+
+[[case]]
+name = "if_is_and_condition"
+source = """
+fn f() {
+    if value is .Some(x) && x > 0 {
+        use_value(x)
+    }
+}
+"""
+
+[[case]]
+name = "for_tuple_pattern"
+source = """
+fn f() {
+    for (key, value) in items {
+        process(key, value)
+    }
+}
+"""
+
+[[case]]
+name = "loop_break_with_value"
+source = """
+fn f() {
+    let result = loop {
+        break 42
+    }
+}
+"""
+
+[[case]]
+name = "labeled_block_break_value"
+source = """
+fn f() {
+    let v = 'block: {
+        break 'block 42
+    }
+}
+"""

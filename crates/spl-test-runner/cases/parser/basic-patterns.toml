@@ -130,3 +130,36 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "pat_range_large_bound"
+source = """
+fn f() {
+    match x {
+        0..255 => "in range",
+        _ => "out",
+    }
+}
+"""
+
+[[case]]
+name = "pat_negative_int_large"
+source = """
+fn f() {
+    match x {
+        -1000 => "neg",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "pat_literal_float"
+source = """
+fn f() {
+    match x {
+        3.14 => "pi",
+        _ => "other",
+    }
+}
+"""
