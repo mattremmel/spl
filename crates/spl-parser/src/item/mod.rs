@@ -1049,6 +1049,14 @@ fn associated_type(
         }
     }
 
+    // Optional default: `= Type`
+    if p.eat(SyntaxKind::EQ)
+        && let Err(e) = stmt::type_annotation(p)
+    {
+        m.abandon(p);
+        return Err(e);
+    }
+
     // Optional semicolon
     stmt::eat_optional_semicolon(p);
 

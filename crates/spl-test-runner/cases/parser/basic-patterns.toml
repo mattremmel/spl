@@ -265,12 +265,55 @@ fn f() {
 
 [[case]]
 name = "pat_range_half_open_start"
-expect_error = "expected"  # Prefix range patterns (..10) not supported in pattern position
 source = """
 fn f() {
     match x {
         ..10 => "less",
         _ => "more",
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_half_open_start_inclusive"
+source = """
+fn f() {
+    match x {
+        ..=10 => "at_most",
+        _ => "more",
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_half_open_start_negative"
+source = """
+fn f() {
+    match x {
+        ..-1 => "negative",
+        _ => "non_negative",
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_half_open_start_path"
+source = """
+fn f() {
+    match x {
+        ..MAX => "below_max",
+        _ => "at_max",
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_half_open_start_char"
+source = """
+fn f() {
+    match c {
+        ..='z' => "lower_or_below",
+        _ => "above",
     }
 }
 """

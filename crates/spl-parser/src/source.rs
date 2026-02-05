@@ -32,7 +32,7 @@ pub struct Source<'src> {
 impl<'src> Source<'src> {
     /// Create a new token source from lexer tokens.
     pub fn new(spanned_tokens: Vec<SpannedToken<'src>>) -> Self {
-        let tokens = spanned_tokens
+        let mut tokens: Vec<Token<'src>> = spanned_tokens
             .into_iter()
             .map(|st| Token {
                 kind: SyntaxKind::from(st.token),
@@ -40,7 +40,54 @@ impl<'src> Source<'src> {
                 span: st.span,
             })
             .collect();
+
+        Self::fixup_chained_field_access(&mut tokens);
         Self { tokens, pos: 0 }
+    }
+
+    /// Split `DOT FLOAT_LITERAL` into `DOT INT_LITERAL DOT INT_LITERAL` for chained
+    /// positional field access (e.g., `pair.0.1`).
+    fn fixup_chained_field_access(tokens: &mut Vec<Token<'src>>) {
+        let mut i = 0;
+        while i + 1 < tokens.len() {
+            if tokens[i].kind == SyntaxKind::DOT
+                && tokens[i + 1].kind == SyntaxKind::FLOAT_LITERAL
+            {
+                let text = tokens[i + 1].text;
+                let span_start = tokens[i + 1].span.start;
+
+                // Only split simple digit.digit patterns (no exponent, no suffix)
+                if let Some(dot_pos) = text.find('.') {
+                    let first = &text[..dot_pos];
+                    let second = &text[dot_pos + 1..];
+                    if !first.is_empty()
+                        && !second.is_empty()
+                        && first.bytes().all(|b| b.is_ascii_digit() || b == b'_')
+                        && second.bytes().all(|b| b.is_ascii_digit() || b == b'_')
+                    {
+                        let int1 = Token {
+                            kind: SyntaxKind::INT_LITERAL,
+                            text: first,
+                            span: span_start..span_start + dot_pos,
+                        };
+                        let dot = Token {
+                            kind: SyntaxKind::DOT,
+                            text: &text[dot_pos..=dot_pos],
+                            span: span_start + dot_pos..span_start + dot_pos + 1,
+                        };
+                        let int2 = Token {
+                            kind: SyntaxKind::INT_LITERAL,
+                            text: second,
+                            span: span_start + dot_pos + 1..span_start + text.len(),
+                        };
+                        tokens.splice(i + 1..i + 2, [int1, dot, int2]);
+                        i += 4; // skip past DOT INT DOT INT
+                        continue;
+                    }
+                }
+            }
+            i += 1;
+        }
     }
 
     /// Get the current token kind, skipping trivia.

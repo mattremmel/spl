@@ -5,22 +5,18 @@ name = "Literal Edge Cases"
 
 [[case]]
 name = "raw_string_basic"
-expect_error = "expected"
 source = """fn f() { let s = r"hello world" }"""
 
 [[case]]
 name = "byte_string"
-expect_error = "expected"
 source = """fn f() { let b = b"bytes" }"""
 
 [[case]]
 name = "c_string"
-expect_error = "expected"
 source = """fn f() { let c = c"c_string" }"""
 
 [[case]]
 name = "byte_char"
-expect_error = "expected"
 source = """fn f() { let b = b'x' }"""
 
 [[case]]

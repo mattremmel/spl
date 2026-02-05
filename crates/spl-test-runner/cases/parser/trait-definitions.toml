@@ -262,7 +262,6 @@ trait Dangerous {
 
 [[case]]
 name = "trait_assoc_type_with_default_value"
-ignore = true  # Parser does not yet support `= Type` default on associated types
 source = """
 trait HasDefault {
     type Item = i32

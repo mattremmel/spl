@@ -77,6 +77,8 @@ fn single_pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
         },
         // Rest pattern: ...
         ELLIPSIS => Ok(rest_pat(p)),
+        // Prefix range pattern: ..bound or ..=bound
+        DOT_DOT | DOT_DOT_EQ => prefix_range_pat(p),
         // Negative literal patterns: -1, -3.14
         MINUS => {
             if matches!(p.peek(1), Some(SyntaxKind::INT_LITERAL) | Some(SyntaxKind::FLOAT_LITERAL)) {
@@ -87,7 +89,11 @@ fn single_pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
             }
         },
         // Literal patterns (may be range pattern if followed by ..)
-        INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL | TRUE_KW | FALSE_KW => {
+        INT_LITERAL | FLOAT_LITERAL
+        | STRING_LITERAL | RAW_STRING_LITERAL | BYTE_STRING_LITERAL
+        | RAW_BYTE_STRING_LITERAL | C_STRING_LITERAL
+        | CHAR_LITERAL | BYTE_CHAR_LITERAL
+        | TRUE_KW | FALSE_KW => {
             Ok(literal_or_range_pat(p))
         },
         _ => {
@@ -388,6 +394,7 @@ fn maybe_range_tail(
             Some(SyntaxKind::INT_LITERAL)
                 | Some(SyntaxKind::FLOAT_LITERAL)
                 | Some(SyntaxKind::CHAR_LITERAL)
+                | Some(SyntaxKind::BYTE_CHAR_LITERAL)
         ) {
             p.bump(); // consume end literal
         } else if is_range_bound_path_start(p) {
@@ -414,6 +421,48 @@ fn is_range_bound_path_start(p: &mut Parser<'_>) -> bool {
             | Some(SyntaxKind::SUPER_KW)
             | Some(SyntaxKind::MODULE_KW)
     )
+}
+
+/// Parse a prefix range pattern: `..10`, `..=10`, `..-1`, `..MAX`
+fn prefix_range_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+    let m = p.start();
+    p.bump(); // consume .. or ..=
+
+    // Parse required end bound
+    if p.at(SyntaxKind::MINUS) {
+        // Negative literal: ..-1
+        p.bump();
+        if !matches!(
+            p.current(),
+            Some(SyntaxKind::INT_LITERAL) | Some(SyntaxKind::FLOAT_LITERAL)
+        ) {
+            m.abandon(p);
+            return Err(p.error_at_current(
+                "expected literal after '-' in range pattern".to_string(),
+            ));
+        }
+        p.bump();
+    } else if matches!(
+        p.current(),
+        Some(SyntaxKind::INT_LITERAL)
+            | Some(SyntaxKind::FLOAT_LITERAL)
+            | Some(SyntaxKind::CHAR_LITERAL)
+            | Some(SyntaxKind::BYTE_CHAR_LITERAL)
+    ) {
+        p.bump();
+    } else if is_range_bound_path_start(p) {
+        if let Err(e) = crate::path::path_no_generics(p) {
+            m.abandon(p);
+            return Err(e);
+        }
+    } else {
+        m.abandon(p);
+        return Err(p.error_at_current(
+            "expected range bound after '..' or '..='".to_string(),
+        ));
+    }
+
+    Ok(m.complete(p, SyntaxKind::RangePat))
 }
 
 /// Parse a negative literal pattern: `-1`, `-3.14`, or a range starting with a negative literal.

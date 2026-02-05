@@ -19,7 +19,11 @@ pub(super) fn primary_expr(
 ) -> Result<Option<CompletedMarker>, crate::ParseError> {
     match_token!(p, {
         // Literals
-        INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL | TRUE_KW | FALSE_KW => {
+        INT_LITERAL | FLOAT_LITERAL
+        | STRING_LITERAL | RAW_STRING_LITERAL | BYTE_STRING_LITERAL
+        | RAW_BYTE_STRING_LITERAL | C_STRING_LITERAL
+        | CHAR_LITERAL | BYTE_CHAR_LITERAL
+        | TRUE_KW | FALSE_KW => {
             Ok(Some(literal_expr(p)))
         },
         // Identifier / path (including path-starting keywords like module, super)

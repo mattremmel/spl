@@ -177,7 +177,6 @@ source = "fn f() { a.b().c?.d[0]!.e }"
 
 [[case]]
 name = "tuple_positional_access_nested"
-expect_error = "expected"  # Chained positional access (pair.0.1) not supported
 source = "fn f() { pair.0.1 }"
 
 [[case]]

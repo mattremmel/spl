@@ -431,7 +431,7 @@ TraitItem = [ "pub" ] ( TraitMethod | AssociatedType ) ;
 
 TraitMethod = [ "const" ] [ "unsafe" ] "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] [ ThrowsClause ] [ WhereClause ] ( ";" | Block ) ;
 
-AssociatedType = "type" IDENTIFIER [ ":" PathType { "+" PathType } ] [ ";" ] ;
+AssociatedType = "type" IDENTIFIER [ ":" PathType { "+" PathType } ] [ "=" Type ] [ ";" ] ;
 ```
 
 **Associated Type with Bounds Example:**
