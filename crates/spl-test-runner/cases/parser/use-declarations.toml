@@ -1,0 +1,33 @@
+[section]
+id = "items.use"
+spec_chapter = "1.9"
+name = "Use Declarations"
+
+[[case]]
+name = "use_simple"
+source = "use std.vec.Vec"
+
+[[case]]
+name = "use_rename"
+source = "use std.collections.HashMap as Map"
+
+[[case]]
+name = "use_glob"
+source = "use std.prelude.*"
+
+[[case]]
+name = "use_grouped"
+source = "use std.collections.{HashMap, HashSet}"
+
+[[case]]
+name = "use_nested_group"
+source = "use std.{vec.Vec, io.{Read, Write}}"
+
+[[case]]
+name = "use_self_super"
+source = "use super.common"
+
+[[case]]
+name = "use_missing_path"
+expect_error = "expected"
+source = "use"

@@ -1,0 +1,16 @@
+[section]
+id = "types.special"
+spec_chapter = "2"
+name = "Special Types"
+
+[[case]]
+name = "never_type"
+source = "fn diverge(): Never { loop {} }"
+
+[[case]]
+name = "optional_type"
+source = "fn foo(x: i32?) {}"
+
+[[case]]
+name = "ref_optional"
+source = "fn foo(x: &i32?) {}"

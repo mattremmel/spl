@@ -1,0 +1,48 @@
+[section]
+id = "expr.control_flow"
+spec_chapter = "4.5"
+name = "Control Flow Expressions"
+
+[[case]]
+name = "if_basic"
+source = "fn f() { if true { 1 } }"
+
+[[case]]
+name = "if_else"
+source = "fn f() { if true { 1 } else { 0 } }"
+
+[[case]]
+name = "if_else_if"
+source = "fn f() { if a { 1 } else if b { 2 } else { 3 } }"
+
+[[case]]
+name = "while_basic"
+source = "fn f() { while true { x = x + 1 } }"
+
+[[case]]
+name = "for_basic"
+source = "fn f() { for x in items { process(x) } }"
+
+[[case]]
+name = "for_pattern"
+source = "fn f() { for (a, b) in pairs { use_pair(a, b) } }"
+
+[[case]]
+name = "loop_basic"
+source = "fn f() { loop { break } }"
+
+[[case]]
+name = "break_value"
+source = "fn f() { loop { break 42 } }"
+
+[[case]]
+name = "continue_basic"
+source = "fn f() { while true { continue } }"
+
+[[case]]
+name = "return_value"
+source = "fn f(): i32 { return 42 }"
+
+[[case]]
+name = "return_void"
+source = "fn f() { return }"

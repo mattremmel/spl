@@ -15,9 +15,13 @@ use std::fmt;
 #[derive(Logos, Debug, Clone, PartialEq)]
 pub enum Token {
     // === Trivia (whitespace and comments) ===
-    /// Whitespace (spaces, tabs, newlines)
-    #[regex(r"[ \t\n\r]+")]
+    /// Horizontal whitespace (spaces and tabs)
+    #[regex(r"[ \t]+")]
     Whitespace,
+
+    /// Newline (LF, CR, or CR-LF)
+    #[regex(r"\r\n|\n|\r")]
+    Newline,
 
     /// Line comment (// ...)
     #[regex(r"//[^\n]*")]
@@ -187,6 +191,8 @@ pub enum Token {
     FatArrow,
     #[token("::")]
     ColonColon,
+    #[token("...")]
+    Ellipsis,
     #[token("..=")]
     DotDotEq,
     #[token("..")]

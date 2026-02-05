@@ -1,0 +1,34 @@
+[section]
+id = "misc.error_recovery"
+spec_chapter = "0"
+name = "Error Recovery"
+
+[[case]]
+name = "garbage_between_items"
+expect_error = "expected"
+source = "fn a() {} @@@ fn b() {}"
+
+[[case]]
+name = "empty_source"
+source = ""
+
+[[case]]
+name = "whitespace_only"
+source = "   "
+
+[[case]]
+name = "invalid_item_start"
+expect_error = "expected"
+source = "@@@ fn foo() {}"
+
+[[case]]
+name = "comment_only"
+source = "// just a comment"
+
+[[case]]
+name = "multiple_valid_items"
+source = """
+fn a() {}
+struct B()
+fn c() {}
+"""

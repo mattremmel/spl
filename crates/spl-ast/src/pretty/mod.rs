@@ -961,6 +961,14 @@ impl AstPrinter {
             Type::FnPtr(f) => self.print_fn_ptr_type(f),
             Type::Path(p) => self.print_path_type(p),
             Type::Never(_) => self.line("NeverType \"!\""),
+            Type::Optional(o) => {
+                self.line("OptionalType \"?\"");
+                self.indented(|p| {
+                    if let Some(ty) = o.ty() {
+                        p.print_type(&ty);
+                    }
+                });
+            }
         }
     }
 

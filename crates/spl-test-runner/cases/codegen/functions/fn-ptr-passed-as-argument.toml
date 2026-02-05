@@ -7,7 +7,7 @@ return = 42
 [source]
 inline = """
 fn double(_ x: i32): i32 { x * 2 }
-fn apply(_ f: fn(i32) -> i32, _ x: i32): i32 { f(x) }
+fn apply(_ f: fn(i32): i32, _ x: i32): i32 { f(x) }
 fn main(): i32 {
     return apply(double, 21);
 }

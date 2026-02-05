@@ -1,0 +1,36 @@
+[section]
+id = "types.references"
+spec_chapter = "2"
+name = "Reference Types"
+
+[[case]]
+name = "ref_immutable"
+source = "fn foo(x: &i32) {}"
+
+[[case]]
+name = "ref_mutable"
+source = "fn foo(x: &mut i32) {}"
+
+[[case]]
+name = "ref_nested"
+source = "fn foo(x: &&i32) {}"
+
+[[case]]
+name = "ref_complex"
+source = "fn foo(x: &mut (i32, bool)) {}"
+
+[[case]]
+name = "ref_lifetime"
+source = "fn foo(x: &'a i32) {}"
+
+[[case]]
+name = "ref_lifetime_mut"
+source = "fn foo(x: &'a mut i32) {}"
+
+[[case]]
+name = "ref_nested_inner_mut"
+source = "fn foo(x: &&mut i32) {}"
+
+[[case]]
+name = "ref_nested_outer_mut"
+source = "fn foo(x: &mut &i32) {}"

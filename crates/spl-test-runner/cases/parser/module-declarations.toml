@@ -1,0 +1,20 @@
+[section]
+id = "items.modules"
+spec_chapter = "1.10"
+name = "Module Declarations"
+
+[[case]]
+name = "module_inline"
+source = """
+module internal {
+    fn helper(): i32 { return 42 }
+}
+"""
+
+[[case]]
+name = "module_pub"
+source = """
+pub module api {
+    pub fn endpoint(): i32 { return 0 }
+}
+"""

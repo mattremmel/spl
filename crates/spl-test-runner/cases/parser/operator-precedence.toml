@@ -1,0 +1,88 @@
+[section]
+id = "expr.precedence"
+spec_chapter = "4"
+name = "Operator Precedence"
+
+[[case]]
+name = "precedence_assign"
+source = "fn f() { x = 1 }"
+
+[[case]]
+name = "precedence_coalesce"
+source = "fn f() { x ?? y }"
+
+[[case]]
+name = "precedence_or"
+source = "fn f() { a || b }"
+
+[[case]]
+name = "precedence_and"
+source = "fn f() { a && b }"
+
+[[case]]
+name = "precedence_equality"
+source = "fn f() { a == b }"
+
+[[case]]
+name = "precedence_inequality"
+source = "fn f() { a != b }"
+
+[[case]]
+name = "precedence_comparison"
+source = "fn f() { a < b }"
+
+[[case]]
+name = "precedence_comparison_le"
+source = "fn f() { a <= b }"
+
+[[case]]
+name = "precedence_bitwise_or"
+source = "fn f() { a | b }"
+
+[[case]]
+name = "precedence_bitwise_xor"
+source = "fn f() { a ^ b }"
+
+[[case]]
+name = "precedence_bitwise_and"
+source = "fn f() { a & b }"
+
+[[case]]
+name = "precedence_shift"
+source = "fn f() { a << b }"
+
+[[case]]
+name = "precedence_add_sub"
+source = "fn f() { a + b - c }"
+
+[[case]]
+name = "precedence_mul_div_mod"
+source = "fn f() { a * b / c % d }"
+
+[[case]]
+name = "precedence_unary"
+source = "fn f() { !a }"
+
+[[case]]
+name = "precedence_neg"
+source = "fn f() { -a }"
+
+[[case]]
+name = "precedence_ref"
+source = "fn f() { &a }"
+
+[[case]]
+name = "precedence_deref"
+source = "fn f() { *a }"
+
+[[case]]
+name = "precedence_mixed"
+source = "fn f() { a + b * c }"
+
+[[case]]
+name = "precedence_assign_compound"
+source = "fn f() { x += 1 }"
+
+[[case]]
+name = "precedence_bitwise_not"
+source = "fn f() { ~a }"

@@ -1,0 +1,52 @@
+[section]
+id = "expr.misc"
+spec_chapter = "4"
+name = "Miscellaneous Expressions"
+
+[[case]]
+name = "return_expr"
+source = "fn f(): i32 { return 42 }"
+
+[[case]]
+name = "return_void_expr"
+source = "fn f() { return }"
+
+[[case]]
+name = "yield_expr"
+source = "gen fn g(): i32 { yield 1 }"
+
+[[case]]
+name = "throw_expr"
+source = "fn f() throws { throw err }"
+
+[[case]]
+name = "try_expr"
+source = "fn f() { x! }"
+
+[[case]]
+name = "is_expr"
+source = "fn f() { if x is .Some(v) { v } }"
+
+[[case]]
+name = "unsafe_block"
+source = "fn f() { unsafe { danger() } }"
+
+[[case]]
+name = "range_exclusive"
+source = "fn f() { 0..10 }"
+
+[[case]]
+name = "range_inclusive"
+source = "fn f() { 0..=10 }"
+
+[[case]]
+name = "grouped_expr"
+source = "fn f() { (a + b) * c }"
+
+[[case]]
+name = "block_expr"
+source = """
+fn f() {
+    let x = { 42 }
+}
+"""

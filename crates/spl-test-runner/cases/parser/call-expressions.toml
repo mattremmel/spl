@@ -1,0 +1,28 @@
+[section]
+id = "expr.calls"
+spec_chapter = "4"
+name = "Call Expressions"
+
+[[case]]
+name = "call_simple"
+source = "fn f() { foo() }"
+
+[[case]]
+name = "call_with_args"
+source = "fn f() { foo(1, 2, 3) }"
+
+[[case]]
+name = "call_named_args"
+source = "fn f() { greet(to: person) }"
+
+[[case]]
+name = "call_method_chain"
+source = "fn f() { obj.method1().method2() }"
+
+[[case]]
+name = "call_trailing_comma"
+source = "fn f() { foo(1, 2,) }"
+
+[[case]]
+name = "call_nested"
+source = "fn f() { foo(bar(baz(1))) }"

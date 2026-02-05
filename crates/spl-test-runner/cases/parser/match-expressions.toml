@@ -1,0 +1,63 @@
+[section]
+id = "expr.match"
+spec_chapter = "4"
+name = "Match Expressions"
+
+[[case]]
+name = "match_basic"
+source = """
+fn f() {
+    match x {
+        0 => 0,
+        1 => 1,
+        _ => 2,
+    }
+}
+"""
+
+[[case]]
+name = "match_guards"
+source = """
+fn f() {
+    match x {
+        n if n > 0 => n,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_enum_shorthand"
+source = """
+fn f() {
+    match opt {
+        .Some(x) => x,
+        .None => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_trailing_comma"
+source = """
+fn f() {
+    match x {
+        0 => 0,
+        _ => 1,
+    }
+}
+"""
+
+[[case]]
+name = "match_nested"
+source = """
+fn f() {
+    match a {
+        1 => match b {
+            2 => 3,
+            _ => 4,
+        },
+        _ => 5,
+    }
+}
+"""

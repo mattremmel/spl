@@ -1,0 +1,104 @@
+[section]
+id = "patterns.compound"
+spec_chapter = "5"
+name = "Compound Patterns"
+
+[[case]]
+name = "pat_tuple"
+source = "fn f() { let (a, b) = pair }"
+
+[[case]]
+name = "pat_slice"
+source = """
+fn f() {
+    match arr {
+        [a, b] => a + b,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_slice_rest"
+source = """
+fn f() {
+    match arr {
+        [first, ..rest] => first,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_slice_rest_end"
+source = """
+fn f() {
+    match arr {
+        [.., last] => last,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_struct"
+source = """
+fn f() {
+    match p {
+        Point(x, y) => x + y,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_struct_rename"
+source = """
+fn f() {
+    match p {
+        Point(x: a, y: b) => a + b,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_struct_rest"
+source = """
+fn f() {
+    match p {
+        Point(x, ..) => x,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_enum_shorthand"
+source = """
+fn f() {
+    match opt {
+        .Some(x) => x,
+        .None => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_reference"
+source = "fn f() { let &x = r }"
+
+[[case]]
+name = "pat_ref_mut"
+source = "fn f() { let &mut x = r }"
+
+[[case]]
+name = "pat_or"
+source = """
+fn f() {
+    match x {
+        1 | 2 | 3 => 1,
+        _ => 0,
+    }
+}
+"""

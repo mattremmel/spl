@@ -1,0 +1,54 @@
+[section]
+id = "items.enums"
+spec_chapter = "1.5"
+name = "Enum Definitions"
+
+[[case]]
+name = "enum_unit_variants"
+source = "enum Color { Red, Green, Blue }"
+
+[[case]]
+name = "enum_tuple_variants"
+source = """
+enum Option {
+    Some(i32),
+    None,
+}
+"""
+
+[[case]]
+name = "enum_struct_variants"
+source = """
+enum Message {
+    Quit,
+    Move(x: i32, y: i32),
+    Write(String),
+}
+"""
+
+[[case]]
+name = "enum_mixed"
+source = """
+enum Event {
+    Click(x: i32, y: i32),
+    Key(char),
+    Quit,
+}
+"""
+
+[[case]]
+name = "enum_where_after_brace"
+source = """
+enum Option {
+    Some(T),
+    None,
+} where T
+"""
+
+[[case]]
+name = "enum_trailing_comma"
+source = "enum Color { Red, Green, Blue, }"
+
+[[case]]
+name = "enum_empty"
+source = "enum Empty {}"

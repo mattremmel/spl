@@ -1290,7 +1290,7 @@ mod types {
     #[test]
     fn type_fn_ptr() {
         check(
-            "fn foo(f: fn(i32) -> bool) {}",
+            "fn foo(f: fn(i32): bool) {}",
             &expect![[r#"
                 SourceFile
                   FunctionDef "foo"
@@ -1309,7 +1309,7 @@ mod types {
     #[test]
     fn type_never_colon() {
         check(
-            "fn foo(): ! {}",
+            "fn foo(): Never {}",
             &expect![[r#"
                 SourceFile
                   FunctionDef "foo"
@@ -1581,7 +1581,7 @@ p.distance();
     fn complex_function() {
         check(
             r#"
-fn process(items: &[T], filter: fn(T) -> bool): i32 where T {
+fn process(items: &[T], filter: fn(T): bool): i32 where T {
 let mut count = 0;
 for item in items {
     if filter(item) {

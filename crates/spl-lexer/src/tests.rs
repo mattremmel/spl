@@ -6,13 +6,13 @@ fn lex(source: &str) -> Vec<(Token, &str)> {
     Lexer::new(source).map(|st| (st.token, st.text)).collect()
 }
 
-/// Helper to lex and filter out trivia (whitespace and comments)
+/// Helper to lex and filter out trivia (whitespace, newlines, and comments)
 fn lex_no_trivia(source: &str) -> Vec<(Token, &str)> {
     Lexer::new(source)
         .filter(|st| {
             !matches!(
                 st.token,
-                Token::Whitespace | Token::LineComment | Token::BlockComment
+                Token::Whitespace | Token::Newline | Token::LineComment | Token::BlockComment
             )
         })
         .map(|st| (st.token, st.text))
@@ -1227,14 +1227,16 @@ fn span_with_comments() {
 
 #[test]
 fn span_multiline() {
-    // Now includes whitespace token
+    // Newline and whitespace are now separate tokens
     let source = "let\n  x";
     let tokens = lex_spanned(source);
-    assert_eq!(tokens.len(), 3); // let, whitespace, x
+    assert_eq!(tokens.len(), 4); // let, newline, whitespace, x
     assert_eq!(tokens[0].span, 0..3); // "let"
-    assert_eq!(tokens[1].span, 3..6); // "\n  "
-    assert_eq!(tokens[1].token, Token::Whitespace);
-    assert_eq!(tokens[2].span, 6..7); // "x"
+    assert_eq!(tokens[1].span, 3..4); // "\n"
+    assert_eq!(tokens[1].token, Token::Newline);
+    assert_eq!(tokens[2].span, 4..6); // "  "
+    assert_eq!(tokens[2].token, Token::Whitespace);
+    assert_eq!(tokens[3].span, 6..7); // "x"
 }
 
 // ============================================================
@@ -1962,6 +1964,11 @@ fn combined_exponentiation() {
 // ============================================================
 // Range and Optional Operators
 // ============================================================
+
+#[test]
+fn op_ellipsis() {
+    check_single("...", Token::Ellipsis);
+}
 
 #[test]
 fn op_dot_dot_eq() {

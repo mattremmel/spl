@@ -1,0 +1,59 @@
+[section]
+id = "stmts.blocks"
+spec_chapter = "3"
+name = "Blocks and Statements"
+
+[[case]]
+name = "block_empty"
+source = "fn f() {}"
+
+[[case]]
+name = "block_multiple_stmts"
+source = """
+fn f() {
+    let x = 1
+    let y = 2
+    x + y
+}
+"""
+
+[[case]]
+name = "block_nested"
+source = """
+fn f() {
+    {
+        let x = 1
+        {
+            let y = 2
+        }
+    }
+}
+"""
+
+[[case]]
+name = "block_nested_items"
+source = """
+fn f() {
+    fn inner(): i32 { return 42 }
+    let x = inner()
+}
+"""
+
+[[case]]
+name = "block_attributed_nested_item"
+source = """
+fn f() {
+    #[inline]
+    fn inner(): i32 { return 42 }
+}
+"""
+
+[[case]]
+name = "block_expr_stmts"
+source = """
+fn f() {
+    foo()
+    bar()
+    baz()
+}
+"""

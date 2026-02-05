@@ -1,0 +1,32 @@
+[section]
+id = "expr.field_index"
+spec_chapter = "4"
+name = "Field Access, Indexing, and Slicing"
+
+[[case]]
+name = "field_access"
+source = "fn f() { obj.field }"
+
+[[case]]
+name = "field_positional"
+source = "fn f() { pair.0 }"
+
+[[case]]
+name = "index_basic"
+source = "fn f() { arr[0] }"
+
+[[case]]
+name = "index_expr"
+source = "fn f() { arr[i + 1] }"
+
+[[case]]
+name = "field_chain"
+source = "fn f() { a.b.c.d }"
+
+[[case]]
+name = "index_chain"
+source = "fn f() { a[0][1] }"
+
+[[case]]
+name = "method_on_index"
+source = "fn f() { arr[0].method() }"

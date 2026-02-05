@@ -95,6 +95,57 @@ fn is_item_start(kind: SyntaxKind) -> bool {
     )
 }
 
+/// Check if the current token starts a nested item inside a block.
+///
+/// This is used by the block parser to distinguish items from expressions.
+/// Some keywords (`unsafe`, `const`) can start both items and expressions,
+/// so we use lookahead to disambiguate:
+/// - `unsafe { ... }` = expression, `unsafe fn/trait/impl` = item
+/// - `const IDENT` = const def (item), `const fn` = item
+pub(crate) fn is_nested_item_start(kind: SyntaxKind, p: &mut Parser<'_>) -> bool {
+    match kind {
+        // Unambiguous item starters
+        SyntaxKind::FN_KW
+        | SyntaxKind::STRUCT_KW
+        | SyntaxKind::ENUM_KW
+        | SyntaxKind::TRAIT_KW
+        | SyntaxKind::TYPE_KW
+        | SyntaxKind::IMPL_KW
+        | SyntaxKind::PUB_KW
+        | SyntaxKind::USE_KW
+        | SyntaxKind::EXTERN_KW
+        | SyntaxKind::MODULE_KW
+        | SyntaxKind::STATIC_KW
+        | SyntaxKind::GEN_KW => true,
+
+        // `unsafe` can be item (unsafe fn/trait/impl) or expression (unsafe { ... })
+        SyntaxKind::UNSAFE_KW => matches!(
+            p.peek(1),
+            Some(SyntaxKind::FN_KW) | Some(SyntaxKind::TRAIT_KW) | Some(SyntaxKind::IMPL_KW)
+        ),
+
+        // `const` can be item (const X: T = ..., const fn ...) or could be const expr in future
+        SyntaxKind::CONST_KW => matches!(
+            p.peek(1),
+            Some(SyntaxKind::IDENT) | Some(SyntaxKind::FN_KW)
+        ),
+
+        // `#[...]` attributes before items
+        SyntaxKind::HASH => {
+            if p.peek(1) == Some(SyntaxKind::L_BRACKET) {
+                let offset = attribute_lookahead(p);
+                let vis_offset = visibility_lookahead_at(p, offset);
+                let check = offset + vis_offset;
+                p.peek(check).is_some_and(is_item_start)
+            } else {
+                false
+            }
+        }
+
+        _ => false,
+    }
+}
+
 /// Parse a single outer attribute: `#[...]`
 fn attribute(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
@@ -559,6 +610,11 @@ fn param_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> 
 
     // Regular parameters with recovery
     p.parse_delimited_with_recovery(SyntaxKind::L_PAREN, SyntaxKind::R_PAREN, |p| {
+        // Variadic: `...` (valid in extern fn declarations)
+        if p.at(SyntaxKind::ELLIPSIS) {
+            p.bump();
+            return Ok(());
+        }
         param(p)?;
         Ok(())
     });
@@ -1406,10 +1462,16 @@ pub(crate) fn use_decl(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::Par
     opt_visibility(p);
 
     // use keyword
-    p.expect(SyntaxKind::USE_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::USE_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Parse the use tree
-    use_tree(p)?;
+    if let Err(e) = use_tree(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Optional semicolon
     stmt::eat_optional_semicolon(p);

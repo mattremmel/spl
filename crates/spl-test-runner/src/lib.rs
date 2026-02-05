@@ -57,8 +57,8 @@ pub mod executor;
 pub mod runner;
 
 pub use config::{
-    CompileExpectations, Expectations, PackageExpectations, RunExpectations, Source, TestConfig,
-    TestMode,
+    CompileExpectations, Expectations, PackageExpectations, RunExpectations, SectionMeta, Source,
+    SpecTestCase, SpecTestFile, TestConfig, TestMode,
 };
 pub use executor::{ExecuteError, ExecuteResult, execute_captured};
-pub use runner::{format_diagnostics, run_package_test, run_source_test, run_test};
+pub use runner::{format_diagnostics, run_package_test, run_source_test, run_spec_test_file, run_test};

@@ -96,6 +96,7 @@ pub enum SyntaxKind {
     COLON_COLON,
     DOT_DOT,
     DOT_DOT_EQ,
+    ELLIPSIS,
     DOT,
     QUESTION,
     QUESTION_DOT,
@@ -132,6 +133,7 @@ pub enum SyntaxKind {
 
     // Trivia & Error
     WHITESPACE,
+    NEWLINE,
     COMMENT,
     ERROR,
 
@@ -165,6 +167,7 @@ pub enum SyntaxKind {
     GenericParam,
     GenericParams,
     GenericArgs,
+    TypeArg,
     FieldList,
     FieldDef,
     WhereClause,
@@ -229,6 +232,7 @@ pub enum SyntaxKind {
     FnPtrType,
     PathType,
     NeverType,
+    OptionalType,
 
     // Patterns
     IdentPat,
@@ -250,6 +254,7 @@ pub enum SyntaxKind {
     NameRef,
     Path,
     PathSegment,
+    Lifetime,
     Visibility,
 
     // Attributes
@@ -265,7 +270,7 @@ pub enum SyntaxKind {
 
 impl SyntaxKind {
     pub fn is_trivia(self) -> bool {
-        matches!(self, Self::WHITESPACE | Self::COMMENT)
+        matches!(self, Self::WHITESPACE | Self::NEWLINE | Self::COMMENT)
     }
 }
 
@@ -274,6 +279,7 @@ impl From<Token> for SyntaxKind {
         match token {
             // Trivia
             Token::Whitespace => Self::WHITESPACE,
+            Token::Newline => Self::NEWLINE,
             Token::LineComment | Token::BlockComment => Self::COMMENT,
             // Keywords
             Token::Let => Self::LET_KW,
@@ -357,6 +363,7 @@ impl From<Token> for SyntaxKind {
             Token::ColonColon => Self::COLON_COLON,
             Token::DotDot => Self::DOT_DOT,
             Token::DotDotEq => Self::DOT_DOT_EQ,
+            Token::Ellipsis => Self::ELLIPSIS,
             Token::Dot => Self::DOT,
             Token::Question => Self::QUESTION,
             Token::QuestionDot => Self::QUESTION_DOT,

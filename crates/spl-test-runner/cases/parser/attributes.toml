@@ -1,0 +1,52 @@
+[section]
+id = "items.attributes"
+spec_chapter = "1.1"
+name = "Attributes"
+
+[[case]]
+name = "attr_simple"
+source = "#[test] fn foo() {}"
+
+[[case]]
+name = "attr_dotted_path"
+source = "#[cfg.test] fn foo() {}"
+
+[[case]]
+name = "attr_with_args"
+source = "#[derive(Clone, Copy)] struct Point(x: i32)"
+
+[[case]]
+name = "attr_key_value"
+source = """#[doc = "hello"] fn foo() {}"""
+
+[[case]]
+name = "attr_nested"
+source = "#[cfg(target_os = \"linux\")] fn foo() {}"
+
+[[case]]
+name = "attr_trailing_comma"
+source = "#[derive(Clone,)] struct Foo()"
+
+[[case]]
+name = "attr_inner"
+source = """
+#![allow(unused)]
+fn foo() {}
+"""
+
+[[case]]
+name = "attr_on_struct"
+source = "#[repr(C)] struct Data(x: i32, y: i32)"
+
+[[case]]
+name = "attr_multiple"
+source = """
+#[inline]
+#[no_mangle]
+fn foo() {}
+"""
+
+[[case]]
+name = "attr_unclosed"
+expect_error = "expected"
+source = "#[test fn foo() {}"

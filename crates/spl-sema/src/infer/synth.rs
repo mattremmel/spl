@@ -3654,6 +3654,14 @@ impl<'a> InferEngine<'a> {
                 self.types.mk_fn_ptr(params, ret)
             }
             spl_ast::Type::Never(_) => self.types.never(),
+            spl_ast::Type::Optional(opt) => {
+                // Optional(T) desugars to Option(T: T) — for now, treat as error
+                // until Option is defined in the standard library
+                if let Some(inner) = opt.ty() {
+                    let _inner_ty = self.ast_type_to_type_id_inner(&inner);
+                }
+                self.types.error()
+            }
         }
     }
 }

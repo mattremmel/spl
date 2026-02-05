@@ -11,6 +11,7 @@ ast_node!(TupleTypeElement);
 ast_node!(FnPtrType);
 ast_node!(PathType);
 ast_node!(NeverType);
+ast_node!(OptionalType);
 
 ast_enum!(
     /// Type enum - all type syntax variants.
@@ -22,6 +23,7 @@ ast_enum!(
         FnPtr(FnPtrType),
         Path(PathType),
         Never(NeverType),
+        Optional(OptionalType),
     }
 );
 
@@ -29,7 +31,7 @@ ast_enum!(
 
 impl RefType {
     pub fn amp(&self) -> Option<SyntaxToken> {
-        token(&self.0, SyntaxKind::AMP)
+        token(&self.0, SyntaxKind::AMP).or_else(|| token(&self.0, SyntaxKind::AND_AND))
     }
 
     pub fn mut_kw(&self) -> Option<SyntaxToken> {
@@ -38,6 +40,16 @@ impl RefType {
 
     pub fn ty(&self) -> Option<Type> {
         child(&self.0)
+    }
+}
+
+impl OptionalType {
+    pub fn ty(&self) -> Option<Type> {
+        child(&self.0)
+    }
+
+    pub fn question(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::QUESTION)
     }
 }
 
@@ -183,7 +195,7 @@ mod tests {
 
     #[test]
     fn fn_ptr_type_no_params() {
-        let ty: FnPtrType = parse_type("fn foo(f: fn() -> i32) {}");
+        let ty: FnPtrType = parse_type("fn foo(f: fn(): i32) {}");
         // param_types returns all types, last one is return type
         let types: Vec<_> = ty.param_types().collect();
         assert!(!types.is_empty()); // At least the return type
@@ -192,7 +204,7 @@ mod tests {
 
     #[test]
     fn fn_ptr_type_with_params() {
-        let ty: FnPtrType = parse_type("fn foo(f: fn(i32, bool) -> char) {}");
+        let ty: FnPtrType = parse_type("fn foo(f: fn(i32, bool): char) {}");
         assert!(ty.ret_type().is_some());
     }
 
@@ -220,8 +232,8 @@ mod tests {
 
     #[test]
     fn never_type() {
-        // SPL uses `: !` for return type, not `-> !`
-        let ty: NeverType = parse_type("fn foo(): ! { loop {} }");
+        // SPL uses `: Never` for return type
+        let ty: NeverType = parse_type("fn foo(): Never { loop {} }");
         assert!(ty.syntax().kind() == spl_syntax::SyntaxKind::NeverType);
     }
 

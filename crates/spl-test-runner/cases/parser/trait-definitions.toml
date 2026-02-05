@@ -1,0 +1,67 @@
+[section]
+id = "items.traits"
+spec_chapter = "1.6"
+name = "Trait Definitions"
+
+[[case]]
+name = "trait_basic"
+source = """
+trait Clone {
+    fn clone(&self): Self
+}
+"""
+
+[[case]]
+name = "trait_associated_type"
+source = """
+trait Iterator {
+    type Item
+    fn next(&mut self): i32
+}
+"""
+
+[[case]]
+name = "trait_assoc_type_bounds"
+source = """
+trait Collection {
+    type Item: Clone
+}
+"""
+
+[[case]]
+name = "trait_supertraits"
+source = """
+trait Numeric: Add + Sub {
+    fn zero(): Self
+}
+"""
+
+[[case]]
+name = "trait_where_clause"
+source = """
+trait Container where T: Clone {
+    fn get(&self): i32
+}
+"""
+
+[[case]]
+name = "trait_default_method"
+source = """
+trait Default {
+    fn default(): Self {
+        return Self()
+    }
+}
+"""
+
+[[case]]
+name = "trait_unsafe"
+source = """
+unsafe trait Send {
+    fn check(&self): bool
+}
+"""
+
+[[case]]
+name = "trait_empty"
+source = "trait Marker {}"

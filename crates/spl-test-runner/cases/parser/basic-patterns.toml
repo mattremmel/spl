@@ -1,0 +1,99 @@
+[section]
+id = "patterns.basic"
+spec_chapter = "5"
+name = "Basic Patterns"
+
+[[case]]
+name = "pat_identifier"
+source = "fn f() { let x = 1 }"
+
+[[case]]
+name = "pat_mut"
+source = "fn f() { let mut x = 1 }"
+
+[[case]]
+name = "pat_wildcard"
+source = """
+fn f() {
+    match x {
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_literal_int"
+source = """
+fn f() {
+    match x {
+        42 => 1,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_negative_literal"
+source = """
+fn f() {
+    match x {
+        -1 => 1,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_string"
+source = """
+fn f() {
+    match s {
+        "hello" => 1,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_char"
+source = """
+fn f() {
+    match c {
+        'a' => 1,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_bool"
+source = """
+fn f() {
+    match b {
+        true => 1,
+        false => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_exclusive"
+source = """
+fn f() {
+    match x {
+        0..10 => 1,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_inclusive"
+source = """
+fn f() {
+    match x {
+        0..=10 => 1,
+        _ => 0,
+    }
+}
+"""

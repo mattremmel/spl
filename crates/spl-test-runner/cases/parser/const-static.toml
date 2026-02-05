@@ -1,0 +1,21 @@
+[section]
+id = "items.const_static"
+spec_chapter = "1.2"
+name = "Const and Static Definitions"
+
+[[case]]
+name = "const_basic"
+source = "const MAX_SIZE: i32 = 1024"
+
+[[case]]
+name = "static_basic"
+source = "static COUNTER: i32 = 0"
+
+[[case]]
+name = "static_mut"
+source = "static mut GLOBAL: i32 = 0"
+
+[[case]]
+name = "const_missing_type"
+expect_error = "expected"
+source = "const FOO = 42"

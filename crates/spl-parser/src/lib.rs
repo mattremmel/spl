@@ -583,11 +583,13 @@ impl Drop for Marker {
 #[derive(Clone, Copy)]
 pub(crate) struct CompletedMarker {
     pos: usize,
+    #[allow(dead_code)]
     kind: SyntaxKind,
 }
 
 impl CompletedMarker {
     /// Returns the syntax kind of this completed node.
+    #[allow(dead_code)]
     pub fn kind(&self) -> SyntaxKind {
         self.kind
     }
@@ -1140,7 +1142,7 @@ pub(crate) mod tests {
             type Int = i32;
             type Pair = (i32, i32);
             type Buffer = [u8; 256];
-            type Callback = fn(i32) -> i32;
+            type Callback = fn(i32): i32;
             type Nested = Option(Vec(String));
         "#,
         );

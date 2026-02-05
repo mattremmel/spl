@@ -8,29 +8,6 @@ use spl_syntax::SyntaxKind;
 use super::expr;
 use super::pattern;
 
-/// Check if expression kind requires a semicolon (statement-like expressions).
-/// These expressions act like statements and should not be used as implicit tail expressions.
-fn requires_semicolon(kind: SyntaxKind) -> bool {
-    matches!(
-        kind,
-        SyntaxKind::ReturnExpr
-            | SyntaxKind::BreakExpr
-            | SyntaxKind::ContinueExpr
-            | SyntaxKind::YieldExpr
-    )
-}
-
-/// Get a human-readable name for an expression kind (for error messages).
-fn expr_kind_name(kind: SyntaxKind) -> &'static str {
-    match kind {
-        SyntaxKind::ReturnExpr => "return",
-        SyntaxKind::BreakExpr => "break",
-        SyntaxKind::ContinueExpr => "continue",
-        SyntaxKind::YieldExpr => "yield",
-        _ => "expression",
-    }
-}
-
 /// Consume optional trailing semicolon.
 ///
 /// Per SPL spec: "Statement terminators are inferred from newlines, but can be
@@ -75,6 +52,22 @@ fn can_start_stmt_or_expr(p: &mut Parser<'_>) -> bool {
                 | SyntaxKind::MINUS
                 | SyntaxKind::BANG
                 | SyntaxKind::LET_KW
+                // Item-starting keywords (nested items in blocks)
+                | SyntaxKind::FN_KW
+                | SyntaxKind::STRUCT_KW
+                | SyntaxKind::ENUM_KW
+                | SyntaxKind::TRAIT_KW
+                | SyntaxKind::TYPE_KW
+                | SyntaxKind::IMPL_KW
+                | SyntaxKind::PUB_KW
+                | SyntaxKind::USE_KW
+                | SyntaxKind::EXTERN_KW
+                | SyntaxKind::MODULE_KW
+                | SyntaxKind::UNSAFE_KW
+                | SyntaxKind::CONST_KW
+                | SyntaxKind::STATIC_KW
+                | SyntaxKind::GEN_KW
+                | SyntaxKind::HASH
         )
     )
 }
@@ -140,21 +133,62 @@ fn tuple_type_element(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::Pars
     Ok(m.complete(p, SyntaxKind::TupleTypeElement))
 }
 
-/// Parse a type annotation.
+/// Parse a type annotation: `BaseType [ "?" ]`
+///
+/// The optional `?` postfix makes the type optional (sugar for `Option(T: T)`).
 pub(crate) fn type_annotation(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let base = base_type(p)?;
+
+    // Optional postfix: T? = Option(T: T)
+    if p.at(SyntaxKind::QUESTION) {
+        let m = base.precede(p);
+        p.bump(); // consume `?`
+        return Ok(m.complete(p, SyntaxKind::OptionalType));
+    }
+
+    Ok(base)
+}
+
+/// Parse a base type (without optional `?` postfix).
+fn base_type(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
 
-    // Never type: !
-    if p.at(SyntaxKind::BANG) {
+    // Never type: Never (keyword-like identifier per spec)
+    if p.at(SyntaxKind::IDENT) && p.current_text() == Some("Never") {
         p.bump();
         return Ok(m.complete(p, SyntaxKind::NeverType));
     }
 
     // Reference type: &T or &mut T
-    if p.at(SyntaxKind::AMP) {
-        p.bump();
-        p.eat(SyntaxKind::MUT_KW);
-        type_annotation(p)?;
+    // Also handle &&T where lexer emits AND_AND instead of two AMPs
+    if p.at(SyntaxKind::AMP) || p.at(SyntaxKind::AND_AND) {
+        if p.at(SyntaxKind::AND_AND) {
+            // &&T: split AND_AND into two reference levels
+            p.bump(); // consume `&&`
+            // Start inner RefType FIRST, so mut lands on inner ref
+            let inner_m = p.start();
+            // Optional lifetime on inner: &&'a T
+            if p.at(SyntaxKind::TICK) {
+                let lt_m = p.start();
+                p.bump(); // consume '
+                p.expect(SyntaxKind::IDENT)?;
+                lt_m.complete(p, SyntaxKind::Lifetime);
+            }
+            p.eat(SyntaxKind::MUT_KW);
+            type_annotation(p)?;
+            let _inner = inner_m.complete(p, SyntaxKind::RefType);
+        } else {
+            p.bump(); // consume `&`
+            // Optional lifetime: &'a T
+            if p.at(SyntaxKind::TICK) {
+                let lt_m = p.start();
+                p.bump(); // consume '
+                p.expect(SyntaxKind::IDENT)?;
+                lt_m.complete(p, SyntaxKind::Lifetime);
+            }
+            p.eat(SyntaxKind::MUT_KW);
+            type_annotation(p)?;
+        }
         return Ok(m.complete(p, SyntaxKind::RefType));
     }
 
@@ -184,17 +218,29 @@ pub(crate) fn type_annotation(p: &mut Parser<'_>) -> Result<CompletedMarker, cra
         return Ok(m.complete(p, SyntaxKind::TupleType));
     }
 
-    // Function pointer type: fn(T1, T2) -> R
-    if p.at(SyntaxKind::FN_KW) {
-        p.bump();
+    // Function pointer type: fn(T1, T2): R
+    // Also handles: unsafe fn(...), extern "C" fn(...), unsafe extern "C" fn(...)
+    let is_fn_type = p.at(SyntaxKind::FN_KW)
+        || (p.at(SyntaxKind::UNSAFE_KW)
+            && matches!(
+                p.peek(1),
+                Some(SyntaxKind::FN_KW) | Some(SyntaxKind::EXTERN_KW)
+            ))
+        || (p.at(SyntaxKind::EXTERN_KW) && p.peek(1) == Some(SyntaxKind::STRING_LITERAL));
+    if is_fn_type {
+        p.eat(SyntaxKind::UNSAFE_KW);
+        if p.eat(SyntaxKind::EXTERN_KW) {
+            p.eat(SyntaxKind::STRING_LITERAL);
+        }
+        p.expect(SyntaxKind::FN_KW)?;
         p.expect(SyntaxKind::L_PAREN)?;
         p.parse_delimited(SyntaxKind::R_PAREN, |p| {
             type_annotation(p)?;
             Ok(())
         })?;
         p.expect(SyntaxKind::R_PAREN)?;
-        // Optional return type
-        if p.eat(SyntaxKind::ARROW) {
+        // Optional return type (colon, per spec)
+        if p.eat(SyntaxKind::COLON) {
             type_annotation(p)?;
         }
         return Ok(m.complete(p, SyntaxKind::FnPtrType));
@@ -236,25 +282,23 @@ pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseE
                     p.recover_to_stmt(err);
                 }
             }
+            // Nested items: fn, struct, enum, trait, type, impl, use, extern, module, pub, gen
+            Some(k) if crate::item::is_nested_item_start(k, p) => {
+                if let Err(err) = crate::item::item(p) {
+                    p.recover_to_stmt(err);
+                }
+            }
             Some(_) => {
                 // Try to parse an expression
                 let expr_m = p.start();
                 match expr::expr(p) {
-                    Ok(Some(expr_completed)) => {
+                    Ok(Some(_expr_completed)) => {
                         // Successfully parsed an expression
                         if p.eat(SyntaxKind::SEMI) {
                             // Expression statement with semicolon
                             expr_m.complete(p, SyntaxKind::ExprStmt);
                         } else if p.at(SyntaxKind::R_BRACE) {
-                            // At end of block - statement-like expressions require semicolons
-                            if requires_semicolon(expr_completed.kind()) {
-                                let err = p.error_at_current(format!(
-                                    "expected ';' after {} expression",
-                                    expr_kind_name(expr_completed.kind())
-                                ));
-                                p.error(err);
-                            }
-                            // Regular expressions are valid tail expressions
+                            // At end of block - valid tail expression (semicolons optional per spec)
                             expr_m.abandon(p);
                         } else if can_start_stmt_or_expr(p) {
                             // No semicolon but another expression follows

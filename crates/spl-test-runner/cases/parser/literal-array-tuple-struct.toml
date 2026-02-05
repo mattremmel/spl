@@ -1,0 +1,62 @@
+[section]
+id = "expr.literals_containers"
+spec_chapter = "4"
+name = "Literals, Arrays, Tuples, and Struct Expressions"
+
+[[case]]
+name = "literal_int"
+source = "fn f() { 42 }"
+
+[[case]]
+name = "literal_float"
+source = "fn f() { 3.14 }"
+
+[[case]]
+name = "literal_string"
+source = """fn f() { "hello" }"""
+
+[[case]]
+name = "literal_char"
+source = "fn f() { 'a' }"
+
+[[case]]
+name = "literal_bool"
+source = "fn f() { true }"
+
+[[case]]
+name = "array_expr"
+source = "fn f() { [1, 2, 3] }"
+
+[[case]]
+name = "array_repeat"
+source = "fn f() { [0; 10] }"
+
+[[case]]
+name = "tuple_expr"
+source = "fn f() { (1, 2) }"
+
+[[case]]
+name = "named_tuple_expr"
+source = "fn f() { (x: 1, y: 2) }"
+
+[[case]]
+name = "struct_expr"
+source = "fn f() { Point(x: 1, y: 2) }"
+
+[[case]]
+name = "struct_shorthand"
+source = """
+fn f() {
+    let x = 1
+    let y = 2
+    Point(x, y)
+}
+"""
+
+[[case]]
+name = "named_tuple_single"
+source = "fn f() { (x: 1) }"
+
+[[case]]
+name = "enum_shorthand"
+source = "fn f() { .Some(42) }"

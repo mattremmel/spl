@@ -476,6 +476,25 @@ fn call_arg(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
 }
 
 /// Parse a parenthesized or tuple expression.
+/// Check if we're at a named tuple element: `IDENT ":"` (lowercase identifier).
+///
+/// Per spec, `TupleExprElement = [ IDENTIFIER ":" ] Expression`.
+/// Named elements with `:` make this unambiguously a tuple, not a grouped expression.
+fn at_named_element(p: &mut Parser<'_>) -> bool {
+    p.at(SyntaxKind::IDENT) && p.peek_at(1, SyntaxKind::COLON)
+}
+
+/// Parse a tuple expression element: optional `name:` prefix followed by expression.
+fn tuple_expr_element(p: &mut Parser<'_>) -> Result<(), crate::ParseError> {
+    if at_named_element(p) {
+        // Named element: name: expr
+        crate::item::name(p)?;
+        p.expect(SyntaxKind::COLON)?;
+    }
+    expr(p)?;
+    Ok(())
+}
+
 pub(super) fn paren_or_tuple_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::ParseError> {
@@ -491,20 +510,31 @@ pub(super) fn paren_or_tuple_expr(
         return Ok(Some(m.complete(p, SyntaxKind::TupleExpr)));
     }
 
-    // Parse first expression
-    if let Err(e) = expr(p) {
-        m.abandon(p);
-        return Err(e);
+    // Check if first element is named — if so, this is definitely a tuple
+    let first_is_named = at_named_element(p);
+
+    // Parse first element (possibly named)
+    if first_is_named {
+        if let Err(e) = tuple_expr_element(p) {
+            m.abandon(p);
+            return Err(e);
+        }
+    } else {
+        // Parse as expression
+        if let Err(e) = expr(p) {
+            m.abandon(p);
+            return Err(e);
+        }
     }
 
-    // Check for tuple (comma) or just grouped expression
-    if p.at(SyntaxKind::COMMA) {
-        // Tuple
+    // Check for tuple (comma, or was named) vs grouped expression
+    if p.at(SyntaxKind::COMMA) || first_is_named {
+        // Tuple — parse remaining elements
         while p.eat(SyntaxKind::COMMA) {
             if p.at(SyntaxKind::R_PAREN) {
                 break; // trailing comma
             }
-            if let Err(e) = expr(p) {
+            if let Err(e) = tuple_expr_element(p) {
                 m.abandon(p);
                 return Err(e);
             }

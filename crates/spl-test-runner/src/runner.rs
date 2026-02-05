@@ -1,10 +1,93 @@
 //! Test runner for executing spec tests.
 
-use crate::config::{Source, TestConfig, TestMode};
+use crate::config::{Source, SpecTestFile, TestConfig, TestMode};
 use crate::executor::{ExecuteError, execute_captured};
 use spl_compiler::package::Package;
 use spl_compiler::{Diagnostic, Severity};
 use std::path::Path;
+
+/// Run all cases in a grouped spec test file.
+///
+/// Each case either expects a clean parse (no `expect_error`) or expects parse failure
+/// with an error matching the given pattern(s).
+pub fn run_spec_test_file(path: &Path, file: &SpecTestFile) -> Result<(), String> {
+    let mut failures = Vec::new();
+
+    for case in &file.case {
+        if case.ignore {
+            continue;
+        }
+
+        let case_id = format!("{}/{}", file.section.id, case.name);
+        let parse = spl_parser::parse(&case.source);
+
+        // Collect all error patterns to check
+        let mut expected_patterns: Vec<&str> = Vec::new();
+        if let Some(pattern) = &case.expect_error {
+            expected_patterns.push(pattern.as_str());
+        }
+        if let Some(patterns) = &case.expect_errors {
+            expected_patterns.extend(patterns.iter().map(String::as_str));
+        }
+
+        if expected_patterns.is_empty() {
+            // parse-pass: expect no errors
+            if !parse.ok() {
+                let errors: Vec<_> = parse
+                    .errors()
+                    .iter()
+                    .map(|e| format!("  - {}", e.message))
+                    .collect();
+                failures.push(format!(
+                    "[{}] expected parse to succeed, but got {} error(s):\n{}",
+                    case_id,
+                    parse.errors().len(),
+                    errors.join("\n"),
+                ));
+            }
+        } else {
+            // parse-fail: expect errors
+            if parse.ok() {
+                failures.push(format!(
+                    "[{case_id}] expected parse to fail, but it succeeded",
+                ));
+            } else {
+                // Check each expected pattern is found in some error
+                for pattern in &expected_patterns {
+                    let found = parse.errors().iter().any(|e| {
+                        e.message
+                            .to_lowercase()
+                            .contains(&pattern.to_lowercase())
+                    });
+                    if !found {
+                        let errors: Vec<_> = parse
+                            .errors()
+                            .iter()
+                            .map(|e| format!("  - {}", e.message))
+                            .collect();
+                        failures.push(format!(
+                            "[{}] expected error containing '{}', got:\n{}",
+                            case_id,
+                            pattern,
+                            errors.join("\n"),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{}: {} case(s) failed:\n{}",
+            path.display(),
+            failures.len(),
+            failures.join("\n\n"),
+        ))
+    }
+}
 
 /// Format diagnostics for display in test output.
 pub fn format_diagnostics(diags: &[Diagnostic]) -> String {

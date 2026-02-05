@@ -1,0 +1,41 @@
+[section]
+id = "items.structs"
+spec_chapter = "1.4"
+name = "Struct Definitions"
+
+[[case]]
+name = "struct_named_fields"
+source = "struct Point(x: f64, y: f64)"
+
+[[case]]
+name = "struct_positional"
+source = "struct Pair(i32, i32)"
+
+[[case]]
+name = "struct_empty"
+source = "struct Empty()"
+
+[[case]]
+name = "struct_unit"
+source = "struct Unit;"
+
+[[case]]
+name = "struct_generic_where"
+source = "struct Box(value: T) where T"
+
+[[case]]
+name = "struct_pub_fields"
+source = "pub struct Point(pub x: f64, pub y: f64)"
+
+[[case]]
+name = "struct_trailing_comma"
+source = "struct Point(x: i32, y: i32,)"
+
+[[case]]
+name = "struct_multiple_type_params"
+source = "struct Pair(first: T, second: U) where T, U"
+
+[[case]]
+name = "struct_missing_paren"
+expect_error = "expected"
+source = "struct Point x: i32)"

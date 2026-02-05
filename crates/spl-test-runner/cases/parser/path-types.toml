@@ -1,0 +1,28 @@
+[section]
+id = "types.paths"
+spec_chapter = "2"
+name = "Path Types"
+
+[[case]]
+name = "path_simple"
+source = "fn foo(x: i32) {}"
+
+[[case]]
+name = "path_qualified"
+source = "fn foo(x: std.vec.Vec) {}"
+
+[[case]]
+name = "path_self"
+source = """
+impl Foo {
+    fn me(&self): Self { return self }
+}
+"""
+
+[[case]]
+name = "path_generic_args"
+source = "fn foo(x: Vec(T: i32)) {}"
+
+[[case]]
+name = "path_shorthand_generic"
+source = "fn foo(x: Option(T)) {}"

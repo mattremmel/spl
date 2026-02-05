@@ -138,6 +138,75 @@ impl TestConfig {
     }
 }
 
+/// Grouped spec test file format with multiple cases per file.
+///
+/// Each TOML file covers one logical section with multiple `[[case]]` entries:
+///
+/// ```toml
+/// [section]
+/// id = "items.functions"
+/// spec_chapter = "1.3"
+/// name = "Function Definitions"
+///
+/// [[case]]
+/// name = "fn_minimal"
+/// source = """
+/// fn foo() {}
+/// """
+///
+/// [[case]]
+/// name = "fn_missing_name"
+/// expect_error = "expected"
+/// source = """
+/// fn () {}
+/// """
+/// ```
+#[derive(Debug, Clone, Deserialize)]
+pub struct SpecTestFile {
+    /// Section metadata.
+    pub section: SectionMeta,
+    /// Test cases within this section.
+    pub case: Vec<SpecTestCase>,
+}
+
+/// Section metadata for a spec test file.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SectionMeta {
+    /// Unique section identifier (e.g., "items.functions").
+    pub id: String,
+    /// Spec chapter reference (e.g., "1.3").
+    pub spec_chapter: Option<String>,
+    /// Human-readable section name.
+    pub name: String,
+    /// Optional description.
+    pub description: Option<String>,
+}
+
+/// A single test case within a spec test file.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SpecTestCase {
+    /// Unique case name within the section.
+    pub name: String,
+    /// Spec paragraph references (e.g., `["1.3:1"]`).
+    pub spec: Option<Vec<String>>,
+    /// Source code to parse.
+    pub source: String,
+    /// If present, parsing must fail and an error must contain this pattern (case-insensitive).
+    pub expect_error: Option<String>,
+    /// If present, parsing must fail and errors must contain all these patterns.
+    pub expect_errors: Option<Vec<String>>,
+    /// If true, skip this case.
+    #[serde(default)]
+    pub ignore: bool,
+}
+
+impl SpecTestFile {
+    /// Parse a spec test file from TOML.
+    pub fn parse(toml_str: &str) -> Result<Self, toml::de::Error> {
+        toml::from_str(toml_str)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

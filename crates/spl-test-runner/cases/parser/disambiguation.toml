@@ -1,0 +1,38 @@
+[section]
+id = "misc.disambiguation"
+spec_chapter = "6"
+name = "Disambiguation"
+
+[[case]]
+name = "struct_vs_call"
+source = """
+fn f() {
+    Point(x: 1, y: 2)
+    add(1, 2)
+}
+"""
+
+[[case]]
+name = "tuple_vs_grouped"
+source = """
+fn f() {
+    let a = (x)
+    let b = (x,)
+}
+"""
+
+[[case]]
+name = "generic_parens"
+source = "fn f() { let x: Vec(T: i32) = v }"
+
+[[case]]
+name = "path_types"
+source = "fn f() { let x: std.vec.Vec = v }"
+
+[[case]]
+name = "nested_generics"
+source = "fn f() { let x: Option(T: Vec(T: i32)) = v }"
+
+[[case]]
+name = "method_vs_field"
+source = "fn f() { obj.field.method() }"

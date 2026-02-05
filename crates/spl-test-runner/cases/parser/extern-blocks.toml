@@ -1,0 +1,37 @@
+[section]
+id = "items.extern"
+spec_chapter = "1.11"
+name = "Extern Blocks"
+
+[[case]]
+name = "extern_basic"
+source = """
+extern "C" {
+    fn puts(s: i32): i32
+}
+"""
+
+[[case]]
+name = "extern_multiple_fns"
+source = """
+extern "C" {
+    fn malloc(size: i32): i32
+    fn free(ptr: i32)
+}
+"""
+
+[[case]]
+name = "extern_return_type"
+source = """
+extern "C" {
+    fn atoi(s: i32): i32
+}
+"""
+
+[[case]]
+name = "extern_variadic"
+source = """
+extern "C" {
+    fn printf(fmt: i32, ...): i32
+}
+"""

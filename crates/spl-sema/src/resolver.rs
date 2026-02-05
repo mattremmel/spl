@@ -1648,6 +1648,11 @@ impl<'ctx> Resolver<'ctx> {
             Type::Never(_) => {
                 // Never type has no inner types to resolve
             }
+            Type::Optional(opt) => {
+                if let Some(inner) = opt.ty() {
+                    self.resolve_type(&inner);
+                }
+            }
         }
     }
 }
@@ -2157,7 +2162,7 @@ mod tests {
 
     #[test]
     fn resolve_fn_ptr_type() {
-        check_ok("fn foo(f: fn(i32) -> bool) {}");
+        check_ok("fn foo(f: fn(i32): bool) {}");
     }
 
     #[test]

@@ -641,11 +641,11 @@ fn type_alias_simple() {
 
 #[test]
 fn type_alias_pub_arrow() {
-    // Note: fn pointer types still use -> syntax
+    // Note: fn pointer types use : for return type per spec
     check_item(
-        "pub type Callback = fn(i32) -> bool;",
+        "pub type Callback = fn(i32): bool;",
         &expect![[r#"
-            TypeAlias@0..36
+            TypeAlias@0..34
               Visibility@0..3
                 PUB_KW@0..3 "pub"
               WHITESPACE@3..4 " "
@@ -655,7 +655,7 @@ fn type_alias_pub_arrow() {
                 IDENT@9..17 "Callback"
               WHITESPACE@17..18 " "
               EQ@18..19 "="
-              FnPtrType@19..35
+              FnPtrType@19..33
                 WHITESPACE@19..20 " "
                 FN_KW@20..22 "fn"
                 L_PAREN@22..23 "("
@@ -665,15 +665,14 @@ fn type_alias_pub_arrow() {
                       NameRef@23..26
                         IDENT@23..26 "i32"
                 R_PAREN@26..27 ")"
-                WHITESPACE@27..28 " "
-                ARROW@28..30 "->"
-                PathType@30..35
-                  Path@30..35
-                    PathSegment@30..35
-                      NameRef@30..35
-                        WHITESPACE@30..31 " "
-                        IDENT@31..35 "bool"
-              SEMI@35..36 ";"
+                COLON@27..28 ":"
+                PathType@28..33
+                  Path@28..33
+                    PathSegment@28..33
+                      NameRef@28..33
+                        WHITESPACE@28..29 " "
+                        IDENT@29..33 "bool"
+              SEMI@33..34 ";"
         "#]],
     );
 }
@@ -838,7 +837,7 @@ fn source_file_multiple_items_paren() {
                             IDENT@16..19 "i32"
                   R_PAREN@19..20 ")"
               FunctionDef@20..33
-                WHITESPACE@20..21 "\n"
+                NEWLINE@20..21 "\n"
                 FN_KW@21..23 "fn"
                 Name@23..28
                   WHITESPACE@23..24 " "
@@ -870,7 +869,7 @@ fn source_file_with_impl_paren() {
                   L_PAREN@10..11 "("
                   R_PAREN@11..12 ")"
               ImplBlock@12..42
-                WHITESPACE@12..13 "\n"
+                NEWLINE@12..13 "\n"
                 IMPL_KW@13..17 "impl"
                 PathType@17..21
                   Path@17..21
@@ -974,20 +973,20 @@ fn fn_many_generics_where() {
 #[test]
 fn fn_taking_fn_arg_colon() {
     check_item(
-        "fn apply(f: fn(i32) -> i32, x: i32): i32 {}",
+        "fn apply(f: fn(i32): i32, x: i32): i32 {}",
         &expect![[r#"
-            FunctionDef@0..43
+            FunctionDef@0..41
               FN_KW@0..2 "fn"
               Name@2..8
                 WHITESPACE@2..3 " "
                 IDENT@3..8 "apply"
-              ParamList@8..35
+              ParamList@8..33
                 L_PAREN@8..9 "("
-                Param@9..26
+                Param@9..24
                   Name@9..10
                     IDENT@9..10 "f"
                   COLON@10..11 ":"
-                  FnPtrType@11..26
+                  FnPtrType@11..24
                     WHITESPACE@11..12 " "
                     FN_KW@12..14 "fn"
                     L_PAREN@14..15 "("
@@ -997,38 +996,37 @@ fn fn_taking_fn_arg_colon() {
                           NameRef@15..18
                             IDENT@15..18 "i32"
                     R_PAREN@18..19 ")"
-                    WHITESPACE@19..20 " "
-                    ARROW@20..22 "->"
-                    PathType@22..26
-                      Path@22..26
-                        PathSegment@22..26
-                          NameRef@22..26
-                            WHITESPACE@22..23 " "
-                            IDENT@23..26 "i32"
-                COMMA@26..27 ","
-                Param@27..34
-                  Name@27..29
-                    WHITESPACE@27..28 " "
-                    IDENT@28..29 "x"
-                  COLON@29..30 ":"
-                  PathType@30..34
-                    Path@30..34
-                      PathSegment@30..34
-                        NameRef@30..34
-                          WHITESPACE@30..31 " "
-                          IDENT@31..34 "i32"
-                R_PAREN@34..35 ")"
-              COLON@35..36 ":"
-              PathType@36..40
-                Path@36..40
-                  PathSegment@36..40
-                    NameRef@36..40
-                      WHITESPACE@36..37 " "
-                      IDENT@37..40 "i32"
-              Block@40..43
-                WHITESPACE@40..41 " "
-                L_BRACE@41..42 "{"
-                R_BRACE@42..43 "}"
+                    COLON@19..20 ":"
+                    PathType@20..24
+                      Path@20..24
+                        PathSegment@20..24
+                          NameRef@20..24
+                            WHITESPACE@20..21 " "
+                            IDENT@21..24 "i32"
+                COMMA@24..25 ","
+                Param@25..32
+                  Name@25..27
+                    WHITESPACE@25..26 " "
+                    IDENT@26..27 "x"
+                  COLON@27..28 ":"
+                  PathType@28..32
+                    Path@28..32
+                      PathSegment@28..32
+                        NameRef@28..32
+                          WHITESPACE@28..29 " "
+                          IDENT@29..32 "i32"
+                R_PAREN@32..33 ")"
+              COLON@33..34 ":"
+              PathType@34..38
+                Path@34..38
+                  PathSegment@34..38
+                    NameRef@34..38
+                      WHITESPACE@34..35 " "
+                      IDENT@35..38 "i32"
+              Block@38..41
+                WHITESPACE@38..39 " "
+                L_BRACE@39..40 "{"
+                R_BRACE@40..41 "}"
         "#]],
     );
 }
@@ -1639,7 +1637,8 @@ fn source_file_trailing_whitespace() {
                   WHITESPACE@9..10 " "
                   L_BRACE@10..11 "{"
                   R_BRACE@11..12 "}"
-              WHITESPACE@12..15 "  \n"
+              WHITESPACE@12..14 "  "
+              NEWLINE@14..15 "\n"
         "#]],
     );
 }
@@ -2746,7 +2745,7 @@ fn attribute_simple() {
                 AttrPath@2..6
                   IDENT@2..6 "test"
                 R_BRACKET@6..7 "]"
-              WHITESPACE@7..8 "\n"
+              NEWLINE@7..8 "\n"
               FN_KW@8..10 "fn"
               Name@10..14
                 WHITESPACE@10..11 " "
@@ -2778,7 +2777,7 @@ fn attribute_dotted_path() {
                   DOT@9..10 "."
                   IDENT@10..13 "baz"
                 R_BRACKET@13..14 "]"
-              WHITESPACE@14..15 "\n"
+              NEWLINE@14..15 "\n"
               FN_KW@15..17 "fn"
               Name@17..21
                 WHITESPACE@17..18 " "
@@ -2807,13 +2806,13 @@ fn multiple_attributes() {
                   IDENT@2..6 "test"
                 R_BRACKET@6..7 "]"
               Attribute@7..17
-                WHITESPACE@7..8 "\n"
+                NEWLINE@7..8 "\n"
                 HASH@8..9 "#"
                 L_BRACKET@9..10 "["
                 AttrPath@10..16
                   IDENT@10..16 "ignore"
                 R_BRACKET@16..17 "]"
-              WHITESPACE@17..18 "\n"
+              NEWLINE@17..18 "\n"
               FN_KW@18..20 "fn"
               Name@20..24
                 WHITESPACE@20..21 " "
@@ -2842,7 +2841,7 @@ fn attribute_with_visibility() {
                   IDENT@2..6 "test"
                 R_BRACKET@6..7 "]"
               Visibility@7..11
-                WHITESPACE@7..8 "\n"
+                NEWLINE@7..8 "\n"
                 PUB_KW@8..11 "pub"
               WHITESPACE@11..12 " "
               FN_KW@12..14 "fn"
@@ -2878,7 +2877,7 @@ fn attribute_on_struct() {
                       IDENT@9..14 "Clone"
                   R_PAREN@14..15 ")"
                 R_BRACKET@15..16 "]"
-              WHITESPACE@16..17 "\n"
+              NEWLINE@16..17 "\n"
               STRUCT_KW@17..23 "struct"
               Name@23..29
                 WHITESPACE@23..24 " "
@@ -2922,7 +2921,7 @@ fn foo() {}"#,
                     STRING_LITERAL@11..18 "\"linux\""
                   R_PAREN@18..19 ")"
                 R_BRACKET@19..20 "]"
-              WHITESPACE@20..21 "\n"
+              NEWLINE@20..21 "\n"
               FN_KW@21..23 "fn"
               Name@23..27
                 WHITESPACE@23..24 " "
@@ -2968,7 +2967,7 @@ fn foo() {}"#,
                     STRING_LITERAL@27..32 "\"x86\""
                   R_PAREN@32..33 ")"
                 R_BRACKET@33..34 "]"
-              WHITESPACE@34..35 "\n"
+              NEWLINE@34..35 "\n"
               FN_KW@35..37 "fn"
               Name@37..41
                 WHITESPACE@37..38 " "
@@ -3008,7 +3007,7 @@ fn attribute_with_trailing_comma() {
                   COMMA@26..27 ","
                   R_PAREN@27..28 ")"
                 R_BRACKET@28..29 "]"
-              WHITESPACE@29..30 "\n"
+              NEWLINE@29..30 "\n"
               FN_KW@30..32 "fn"
               Name@32..36
                 WHITESPACE@32..33 " "
@@ -3060,7 +3059,7 @@ fn foo() {}"#,
                       R_PAREN@36..37 ")"
                   R_PAREN@37..38 ")"
                 R_BRACKET@38..39 "]"
-              WHITESPACE@39..40 "\n"
+              NEWLINE@39..40 "\n"
               FN_KW@40..42 "fn"
               Name@42..46
                 WHITESPACE@42..43 " "
@@ -3101,7 +3100,7 @@ fn foo() {}"#,
                   R_PAREN@16..17 ")"
                 R_BRACKET@17..18 "]"
               FunctionDef@18..30
-                WHITESPACE@18..19 "\n"
+                NEWLINE@18..19 "\n"
                 FN_KW@19..21 "fn"
                 Name@21..25
                   WHITESPACE@21..22 " "
@@ -3138,7 +3137,7 @@ fn main() {}"#,
                   R_PAREN@15..16 ")"
                 R_BRACKET@16..17 "]"
               InnerAttribute@17..35
-                WHITESPACE@17..18 "\n"
+                NEWLINE@17..18 "\n"
                 HASH@18..19 "#"
                 BANG@19..20 "!"
                 L_BRACKET@20..21 "["
@@ -3152,7 +3151,7 @@ fn main() {}"#,
                   R_PAREN@33..34 ")"
                 R_BRACKET@34..35 "]"
               FunctionDef@35..48
-                WHITESPACE@35..36 "\n"
+                NEWLINE@35..36 "\n"
                 FN_KW@36..38 "fn"
                 Name@38..43
                   WHITESPACE@38..39 " "
@@ -3186,7 +3185,7 @@ fn foo() {}"##,
                   WHITESPACE@7..8 " "
                   STRING_LITERAL@8..23 "\"Documentation\""
                 R_BRACKET@23..24 "]"
-              WHITESPACE@24..25 "\n"
+              NEWLINE@24..25 "\n"
               FN_KW@25..27 "fn"
               Name@27..31
                 WHITESPACE@27..28 " "
@@ -3220,7 +3219,7 @@ fn attribute_on_impl_block() {
                       IDENT@6..10 "test"
                   R_PAREN@10..11 ")"
                 R_BRACKET@11..12 "]"
-              WHITESPACE@12..13 "\n"
+              NEWLINE@12..13 "\n"
               IMPL_KW@13..17 "impl"
               PathType@17..21
                 Path@17..21
@@ -3266,13 +3265,15 @@ fn attribute_on_impl_method() {
               L_BRACE@9..10 "{"
               FunctionDef@10..34
                 Attribute@10..20
-                  WHITESPACE@10..13 "\n  "
+                  NEWLINE@10..11 "\n"
+                  WHITESPACE@11..13 "  "
                   HASH@13..14 "#"
                   L_BRACKET@14..15 "["
                   AttrPath@15..19
                     IDENT@15..19 "test"
                   R_BRACKET@19..20 "]"
-                WHITESPACE@20..23 "\n  "
+                NEWLINE@20..21 "\n"
+                WHITESPACE@21..23 "  "
                 FN_KW@23..25 "fn"
                 Name@25..29
                   WHITESPACE@25..26 " "
@@ -3284,7 +3285,7 @@ fn attribute_on_impl_method() {
                   WHITESPACE@31..32 " "
                   L_BRACE@32..33 "{"
                   R_BRACE@33..34 "}"
-              WHITESPACE@34..35 "\n"
+              NEWLINE@34..35 "\n"
               R_BRACE@35..36 "}"
         "##]],
     );

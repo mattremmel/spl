@@ -1,0 +1,48 @@
+[section]
+id = "items.impls"
+spec_chapter = "1.7"
+name = "Implementation Blocks"
+
+[[case]]
+name = "impl_inherent"
+source = """
+impl Point {
+    fn new(x: f64, y: f64): Point {
+        return Point(x: x, y: y)
+    }
+}
+"""
+
+[[case]]
+name = "impl_with_where"
+source = """
+impl Box where T {
+    fn unwrap(self): i32 {
+        return 0
+    }
+}
+"""
+
+[[case]]
+name = "impl_pub_methods"
+source = """
+impl Point {
+    pub fn x(&self): f64 { return 0.0 }
+    pub fn y(&self): f64 { return 0.0 }
+}
+"""
+
+[[case]]
+name = "impl_multiple_methods"
+source = """
+impl Stack {
+    fn push(&mut self, value: i32) {}
+    fn pop(&mut self): i32 { return 0 }
+    fn len(&self): i32 { return 0 }
+}
+"""
+
+[[case]]
+name = "impl_missing_brace"
+expect_error = "expected"
+source = "impl Foo fn bar() {} }"

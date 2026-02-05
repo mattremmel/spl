@@ -1,0 +1,36 @@
+[section]
+id = "types.function"
+spec_chapter = "2"
+name = "Function Types"
+
+[[case]]
+name = "fn_type_basic"
+source = "type F = fn(i32): bool;"
+
+[[case]]
+name = "fn_type_no_return"
+source = "type F = fn(i32);"
+
+[[case]]
+name = "fn_type_multi_param"
+source = "type F = fn(i32, String): bool;"
+
+[[case]]
+name = "fn_type_no_params"
+source = "type F = fn(): i32;"
+
+[[case]]
+name = "fn_type_unit"
+source = "type F = fn();"
+
+[[case]]
+name = "fn_type_unsafe"
+source = "type F = unsafe fn(i32): bool;"
+
+[[case]]
+name = "fn_type_extern"
+source = """type F = extern "C" fn(i32): i32;"""
+
+[[case]]
+name = "fn_type_unsafe_extern"
+source = """type F = unsafe extern "C" fn(): i32;"""

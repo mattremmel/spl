@@ -1,0 +1,24 @@
+[section]
+id = "items.visibility"
+spec_chapter = "1.1"
+name = "Visibility Modifiers"
+
+[[case]]
+name = "vis_pub"
+source = "pub fn foo() {}"
+
+[[case]]
+name = "vis_pub_super"
+source = "pub(super) fn internal() {}"
+
+[[case]]
+name = "vis_pub_package"
+source = "pub($) fn package_fn() {}"
+
+[[case]]
+name = "vis_pub_package_path"
+source = "pub($.path) fn scoped_fn() {}"
+
+[[case]]
+name = "vis_pub_fields"
+source = "pub struct Point(pub x: i32, pub y: i32)"

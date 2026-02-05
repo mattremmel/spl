@@ -1,0 +1,77 @@
+[section]
+id = "items.functions"
+spec_chapter = "1.3"
+name = "Function Definitions"
+
+[[case]]
+name = "fn_minimal"
+source = "fn foo() {}"
+
+[[case]]
+name = "fn_with_return_type"
+source = """
+fn add(a: i32, b: i32): i32 {
+    return a + b
+}
+"""
+
+[[case]]
+name = "fn_with_params"
+source = "fn greet(name: String) {}"
+
+[[case]]
+name = "fn_self_param"
+source = """
+impl Foo {
+    fn method(&self) {}
+}
+"""
+
+[[case]]
+name = "fn_mut_self"
+source = """
+impl Foo {
+    fn mutate(&mut self) {}
+}
+"""
+
+[[case]]
+name = "fn_labeled_params"
+source = "fn send(to recipient: String, message: String) {}"
+
+[[case]]
+name = "fn_underscore_label"
+source = "fn add(_ a: i32, _ b: i32): i32 { return a + b }"
+
+[[case]]
+name = "fn_where_clause"
+source = "fn identity(x: T): T where T { return x }"
+
+[[case]]
+name = "fn_where_bounds"
+source = "fn clone_it(x: &T): T where T: Clone { return x.clone() }"
+
+[[case]]
+name = "fn_throws"
+source = "fn read_file(path: &str): String throws IoError { return path }"
+
+[[case]]
+name = "fn_throws_where"
+source = "fn process(input: T): T throws where T { return input }"
+
+[[case]]
+name = "fn_const"
+source = "const fn square(x: i32): i32 { return x * x }"
+
+[[case]]
+name = "fn_unsafe"
+source = "unsafe fn danger(p: i32): i32 { return p }"
+
+[[case]]
+name = "fn_default_param"
+source = """fn greet(name: String = "World") {}"""
+
+[[case]]
+name = "fn_missing_name"
+expect_error = "expected"
+source = "fn () {}"

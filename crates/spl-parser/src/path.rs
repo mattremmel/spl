@@ -72,7 +72,19 @@ fn path_segment(p: &mut Parser<'_>, allow_generics: bool) -> Result<CompletedMar
     Ok(m.complete(p, SyntaxKind::PathSegment))
 }
 
-/// Parse generic arguments with parentheses: `(T, U, ...)`
+/// Check if the current token is an uppercase identifier (starts with A-Z).
+fn is_upper_ident(p: &mut Parser<'_>) -> bool {
+    p.at(SyntaxKind::IDENT)
+        && p.current_text()
+            .is_some_and(|t| t.starts_with(|c: char| c.is_uppercase()))
+}
+
+/// Parse generic arguments with parentheses: `(TypeArg, ...)`
+///
+/// Per spec: `TypeArg = UPPER_IDENT [ ":" Type ]`
+/// - `T: i32` — named type arg
+/// - `T` — shorthand for `T: T`
+/// - Falls back to bare type for backwards compatibility
 fn generic_args_paren(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::L_PAREN) {
@@ -80,7 +92,7 @@ fn generic_args_paren(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError>
         return Err(e);
     }
     if let Err(e) = p.parse_delimited(SyntaxKind::R_PAREN, |p| {
-        super::stmt::type_annotation(p)?;
+        type_arg(p)?;
         Ok(())
     }) {
         m.abandon(p);
@@ -91,6 +103,21 @@ fn generic_args_paren(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError>
         return Err(e);
     }
     Ok(m.complete(p, SyntaxKind::GenericArgs))
+}
+
+/// Parse a single type argument: `UPPER_IDENT ":" Type` or `UPPER_IDENT` (shorthand) or bare `Type`.
+fn type_arg(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+    // Check for named type arg: UPPER_IDENT followed by ":"
+    if is_upper_ident(p) && p.peek_at(1, SyntaxKind::COLON) {
+        let m = p.start();
+        crate::item::name(p)?; // consume the identifier as Name
+        p.expect(SyntaxKind::COLON)?;
+        super::stmt::type_annotation(p)?;
+        return Ok(m.complete(p, SyntaxKind::TypeArg));
+    }
+
+    // Fall back to bare type (e.g., `i32`, `T`, `&T`)
+    super::stmt::type_annotation(p)
 }
 
 /// Parse a name reference (identifier, self, Self, crate, super, or module).

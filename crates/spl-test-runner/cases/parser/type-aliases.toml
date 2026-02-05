@@ -1,0 +1,33 @@
+[section]
+id = "items.type_aliases"
+spec_chapter = "1.8"
+name = "Type Aliases"
+
+[[case]]
+name = "type_simple"
+source = "type Int = i32;"
+
+[[case]]
+name = "type_generic_params"
+source = "type Pair(T) = (T, T) where T"
+
+[[case]]
+name = "type_where_bounds"
+source = "type CloneBox(T) = i32 where T: Clone"
+
+[[case]]
+name = "type_multiple_params"
+source = "type Map(K, V) = i32 where K, V"
+
+[[case]]
+name = "type_trailing_comma"
+source = "type Pair(T,) = (T, T) where T"
+
+[[case]]
+name = "type_complex"
+source = "type StringMap(V, K) = i32 where V, K: Hash + Eq"
+
+[[case]]
+name = "type_missing_eq"
+expect_error = "expected"
+source = "type Foo i32;"

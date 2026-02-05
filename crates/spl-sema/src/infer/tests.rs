@@ -1295,7 +1295,7 @@ fn error_access_nonexistent_field() {
 
 #[test]
 fn never_from_return() {
-    check("fn f(): ! { loop {} } fn main() { let x = f(); }", "!");
+    check("fn f(): Never { loop {} } fn main() { let x = f(); }", "!");
 }
 
 #[test]
@@ -5110,7 +5110,7 @@ fn range_int_float_mismatch() {
 fn fn_ptr_type_in_param() {
     // Function pointer types in parameters parse and type-check correctly
     check(
-        "fn apply(_ f: fn(i32) -> i32, _ x: i32): i32 { 0 } fn main() { let x = 0; }",
+        "fn apply(_ f: fn(i32): i32, _ x: i32): i32 { 0 } fn main() { let x = 0; }",
         "i32",
     );
 }
@@ -5120,7 +5120,7 @@ fn fn_ptr_type_in_let() {
     // Function pointer types in let bindings parse correctly
     // (even if coercion from fn def isn't implemented yet)
     check_err(
-        "fn add(_ a: i32, _ b: i32): i32 { a + b } fn main() { let f: fn(i32, i32) -> i32 = add; }",
+        "fn add(_ a: i32, _ b: i32): i32 { a + b } fn main() { let f: fn(i32, i32): i32 = add; }",
         &["type mismatch"], // fn def to fn ptr coercion not yet implemented
     );
 }
@@ -5128,7 +5128,7 @@ fn fn_ptr_type_in_let() {
 #[test]
 fn fn_ptr_param_mismatch() {
     check_err(
-        "fn add(_ a: i32, _ b: i32): i32 { a + b } fn main() { let f: fn(i64, i32) -> i32 = add; }",
+        "fn add(_ a: i32, _ b: i32): i32 { a + b } fn main() { let f: fn(i64, i32): i32 = add; }",
         &["type mismatch"],
     );
 }
@@ -5136,7 +5136,7 @@ fn fn_ptr_param_mismatch() {
 #[test]
 fn fn_ptr_return_mismatch() {
     check_err(
-        "fn add(_ a: i32, _ b: i32): i32 { a + b } fn main() { let f: fn(i32, i32) -> i64 = add; }",
+        "fn add(_ a: i32, _ b: i32): i32 { a + b } fn main() { let f: fn(i32, i32): i64 = add; }",
         &["type mismatch"],
     );
 }

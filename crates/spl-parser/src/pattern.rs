@@ -67,6 +67,15 @@ fn single_pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
         },
         // Rest pattern: ..
         DOT_DOT => Ok(rest_pat(p)),
+        // Negative literal patterns: -1, -3.14
+        MINUS => {
+            if matches!(p.peek(1), Some(SyntaxKind::INT_LITERAL) | Some(SyntaxKind::FLOAT_LITERAL)) {
+                Ok(negative_literal_or_range_pat(p))
+            } else {
+                let err = p.error_at_current("expected pattern".to_string());
+                Err(err)
+            }
+        },
         // Literal patterns (may be range pattern if followed by ..)
         INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL | TRUE_KW | FALSE_KW => {
             Ok(literal_or_range_pat(p))
@@ -258,23 +267,30 @@ fn struct_pat_field(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     Ok(m.complete(p, SyntaxKind::StructPatField))
 }
 
-/// Parse a rest pattern: `..`
+/// Parse a rest pattern: `..` or `..ident`
 fn rest_pat(p: &mut Parser<'_>) -> CompletedMarker {
     let m = p.start();
     p.bump(); // consume `..`
+    // Optional binding identifier: `..rest`
+    if p.at(SyntaxKind::IDENT)
+        && p.current_text() != Some("_")
+        && let Err(e) = crate::item::name(p)
+    {
+        p.error(e);
+    }
     m.complete(p, SyntaxKind::RestPat)
 }
 
-/// Parse a literal pattern, or a range pattern if followed by `..`
-fn literal_or_range_pat(p: &mut Parser<'_>) -> CompletedMarker {
-    let m = p.start();
-    p.bump(); // consume the literal
+/// Try to parse a range tail (`..` or `..=` plus optional end literal).
+/// If present, completes `m` as `RangePat`; otherwise completes as `LiteralPat`.
+fn maybe_range_tail(p: &mut Parser<'_>, m: crate::Marker) -> CompletedMarker {
+    if p.at(SyntaxKind::DOT_DOT) || p.at(SyntaxKind::DOT_DOT_EQ) {
+        p.bump(); // consume `..` or `..=`
 
-    // Check if this is a range pattern: literal..literal or literal..
-    if p.at(SyntaxKind::DOT_DOT) {
-        p.bump(); // consume `..`
-
-        // Optional end literal
+        // Optional end literal (may be negative)
+        if p.at(SyntaxKind::MINUS) {
+            p.bump(); // consume `-`
+        }
         if matches!(
             p.current(),
             Some(SyntaxKind::INT_LITERAL)
@@ -288,6 +304,21 @@ fn literal_or_range_pat(p: &mut Parser<'_>) -> CompletedMarker {
     } else {
         m.complete(p, SyntaxKind::LiteralPat)
     }
+}
+
+/// Parse a negative literal pattern: `-1`, `-3.14`, or a range starting with a negative literal.
+fn negative_literal_or_range_pat(p: &mut Parser<'_>) -> CompletedMarker {
+    let m = p.start();
+    p.bump(); // consume `-`
+    p.bump(); // consume the literal
+    maybe_range_tail(p, m)
+}
+
+/// Parse a literal pattern, or a range pattern if followed by `..` or `..=`
+fn literal_or_range_pat(p: &mut Parser<'_>) -> CompletedMarker {
+    let m = p.start();
+    p.bump(); // consume the literal
+    maybe_range_tail(p, m)
 }
 
 /// Parse a tuple or grouped pattern.

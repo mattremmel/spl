@@ -1179,6 +1179,7 @@ dependencies = [
  "datatest-stable",
  "serde",
  "spl-compiler",
+ "spl-parser",
  "thiserror",
  "toml",
 ]

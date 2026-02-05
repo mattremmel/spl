@@ -1,0 +1,32 @@
+[section]
+id = "stmts.let"
+spec_chapter = "3"
+name = "Let Statements"
+
+[[case]]
+name = "let_basic"
+source = "fn f() { let x = 1 }"
+
+[[case]]
+name = "let_with_type"
+source = "fn f() { let x: i32 = 1 }"
+
+[[case]]
+name = "let_mut"
+source = "fn f() { let mut x = 1 }"
+
+[[case]]
+name = "let_pattern"
+source = "fn f() { let (a, b) = pair }"
+
+[[case]]
+name = "let_no_init"
+source = "fn f() { let x: i32 }"
+
+[[case]]
+name = "let_complex_type"
+source = "fn f() { let x: [i32; 10] = arr }"
+
+[[case]]
+name = "let_semicolon"
+source = "fn f() { let x = 1; let y = 2; }"

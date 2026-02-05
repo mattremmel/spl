@@ -27,6 +27,7 @@ ast_node!(SelfParam);
 ast_node!(GenericParam);
 ast_node!(GenericParams);
 ast_node!(GenericArgs);
+ast_node!(TypeArg);
 ast_node!(FieldList);
 ast_node!(FieldDef);
 ast_node!(Name);
@@ -604,6 +605,20 @@ impl GenericParams {
 impl GenericArgs {
     pub fn args(&self) -> impl Iterator<Item = Type> {
         children(&self.0)
+    }
+
+    pub fn type_args(&self) -> impl Iterator<Item = TypeArg> {
+        children(&self.0)
+    }
+}
+
+impl TypeArg {
+    pub fn name(&self) -> Option<Name> {
+        child(&self.0)
+    }
+
+    pub fn ty(&self) -> Option<Type> {
+        child(&self.0)
     }
 }
 

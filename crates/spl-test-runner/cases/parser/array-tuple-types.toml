@@ -1,0 +1,36 @@
+[section]
+id = "types.array_tuple"
+spec_chapter = "2"
+name = "Array and Tuple Types"
+
+[[case]]
+name = "slice_type"
+source = "fn foo(x: [i32]) {}"
+
+[[case]]
+name = "array_type"
+source = "fn foo(x: [i32; 10]) {}"
+
+[[case]]
+name = "nested_array"
+source = "fn foo(x: [[i32; 3]; 3]) {}"
+
+[[case]]
+name = "positional_tuple"
+source = "type T = (i32, bool);"
+
+[[case]]
+name = "named_tuple"
+source = "type T = (x: i32, y: i32);"
+
+[[case]]
+name = "mixed_tuple"
+source = "type T = (i32, name: String);"
+
+[[case]]
+name = "unit_type"
+source = "type T = ();"
+
+[[case]]
+name = "nested_tuples"
+source = "type T = ((i32, i32), (bool, bool));"
