@@ -233,3 +233,94 @@ module tests {
     }
 }
 """
+
+[[case]]
+name = "trait_impl_generics_where_methods_patterns"
+source = """
+trait Container where T {
+    fn push(&mut self, item: T)
+    fn pop(&mut self): T?
+    fn len(&self): i32
+}
+
+struct Stack(items: Vec(T: T)) where T
+
+impl Container for Stack where T {
+    fn push(&mut self, item: T) {}
+    fn pop(&mut self): T? { .None }
+    fn len(&self): i32 { 0 }
+}
+
+fn use_stack() {
+    let mut s = Stack(items: Vec.new())
+    s.push(42);
+    match s.pop() {
+        .Some(v) => v,
+        .None => 0,
+    }
+}
+"""
+
+[[case]]
+name = "all_visibility_forms"
+source = """
+pub struct Public(x: i32)
+pub(super) struct SuperVisible(y: i32)
+struct Private(z: i32)
+
+pub fn public_fn() {}
+pub(super) fn super_fn() {}
+fn private_fn() {}
+
+pub const MAX: i32 = 100
+pub(super) static COUNT: i32 = 0
+"""
+
+[[case]]
+name = "extern_block_with_unsafe"
+source = """
+extern {
+    fn malloc(size: i32): &mut u8
+    fn free(ptr: &mut u8)
+}
+
+unsafe fn allocate(size: i32): &mut u8 {
+    unsafe { malloc(size) }
+}
+"""
+
+[[case]]
+name = "complex_pattern_matching"
+source = """
+fn process(data: Result(T: Vec(T: i32), E: Error)) {
+    match data {
+        .Ok([]) => {},
+        .Ok([first, ...rest]) => {
+            let sum = first
+            for item in rest {
+                sum = sum + item
+            }
+        },
+        .Err(_) => {},
+    }
+}
+"""
+
+[[case]]
+name = "generators_throws_closures_match"
+source = """
+gen fn filtered(items: Vec(T: i32)): i32 throws FilterError {
+    for item in items {
+        match item {
+            n if n > 0 => yield n,
+            0 => continue,
+            _ => throw .InvalidItem,
+        }
+    }
+}
+
+fn collect_positive(items: Vec(T: i32)): Vec(T: i32) {
+    let result = Vec.new()
+    items.filter(|x| x > 0).map(|x| x * 2).collect()
+}
+"""

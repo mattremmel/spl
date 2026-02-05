@@ -712,7 +712,21 @@ impl AstPrinter {
                 p.line("Receiver");
                 p.indented(|p| p.print_expr(&recv));
             }
-            // Print arguments
+            // Print type arguments
+            for type_arg in call.type_args() {
+                let name = type_arg
+                    .name()
+                    .and_then(|n| n.ident_token())
+                    .map(|t| t.text().to_string())
+                    .unwrap_or_else(|| "?".to_string());
+                p.line(&format!("TypeArg \"{name}\""));
+                p.indented(|p| {
+                    if let Some(ty) = type_arg.ty() {
+                        p.print_type(&ty);
+                    }
+                });
+            }
+            // Print value arguments
             for arg in call.args() {
                 let name = arg.name_token().map(|t| t.text().to_string()).or_else(|| {
                     arg.name()

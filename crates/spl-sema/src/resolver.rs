@@ -1355,7 +1355,14 @@ impl<'ctx> Resolver<'ctx> {
             self.resolve_expr(&callee);
         }
 
-        // Resolve argument values
+        // Resolve type arguments (e.g., T: i32 in foo(T: i32, x: 1))
+        for type_arg in call_expr.type_args() {
+            if let Some(ty) = type_arg.ty() {
+                self.resolve_type(&ty);
+            }
+        }
+
+        // Resolve value argument expressions
         for arg in call_expr.args() {
             // Note: Named argument name resolution requires type info (deferred to type checking)
             // Just resolve the value expression

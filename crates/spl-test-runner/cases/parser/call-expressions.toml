@@ -131,3 +131,35 @@ source = """fn f() { "hello".len() }"""
 [[case]]
 name = "call_method_on_array"
 source = "fn f() { [1, 2, 3].len() }"
+
+[[case]]
+name = "call_type_arg_ref_type"
+source = "fn f() { foo(T: &i32, x: 1) }"
+
+[[case]]
+name = "call_type_arg_mut_ref_type"
+source = "fn f() { foo(T: &mut i32, x: 1) }"
+
+[[case]]
+name = "call_type_arg_fn_type"
+source = "fn f() { foo(T: fn(i32): bool, x: 1) }"
+
+[[case]]
+name = "call_type_arg_optional_type"
+source = "fn f() { foo(T: i32?, x: 1) }"
+
+[[case]]
+name = "call_type_arg_array_type"
+source = "fn f() { foo(T: [i32; 10], x: 1) }"
+
+[[case]]
+name = "call_type_arg_slice_type"
+source = "fn f() { foo(T: [i32], x: 1) }"
+
+[[case]]
+name = "call_type_arg_tuple_type"
+source = "fn f() { foo(T: (i32, bool), x: 1) }"
+
+[[case]]
+name = "call_type_arg_never_type"
+source = "fn f() { foo(T: Never, x: 1) }"

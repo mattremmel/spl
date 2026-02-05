@@ -165,3 +165,19 @@ source = "fn f() { let x: std.io.Error = std.io.Error.new() }"
 [[case]]
 name = "disambiguation_multi_type_arg_call"
 source = "fn f() { convert(From: i32, To: f64, value: 100) }"
+
+[[case]]
+name = "disambiguation_type_vs_value_complex_types"
+source = "fn f() { process(T: &mut i32, U: fn(i32): bool, value: 42) }"
+
+[[case]]
+name = "disambiguation_struct_type_shorthand_spread"
+source = "fn f() { Point(T: i32, x: 1, y, ...base) }"
+
+[[case]]
+name = "disambiguation_nested_type_method"
+source = "fn f() { HashMap(K: String, V: Vec(T: i32)).new() }"
+
+[[case]]
+name = "disambiguation_type_expr_with_capacity"
+source = "fn f() { Vec(T: i32).with_capacity(10) }"

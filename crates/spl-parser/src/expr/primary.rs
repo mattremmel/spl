@@ -463,11 +463,34 @@ fn struct_update_base(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::Pars
     Ok(m.complete(p, SyntaxKind::StructUpdateBase))
 }
 
-/// Parse a call argument: either `name: expr` (named) or just `expr` (positional).
+/// Parse a call argument: type arg, named value arg, or positional arg.
+///
+/// Per spec: `NamedArg = UPPER_IDENT ":" Type | LOWER_IDENT ":" Expression`
+/// - Uppercase `IDENT :` → type argument (parsed as `Name : Type`, emits `TypeArg`)
+/// - Lowercase `IDENT :` → named value argument (parsed as `name : expr`, emits `CallArg`)
+/// - No `IDENT :` prefix → positional argument (parsed as `expr`, emits `CallArg`)
 fn call_arg(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    // Check for type argument: UPPER_IDENT ":"
+    if crate::path::is_upper_ident(p) && p.peek(1) == Some(SyntaxKind::COLON) {
+        let m = p.start();
+        if let Err(e) = crate::item::name(p) {
+            m.abandon(p);
+            return Err(e);
+        }
+        if let Err(e) = p.expect(SyntaxKind::COLON) {
+            m.abandon(p);
+            return Err(e);
+        }
+        if let Err(e) = crate::stmt::type_annotation(p) {
+            m.abandon(p);
+            return Err(e);
+        }
+        return Ok(m.complete(p, SyntaxKind::TypeArg));
+    }
+
     let m = p.start();
 
-    // Check for named argument: IDENT :
+    // Check for named value argument: lowercase IDENT ":"
     if p.at(SyntaxKind::IDENT) && p.peek(1) == Some(SyntaxKind::COLON) {
         p.bump(); // name
         p.bump(); // :

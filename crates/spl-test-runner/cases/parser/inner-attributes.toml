@@ -55,3 +55,56 @@ fn foo() {}
 #[test]
 fn bar() {}
 """
+
+[[case]]
+name = "inner_attr_in_function_body"
+expect_error = "expected"
+source = """
+fn f() {
+    #![allow(unused)]
+    let x = 1
+}
+"""
+
+[[case]]
+name = "inner_attr_in_trait"
+expect_error = "expected"
+source = """
+trait Bar {
+    #![cfg(test)]
+    fn method(&self)
+}
+"""
+
+[[case]]
+name = "inner_attr_in_extern_block"
+expect_error = "expected"
+source = """
+extern {
+    #![link(name = "c")]
+    fn puts(s: &str)
+}
+"""
+
+[[case]]
+name = "inner_attr_multiple_file_level"
+source = """
+#![allow(unused)]
+#![warn(dead_code)]
+#![feature(test)]
+fn foo() {}
+"""
+
+[[case]]
+name = "inner_attr_with_string_value"
+source = """
+#![doc = "Module documentation"]
+fn foo() {}
+"""
+
+[[case]]
+name = "inner_attr_with_nested_args"
+source = """
+#![cfg(all(target_os = "linux", feature = "test"))]
+fn foo() {}
+"""

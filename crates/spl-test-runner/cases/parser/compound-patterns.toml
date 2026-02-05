@@ -603,3 +603,48 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "pat_or_in_let_binding"
+source = "fn f() { let 1 | 2 | 3 = x }"
+
+[[case]]
+name = "pat_or_nested_enum_in_match"
+source = """
+fn f() {
+    match x {
+        .Some(1 | 2) => true,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "pat_or_in_if_is"
+source = "fn f() { if x is 1 | 2 | 3 {} }"
+
+[[case]]
+name = "pat_multiple_or_in_match_arm"
+source = """
+fn f() {
+    match x {
+        .A | .B | .C | .D => true,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "pat_grouped_or_complex"
+source = """
+fn f() {
+    match x {
+        (.Some(1) | .Some(2)) | .None => true,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "pat_or_in_for_loop"
+source = "fn f() { for (1 | 2 | 3, b) in items {} }"

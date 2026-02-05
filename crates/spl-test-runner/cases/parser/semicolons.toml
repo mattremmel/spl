@@ -79,3 +79,63 @@ fn a() {}
 fn b() {}
 struct C()
 """
+
+[[case]]
+name = "semicolon_after_unsafe_block"
+source = "fn f() { let x = unsafe { 1 }; x }"
+
+[[case]]
+name = "semicolon_after_if_expr"
+source = "fn f() { if true { 1 } else { 2 }; let x = 3; x }"
+
+[[case]]
+name = "semicolon_after_loop"
+source = "fn f() { loop { break 1; }; let x = 2; x }"
+
+[[case]]
+name = "multiple_stmts_same_line"
+source = "fn f() { let x = 1; let y = 2; let z = 3; x + y + z }"
+
+[[case]]
+name = "trailing_semicolons_with_break"
+source = """
+fn f() {
+    loop {
+        break;
+    };
+    let y = 2
+}
+"""
+
+[[case]]
+name = "nested_blocks_mixed_semicolons"
+source = """
+fn f() {
+    let x = {
+        let a = 1;
+        let b = 2;
+        a + b
+    };
+    x
+}
+"""
+
+[[case]]
+name = "for_loop_followed_by_expr"
+source = """
+fn f() {
+    for x in items {}
+    let y = 2
+    y
+}
+"""
+
+[[case]]
+name = "while_loop_followed_by_expr"
+source = """
+fn f() {
+    while false {}
+    let y = 2
+    y
+}
+"""

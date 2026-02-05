@@ -73,7 +73,7 @@ fn path_segment(p: &mut Parser<'_>, allow_generics: bool) -> Result<CompletedMar
 }
 
 /// Check if the current token is an uppercase identifier (starts with A-Z).
-fn is_upper_ident(p: &mut Parser<'_>) -> bool {
+pub(crate) fn is_upper_ident(p: &mut Parser<'_>) -> bool {
     p.at(SyntaxKind::IDENT)
         && p.current_text()
             .is_some_and(|t| t.starts_with(|c: char| c.is_uppercase()))

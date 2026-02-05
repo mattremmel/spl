@@ -78,3 +78,41 @@ impl Stack {
     fn pop(&mut self): i32 { 0 }
 }
 """
+
+[[case]]
+name = "self_with_many_params_and_where"
+source = """
+impl Container where T: Clone {
+    fn transform(&self, f: fn(T): U, default: U): U where U {
+        default
+    }
+}
+"""
+
+[[case]]
+name = "self_in_unsafe_fn"
+source = """
+impl Ptr {
+    unsafe fn deref(&self): i32 { 0 }
+}
+"""
+
+[[case]]
+name = "self_mut_in_trait_with_return"
+source = """
+trait MutableContainer {
+    fn push(&mut self, item: i32)
+    fn pop(&mut self): i32
+    fn clear(&mut self)
+    fn len(&self): i32
+}
+"""
+
+[[case]]
+name = "self_by_value_consuming_method"
+source = """
+impl Builder {
+    fn build(self): Widget { Widget() }
+    fn with_name(mut self, name: String): Builder { self }
+}
+"""

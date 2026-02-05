@@ -138,8 +138,13 @@ impl CallExpr {
         child(&self.0)
     }
 
-    /// Get all arguments to this call.
+    /// Get all value arguments to this call (excludes type arguments).
     pub fn args(&self) -> impl Iterator<Item = CallArg> {
+        children(&self.0)
+    }
+
+    /// Get all type arguments to this call (e.g., `T: i32` in `foo(T: i32, x: 1)`).
+    pub fn type_args(&self) -> impl Iterator<Item = crate::TypeArg> {
         children(&self.0)
     }
 

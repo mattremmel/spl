@@ -124,3 +124,49 @@ source = "gen fn items(_ x: i32 = 0): i32 { yield x }"
 [[case]]
 name = "gen_fn_no_return_type"
 source = "gen fn items() { yield 1 }"
+
+[[case]]
+name = "gen_fn_where_throws_combined"
+source = """
+gen fn items(list: T): i32 throws Error where T: Clone {
+    yield 0
+}
+"""
+
+[[case]]
+name = "gen_fn_default_params"
+source = "gen fn range(start: i32 = 0, end: i32 = 10): i32 { yield start }"
+
+[[case]]
+name = "gen_fn_pub_super"
+source = """
+pub(super) gen fn items(): i32 {
+    yield 0
+}
+"""
+
+[[case]]
+name = "gen_fn_with_attribute"
+source = "#[inline] gen fn fast_items(): i32 { yield 1; yield 2 }"
+
+[[case]]
+name = "gen_fn_in_trait"
+expect_error = "expected trait item"
+source = """
+trait Iterable {
+    gen fn items(&self): i32
+}
+"""
+
+[[case]]
+name = "gen_fn_yield_in_match"
+source = """
+gen fn transform(items: [i32]): String {
+    for item in items {
+        match item {
+            0 => yield "zero",
+            _ => yield "other",
+        }
+    }
+}
+"""

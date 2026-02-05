@@ -167,15 +167,28 @@ source = "fn f() { 1.5e10 }"
 
 [[case]]
 name = "literal_raw_string"
-ignore = true  # Parser does not yet handle raw string literals in expressions
 source = """fn f() { r"hello\nworld" }"""
 
 [[case]]
 name = "literal_byte_string"
-ignore = true  # Parser does not yet handle byte string literals in expressions
 source = """fn f() { b"bytes" }"""
 
 [[case]]
 name = "literal_byte_char"
-ignore = true  # Parser does not yet handle byte char literals in expressions
 source = "fn f() { b'A' }"
+
+[[case]]
+name = "struct_spread_multiple_overrides"
+source = "fn f() { Point(x: 1, y: 2, ...base) }"
+
+[[case]]
+name = "struct_spread_nested"
+source = "fn f() { Outer(inner: Inner(x: 1, ...defaults)) }"
+
+[[case]]
+name = "literal_c_string"
+source = """fn f() { c"hello" }"""
+
+[[case]]
+name = "literal_raw_byte_string"
+source = """fn f() { br"raw bytes" }"""
