@@ -6,6 +6,7 @@ use crate::{CompletedMarker, Parser};
 use spl_syntax::SyntaxKind;
 
 use super::expr;
+use super::item;
 use super::pattern;
 
 /// Consume optional trailing semicolon.
@@ -52,24 +53,9 @@ fn can_start_stmt_or_expr(p: &mut Parser<'_>) -> bool {
                 | SyntaxKind::MINUS
                 | SyntaxKind::BANG
                 | SyntaxKind::LET_KW
-                // Item-starting keywords (nested items in blocks)
-                | SyntaxKind::FN_KW
-                | SyntaxKind::STRUCT_KW
-                | SyntaxKind::ENUM_KW
-                | SyntaxKind::TRAIT_KW
-                | SyntaxKind::TYPE_KW
-                | SyntaxKind::IMPL_KW
-                | SyntaxKind::PUB_KW
-                | SyntaxKind::USE_KW
-                | SyntaxKind::EXTERN_KW
-                | SyntaxKind::MODULE_KW
-                | SyntaxKind::UNSAFE_KW
-                | SyntaxKind::CONST_KW
-                | SyntaxKind::STATIC_KW
-                | SyntaxKind::GEN_KW
                 | SyntaxKind::HASH
         )
-    )
+    ) || p.current().is_some_and(item::is_item_start)
 }
 
 /// Parse a let statement: `let [mut] pattern [: type] [= expr];`
@@ -226,7 +212,11 @@ fn base_type(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
                 p.peek(1),
                 Some(SyntaxKind::FN_KW) | Some(SyntaxKind::EXTERN_KW)
             ))
-        || (p.at(SyntaxKind::EXTERN_KW) && p.peek(1) == Some(SyntaxKind::STRING_LITERAL));
+        || (p.at(SyntaxKind::EXTERN_KW)
+            && matches!(
+                p.peek(1),
+                Some(SyntaxKind::STRING_LITERAL) | Some(SyntaxKind::FN_KW)
+            ));
     if is_fn_type {
         p.eat(SyntaxKind::UNSAFE_KW);
         if p.eat(SyntaxKind::EXTERN_KW) {

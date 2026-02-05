@@ -34,3 +34,11 @@ source = """type F = extern "C" fn(i32): i32;"""
 [[case]]
 name = "fn_type_unsafe_extern"
 source = """type F = unsafe extern "C" fn(): i32;"""
+
+[[case]]
+name = "fn_type_bare_extern"
+source = "type F = extern fn(i32): i32;"
+
+[[case]]
+name = "fn_type_unsafe_bare_extern"
+source = "type F = unsafe extern fn(): i32;"

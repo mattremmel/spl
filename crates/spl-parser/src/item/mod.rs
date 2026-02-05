@@ -75,7 +75,7 @@ fn inner_attribute(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseEr
 }
 
 /// Check if we're at a token that could start an item (for recovery).
-fn is_item_start(kind: SyntaxKind) -> bool {
+pub(crate) fn is_item_start(kind: SyntaxKind) -> bool {
     matches!(
         kind,
         SyntaxKind::FN_KW
@@ -104,20 +104,6 @@ fn is_item_start(kind: SyntaxKind) -> bool {
 /// - `const IDENT` = const def (item), `const fn` = item
 pub(crate) fn is_nested_item_start(kind: SyntaxKind, p: &mut Parser<'_>) -> bool {
     match kind {
-        // Unambiguous item starters
-        SyntaxKind::FN_KW
-        | SyntaxKind::STRUCT_KW
-        | SyntaxKind::ENUM_KW
-        | SyntaxKind::TRAIT_KW
-        | SyntaxKind::TYPE_KW
-        | SyntaxKind::IMPL_KW
-        | SyntaxKind::PUB_KW
-        | SyntaxKind::USE_KW
-        | SyntaxKind::EXTERN_KW
-        | SyntaxKind::MODULE_KW
-        | SyntaxKind::STATIC_KW
-        | SyntaxKind::GEN_KW => true,
-
         // `unsafe` can be item (unsafe fn/trait/impl) or expression (unsafe { ... })
         SyntaxKind::UNSAFE_KW => matches!(
             p.peek(1),
@@ -142,7 +128,8 @@ pub(crate) fn is_nested_item_start(kind: SyntaxKind, p: &mut Parser<'_>) -> bool
             }
         }
 
-        _ => false,
+        // All other unambiguous item starters
+        _ => is_item_start(kind),
     }
 }
 
@@ -361,6 +348,11 @@ pub(crate) fn function_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate:
 
     // Optional unsafe modifier
     p.eat(SyntaxKind::UNSAFE_KW);
+
+    // Optional extern modifier with optional ABI
+    if p.eat(SyntaxKind::EXTERN_KW) {
+        p.eat(SyntaxKind::STRING_LITERAL);
+    }
 
     // fn keyword
     if let Err(e) = p.expect(SyntaxKind::FN_KW) {
@@ -612,7 +604,9 @@ fn param_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> 
     p.parse_delimited_with_recovery(SyntaxKind::L_PAREN, SyntaxKind::R_PAREN, |p| {
         // Variadic: `...` (valid in extern fn declarations)
         if p.at(SyntaxKind::ELLIPSIS) {
+            let vm = p.start();
             p.bump();
+            vm.complete(p, SyntaxKind::VariadicParam);
             return Ok(());
         }
         param(p)?;
@@ -1649,7 +1643,18 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseEr
         Some(SyntaxKind::TRAIT_KW) => trait_def(p),
         Some(SyntaxKind::TYPE_KW) => type_alias(p),
         Some(SyntaxKind::IMPL_KW) if !has_pub => impl_block(p),
-        Some(SyntaxKind::EXTERN_KW) if !has_pub => extern_block(p),
+        Some(SyntaxKind::EXTERN_KW) => {
+            // Disambiguate: extern [ABI] { ... } vs extern [ABI] fn ...
+            let mut ext = lookahead + 1;
+            if p.peek(ext) == Some(SyntaxKind::STRING_LITERAL) {
+                ext += 1;
+            }
+            if p.peek(ext) == Some(SyntaxKind::L_BRACE) && !has_pub {
+                extern_block(p)
+            } else {
+                function_def(p)
+            }
+        }
         Some(SyntaxKind::USE_KW) => use_decl(p),
         Some(SyntaxKind::MODULE_KW) => module_def(p),
         Some(SyntaxKind::CONST_KW) => const_def(p),

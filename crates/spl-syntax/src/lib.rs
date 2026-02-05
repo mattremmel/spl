@@ -164,6 +164,7 @@ pub enum SyntaxKind {
     ParamList,
     Param,
     SelfParam,
+    VariadicParam,
     GenericParam,
     GenericParams,
     GenericArgs,

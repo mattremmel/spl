@@ -580,15 +580,15 @@ impl Drop for Marker {
 }
 
 /// A completed marker that can be used as a precede target.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct CompletedMarker {
     pos: usize,
-    #[allow(dead_code)]
     kind: SyntaxKind,
 }
 
 impl CompletedMarker {
     /// Returns the syntax kind of this completed node.
+    // Useful API for callers checking node kind after completion
     #[allow(dead_code)]
     pub fn kind(&self) -> SyntaxKind {
         self.kind

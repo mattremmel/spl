@@ -35,3 +35,27 @@ extern "C" {
     fn printf(fmt: i32, ...): i32
 }
 """
+
+[[case]]
+name = "extern_bare_block"
+source = """
+extern {
+    fn puts(s: i32): i32
+}
+"""
+
+[[case]]
+name = "extern_fn_def_no_abi"
+source = """
+extern fn my_callback(value: i32): i32 {
+    return value * 2
+}
+"""
+
+[[case]]
+name = "pub_extern_fn_def"
+source = """
+pub extern fn exported(x: i32): i32 {
+    x
+}
+"""

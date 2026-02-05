@@ -735,7 +735,7 @@ Extern blocks declare foreign functions. Extern function definitions create SPL 
 
 ```ebnf
 (* Declare foreign functions *)
-ExternBlock = "extern" AbiString "{" { ExternFnDecl } "}" ;
+ExternBlock = "extern" [ AbiString ] "{" { ExternFnDecl } "}" ;
 
 ExternFnDecl = "fn" IDENTIFIER "(" [ ExternParamList ] [ "," "..." ] ")" [ ":" Type ] [ ";" ] ;
 
@@ -744,11 +744,12 @@ ExternParamList = ExternParam { "," ExternParam } [ "," ] ;
 ExternParam = IDENTIFIER ":" Type ;
 
 (* Define SPL functions with C calling convention *)
-ExternFnDef = "extern" AbiString "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] Block ;
+ExternFnDef = "extern" [ AbiString ] "fn" IDENTIFIER "(" [ ParamList ] ")" [ ":" Type ] Block ;
 
 AbiString = STRING ;
 
-(* Note: Valid ABI strings are validated semantically. Currently supported: "C".
+(* Note: When ABI string is omitted, the default ABI is "C".
+   Valid ABI strings are validated semantically. Currently supported: "C".
    Future ABIs may include "system", "stdcall", etc. *)
 ```
 
@@ -762,14 +763,25 @@ extern "C" {
     fn variadic_fn(fmt: Ptr(T: u8), ...): i32
 }
 
+// Bare extern block (ABI defaults to "C")
+extern {
+    fn puts(s: i32): i32
+}
+
 // Define SPL function callable from C (outside extern block)
 #[no_mangle]
 extern "C" fn my_callback(value: i32): i32 {
     return value * 2
 }
 
+// Bare extern fn (ABI defaults to "C")
+extern fn my_other_callback(value: i32): i32 {
+    return value + 1
+}
+
 // Function pointer type for callbacks
 type Callback = extern "C" fn(i32): i32
+type BareCallback = extern fn(i32): i32
 ```
 
 **Notes:**
@@ -826,7 +838,7 @@ TupleTypeElement = [ IDENTIFIER ":" ] Type ;
    Note: Function types do not have throws clauses. The `throws` keyword in
    function definitions is syntactic sugar that desugars to a Result return type.
    For example, `fn foo(): String throws Error` has type `fn(): Result(T: String, E: Error)`. *)
-FnType = [ "unsafe" ] [ "extern" AbiString ] "fn" [ LifetimeParams ] "(" [ TypeList ] ")" [ ":" Type ] ;
+FnType = [ "unsafe" ] [ "extern" [ AbiString ] ] "fn" [ LifetimeParams ] "(" [ TypeList ] ")" [ ":" Type ] ;
 
 LifetimeParams = "(" Lifetime { "," Lifetime } [ "," ] ")" ;
 

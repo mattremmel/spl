@@ -24,6 +24,7 @@ ast_node!(ModuleDef);
 ast_node!(ParamList);
 ast_node!(Param);
 ast_node!(SelfParam);
+ast_node!(VariadicParam);
 ast_node!(GenericParam);
 ast_node!(GenericParams);
 ast_node!(GenericArgs);
@@ -32,6 +33,7 @@ ast_node!(FieldList);
 ast_node!(FieldDef);
 ast_node!(Name);
 ast_node!(NameRef);
+ast_node!(Lifetime);
 ast_node!(Visibility);
 ast_node!(WhereClause);
 ast_node!(ThrowsClause);
@@ -92,6 +94,16 @@ impl FunctionDef {
     /// Check if this function is marked `unsafe`.
     pub fn is_unsafe(&self) -> bool {
         token(&self.0, SyntaxKind::UNSAFE_KW).is_some()
+    }
+
+    /// Check if this function is marked `extern`.
+    pub fn is_extern(&self) -> bool {
+        token(&self.0, SyntaxKind::EXTERN_KW).is_some()
+    }
+
+    /// Get the ABI string (e.g., "C"), if present.
+    pub fn abi(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::STRING_LITERAL)
     }
 
     pub fn fn_kw(&self) -> Option<SyntaxToken> {
@@ -651,6 +663,12 @@ impl NameRef {
         token(&self.0, SyntaxKind::IDENT)
             .or_else(|| token(&self.0, SyntaxKind::SELF_VALUE_KW))
             .or_else(|| token(&self.0, SyntaxKind::SELF_TYPE_KW))
+    }
+}
+
+impl Lifetime {
+    pub fn ident_token(&self) -> Option<SyntaxToken> {
+        token(&self.0, SyntaxKind::IDENT)
     }
 }
 
