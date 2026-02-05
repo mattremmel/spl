@@ -286,3 +286,23 @@ source = "fn f() { -1..1 }"
 [[case]]
 name = "is_with_or_pattern_and_guard"
 source = "fn f() { x is .Some(v) && v > 0 }"
+
+[[case]]
+name = "is_with_literal_pattern"
+source = "fn f() { x is 42 }"
+
+[[case]]
+name = "is_with_slice_pattern"
+source = "fn f() { arr is [first, ...rest] }"
+
+[[case]]
+name = "is_with_reference_pattern"
+source = "fn f() { val is &x }"
+
+[[case]]
+name = "is_with_grouped_or_pattern"
+source = "fn f() { x is (1 | 2 | 3) }"
+
+[[case]]
+name = "is_with_negative_literal"
+source = "fn f() { x is -1 }"

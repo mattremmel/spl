@@ -230,3 +230,11 @@ enum Map {
     Empty,
 } where K: Hash + Eq, V, E: Debug
 """
+
+[[case]]
+name = "enum_variant_mixed_named_positional"
+source = "enum Mixed { V(x: i32, bool) }"
+
+[[case]]
+name = "enum_variant_pub_field"
+source = "enum Foo { Bar(pub x: i32) }"

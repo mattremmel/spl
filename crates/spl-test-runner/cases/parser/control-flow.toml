@@ -294,3 +294,15 @@ gen fn flatten(lists: [[i32]]): i32 {
     }
 }
 """
+
+[[case]]
+name = "for_ref_pattern"
+source = "fn f() { for &x in items {} }"
+
+[[case]]
+name = "for_mut_ref_pattern"
+source = "fn f() { for &mut x in items {} }"
+
+[[case]]
+name = "while_is_slice_pattern"
+source = "fn f() { while data is [first, ...rest] { process(first) } }"

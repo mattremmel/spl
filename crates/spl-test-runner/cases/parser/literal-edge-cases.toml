@@ -74,3 +74,31 @@ source = "fn f() { let x = 0.5 }"
 [[case]]
 name = "int_max_suffix"
 source = "fn f() { let x = 255u8; let y = 65535u16 }"
+
+[[case]]
+name = "unicode_escape"
+source = '''fn f() { let s = "\u{1F600}" }'''
+
+[[case]]
+name = "hex_escape"
+source = '''fn f() { let s = "\x41" }'''
+
+[[case]]
+name = "raw_string_with_hashes"
+source = '''fn f() { let s = r#"has "quotes""# }'''
+
+[[case]]
+name = "raw_byte_string"
+source = '''fn f() { let s = br"raw bytes" }'''
+
+[[case]]
+name = "byte_string_with_escape"
+source = '''fn f() { let s = b"data\x00" }'''
+
+[[case]]
+name = "float_exponent_negative"
+source = "fn f() { let x = 1.5e-10 }"
+
+[[case]]
+name = "float_exponent_only"
+source = "fn f() { let x = 1e10 }"

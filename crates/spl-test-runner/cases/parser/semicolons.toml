@@ -139,3 +139,17 @@ fn f() {
     y
 }
 """
+
+[[case]]
+name = "closures_same_line_with_semicolons"
+source = "fn f() { let a = |x| x + 1; let b = |y| y * 2; a(b(3)) }"
+
+[[case]]
+name = "match_in_let_with_semicolons"
+source = """
+fn f() {
+    let x = match val { 1 => "one", _ => "other" };
+    let y = x;
+    y
+}
+"""

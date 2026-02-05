@@ -324,3 +324,56 @@ fn collect_positive(items: Vec(T: i32)): Vec(T: i32) {
     items.filter(|x| x > 0).map(|x| x * 2).collect()
 }
 """
+
+[[case]]
+name = "ffi_with_safe_wrappers"
+source = """
+extern {
+    fn c_open(path: &u8, flags: i32): i32
+    fn c_read(fd: i32, buf: &mut u8, count: i32): i32
+    fn c_close(fd: i32): i32
+}
+
+struct File(fd: i32)
+
+impl File {
+    fn open(path: &str): File throws IoError {
+        let fd = unsafe { c_open(path, 0) }
+        if fd < 0 {
+            throw .IoError("failed to open")
+        }
+        File(fd: fd)
+    }
+
+    fn close(&mut self) {
+        unsafe { c_close(self.fd) }
+    }
+}
+"""
+
+[[case]]
+name = "generator_closures_patterns_combined"
+source = """
+gen fn transform(items: Vec(T: i32)): String {
+    let mapper = |x: i32| match x {
+        0 => "zero",
+        n if n > 0 => "positive",
+        _ => "negative",
+    }
+
+    for item in items {
+        if item is 0..=100 {
+            yield mapper(item)
+        }
+    }
+}
+
+fn use_generator() {
+    for label in transform([-1, 0, 50, 200]) {
+        match label {
+            "zero" | "negative" => continue,
+            s => print(s),
+        }
+    }
+}
+"""

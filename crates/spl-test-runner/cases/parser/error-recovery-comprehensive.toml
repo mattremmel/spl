@@ -195,3 +195,18 @@ source = "fn f(x: &dyn Clone) {}"
 name = "rust_impl_trait_in_param"
 expect_error = "expected"
 source = "fn f(x: impl Clone) {}"
+
+[[case]]
+name = "rust_async_fn_rejected"
+expect_error = "expected"
+source = "async fn foo() {}"
+
+[[case]]
+name = "const_gen_fn_rejected"
+expect_error = "expected"
+source = "const gen fn foo() {}"
+
+[[case]]
+name = "gen_gen_fn_duplicate"
+expect_error = "expected"
+source = "gen gen fn foo() {}"

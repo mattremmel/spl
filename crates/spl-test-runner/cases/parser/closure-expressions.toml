@@ -190,3 +190,23 @@ source = "fn f() { @[x: &mut x] || x }"
 [[case]]
 name = "closure_assigned_to_typed_binding"
 source = "fn f() { let c: fn(i32): i32 = |x| x + 1 }"
+
+[[case]]
+name = "closure_capture_typed_block"
+source = """
+fn f() {
+    @[data: &data] |x: i32, y: i32| {
+        let sum = x + y
+        data.push(sum)
+        sum
+    }
+}
+"""
+
+[[case]]
+name = "closure_as_return_value"
+source = "fn f() { return |x| x + 1 }"
+
+[[case]]
+name = "closure_in_array_literal"
+source = "fn f() { [|x| x + 1, |x| x * 2] }"
