@@ -249,5 +249,4 @@ source = "fn f() { x %= 1 }"
 
 [[case]]
 name = "assign_exp_eq"
-expect_error = "expected"
 source = "fn f() { x **= 2 }"

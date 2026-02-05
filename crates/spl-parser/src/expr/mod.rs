@@ -184,6 +184,7 @@ fn infix_bp(op: SyntaxKind) -> Option<(u8, u8)> {
         | SyntaxKind::PLUS_EQ
         | SyntaxKind::MINUS_EQ
         | SyntaxKind::STAR_EQ
+        | SyntaxKind::STAR_STAR_EQ
         | SyntaxKind::SLASH_EQ
         | SyntaxKind::PERCENT_EQ
         | SyntaxKind::PIPE_EQ

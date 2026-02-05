@@ -1089,7 +1089,7 @@ Expression = AssignmentExpr ;
 
 AssignmentExpr = CoalesceExpr [ AssignOp AssignmentExpr ] ;
 
-AssignOp = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" ;
+AssignOp = "=" | "+=" | "-=" | "*=" | "**=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" ;
 
 CoalesceExpr = OrExpr { "??" OrExpr } ;
 
