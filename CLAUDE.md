@@ -10,11 +10,20 @@ For detailed architecture, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Build & Test
 
+Always use `just` commands instead of running `cargo` directly.
+
 ```bash
-cargo build                    # Build all crates
-cargo test                     # Run all tests
-cargo clippy --all-targets -- -D warnings  # Lint (treat warnings as errors)
-cargo +nightly fmt             # Format (requires nightly)
+just build          # Build all crates
+just test           # Run all tests (unit + spec, across all crates)
+just spec-tests     # Run TOML spec tests only (spl-test-runner)
+just check          # Lint + all tests (full CI check)
+just lint           # Clippy with warnings as errors
+just fmt            # Format (requires nightly rustfmt)
+just fmt-check      # Check formatting without applying
+just parser-tests   # Run parser crate tests only
+just spec-file <name>  # Run a specific spec test file
+just test-serial    # Single-threaded tests (for debugging panics)
+just clean          # Clean build artifacts
 ```
 
 ## Architecture Overview
