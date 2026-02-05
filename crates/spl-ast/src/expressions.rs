@@ -126,7 +126,7 @@ impl ArrayExpr {
 ast_node!(StructUpdateBase);
 
 impl StructUpdateBase {
-    /// Get the base expression in `..base`
+    /// Get the base expression in `...base`
     pub fn expr(&self) -> Option<Expr> {
         child(&self.0)
     }
@@ -143,7 +143,7 @@ impl CallExpr {
         children(&self.0)
     }
 
-    /// Get the struct update base if present: `..base`
+    /// Get the struct update base if present: `...base`
     pub fn update_base(&self) -> Option<StructUpdateBase> {
         child(&self.0)
     }

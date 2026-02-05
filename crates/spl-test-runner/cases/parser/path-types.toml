@@ -82,3 +82,27 @@ impl Foo {
     fn wrap(&self): Option(T: Self) { .Some(self) }
 }
 """
+
+[[case]]
+name = "path_self_type_in_option"
+source = """
+impl Foo {
+    fn maybe(): Self? { .Some(Self(x: 1)) }
+}
+"""
+
+[[case]]
+name = "path_self_associated_optional"
+source = """
+impl Foo {
+    fn get(): Self.Output? { .None }
+}
+"""
+
+[[case]]
+name = "path_generic_trailing_comma"
+source = "fn f() { let x: Vec(T: i32,) = items }"
+
+[[case]]
+name = "path_multiple_shorthand"
+source = "fn f() { let x: Result(T, E) = val }"

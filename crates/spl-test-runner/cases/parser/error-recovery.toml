@@ -32,3 +32,27 @@ fn a() {}
 struct B()
 fn c() {}
 """
+
+[[case]]
+name = "trailing_junk_after_item"
+expect_error = "expected"
+source = "fn foo() {} !!!"
+
+[[case]]
+name = "nested_unclosed_parens"
+expect_error = "expected"
+source = "fn f() { foo((1, 2) }"
+
+[[case]]
+name = "keyword_as_identifier"
+expect_error = "expected"
+source = "fn f() { let fn = 1 }"
+
+[[case]]
+name = "recovery_multiple_errors"
+expect_error = "expected"
+source = """
+fn good1() {}
+struct {
+fn good2() {}
+"""

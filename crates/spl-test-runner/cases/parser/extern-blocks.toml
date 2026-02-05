@@ -139,3 +139,32 @@ extern "C" {
 [[case]]
 name = "extern_fn_def_all_features"
 source = """pub extern "C" fn callback(x: i32, y: i32): i32 { x + y }"""
+
+[[case]]
+name = "extern_link_attr"
+source = """
+#[link(name = "mylib")]
+extern "C" {
+    fn init(): i32
+}
+"""
+
+[[case]]
+name = "extern_fn_trailing_comma_params"
+source = """
+extern "C" {
+    fn process(a: i32, b: i32,): i32
+}
+"""
+
+[[case]]
+name = "extern_fn_def_no_mangle"
+source = """#[no_mangle] extern "C" fn callback(x: i32): i32 { x }"""
+
+[[case]]
+name = "extern_variadic_3_params"
+source = """
+extern "C" {
+    fn snprintf(buf: Ptr(T: u8), size: i32, fmt: Ptr(T: u8), ...): i32
+}
+"""

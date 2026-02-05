@@ -44,3 +44,32 @@ source = "fn f() { Point(x, y: y + 1) }"
 [[case]]
 name = "named_tuple_not_grouped"
 source = "fn f() { (x: 1) }"
+
+[[case]]
+name = "disambiguation_is_in_while"
+source = "fn f() { while x is .Some(v) { v } }"
+
+[[case]]
+name = "disambiguation_dollar_in_slice_both"
+source = "fn f() { arr[$-2:$-1] }"
+
+[[case]]
+name = "disambiguation_for_pattern_complex"
+source = "fn f() { for .Some(x) in items {} }"
+
+[[case]]
+name = "disambiguation_optional_chain_coalesce"
+source = """fn f() { x?.name ?? y?.name ?? "default" }"""
+
+[[case]]
+name = "disambiguation_match_block_then_expr_arm"
+source = """
+fn f() {
+    match x {
+        1 => {
+            do_something()
+        }
+        2 => "two",
+    }
+}
+"""

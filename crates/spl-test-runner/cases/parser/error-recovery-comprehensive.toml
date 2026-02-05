@@ -71,3 +71,57 @@ fn broken() {
 fn valid() {}
 """
 expect_error = "expected"
+
+[[case]]
+name = "missing_closing_bracket_array"
+source = """
+fn f() {
+    let x = [1, 2, 3
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "missing_match_arrow"
+source = """
+fn f() {
+    match x {
+        0 "zero",
+    }
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "invalid_type_annotation"
+source = """
+fn f() {
+    let x: = 1
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "missing_use_path"
+source = "use"
+expect_error = "expected"
+
+[[case]]
+name = "malformed_where_clause"
+source = "fn foo() where {}"
+expect_error = "expected"
+
+[[case]]
+name = "double_comma_in_struct"
+source = "struct Foo(x: i32,, y: i32)"
+expect_error = "expected"
+
+[[case]]
+name = "missing_impl_body"
+source = "impl Foo"
+expect_error = "expected"
+
+[[case]]
+name = "missing_trait_body"
+source = "trait Foo"
+expect_error = "expected"

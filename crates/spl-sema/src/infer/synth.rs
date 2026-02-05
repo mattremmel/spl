@@ -1512,7 +1512,7 @@ impl<'a> InferEngine<'a> {
             .collect();
         let field_map: FxHashMap<_, _> = instantiated_fields.iter().cloned().collect();
 
-        // Check for struct update syntax: ..base
+        // Check for struct update syntax: ...base
         let has_update_base = if let Some(update_base) = call.update_base() {
             if let Some(base_expr) = update_base.expr() {
                 let base_ty = self.synth_expr(&base_expr);

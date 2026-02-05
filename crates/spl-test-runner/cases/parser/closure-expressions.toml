@@ -123,3 +123,19 @@ source = "fn f() { || {} }"
 [[case]]
 name = "closure_in_method_chain_complex"
 source = "fn f() { items.map(|x| x * 2).filter(|x| x > 0).collect() }"
+
+[[case]]
+name = "closure_body_if_expr"
+source = "fn f() { |x| if x > 0 { x } else { 0 - x } }"
+
+[[case]]
+name = "closure_capture_trailing_comma"
+source = "fn f() { @[x, y,] || x + y }"
+
+[[case]]
+name = "closure_in_call_arg"
+source = "fn f() { items.map(|x| x * 2) }"
+
+[[case]]
+name = "closure_nested_captures"
+source = "fn f() { @[x] |y| @[x, y] |z| x + y + z }"

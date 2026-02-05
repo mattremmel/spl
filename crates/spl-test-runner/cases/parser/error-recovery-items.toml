@@ -60,3 +60,43 @@ source = """fn f() { let x = "unterminated }"""
 name = "double_return_type"
 expect_error = "expected"
 source = "fn foo(): i32: String {}"
+
+[[case]]
+name = "missing_struct_name"
+expect_error = "expected"
+source = "struct (x: i32)"
+
+[[case]]
+name = "missing_enum_name"
+expect_error = "expected"
+source = "enum { Red, Green }"
+
+[[case]]
+name = "missing_trait_name"
+expect_error = "expected"
+source = "trait { fn foo() }"
+
+[[case]]
+name = "missing_module_name"
+expect_error = "expected"
+source = "module {}"
+
+[[case]]
+name = "invalid_expr_in_fn_body"
+expect_error = "expected"
+source = """
+fn f() {
+    ### garbage
+    let x = 1
+}
+"""
+
+[[case]]
+name = "recovery_after_bad_trait_item"
+expect_error = "expected"
+source = """
+trait Foo {
+    @@@ bad
+    fn valid(): i32
+}
+"""

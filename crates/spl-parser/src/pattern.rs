@@ -75,8 +75,8 @@ fn single_pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
                 Err(err)
             }
         },
-        // Rest pattern: ..
-        DOT_DOT => Ok(rest_pat(p)),
+        // Rest pattern: ...
+        ELLIPSIS => Ok(rest_pat(p)),
         // Negative literal patterns: -1, -3.14
         MINUS => {
             if matches!(p.peek(1), Some(SyntaxKind::INT_LITERAL) | Some(SyntaxKind::FLOAT_LITERAL)) {
@@ -131,8 +131,8 @@ fn enum_shorthand_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError>
 fn parse_enum_variant_fields(p: &mut Parser<'_>) -> Result<(), ParseError> {
     p.expect(SyntaxKind::L_PAREN)?;
     p.parse_delimited(SyntaxKind::R_PAREN, |p| {
-        // Check for rest pattern `..`
-        if p.at(SyntaxKind::DOT_DOT) {
+        // Check for rest pattern `...`
+        if p.at(SyntaxKind::ELLIPSIS) {
             rest_pat(p);
             return Ok(());
         }
@@ -318,7 +318,7 @@ fn parse_enum_args(p: &mut Parser<'_>) -> Result<(), ParseError> {
     Ok(())
 }
 
-/// Parse a struct pattern: `Point(x: a, y: b)`, `Point(x, y)`, `Point(x, ..)`
+/// Parse a struct pattern: `Point(x: a, y: b)`, `Point(x, y)`, `Point(x, ...)`
 fn struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
     crate::path::path_no_generics(p)?; // Use Path for consistency (single-segment)
@@ -326,7 +326,7 @@ fn struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     Ok(m.complete(p, SyntaxKind::StructPat))
 }
 
-/// Parse struct pattern fields: `(x: a, y: b)`, `(x, y, ..)`
+/// Parse struct pattern fields: `(x: a, y: b)`, `(x, y, ...)`
 fn parse_struct_fields(p: &mut Parser<'_>) -> Result<(), ParseError> {
     p.expect(SyntaxKind::L_PAREN)?;
     p.parse_delimited(SyntaxKind::R_PAREN, |p| {
@@ -337,10 +337,10 @@ fn parse_struct_fields(p: &mut Parser<'_>) -> Result<(), ParseError> {
     Ok(())
 }
 
-/// Parse a struct pattern field: `x`, `x: pattern`, or `..`
+/// Parse a struct pattern field: `x`, `x: pattern`, or `...`
 fn struct_pat_field(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
-    // Check for rest pattern `..`
-    if p.at(SyntaxKind::DOT_DOT) {
+    // Check for rest pattern `...`
+    if p.at(SyntaxKind::ELLIPSIS) {
         return Ok(rest_pat(p));
     }
 
@@ -355,11 +355,11 @@ fn struct_pat_field(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     Ok(m.complete(p, SyntaxKind::StructPatField))
 }
 
-/// Parse a rest pattern: `..` or `..ident`
+/// Parse a rest pattern: `...` or `...ident`
 fn rest_pat(p: &mut Parser<'_>) -> CompletedMarker {
     let m = p.start();
-    p.bump(); // consume `..`
-    // Optional binding identifier: `..rest`
+    p.bump(); // consume `...`
+    // Optional binding identifier: `...rest`
     if p.at(SyntaxKind::IDENT)
         && p.current_text() != Some("_")
         && let Err(e) = crate::item::name(p)

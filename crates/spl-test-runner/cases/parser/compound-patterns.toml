@@ -23,7 +23,7 @@ name = "pat_slice_rest"
 source = """
 fn f() {
     match arr {
-        [first, ..rest] => first,
+        [first, ...rest] => first,
         _ => 0,
     }
 }
@@ -34,7 +34,7 @@ name = "pat_slice_rest_end"
 source = """
 fn f() {
     match arr {
-        [.., last] => last,
+        [..., last] => last,
         _ => 0,
     }
 }
@@ -67,7 +67,7 @@ name = "pat_struct_rest"
 source = """
 fn f() {
     match p {
-        Point(x, ..) => x,
+        Point(x, ...) => x,
         _ => 0,
     }
 }
@@ -119,7 +119,7 @@ name = "pat_slice_middle_rest"
 source = """
 fn f() {
     match arr {
-        [first, ..middle, last] => first + last,
+        [first, ...middle, last] => first + last,
         _ => 0,
     }
 }
@@ -152,7 +152,7 @@ name = "pat_enum_with_rest"
 source = """
 fn f() {
     match msg {
-        .Move(x, ..) => x,
+        .Move(x, ...) => x,
         _ => 0,
     }
 }
@@ -210,7 +210,7 @@ name = "pat_enum_shorthand_with_rest"
 source = """
 fn f() {
     match msg {
-        .Move(x, ..) => x,
+        .Move(x, ...) => x,
         _ => 0,
     }
 }
@@ -221,7 +221,7 @@ name = "pat_slice_empty_rest"
 source = """
 fn f() {
     match items {
-        [..] => "any",
+        [...] => "any",
     }
 }
 """
@@ -231,7 +231,7 @@ name = "pat_nested_deep"
 source = """
 fn f() {
     match data {
-        .Some((Point(x, _), [first, ..])) => x + first,
+        .Some((Point(x, _), [first, ...])) => x + first,
         _ => 0,
     }
 }
@@ -358,7 +358,132 @@ name = "pat_struct_with_multiple_rest"
 source = """
 fn f() {
     match p {
-        Point(x: a, ..) => a,
+        Point(x: a, ...) => a,
     }
 }
 """
+
+[[case]]
+name = "pat_or_enum_named_fields"
+source = """
+fn f() {
+    match msg {
+        .Move(x: a, ...) | .Resize(x: a, ...) => a,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_grouped_complex_or"
+source = """
+fn f() {
+    match x {
+        (.Some(1) | .Some(2)) => "match",
+        _ => "no",
+    }
+}
+"""
+
+[[case]]
+name = "pat_or_in_let"
+source = "fn f() { let .Some(x) | .Other(x) = val }"
+
+[[case]]
+name = "pat_nested_tuple_in_slice"
+source = """
+fn f() {
+    match items {
+        [(a, b), ...] => a + b,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_struct_full_path_with_rest"
+source = """
+fn f() {
+    match msg {
+        Message.Move(x, ...) => x,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_enum_shorthand_nested_or"
+source = """
+fn f() {
+    match x {
+        .Some(1 | 2 | 3) => "small",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "pat_slice_head_tail"
+source = """
+fn f() {
+    match arr {
+        [head, ..., tail] => head + tail,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_slice_single_element"
+source = """
+fn f() {
+    match arr {
+        [only] => only,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_ref_nested"
+source = "fn f() { let &(a, b) = ref_pair }"
+
+[[case]]
+name = "pat_ref_mut_nested"
+source = "fn f() { let &mut (a, b) = ref_pair }"
+
+[[case]]
+name = "pat_triple_nested"
+source = """
+fn f() {
+    match x {
+        .Some(.Inner(Point(x: x, y: _))) => x,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_or_three_variants"
+source = """
+fn f() {
+    match msg {
+        .Quit | .Close | .Disconnect => true,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "pat_struct_all_renamed"
+source = """
+fn f() {
+    match p {
+        Point(x: px, y: py) => px + py,
+    }
+}
+"""
+
+[[case]]
+name = "pat_for_tuple_destructure"
+source = "fn f() { for (key, value) in map.entries() {} }"

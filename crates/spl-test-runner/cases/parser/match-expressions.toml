@@ -318,3 +318,87 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "match_reference_pattern"
+source = "fn f() { match r { &x => x } }"
+
+[[case]]
+name = "match_slice_pattern"
+source = """
+fn f() {
+    match arr {
+        [first, ...rest] => first,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_nested_or_pattern"
+source = """
+fn f() {
+    match pair {
+        (1 | 2, 3 | 4) => true,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "match_grouped_or_pattern"
+source = """
+fn f() {
+    match x {
+        (1 | 2 | 3) => "small",
+        _ => "big",
+    }
+}
+"""
+
+[[case]]
+name = "match_guard_with_or"
+source = """
+fn f() {
+    match n {
+        x if x > 0 || x == -1 => true,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "match_range_char_inclusive"
+source = """
+fn f() {
+    match c {
+        'a'..='z' => "lower",
+        'A'..='Z' => "upper",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "match_on_tuple"
+source = """
+fn f() {
+    match (a, b, c) {
+        (1, 2, 3) => "exact",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "match_block_arm_no_comma"
+source = """
+fn f() {
+    match x {
+        1 => {
+            do_something()
+        }
+        2 => "two",
+    }
+}
+"""

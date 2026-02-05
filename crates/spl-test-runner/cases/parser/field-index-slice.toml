@@ -110,3 +110,43 @@ source = "fn f() { obj.get()! }"
 [[case]]
 name = "slice_nested"
 source = "fn f() { matrix[0][1:3] }"
+
+[[case]]
+name = "dollar_alone_in_index"
+source = "fn f() { arr[$] }"
+
+[[case]]
+name = "slice_dollar_start"
+source = "fn f() { arr[$-2:$] }"
+
+[[case]]
+name = "slice_dollar_both_minus"
+source = "fn f() { arr[$-3:$-1] }"
+
+[[case]]
+name = "optional_chain_then_field_then_method"
+source = "fn f() { a?.b.c() }"
+
+[[case]]
+name = "try_then_field"
+source = "fn f() { x!.field }"
+
+[[case]]
+name = "try_then_method"
+source = "fn f() { x!.method() }"
+
+[[case]]
+name = "index_then_field"
+source = "fn f() { arr[0].field }"
+
+[[case]]
+name = "field_then_try"
+source = "fn f() { obj.result! }"
+
+[[case]]
+name = "method_chain_with_optional"
+source = "fn f() { a.b()?.c.d()?.e }"
+
+[[case]]
+name = "slice_from_dollar_minus"
+source = "fn f() { arr[$-3:] }"

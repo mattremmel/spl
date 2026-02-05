@@ -74,3 +74,19 @@ source = "fn f(x: fn(fn(i32): i32): bool) {}"
 [[case]]
 name = "fn_type_unsafe_extern_combo"
 source = "fn f(x: unsafe extern \"C\" fn(i32): i32) {}"
+
+[[case]]
+name = "fn_type_ref_return"
+source = "fn f(cb: fn(&i32): &i32) {}"
+
+[[case]]
+name = "fn_type_optional_param"
+source = "fn f(cb: fn(i32?): bool) {}"
+
+[[case]]
+name = "fn_type_as_generic_arg"
+source = "fn f() { let x: Vec(T: fn(i32): bool) = items }"
+
+[[case]]
+name = "fn_type_tuple_return"
+source = "fn f(cb: fn(i32): (i32, bool)) {}"

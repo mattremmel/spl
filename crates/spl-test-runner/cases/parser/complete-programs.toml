@@ -210,7 +210,7 @@ source = """
 fn process(msg: Message) {
     match msg {
         .Text(content) if content.len() > 0 => handle_text(content),
-        .Binary(data, ..) => handle_binary(data),
+        .Binary(data, ...) => handle_binary(data),
         .Close | .Error(_) => disconnect(),
         _ => {},
     }

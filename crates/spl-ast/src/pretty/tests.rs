@@ -561,7 +561,7 @@ mod expressions {
     #[test]
     fn struct_expr_update() {
         check(
-            "fn main() { Point(x: 1, ..other) }",
+            "fn main() { Point(x: 1, ...other) }",
             &expect![[r#"
                 SourceFile
                   FunctionDef "main"

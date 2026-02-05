@@ -218,3 +218,47 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "pat_negative_range"
+source = """
+fn f() {
+    match x {
+        -10..10 => "near zero",
+        _ => "far",
+    }
+}
+"""
+
+[[case]]
+name = "pat_float_range"
+source = """
+fn f() {
+    match x {
+        0.0..1.0 => "unit",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "pat_negative_float_range"
+source = """
+fn f() {
+    match x {
+        -1.0..=1.0 => "normalized",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_const_path_qualified"
+source = """
+fn f() {
+    match x {
+        bounds.MIN..=bounds.MAX => true,
+        _ => false,
+    }
+}
+"""

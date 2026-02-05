@@ -1128,7 +1128,7 @@ fn struct_field_shorthand() {
 #[test]
 fn struct_update_syntax() {
     check(
-        "struct S(a: i32, b: i32) fn main() { let s = S(a: 1, b: 2); let x = S(a: 3, ..s); }",
+        "struct S(a: i32, b: i32) fn main() { let s = S(a: 1, b: 2); let x = S(a: 3, ...s); }",
         "S",
     );
 }
@@ -4465,7 +4465,7 @@ fn struct_pattern_with_rest() {
         struct Point(x: i32, y: i32, z: i32)
         fn make(): Point { Point(x: 1, y: 2, z: 3) }
         fn main() {
-            let Point(x: x, ..) = make();
+            let Point(x: x, ...) = make();
         }
         "#,
         "i32",
@@ -4810,7 +4810,7 @@ fn rest_pattern_in_nested_tuple() {
         r#"
         fn main() {
             let outer = ((1, 2, 3), true);
-            let ((a, ..), flag) = outer;
+            let ((a, ...), flag) = outer;
         }
         "#,
         "bool",
@@ -4826,7 +4826,7 @@ fn rest_pattern_in_nested_struct() {
         struct Outer(inner: Inner, flag: bool)
         fn make(): Outer { Outer(inner: Inner(a: 1, b: 2, c: 3), flag: true) }
         fn main() {
-            let Outer(inner: Inner(a: x, ..), flag: f) = make();
+            let Outer(inner: Inner(a: x, ...), flag: f) = make();
         }
         "#,
         "bool",
@@ -4841,7 +4841,7 @@ fn rest_pattern_multiple_levels() {
         struct Point(x: i32, y: i32, z: i32)
         fn main() {
             let points = (Point(x: 1, y: 2, z: 3), Point(x: 4, y: 5, z: 6));
-            let (Point(x: x1, ..), ..) = points;
+            let (Point(x: x1, ...), ...) = points;
         }
         "#,
         "i32",

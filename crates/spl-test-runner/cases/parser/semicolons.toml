@@ -1,0 +1,47 @@
+[section]
+id = "stmt.semicolons"
+spec_chapter = "3"
+name = "Semicolons"
+
+[[case]]
+name = "semicolon_optional_at_end_of_line"
+source = """
+fn f() {
+    let x = 1
+    let y = 2
+    x + y
+}
+"""
+
+[[case]]
+name = "semicolon_required_same_line"
+source = "fn f() { let x = 1; let y = 2; x + y }"
+
+[[case]]
+name = "semicolon_after_block_expr_optional"
+source = """
+fn f() {
+    if true { 1 } else { 2 }
+    while false {}
+    for x in items {}
+}
+"""
+
+[[case]]
+name = "semicolon_after_const"
+source = "const X: i32 = 42;"
+
+[[case]]
+name = "semicolon_newline_no_semi"
+source = """
+fn f() {
+    let a = 1
+    let b = 2
+    let c = 3
+    a + b + c
+}
+"""
+
+[[case]]
+name = "semicolon_multiple_same_line"
+source = "fn f() { let a = 1; let b = 2; let c = 3; a + b + c }"

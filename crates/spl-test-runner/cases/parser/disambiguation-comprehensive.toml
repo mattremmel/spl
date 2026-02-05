@@ -113,8 +113,55 @@ source = "fn f(): Option(T: i32) { return .Some(42) }"
 
 [[case]]
 name = "disambiguation_struct_update"
-source = "fn f() { Point(x: 1, ..default) }"
+source = "fn f() { Point(x: 1, ...default) }"
 
 [[case]]
 name = "disambiguation_char_vs_label"
 source = "fn f() { let x = 'a'; 'b: loop { break 'b } }"
+
+[[case]]
+name = "disambiguation_numeric_method"
+source = "fn f() { 42.method() }"
+
+[[case]]
+name = "disambiguation_negative_literal_pattern"
+source = """
+fn f() {
+    match x {
+        -1 => "neg",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "disambiguation_label_vs_char_in_block"
+source = "fn f() { let x = 'a'; 'b: loop { break 'b } }"
+
+[[case]]
+name = "disambiguation_type_expr_standalone"
+source = "fn f() { let v = Vec(T: i32) }"
+
+[[case]]
+name = "disambiguation_closure_vs_logical_or"
+source = "fn f() { let a = || 42; let b = x || y }"
+
+[[case]]
+name = "disambiguation_grouped_vs_single_named"
+source = "fn f() { let a = (x + 1); let b = (x: 1) }"
+
+[[case]]
+name = "disambiguation_struct_spread_vs_range"
+source = "fn f() { let a = Point(x: 1, ...base); let b = 0..10 }"
+
+[[case]]
+name = "disambiguation_ref_type_vs_ref_expr"
+source = "fn f() { let x: &i32 = &y }"
+
+[[case]]
+name = "disambiguation_path_expr_vs_type_path"
+source = "fn f() { let x: std.io.Error = std.io.Error.new() }"
+
+[[case]]
+name = "disambiguation_multi_type_arg_call"
+source = "fn f() { convert(From: i32, To: f64, value: 100) }"

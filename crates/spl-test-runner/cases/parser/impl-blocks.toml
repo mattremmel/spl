@@ -209,3 +209,29 @@ impl Config {
     const fn default(): Config { Config(value: 0) }
 }
 """
+
+[[case]]
+name = "impl_trait_with_assoc_type"
+source = """
+impl Iterator for MyIter {
+    type Item = i32
+    fn next(&mut self): Self.Item? { .None }
+}
+"""
+
+[[case]]
+name = "impl_attributed"
+source = """
+#[derive(Clone)]
+impl Foo {
+    fn new(): Self { Self(x: 0) }
+}
+"""
+
+[[case]]
+name = "impl_generic_trait_for_generic_type"
+source = """
+impl From(T: String) for MyType {
+    fn from(s: String): Self { Self(value: s) }
+}
+"""

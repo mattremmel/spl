@@ -408,7 +408,7 @@ pub(super) fn path_expr_only(
 /// - Named: `name: value`
 /// - Positional: just `value`
 ///
-/// Struct update syntax `..base` is also supported for struct instantiation.
+/// Struct update syntax `...base` is also supported for struct instantiation.
 pub(super) fn call_expr_rest(
     p: &mut Parser<'_>,
     m: Marker,
@@ -419,8 +419,8 @@ pub(super) fn call_expr_rest(
     }
 
     while !p.at(SyntaxKind::R_PAREN) && p.current().is_some() {
-        // Check for struct update syntax: ..base
-        if p.at(SyntaxKind::DOT_DOT) {
+        // Check for struct update syntax: ...base
+        if p.at(SyntaxKind::ELLIPSIS) {
             if let Err(e) = struct_update_base(p) {
                 m.abandon(p);
                 return Err(e);
@@ -445,10 +445,10 @@ pub(super) fn call_expr_rest(
     Ok(Some(m.complete(p, SyntaxKind::CallExpr)))
 }
 
-/// Parse struct update base: ..expr
+/// Parse struct update base: ...expr
 fn struct_update_base(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
-    if let Err(e) = p.expect(SyntaxKind::DOT_DOT) {
+    if let Err(e) = p.expect(SyntaxKind::ELLIPSIS) {
         m.abandon(p);
         return Err(e);
     }

@@ -78,3 +78,23 @@ source = "fn f(x: &mut &mut i32) {}"
 [[case]]
 name = "ref_triple_nested"
 source = "fn f(x: &&&i32) {}"
+
+[[case]]
+name = "ref_to_self"
+source = """
+impl Foo {
+    fn borrow(&self): &Self {}
+}
+"""
+
+[[case]]
+name = "ref_to_path_type"
+source = "fn f(r: &std.io.Reader) {}"
+
+[[case]]
+name = "ref_mut_to_generic"
+source = "fn f(v: &mut Vec(T: i32)) {}"
+
+[[case]]
+name = "ref_lifetime_to_slice"
+source = "fn f(s: &'a [i32]) {}"

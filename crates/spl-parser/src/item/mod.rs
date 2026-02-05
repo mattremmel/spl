@@ -1766,10 +1766,16 @@ pub(crate) fn module_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::P
     opt_visibility(p);
 
     // module keyword
-    p.expect(SyntaxKind::MODULE_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::MODULE_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Module name
-    name(p)?;
+    if let Err(e) = name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Either a block body or a semicolon (module reference)
     if p.at(SyntaxKind::L_BRACE) {
@@ -1786,7 +1792,10 @@ pub(crate) fn module_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::P
             }
         }
 
-        p.expect(SyntaxKind::R_BRACE)?;
+        if let Err(e) = p.expect(SyntaxKind::R_BRACE) {
+            m.abandon(p);
+            return Err(e);
+        }
     } else {
         // Module reference: `module name;`
         stmt::eat_optional_semicolon(p);

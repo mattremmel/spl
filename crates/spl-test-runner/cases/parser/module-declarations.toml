@@ -122,3 +122,22 @@ module foo {
     fn bar() {}
 }
 """
+
+[[case]]
+name = "module_with_type_alias"
+source = """
+module types {
+    type Id = i32
+    type Name = String
+}
+"""
+
+[[case]]
+name = "module_with_extern"
+source = """
+module ffi {
+    extern "C" {
+        fn malloc(size: i32): Ptr(T: u8)
+    }
+}
+"""

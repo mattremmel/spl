@@ -1262,7 +1262,7 @@ StructExpr = StructExprPath "(" [ StructArgList ] ")" ;
 
 StructExprPath = TypePath ;
 
-StructArgList = StructArg { "," StructArg } [ "," ] ;
+StructArgList = StructArg { "," StructArg } [ "," ] [ "..." Expression ] ;
 
 (* Case-based disambiguation (see EBNF Notation section):
    - UPPER_IDENT (starts A-Z) → type argument
@@ -1270,6 +1270,10 @@ StructArgList = StructArg { "," StructArg } [ "," ] ;
    This is a hard rule; no backtracking occurs. *)
 StructArg = UPPER_IDENT [ ":" Type ]           (* type argument: T: Type or T shorthand *)
           | LOWER_IDENT [ ":" Expression ] ;   (* value field: name: expr or name shorthand *)
+
+(* Struct update base: spread remaining fields from another expression.
+   Uses "..." (ellipsis) to avoid ambiguity with ".." (range) syntax. *)
+StructUpdateBase = "..." Expression ;
 
 (* Match expression *)
 MatchExpr = "match" Expression "{" { MatchArm } "}" ;
@@ -1592,14 +1596,14 @@ SlicePattern = "[" [ SlicePatternElement { "," SlicePatternElement } [ "," ] ] "
 
 SlicePatternElement = RestPattern | Pattern ;
 
-RestPattern = ".." [ IDENTIFIER ] ;
+RestPattern = "..." [ IDENTIFIER ] ;
 
 (* Struct patterns use parentheses *)
 StructPattern = StructPatternPath "(" [ StructPatternFields ] ")" ;
 
 StructPatternPath = TypePath ;
 
-StructPatternFields = StructPatternField { "," StructPatternField } [ "," ] [ ".." ] ;
+StructPatternFields = StructPatternField { "," StructPatternField } [ "," ] [ "..." ] ;
 
 (* Field with optional pattern binding *)
 StructPatternField = IDENTIFIER [ ":" Pattern ] ;
@@ -1616,7 +1620,7 @@ EnumShorthandPattern = "." UPPER_IDENT [ "(" [ EnumPatternFields ] ")" ] ;
 (* Note: Enum variants must start with an uppercase letter (PascalCase convention). *)
 
 (* Pattern fields for enum variants *)
-EnumPatternFields = EnumPatternField { "," EnumPatternField } [ "," ] [ ".." ] ;
+EnumPatternFields = EnumPatternField { "," EnumPatternField } [ "," ] [ "..." ] ;
 
 (* Named field (struct-style variant) or plain pattern (tuple-style or shorthand) *)
 (* SEMANTIC NOTE: When the Pattern alternative is an IdentifierPattern (e.g., `x`),

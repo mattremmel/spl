@@ -66,3 +66,23 @@ source = "fn f() { let x: Vec(T: i32) }"
 [[case]]
 name = "let_or_pattern"
 source = "fn f() { let (1 | 2 | 3) = val }"
+
+[[case]]
+name = "let_slice_pattern"
+source = "fn f() { let [first, ...rest] = arr }"
+
+[[case]]
+name = "let_wildcard"
+source = "fn f() { let _ = compute() }"
+
+[[case]]
+name = "let_optional_type"
+source = "fn f() { let x: i32? = .Some(42) }"
+
+[[case]]
+name = "let_generic_type"
+source = "fn f() { let x: HashMap(K: String, V: i32) = items }"
+
+[[case]]
+name = "let_ref_mut_pattern"
+source = "fn f() { let &mut x = ref_val }"

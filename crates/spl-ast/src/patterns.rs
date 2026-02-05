@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn struct_pat_with_rest() {
-        let pat: StructPat = parse_pat("fn main() { let Point(x: x, ..) = p; }");
+        let pat: StructPat = parse_pat("fn main() { let Point(x: x, ...) = p; }");
         assert!(pat.path().is_some());
         assert_eq!(pat.fields().count(), 1);
         assert!(pat.rest().is_some());

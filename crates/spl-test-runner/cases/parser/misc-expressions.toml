@@ -194,3 +194,51 @@ source = "fn f() { x **= 2 }"
 [[case]]
 name = "nested_optional_chaining"
 source = "fn f() { a?.b?.c?.d }"
+
+[[case]]
+name = "optional_chain_then_try"
+source = "fn f() { x?.value! }"
+
+[[case]]
+name = "optional_chain_method_then_try"
+source = "fn f() { x?.get()! }"
+
+[[case]]
+name = "coalesce_with_optional_chain"
+source = """fn f() { x?.name ?? "default" }"""
+
+[[case]]
+name = "try_on_method_chain"
+source = "fn f() { a.b().c()! }"
+
+[[case]]
+name = "range_in_for_inclusive"
+source = "fn f() { for i in 0..=5 {} }"
+
+[[case]]
+name = "range_prefix_to_inclusive"
+source = "fn f() { ..=5 }"
+
+[[case]]
+name = "range_from_expr"
+source = "fn f() { let r = x + 1.. }"
+
+[[case]]
+name = "enum_shorthand_unit_no_parens"
+source = "fn f() { let x = .None }"
+
+[[case]]
+name = "enum_shorthand_nested_args"
+source = "fn f() { .Ok(.Some(42)) }"
+
+[[case]]
+name = "is_with_struct_pattern"
+source = "fn f() { if p is Point(x: x, y: y) { x + y } }"
+
+[[case]]
+name = "is_with_wildcard"
+source = "fn f() { if x is _ { 1 } }"
+
+[[case]]
+name = "unsafe_block_with_value"
+source = "fn f() { let x = unsafe { ptr.read() } }"

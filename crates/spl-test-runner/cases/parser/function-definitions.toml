@@ -278,3 +278,25 @@ source = """fn connect(to host: String = "localhost", on port: i32 = 8080) {}"""
 [[case]]
 name = "fn_nested_generic_return"
 source = "fn wrap(x: T): Option(T: Vec(T: T)) where T { .Some(Vec.new()) }"
+
+[[case]]
+name = "fn_pub_unsafe"
+source = "pub unsafe fn danger(): i32 { 0 }"
+
+[[case]]
+name = "fn_where_trailing_comma"
+source = "fn f(x: T) where T: Clone, {}"
+
+[[case]]
+name = "fn_param_mut_with_type"
+expect_error = "expected"
+source = "fn f(mut x: i32) {}"
+
+[[case]]
+name = "fn_label_underscore_with_default"
+source = "fn f(_ x: i32 = 0) { x }"
+
+[[case]]
+name = "fn_no_body_error"
+expect_error = "expected"
+source = "fn foo(): i32"

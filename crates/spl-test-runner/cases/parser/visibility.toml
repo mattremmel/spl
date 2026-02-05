@@ -50,3 +50,15 @@ source = "struct Foo(pub($.internal) x: i32)"
 [[case]]
 name = "vis_pub_static_mut"
 source = "pub static mut COUNTER: i32 = 0"
+
+[[case]]
+name = "pub_const"
+source = "pub const MAX: i32 = 100"
+
+[[case]]
+name = "pub_enum"
+source = "pub enum Color { Red, Green, Blue }"
+
+[[case]]
+name = "pub_type_alias"
+source = "pub type Result(T) = i32"

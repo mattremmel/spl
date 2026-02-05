@@ -42,3 +42,23 @@ source = "fn f(x: &i32?) {}"
 [[case]]
 name = "never_in_result"
 source = "fn f(x: Result(T: i32, E: Never)) {}"
+
+[[case]]
+name = "optional_nested"
+source = "fn f() { let x: Option(T: i32)? = .Some(.Some(1)) }"
+
+[[case]]
+name = "optional_ref_to_optional"
+source = "fn f() { let x: &String? = r }"
+
+[[case]]
+name = "optional_fn_type"
+source = "fn f() { let x: fn(i32): bool? = cb }"
+
+[[case]]
+name = "optional_path_type"
+source = "fn f() { let x: std.io.Result? = r }"
+
+[[case]]
+name = "never_in_fn_return"
+source = "fn abort(): Never { loop {} }"

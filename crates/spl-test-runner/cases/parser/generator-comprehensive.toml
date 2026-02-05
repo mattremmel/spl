@@ -99,3 +99,28 @@ name = "gen_fn_empty_body"
 source = """
 gen fn empty(): i32 {}
 """
+
+[[case]]
+name = "gen_fn_attr"
+source = "#[inline] gen fn items(): i32 { yield 1; yield 2 }"
+
+[[case]]
+name = "gen_fn_throw_and_yield"
+source = """
+gen fn items(): i32 throws Error {
+    yield 1;
+    throw .ParseError
+}
+"""
+
+[[case]]
+name = "gen_fn_where_bounds"
+source = "gen fn items(list: T): T where T: Clone { yield list }"
+
+[[case]]
+name = "gen_fn_default_and_label"
+source = "gen fn items(_ x: i32 = 0): i32 { yield x }"
+
+[[case]]
+name = "gen_fn_no_return_type"
+source = "gen fn items() { yield 1 }"

@@ -57,11 +57,11 @@ source = "fn f() { Point(x, y) }"
 
 [[case]]
 name = "call_struct_update"
-source = "fn f() { Point(x: 1, ..base) }"
+source = "fn f() { Point(x: 1, ...base) }"
 
 [[case]]
 name = "call_struct_update_only"
-source = "fn f() { Point(..other) }"
+source = "fn f() { Point(...other) }"
 
 [[case]]
 name = "call_method_type_arg_collect"
@@ -74,3 +74,27 @@ source = "fn f() { Outer(inner: Inner(x: 1)) }"
 [[case]]
 name = "call_empty_args"
 source = "fn f() { foo() }"
+
+[[case]]
+name = "call_method_with_type_arg"
+source = "fn f() { list.collect(T: Vec(T: i32)) }"
+
+[[case]]
+name = "call_multiple_type_and_positional"
+source = "fn f() { foo(T: i32, 42, 43) }"
+
+[[case]]
+name = "call_struct_mixed_shorthand_explicit"
+source = "fn f() { Point(x, y: y + 1) }"
+
+[[case]]
+name = "call_type_expr_chain"
+source = "fn f() { Vec(T: i32).with_capacity(10).push(42) }"
+
+[[case]]
+name = "call_struct_only_shorthand"
+source = "fn f() { Point(x, y) }"
+
+[[case]]
+name = "call_generic_in_generic"
+source = "fn f() { Box(T: Vec(T: i32), value: Vec.new()) }"

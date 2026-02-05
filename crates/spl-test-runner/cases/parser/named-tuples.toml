@@ -48,3 +48,19 @@ source = "fn f(p: (items: Vec(T: i32), count: i32)) {}"
 [[case]]
 name = "named_tuple_as_param_and_return"
 source = "fn f(p: (x: i32, y: i32)): (sum: i32, product: i32) {}"
+
+[[case]]
+name = "named_tuple_trailing_comma"
+source = "fn f() { let x: (x: i32, y: i32,) = val }"
+
+[[case]]
+name = "named_tuple_ref_field"
+source = "fn f() { let x: (x: &i32, y: &mut i32) = val }"
+
+[[case]]
+name = "named_tuple_nested"
+source = "fn f() { let x: (pos: (x: f64, y: f64), color: i32) = val }"
+
+[[case]]
+name = "named_tuple_single_named"
+source = "fn f() { let x: (value: i32) = val }"

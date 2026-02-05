@@ -119,3 +119,52 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "block_single_expr_value"
+source = "fn f() { let x = { 42 } }"
+
+[[case]]
+name = "block_multi_stmt_no_value"
+source = """
+fn f() {
+    {
+        let a = 1
+        let b = 2
+    }
+}
+"""
+
+[[case]]
+name = "block_multi_stmt_break_value"
+source = "fn f() { let x = 'a: { break 'a 42 } }"
+
+[[case]]
+name = "block_semicolons_same_line"
+source = "fn f() { let a = 1; let b = 2; a + b }"
+
+[[case]]
+name = "block_if_no_semicolon"
+source = """
+fn f() {
+    if true { do_something() }
+    let x = 1
+}
+"""
+
+[[case]]
+name = "block_nested_fn"
+source = """
+fn f() {
+    fn inner(): i32 { 42 }
+    inner()
+}
+"""
+
+[[case]]
+name = "block_nested_module"
+source = """
+fn f() {
+    module inner {}
+}
+"""

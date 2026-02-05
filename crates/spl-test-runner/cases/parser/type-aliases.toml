@@ -89,3 +89,19 @@ source = "type Pair(T) = (T, T) where T"
 [[case]]
 name = "type_alias_slice_type"
 source = "type IntSlice = [i32]"
+
+[[case]]
+name = "type_alias_array_type"
+source = "type IntArray = [i32; 10]"
+
+[[case]]
+name = "type_alias_fn_type_extern"
+source = """type Callback = extern "C" fn(i32): i32"""
+
+[[case]]
+name = "type_alias_generic_trailing"
+source = "type Map(K, V,) = i32"
+
+[[case]]
+name = "type_alias_never_type"
+source = "type Bottom = Never"
