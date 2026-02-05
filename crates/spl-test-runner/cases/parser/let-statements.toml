@@ -86,3 +86,39 @@ source = "fn f() { let x: HashMap(K: String, V: i32) = items }"
 [[case]]
 name = "let_ref_mut_pattern"
 source = "fn f() { let &mut x = ref_val }"
+
+[[case]]
+name = "let_or_pattern_enum"
+source = "fn f() { let .Some(x) | .Other(x) = val }"
+
+[[case]]
+name = "let_grouped_pattern"
+source = "fn f() { let (1 | 2 | 3) = val }"
+
+[[case]]
+name = "let_ref_with_type"
+source = "fn f() { let &x: &i32 = &val }"
+
+[[case]]
+name = "let_nested_enum_tuple_slice"
+source = "fn f() { let .Some((x, [first, ...rest])) = val }"
+
+[[case]]
+name = "let_struct_pattern_with_rest"
+source = "fn f() { let Point(x, ...) = p }"
+
+[[case]]
+name = "let_tuple_three"
+source = "fn f() { let (a, b, c) = triple }"
+
+[[case]]
+name = "let_empty_tuple"
+source = "fn f() { let () = unit_val }"
+
+[[case]]
+name = "let_complex_type_annotation"
+source = "fn f() { let x: HashMap(K: String, V: Vec(T: i32)) = items }"
+
+[[case]]
+name = "let_fn_type"
+source = "fn f() { let cb: fn(i32): bool = is_positive }"

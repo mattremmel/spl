@@ -45,3 +45,37 @@ fn f() {
 [[case]]
 name = "semicolon_multiple_same_line"
 source = "fn f() { let a = 1; let b = 2; let c = 3; a + b + c }"
+
+[[case]]
+name = "semicolon_after_block_expr_same_line"
+source = "fn f() { if true { 1 } else { 2 }; let x = 3 }"
+
+[[case]]
+name = "semicolon_after_match"
+source = """
+fn f() {
+    match x { _ => 0 };
+    let y = 1
+}
+"""
+
+[[case]]
+name = "semicolon_trailing_in_block"
+source = "fn f() { let x = 1; }"
+
+[[case]]
+name = "semicolon_after_item_in_block"
+source = """
+fn f() {
+    struct Inner(x: i32);
+    fn helper(): i32 { 0 }
+}
+"""
+
+[[case]]
+name = "no_semicolon_between_items"
+source = """
+fn a() {}
+fn b() {}
+struct C()
+"""

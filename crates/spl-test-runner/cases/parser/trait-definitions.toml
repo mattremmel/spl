@@ -259,3 +259,81 @@ trait Dangerous {
     unsafe fn risky(&self): i32 throws Error
 }
 """
+
+[[case]]
+name = "trait_assoc_type_with_default_value"
+ignore = true  # Parser does not yet support `= Type` default on associated types
+source = """
+trait HasDefault {
+    type Item = i32
+}
+"""
+
+[[case]]
+name = "trait_only_assoc_types"
+source = """
+trait TypesOnly {
+    type Input
+    type Output
+    type Error
+}
+"""
+
+[[case]]
+name = "trait_method_throws_where_combined"
+source = """
+trait Converter {
+    fn convert(&self, input: T): U throws ConvertError where T: Clone, U
+}
+"""
+
+[[case]]
+name = "trait_multiple_supertraits_with_generics"
+source = """
+trait Complex: Add(RHS: Self) + Sub(RHS: Self) + Clone {
+    fn zero(): Self
+}
+"""
+
+[[case]]
+name = "trait_method_with_default_params"
+source = """
+trait Logger {
+    fn log(&self, message: String, level: i32 = 0)
+}
+"""
+
+[[case]]
+name = "trait_method_returning_optional"
+source = """
+trait Lookup {
+    fn find(&self, key: String): i32?
+}
+"""
+
+[[case]]
+name = "trait_method_with_labeled_params"
+source = """
+trait Sendable {
+    fn send(&self, to recipient: String, message: String)
+}
+"""
+
+[[case]]
+name = "trait_pub_assoc_type"
+source = """
+trait Foo {
+    pub type Output: Clone
+}
+"""
+
+[[case]]
+name = "trait_mix_abstract_and_default"
+source = """
+trait Mixed {
+    fn abstract_method(&self): i32
+    fn default_method(&self): i32 { 0 }
+    fn another_abstract(&mut self)
+    fn another_default(&self): bool { true }
+}
+"""

@@ -98,3 +98,36 @@ source = "fn f() { Point(x, y) }"
 [[case]]
 name = "call_generic_in_generic"
 source = "fn f() { Box(T: Vec(T: i32), value: Vec.new()) }"
+
+[[case]]
+name = "call_struct_with_spread_and_trailing_comma"
+expect_error = "expected"  # spread must be last arg, no trailing comma after it
+source = "fn f() { Point(x: 1, ...base,) }"
+
+[[case]]
+name = "call_struct_only_spread"
+source = "fn f() { Config(...defaults) }"
+
+[[case]]
+name = "call_struct_only_type_args"
+source = "fn f() { Container(T: i32) }"
+
+[[case]]
+name = "call_closure_as_arg"
+source = "fn f() { items.map(|x| x + 1) }"
+
+[[case]]
+name = "call_method_chain_with_type_args"
+source = "fn f() { items.iter().map(|x| x).collect(T: Vec(T: i32)) }"
+
+[[case]]
+name = "call_nested_three_deep"
+source = "fn f() { a(b(c(1, 2), 3), 4) }"
+
+[[case]]
+name = "call_method_on_literal"
+source = """fn f() { "hello".len() }"""
+
+[[case]]
+name = "call_method_on_array"
+source = "fn f() { [1, 2, 3].len() }"

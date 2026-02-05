@@ -125,3 +125,58 @@ expect_error = "expected"
 name = "missing_trait_body"
 source = "trait Foo"
 expect_error = "expected"
+
+[[case]]
+name = "missing_field_type_in_struct"
+expect_error = "expected"
+source = "struct S(x:)"
+
+[[case]]
+name = "missing_variant_data_close_paren"
+expect_error = "expected"
+source = "enum E { V(i32 }"
+
+[[case]]
+name = "missing_arm_body_in_match"
+source = """
+fn f() {
+    match x {
+        1 => ,
+        2 => "two",
+    }
+}
+"""
+
+[[case]]
+name = "unclosed_generic_args"
+expect_error = "expected"
+source = "fn f(x: Vec(T: i32) {}"
+
+[[case]]
+name = "missing_condition_in_if"
+expect_error = "expected"
+source = "fn f() { if { 1 } }"
+
+[[case]]
+name = "missing_body_in_while"
+expect_error = "expected"
+source = "fn f() { while true }"
+
+[[case]]
+name = "missing_iterable_in_for"
+expect_error = "expected"
+source = "fn f() { for x in {} }"
+
+[[case]]
+name = "double_colon_in_path"
+expect_error = "expected"
+source = "use std::vec"
+
+[[case]]
+name = "arrow_return_type"
+expect_error = "expected"
+source = "fn f() -> i32 { 0 }"
+
+[[case]]
+name = "missing_equals_in_let"
+source = "fn f() { let x: i32 1 }"  # Parser accepts: `let x: i32` (no init) then `1` as expr stmt

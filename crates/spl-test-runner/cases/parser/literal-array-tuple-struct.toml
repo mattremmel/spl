@@ -120,3 +120,62 @@ source = "fn f() { (a: (b: 1, c: 2), d: 3) }"
 [[case]]
 name = "struct_generic_instantiation"
 source = "fn f() { Box(T: i32, value: 42) }"
+
+[[case]]
+name = "enum_shorthand_nested"
+source = "fn f() { .Some(.Inner(42)) }"
+
+[[case]]
+name = "struct_with_spread_only"
+source = "fn f() { Point(...base) }"
+
+[[case]]
+name = "struct_with_spread_and_named"
+source = "fn f() { Point(x: 1, ...base) }"
+
+[[case]]
+name = "array_single_element"
+source = "fn f() { [42] }"
+
+[[case]]
+name = "tuple_three_elements"
+source = "fn f() { (1, 2, 3) }"
+
+[[case]]
+name = "named_tuple_three_fields"
+source = "fn f() { (a: 1, b: 2, c: 3) }"
+
+[[case]]
+name = "literal_hex"
+source = "fn f() { 0xFF }"
+
+[[case]]
+name = "literal_binary"
+source = "fn f() { 0b1010 }"
+
+[[case]]
+name = "literal_octal"
+source = "fn f() { 0o77 }"
+
+[[case]]
+name = "literal_underscore_numeric"
+source = "fn f() { 1_000_000 }"
+
+[[case]]
+name = "literal_float_scientific"
+source = "fn f() { 1.5e10 }"
+
+[[case]]
+name = "literal_raw_string"
+ignore = true  # Parser does not yet handle raw string literals in expressions
+source = """fn f() { r"hello\nworld" }"""
+
+[[case]]
+name = "literal_byte_string"
+ignore = true  # Parser does not yet handle byte string literals in expressions
+source = """fn f() { b"bytes" }"""
+
+[[case]]
+name = "literal_byte_char"
+ignore = true  # Parser does not yet handle byte char literals in expressions
+source = "fn f() { b'A' }"

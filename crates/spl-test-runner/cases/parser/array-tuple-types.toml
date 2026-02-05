@@ -50,3 +50,39 @@ source = "fn f(x: (inner: (a: i32, b: i32), y: i32)) {}"
 [[case]]
 name = "tuple_type_with_refs"
 source = "fn f(x: (&i32, &mut String)) {}"
+
+[[case]]
+name = "array_of_references"
+source = "fn f(x: [&i32; 10]) {}"
+
+[[case]]
+name = "array_of_tuples"
+source = "fn f(x: [(i32, bool); 5]) {}"
+
+[[case]]
+name = "slice_of_optionals"
+source = "fn f(x: [i32?]) {}"
+
+[[case]]
+name = "tuple_all_optionals"
+source = "fn f(x: (i32?, String?)) {}"
+
+[[case]]
+name = "tuple_of_fn_types"
+source = "fn f(x: (fn(i32): bool, fn(): i32)) {}"
+
+[[case]]
+name = "single_named_element_tuple"
+source = "fn f(x: (x: i32,)) {}"
+
+[[case]]
+name = "tuple_trailing_comma"
+source = "fn f(x: (i32, bool,)) {}"
+
+[[case]]
+name = "array_of_generics"
+source = "fn f(x: [Vec(T: i32); 3]) {}"
+
+[[case]]
+name = "slice_of_slices"
+source = "fn f(x: [[i32]]) {}"

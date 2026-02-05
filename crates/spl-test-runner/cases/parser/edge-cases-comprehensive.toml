@@ -1,0 +1,215 @@
+[section]
+id = "misc.edge_cases"
+spec_chapter = "0"
+name = "Comprehensive Edge Cases"
+
+# Trailing commas everywhere
+
+[[case]]
+name = "trailing_comma_fn_params"
+source = "fn f(a: i32, b: i32,) {}"
+
+[[case]]
+name = "trailing_comma_call_args"
+source = "fn f() { foo(1, 2,) }"
+
+[[case]]
+name = "trailing_comma_generic_args"
+source = "fn f() { let x: Vec(T: i32,) = items }"
+
+[[case]]
+name = "trailing_comma_tuple_fields"
+source = "fn f() { (1, 2, 3,) }"
+
+[[case]]
+name = "trailing_comma_array_elements"
+source = "fn f() { [1, 2, 3,] }"
+
+[[case]]
+name = "trailing_comma_enum_variants"
+source = "enum Color { Red, Green, Blue, }"
+
+[[case]]
+name = "trailing_comma_struct_fields"
+source = "struct Point(x: i32, y: i32,)"
+
+[[case]]
+name = "trailing_comma_where_clause"
+source = "fn f(x: T) where T: Clone, {}"
+
+[[case]]
+name = "trailing_comma_use_group"
+source = "use std.{HashMap, HashSet,}"
+
+[[case]]
+name = "trailing_comma_match_arms"
+source = """
+fn f() {
+    match x {
+        0 => 0,
+        _ => 1,
+    }
+}
+"""
+
+[[case]]
+name = "trailing_comma_slice_pattern"
+source = "fn f() { let [a, b,] = arr }"
+
+[[case]]
+name = "trailing_comma_closure_params"
+source = "fn f() { |a: i32, b: i32,| a + b }"
+
+[[case]]
+name = "trailing_comma_capture_list"
+source = "fn f() { @[x, y,] || x + y }"
+
+# Empty delimiters
+
+[[case]]
+name = "empty_parens_fn"
+source = "fn f() {}"
+
+[[case]]
+name = "empty_braces_block"
+source = "fn f() { {} }"
+
+[[case]]
+name = "empty_brackets_array"
+source = "fn f() { [] }"
+
+[[case]]
+name = "empty_match"
+source = "fn f() { match x {} }"
+
+[[case]]
+name = "empty_struct"
+source = "struct Empty()"
+
+[[case]]
+name = "empty_enum"
+source = "enum Empty {}"
+
+[[case]]
+name = "empty_impl"
+source = "impl Foo {}"
+
+[[case]]
+name = "empty_trait"
+source = "trait Marker {}"
+
+[[case]]
+name = "empty_tuple_unit"
+source = "fn f() { () }"
+
+# Deeply nested generics
+
+[[case]]
+name = "nested_generics_3_deep"
+source = "fn f(x: Vec(T: Option(T: Result(T: i32, E: Error)))) {}"
+
+[[case]]
+name = "nested_generics_with_multiple_args"
+source = "fn f(x: HashMap(K: String, V: Vec(T: Option(T: i32)))) {}"
+
+# Unicode identifiers
+
+[[case]]
+name = "unicode_fn_name"
+source = "fn café() {}"
+
+[[case]]
+name = "unicode_variable"
+source = "fn f() { let π = 3.14 }"
+
+[[case]]
+name = "unicode_struct_name"
+source = "struct Ñoño(x: i32)"
+
+[[case]]
+name = "unicode_field_name"
+source = "struct Point(λ: f64, μ: f64)"
+
+# Single expression blocks vs multi-statement
+
+[[case]]
+name = "single_expr_block"
+source = "fn f() { let x = { 42 } }"
+
+[[case]]
+name = "multi_stmt_block"
+source = "fn f() { let x = { let a = 1; let b = 2; a + b } }"
+
+# Comments in unusual positions
+
+[[case]]
+name = "comment_between_fn_and_name"
+source = """
+fn /* comment */ foo() {}
+"""
+
+[[case]]
+name = "comment_in_params"
+source = "fn f(/* first */ a: i32, /* second */ b: i32) {}"
+
+[[case]]
+name = "comment_in_expr"
+source = "fn f() { a + /* plus */ b }"
+
+[[case]]
+name = "comment_before_brace"
+source = "fn f() /* comment */ {}"
+
+# Optional type on various base types
+
+[[case]]
+name = "optional_on_path"
+source = "fn f(x: std.io.Error?) {}"
+
+[[case]]
+name = "optional_on_ref"
+source = "fn f(x: &i32?) {}"
+
+[[case]]
+name = "optional_on_generic"
+source = "fn f(x: Vec(T: i32)?) {}"
+
+# Misc edge cases
+
+[[case]]
+name = "deeply_nested_blocks"
+source = """
+fn f() {
+    { { { { 42 } } } }
+}
+"""
+
+[[case]]
+name = "max_nesting_if"
+source = "fn f() { if a { if b { if c { if d { 1 } } } } }"
+
+[[case]]
+name = "chained_method_calls_long"
+source = "fn f() { a.b().c().d().e().f().g() }"
+
+[[case]]
+name = "mixed_items_and_exprs_in_block"
+source = """
+fn f() {
+    struct Local(x: i32)
+    let p = Local(x: 42)
+    p.x
+}
+"""
+
+[[case]]
+name = "multiple_where_params_with_bounds_and_defaults"
+source = "fn f(a: A, b: B, c: C) where A: Clone + Debug, B = i32, C: Send + Sync = String {}"
+
+[[case]]
+name = "fn_with_all_clause_types"
+source = """
+pub const unsafe fn complex(from x: T, _ y: f64 = 1.0): Output throws ConvertError where T: Clone + Debug, Output {
+    x
+}
+"""

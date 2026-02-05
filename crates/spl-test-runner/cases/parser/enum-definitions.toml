@@ -167,3 +167,66 @@ enum Direction {
     Down,
 }
 """
+
+[[case]]
+name = "enum_variant_all_named_fields"
+source = """
+enum Shape {
+    Circle(radius: f64),
+    Rectangle(width: f64, height: f64),
+}
+"""
+
+[[case]]
+name = "enum_variant_all_positional_fields"
+source = """
+enum Pair {
+    Ints(i32, i32),
+    Floats(f64, f64),
+}
+"""
+
+[[case]]
+name = "enum_where_multiple_defaults"
+source = "enum Container { Item(T) } where T: Clone = i32, U = String"
+
+[[case]]
+name = "enum_pub_super"
+source = "pub(super) enum Internal { A, B }"
+
+[[case]]
+name = "enum_pub_dollar"
+source = "pub($) enum CrateEnum { X, Y }"
+
+[[case]]
+name = "enum_variant_single_positional"
+source = "enum Boxed { Value(i32) }"
+
+[[case]]
+name = "enum_variant_complex_types"
+source = """
+enum Data {
+    Array([i32; 10]),
+    Ref(&str),
+    Optional(i32?),
+    Tuple((i32, bool)),
+}
+"""
+
+[[case]]
+name = "enum_nested_enum_type_in_variant"
+source = """
+enum Outer {
+    Inner(Option(T: i32)),
+    Wrapped(Vec(T: String)),
+}
+"""
+
+[[case]]
+name = "enum_where_three_params"
+source = """
+enum Map {
+    Entry(K, V),
+    Empty,
+} where K: Hash + Eq, V, E: Debug
+"""

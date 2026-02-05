@@ -103,3 +103,43 @@ source = "#[derive(Clone)] struct Point(x: i32, y: i32)"
 [[case]]
 name = "struct_many_fields"
 source = "struct Record(a: i32, b: i32, c: i32, d: i32, e: i32)"
+
+[[case]]
+name = "struct_single_positional_field"
+source = "struct Wrapper(i32)"
+
+[[case]]
+name = "struct_single_named_field"
+source = "struct Id(value: i64)"
+
+[[case]]
+name = "struct_where_multiple_defaults"
+source = "struct Container(a: T, b: U) where T: Clone = i32, U = String"
+
+[[case]]
+name = "struct_nested_generic_field"
+source = "struct Cache(data: HashMap(K: String, V: Vec(T: T))) where T"
+
+[[case]]
+name = "struct_optional_field_type"
+source = "struct Config(name: String, timeout: i32?)"
+
+[[case]]
+name = "struct_ref_field_type"
+source = "struct Ref(data: &'a [u8])"
+
+[[case]]
+name = "struct_fn_type_field"
+source = "struct Handler(callback: fn(i32): bool)"
+
+[[case]]
+name = "struct_pub_positional_multiple"
+source = "pub struct Triple(pub i32, pub i32, pub i32)"
+
+[[case]]
+name = "struct_all_visibility_levels"
+source = "struct Mixed(pub x: i32, pub(super) y: i32, pub($) z: i32, w: i32)"
+
+[[case]]
+name = "struct_where_three_params"
+source = "struct Triple(a: A, b: B, c: C) where A: Clone, B: Debug, C"

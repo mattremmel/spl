@@ -262,3 +262,50 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "pat_range_half_open_start"
+expect_error = "expected"  # Prefix range patterns (..10) not supported in pattern position
+source = """
+fn f() {
+    match x {
+        ..10 => "less",
+        _ => "more",
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_inclusive_chars"
+source = """
+fn f() {
+    match c {
+        'A'..='Z' => "upper",
+        '0'..='9' => "digit",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_negative_both"
+source = """
+fn f() {
+    match x {
+        -100..-1 => "negative",
+        0 => "zero",
+        _ => "positive",
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_negative_to_positive"
+source = """
+fn f() {
+    match x {
+        -10..=10 => "near zero",
+        _ => "far",
+    }
+}
+"""

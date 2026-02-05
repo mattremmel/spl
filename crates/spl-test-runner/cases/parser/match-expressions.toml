@@ -402,3 +402,101 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "match_all_pattern_types"
+source = """
+fn f() {
+    match x {
+        42 => "literal",
+        -1 => "negative",
+        'a' => "char",
+        "hi" => "string",
+        true => "bool",
+        _ => "wildcard",
+    }
+}
+"""
+
+[[case]]
+name = "match_or_with_bindings"
+source = """
+fn f() {
+    match msg {
+        .Move(x) | .Scroll(x) => x,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_multiple_block_arms"
+source = """
+fn f() {
+    match x {
+        1 => {
+            let a = compute()
+            a + 1
+        }
+        2 => {
+            let b = other()
+            b * 2
+        }
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_on_field_access"
+source = """
+fn f() {
+    match obj.status {
+        .Active => true,
+        .Inactive => false,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "match_deeply_nested_pattern"
+source = """
+fn f() {
+    match x {
+        .Some((Point(x, _), [first, ...])) => x + first,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_struct_pattern_with_rest"
+source = """
+fn f() {
+    match p {
+        Point(x, ...) => x,
+    }
+}
+"""
+
+[[case]]
+name = "match_single_arm"
+source = """
+fn f() {
+    match x {
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_range_inclusive"
+source = """
+fn f() {
+    match x {
+        0..=9 => "digit",
+        _ => "other",
+    }
+}
+"""

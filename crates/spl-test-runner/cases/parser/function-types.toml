@@ -90,3 +90,27 @@ source = "fn f() { let x: Vec(T: fn(i32): bool) = items }"
 [[case]]
 name = "fn_type_tuple_return"
 source = "fn f(cb: fn(i32): (i32, bool)) {}"
+
+[[case]]
+name = "fn_type_no_params_optional_return"
+source = "fn f(cb: fn(): i32?) {}"
+
+[[case]]
+name = "fn_type_returning_fn_type"
+source = "fn f(cb: fn(i32): fn(bool): String) {}"
+
+[[case]]
+name = "fn_type_generic_param"
+source = "fn f(cb: fn(Vec(T: i32)): bool) {}"
+
+[[case]]
+name = "fn_type_ref_params"
+source = "fn f(cb: fn(&i32, &mut String): bool) {}"
+
+[[case]]
+name = "fn_type_slice_param"
+source = "fn f(cb: fn([i32]): i32) {}"
+
+[[case]]
+name = "fn_type_no_params_no_return"
+source = "fn f(cb: fn()) {}"

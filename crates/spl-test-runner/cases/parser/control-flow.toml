@@ -226,3 +226,71 @@ fn f() {
 [[case]]
 name = "if_else_if_chain"
 source = "fn f() { if a { 1 } else if b { 2 } else if c { 3 } else { 4 } }"
+
+[[case]]
+name = "if_is_as_value"
+source = "fn f() { let x = if v is .Some(val) { val } else { 0 } }"
+
+[[case]]
+name = "for_enum_shorthand_pattern"
+source = "fn f() { for .Some(item) in items { process(item) } }"
+
+[[case]]
+name = "nested_labeled_loops_3_deep"
+source = """
+fn f() {
+    'a: loop {
+        'b: for x in items {
+            'c: while cond {
+                break 'a
+            }
+        }
+    }
+}
+"""
+
+[[case]]
+name = "while_is_with_method_call"
+source = "fn f() { while iter.next() is .Some(item) { process(item) } }"
+
+[[case]]
+name = "loop_break_with_complex_value"
+source = """
+fn f() {
+    let result = loop {
+        if done {
+            break compute() + 1
+        }
+    }
+}
+"""
+
+[[case]]
+name = "for_range_inclusive"
+source = "fn f() { for i in 0..=100 {} }"
+
+[[case]]
+name = "for_slice_pattern"
+source = "fn f() { for [a, b] in pairs {} }"
+
+[[case]]
+name = "throw_in_if"
+source = """
+fn f() throws {
+    if error {
+        throw .BadRequest("invalid")
+    }
+}
+"""
+
+[[case]]
+name = "yield_in_for"
+source = """
+gen fn flatten(lists: [[i32]]): i32 {
+    for list in lists {
+        for item in list {
+            yield item
+        }
+    }
+}
+"""

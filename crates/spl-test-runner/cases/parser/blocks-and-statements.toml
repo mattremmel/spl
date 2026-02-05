@@ -168,3 +168,64 @@ fn f() {
     module inner {}
 }
 """
+
+[[case]]
+name = "block_only_items_no_stmts"
+source = """
+fn f() {
+    struct Inner(x: i32)
+    enum Color { Red }
+    const MAX: i32 = 100
+}
+"""
+
+[[case]]
+name = "block_item_then_expr"
+source = """
+fn f() {
+    fn helper(): i32 { 42 }
+    helper()
+}
+"""
+
+[[case]]
+name = "block_deeply_nested_5"
+source = """
+fn f() {
+    {
+        {
+            {
+                {
+                    {
+                        42
+                    }
+                }
+            }
+        }
+    }
+}
+"""
+
+[[case]]
+name = "block_expr_as_if_condition_value"
+source = "fn f() { if { compute() } { do_something() } }"
+
+[[case]]
+name = "block_with_use"
+source = """
+fn f() {
+    use std.io.Read
+    let x = 1
+}
+"""
+
+[[case]]
+name = "block_labeled_with_early_return"
+source = """
+fn f() {
+    let x = 'block: {
+        if error { break 'block 0 }
+        compute()
+    }
+}
+"""

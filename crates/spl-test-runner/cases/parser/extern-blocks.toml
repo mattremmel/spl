@@ -168,3 +168,45 @@ extern "C" {
     fn snprintf(buf: Ptr(T: u8), size: i32, fmt: Ptr(T: u8), ...): i32
 }
 """
+
+[[case]]
+name = "extern_fn_def_with_body_and_abi"
+source = """extern "C" fn handler(code: i32): i32 {
+    let result = code * 2
+    result
+}"""
+
+[[case]]
+name = "extern_multiple_attrs_on_block"
+source = """
+#[link(name = "mylib")]
+#[allow(unused)]
+extern "C" {
+    fn init(): i32
+    fn cleanup()
+}
+"""
+
+[[case]]
+name = "extern_fn_decl_return_no_params"
+source = """
+extern "C" {
+    fn get_errno(): i32
+}
+"""
+
+[[case]]
+name = "extern_fn_decl_no_return_no_params"
+source = """
+extern "C" {
+    fn abort()
+}
+"""
+
+[[case]]
+name = "extern_fn_def_pub_with_attr"
+source = """#[no_mangle] pub extern "C" fn exported(x: i32, y: i32): i32 { x + y }"""
+
+[[case]]
+name = "extern_bare_fn_def_with_body"
+source = """extern fn callback(value: i32): i32 { value + 1 }"""

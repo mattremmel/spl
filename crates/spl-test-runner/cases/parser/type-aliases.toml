@@ -105,3 +105,35 @@ source = "type Map(K, V,) = i32"
 [[case]]
 name = "type_alias_never_type"
 source = "type Bottom = Never"
+
+[[case]]
+name = "type_alias_tuple_named"
+source = "type Point = (x: f64, y: f64)"
+
+[[case]]
+name = "type_alias_deeply_nested_generic"
+source = "type Deep = Vec(T: Option(T: Result(T: i32, E: Error)))"
+
+[[case]]
+name = "type_alias_ref_mut"
+source = "type MutRef = &mut i32"
+
+[[case]]
+name = "type_alias_ref_lifetime"
+source = "type Borrowed = &'a str"
+
+[[case]]
+name = "type_alias_fn_type_complex"
+source = "type Callback = fn(String, i32): Result(T: bool, E: Error)"
+
+[[case]]
+name = "type_alias_fn_unsafe_extern"
+source = """type UnsafeCallback = unsafe extern "C" fn(i32): i32"""
+
+[[case]]
+name = "type_alias_optional_generic"
+source = "type MaybeList = Vec(T: i32)?"
+
+[[case]]
+name = "type_alias_attributed"
+source = "#[deprecated] type OldName = NewName"

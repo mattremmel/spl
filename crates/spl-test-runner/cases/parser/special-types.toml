@@ -62,3 +62,36 @@ source = "fn f() { let x: std.io.Result? = r }"
 [[case]]
 name = "never_in_fn_return"
 source = "fn abort(): Never { loop {} }"
+
+[[case]]
+name = "never_in_tuple"
+source = "fn f(x: (Never, i32)) {}"
+
+[[case]]
+name = "never_ref"
+source = "fn f(x: &Never) {}"
+
+[[case]]
+name = "optional_on_self"
+source = """
+impl Foo {
+    fn maybe(): Self? { .Some(Self(x: 1)) }
+}
+"""
+
+[[case]]
+name = "optional_double"
+ignore = true  # Parser does not support double optional types
+source = "fn f(x: i32??) {}"
+
+[[case]]
+name = "optional_on_tuple"
+source = "fn f(x: (i32, bool)?) {}"
+
+[[case]]
+name = "optional_on_array"
+source = "fn f(x: [i32; 10]?) {}"
+
+[[case]]
+name = "optional_on_slice"
+source = "fn f(x: [i32]?) {}"

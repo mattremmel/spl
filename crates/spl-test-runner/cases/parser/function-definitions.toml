@@ -300,3 +300,87 @@ source = "fn f(_ x: i32 = 0) { x }"
 name = "fn_no_body_error"
 expect_error = "expected"
 source = "fn foo(): i32"
+
+[[case]]
+name = "fn_whitespace_only_params"
+source = "fn f( ) {}"
+
+[[case]]
+name = "fn_variadic_no_other_params"
+source = """
+extern "C" {
+    fn variadic_fn(...): i32
+}
+"""
+
+[[case]]
+name = "fn_gen_all_clauses"
+source = """
+gen fn transform(from input: T, scale: f64 = 1.0): Output throws ConvertError where T: Clone, Output {
+    yield input
+}
+"""
+
+[[case]]
+name = "fn_abstract_self_ref_in_trait"
+source = """
+trait Foo {
+    fn borrow(&self): &Self
+}
+"""
+
+[[case]]
+name = "fn_abstract_self_mut_in_trait"
+source = """
+trait Foo {
+    fn mutate(&mut self)
+}
+"""
+
+[[case]]
+name = "fn_abstract_self_value_in_trait"
+source = """
+trait Foo {
+    fn consume(self): i32
+}
+"""
+
+[[case]]
+name = "fn_abstract_throws_where_in_trait"
+source = """
+trait Foo {
+    fn process(&self, input: T): Output throws Error where T: Clone, Output
+}
+"""
+
+[[case]]
+name = "fn_where_multiple_defaults"
+source = "fn f(a: T, b: U) where T = i32, U: Clone = String {}"
+
+[[case]]
+name = "fn_return_optional_generic"
+source = "fn find(items: Vec(T: T), key: i32): T? where T { .None }"
+
+[[case]]
+name = "fn_deeply_nested_generic_param"
+source = "fn f(x: HashMap(K: String, V: Vec(T: Option(T: i32)))): i32 { 0 }"
+
+[[case]]
+name = "fn_empty_body_with_return_type"
+source = "fn f(): i32 {}"
+
+[[case]]
+name = "fn_multiple_lifetime_params"
+source = "fn f(a: &'a str, b: &'b str): &'a str { a }"
+
+[[case]]
+name = "fn_self_with_return_type_and_throws"
+source = """
+impl Foo {
+    fn read(&self): Data throws IoError { Data() }
+}
+"""
+
+[[case]]
+name = "fn_all_param_styles_combined"
+source = "fn complex(to name: String, _ count: i32, verbose: bool = false): Result(T: i32, E: Error) throws where T {}"

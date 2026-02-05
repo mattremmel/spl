@@ -98,3 +98,27 @@ source = "fn f(v: &mut Vec(T: i32)) {}"
 [[case]]
 name = "ref_lifetime_to_slice"
 source = "fn f(s: &'a [i32]) {}"
+
+[[case]]
+name = "ref_to_named_tuple"
+source = "fn f(x: &(x: i32, y: i32)) {}"
+
+[[case]]
+name = "ref_to_optional_generic"
+source = "fn f(x: &Option(T: i32)?) {}"
+
+[[case]]
+name = "ref_quadruple_nested"
+source = "fn f(x: &&&&i32) {}"
+
+[[case]]
+name = "ref_lifetime_mut_nested"
+source = "fn f(x: &'a mut &'b mut i32) {}"
+
+[[case]]
+name = "ref_to_slice_type"
+source = "fn f(x: &[String]) {}"
+
+[[case]]
+name = "ref_to_nested_array"
+source = "fn f(x: &[[i32; 3]; 3]) {}"

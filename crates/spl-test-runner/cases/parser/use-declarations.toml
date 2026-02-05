@@ -79,3 +79,39 @@ source = "use std.{self, vec.Vec}"
 [[case]]
 name = "use_glob_in_nested"
 source = "use std.{io.*, collections.HashMap}"
+
+[[case]]
+name = "use_self_group"
+source = "use self.{item1, item2}"
+
+[[case]]
+name = "use_super_nested_group"
+source = "use super.parent.{child1, child2.*}"
+
+[[case]]
+name = "use_deeply_nested_groups_3_levels"
+source = "use std.{io.{Read, Write}, collections.{hash.{HashMap, HashSet}, vec.Vec}}"
+
+[[case]]
+name = "use_rename_in_nested_group"
+source = "use std.{io.Read as R, fs}"
+
+[[case]]
+name = "use_glob_top_level_group"
+source = "use std.{*, io.Read}"
+
+[[case]]
+name = "use_package_root_group"
+source = "use $.{utils.helper, config.Settings}"
+
+[[case]]
+name = "use_single_item_group"
+source = "use std.{vec.Vec}"
+
+[[case]]
+name = "use_pub_dollar_reexport"
+source = "pub($) use internal.Helper"
+
+[[case]]
+name = "use_multiple_renames"
+source = "use std.collections.{HashMap as Map, HashSet as Set, BTreeMap as OrderedMap}"

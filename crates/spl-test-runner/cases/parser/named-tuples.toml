@@ -64,3 +64,23 @@ source = "fn f() { let x: (pos: (x: f64, y: f64), color: i32) = val }"
 [[case]]
 name = "named_tuple_single_named"
 source = "fn f() { let x: (value: i32) = val }"
+
+[[case]]
+name = "named_tuple_fn_type_field"
+source = "fn f(p: (callback: fn(i32): bool, count: i32)) {}"
+
+[[case]]
+name = "named_tuple_deeply_nested"
+source = "fn f(x: (a: (b: (c: i32, d: bool), e: String), f: i32)) {}"
+
+[[case]]
+name = "named_tuple_with_optional_fields"
+source = "fn f(x: (name: String?, age: i32?)) {}"
+
+[[case]]
+name = "named_tuple_in_let"
+source = "fn f() { let p: (x: i32, y: i32) = (x: 1, y: 2) }"
+
+[[case]]
+name = "named_tuple_expr_trailing_comma"
+source = "fn f() { (x: 1, y: 2,) }"

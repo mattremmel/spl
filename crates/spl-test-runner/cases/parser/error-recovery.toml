@@ -56,3 +56,33 @@ fn good1() {}
 struct {
 fn good2() {}
 """
+
+[[case]]
+name = "missing_comma_in_params"
+expect_error = "expected"
+source = "fn f(a: i32 b: i32) {}"
+
+[[case]]
+name = "extra_tokens_after_item"
+expect_error = "expected"
+source = "fn f() {} garbage"
+
+[[case]]
+name = "invalid_token_in_type_position"
+expect_error = "expected"
+source = "fn f() { let x: 42 = 1 }"
+
+[[case]]
+name = "missing_pattern_in_let"
+expect_error = "expected"
+source = "fn f() { let = 5 }"
+
+[[case]]
+name = "missing_in_for_loop"
+expect_error = "expected"
+source = "fn f() { for x items {} }"
+
+[[case]]
+name = "invalid_attribute_syntax"
+expect_error = "expected"
+source = "#(test) fn foo() {}"

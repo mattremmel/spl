@@ -235,3 +235,77 @@ impl From(T: String) for MyType {
     fn from(s: String): Self { Self(value: s) }
 }
 """
+
+[[case]]
+name = "impl_only_type_assignments"
+source = """
+impl Foo {
+    type Input = String
+    type Output = i32
+    type Error = IoError
+}
+"""
+
+[[case]]
+name = "impl_const_and_unsafe_method_mix"
+source = """
+impl Foo {
+    const fn default(): Self { Self(x: 0) }
+    unsafe fn dangerous(&self): i32 { 0 }
+    pub fn normal(&self) {}
+}
+"""
+
+[[case]]
+name = "impl_generator_method"
+source = """
+impl Collection {
+    gen fn iter(&self): i32 { yield 0 }
+    gen fn iter_mut(&mut self): i32 { yield 0 }
+}
+"""
+
+[[case]]
+name = "impl_method_level_where_complex"
+source = """
+impl Container(T) {
+    fn convert(&self): Vec(T: U) where U, T: Into(Target: U) { Vec.new() }
+}
+"""
+
+[[case]]
+name = "impl_trait_with_multiple_assoc_types"
+source = """
+impl Iterator for MyIter {
+    type Item = i32
+    type Error = String
+    fn next(&mut self): Self.Item? { .None }
+}
+"""
+
+[[case]]
+name = "impl_where_on_both_impl_and_method"
+source = """
+impl Container where T: Clone {
+    fn convert(&self): U where U: From(T: T) { U.from(self.value) }
+}
+"""
+
+[[case]]
+name = "impl_pub_super_method"
+source = """
+impl Foo {
+    pub(super) fn internal_method(&self): i32 { 0 }
+}
+"""
+
+[[case]]
+name = "impl_method_with_all_features"
+source = """
+impl Foo {
+    #[inline]
+    pub const unsafe fn complex(from input: T, _ scale: f64 = 1.0): Output throws Error where T: Clone, Output {
+        input
+    }
+}
+"""

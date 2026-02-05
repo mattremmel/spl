@@ -270,3 +270,55 @@ source = "fn f() { a | b ^ c & d }"
 [[case]]
 name = "precedence_shift_vs_add"
 source = "fn f() { a + b << c }"
+
+[[case]]
+name = "precedence_exponent_with_unary_pos"
+source = "fn f() { 2 ** -3 }"
+
+[[case]]
+name = "precedence_bitwise_full_chain"
+source = "fn f() { ~a & b | c ^ d }"
+
+[[case]]
+name = "precedence_is_with_or_pattern"
+source = "fn f() { x is (1 | 2 | 3) }"
+
+[[case]]
+name = "precedence_is_wildcard"
+source = "fn f() { x is _ }"
+
+[[case]]
+name = "precedence_range_inclusive_in_for"
+source = "fn f() { for i in 0..=10 {} }"
+
+[[case]]
+name = "precedence_coalesce_with_optional_chain"
+source = "fn f() { a?.b ?? c }"
+
+[[case]]
+name = "precedence_assign_to_complex_lhs"
+source = "fn f() { a.b[0].c = 1 }"
+
+[[case]]
+name = "precedence_nested_parens"
+source = "fn f() { ((a + b) * (c - d)) / e }"
+
+[[case]]
+name = "precedence_all_unary_ops"
+source = "fn f() { !a; -b; ~c; *d; &e; &mut f }"
+
+[[case]]
+name = "precedence_exponent_vs_mul"
+source = "fn f() { a * b ** c }"
+
+[[case]]
+name = "precedence_comparison_chain"
+source = "fn f() { a < b && b < c }"
+
+[[case]]
+name = "precedence_range_with_call"
+source = "fn f() { start()..end() }"
+
+[[case]]
+name = "precedence_is_range"
+source = "fn f() { x is 1..10 }"

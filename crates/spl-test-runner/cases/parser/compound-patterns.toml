@@ -487,3 +487,119 @@ fn f() {
 [[case]]
 name = "pat_for_tuple_destructure"
 source = "fn f() { for (key, value) in map.entries() {} }"
+
+[[case]]
+name = "pat_grouped_enum_or"
+source = """
+fn f() {
+    match x {
+        (.Some(v) | .None) => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_enum_full_path_shorthand_mixed"
+source = """
+fn f() {
+    match result {
+        Result.Ok(v) => v,
+        .Err(e) => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_slice_rest_at_start"
+source = """
+fn f() {
+    match arr {
+        [..., last] => last,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_struct_nested_deep"
+source = """
+fn f() {
+    match x {
+        Outer(inner: Inner(x: a, y: b)) => a + b,
+    }
+}
+"""
+
+[[case]]
+name = "pat_struct_all_rest"
+source = """
+fn f() {
+    match p {
+        Point(...) => true,
+    }
+}
+"""
+
+[[case]]
+name = "pat_struct_with_type_ann_in_let"
+source = "fn f() { let Point(x, y): Point = p }"
+
+[[case]]
+name = "pat_ref_destructure_tuple"
+source = "fn f() { let &(a, b) = ref_pair }"
+
+[[case]]
+name = "pat_ref_mut_slice"
+source = "fn f() { let &mut [first, ...rest] = ref_arr }"
+
+[[case]]
+name = "pat_or_in_for"
+source = "fn f() { for (1 | 2, b) in items {} }"
+
+[[case]]
+name = "pat_complex_nested_enum_tuple_slice"
+source = "fn f() { let .Some((x, [first, ...rest])) = val }"
+
+[[case]]
+name = "pat_or_with_many_variants"
+source = """
+fn f() {
+    match dir {
+        .North | .South | .East | .West => "cardinal",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "pat_enum_shorthand_nested_tuple"
+source = """
+fn f() {
+    match val {
+        .Some((a, b)) => a + b,
+        .None => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_struct_partial_named"
+source = """
+fn f() {
+    match msg {
+        .Move(x: dx, ...) => dx,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_slice_three_elements"
+source = """
+fn f() {
+    match arr {
+        [a, b, c] => a + b + c,
+        _ => 0,
+    }
+}
+"""

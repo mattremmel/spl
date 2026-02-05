@@ -106,3 +106,31 @@ source = "fn f() { let x: Vec(T: i32,) = items }"
 [[case]]
 name = "path_multiple_shorthand"
 source = "fn f() { let x: Result(T, E) = val }"
+
+[[case]]
+name = "path_deep_qualified"
+source = "fn f(x: a.b.c.d.E) {}"
+
+[[case]]
+name = "path_self_assoc_in_generic_arg"
+source = """
+impl Foo {
+    fn items(&self): Vec(T: Self.Item) { Vec.new() }
+}
+"""
+
+[[case]]
+name = "path_optional_on_hashmap"
+source = "fn f(x: HashMap(K: String, V: i32)?) {}"
+
+[[case]]
+name = "path_super_type_generic"
+source = "fn f(x: super.Container(T: i32)) {}"
+
+[[case]]
+name = "path_dollar_type"
+source = "fn f(x: $.internal.Config) {}"
+
+[[case]]
+name = "path_four_segment"
+source = "fn f(x: a.b.c.D) {}"

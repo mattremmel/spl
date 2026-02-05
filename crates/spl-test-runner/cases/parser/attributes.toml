@@ -122,3 +122,47 @@ source = """#[cfg(target_os = "linux", target_arch = "x86")] fn foo() {}"""
 [[case]]
 name = "attr_equals_string"
 source = """#[doc = "documentation"] fn foo() {}"""
+
+[[case]]
+name = "attr_multiple_kv_args"
+source = """#[cfg(target_os = "linux", target_arch = "x86_64")] fn foo() {}"""
+
+[[case]]
+name = "attr_dotted_path_with_args"
+source = """#[cfg.target(os = "linux")] fn foo() {}"""
+
+[[case]]
+name = "attr_three_on_same_item"
+source = """
+#[inline]
+#[no_mangle]
+#[doc = "important"]
+fn foo() {}
+"""
+
+[[case]]
+name = "inner_attr_then_items"
+source = """
+#![allow(unused)]
+#![feature(generators)]
+fn foo() {}
+struct Bar()
+"""
+
+[[case]]
+name = "attr_on_extern_block"
+source = """
+#[link(name = "c")]
+#[allow(non_camel_case)]
+extern "C" {
+    fn puts(s: i32): i32
+}
+"""
+
+[[case]]
+name = "attr_on_type_alias"
+source = "#[deprecated] type OldType = NewType"
+
+[[case]]
+name = "attr_empty_args"
+source = "#[derive()] struct Foo()"

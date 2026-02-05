@@ -242,3 +242,47 @@ source = "fn f() { if x is _ { 1 } }"
 [[case]]
 name = "unsafe_block_with_value"
 source = "fn f() { let x = unsafe { ptr.read() } }"
+
+[[case]]
+name = "enum_shorthand_in_comparison"
+source = "fn f() { x == .None }"
+
+[[case]]
+name = "throw_enum_shorthand"
+source = """fn f() throws { throw .NotFound("msg") }"""
+
+[[case]]
+name = "yield_with_try"
+source = "gen fn f(): i32 throws { yield get_value()! }"
+
+[[case]]
+name = "unsafe_multiple_stmts"
+source = """
+fn f() {
+    unsafe {
+        let p = alloc(size)
+        write(p, value)
+        p
+    }
+}
+"""
+
+[[case]]
+name = "unsafe_in_let"
+source = "fn f() { let x = unsafe { read_ptr(p) } }"
+
+[[case]]
+name = "block_expr_as_fn_arg"
+source = "fn f() { process({ let x = compute(); x + 1 }) }"
+
+[[case]]
+name = "enum_shorthand_no_args_in_array"
+source = "fn f() { [.Red, .Green, .Blue] }"
+
+[[case]]
+name = "range_negative_bounds"
+source = "fn f() { -1..1 }"
+
+[[case]]
+name = "is_with_or_pattern_and_guard"
+source = "fn f() { x is .Some(v) && v > 0 }"

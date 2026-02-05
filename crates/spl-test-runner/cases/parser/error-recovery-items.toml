@@ -100,3 +100,47 @@ trait Foo {
     fn valid(): i32
 }
 """
+
+[[case]]
+name = "missing_fn_name"
+expect_error = "expected"
+source = "fn () {}"
+
+[[case]]
+name = "missing_impl_type_name"
+expect_error = "expected"
+source = "impl { fn foo() {} }"
+
+[[case]]
+name = "extra_closing_brace"
+expect_error = "expected"
+source = """
+fn f() {}
+}
+"""
+
+[[case]]
+name = "missing_field_name_struct"
+expect_error = "expected"
+source = "struct Bad(: i32)"
+
+[[case]]
+name = "duplicate_pub_modifier"
+expect_error = "expected"
+source = "pub pub fn double_pub() {}"
+
+[[case]]
+name = "missing_where_param_name"
+expect_error = "expected"
+source = "fn f() where : Clone {}"
+
+[[case]]
+name = "empty_match_arm"
+expect_error = "expected"
+source = """
+fn f() {
+    match x {
+        =>
+    }
+}
+"""

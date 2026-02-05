@@ -75,3 +75,44 @@ source = "pub($) const INTERNAL: i32 = 42"
 [[case]]
 name = "static_nested_generic_type"
 source = "static CACHE: HashMap(K: String, V: Vec(T: i32)) = HashMap.new()"
+
+[[case]]
+name = "const_fn_type"
+source = "const CALLBACK: fn(i32): bool = is_positive"
+
+[[case]]
+name = "const_block_expr_value"
+source = """
+const VALUE: i32 = {
+    let x = 10
+    x * 2
+}
+"""
+
+[[case]]
+name = "static_ref_type"
+source = "static NAME: &str = \"hello\""
+
+[[case]]
+name = "const_optional_type"
+source = "const DEFAULT: i32? = .Some(42)"
+
+[[case]]
+name = "static_array_type_complex"
+source = "static MATRIX: [[i32; 3]; 3] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]"
+
+[[case]]
+name = "const_attributed"
+source = "#[allow(unused)] const UNUSED: i32 = 0"
+
+[[case]]
+name = "static_mut_with_semicolon"
+source = "static mut FLAG: bool = false;"
+
+[[case]]
+name = "const_negative_value"
+source = "const MIN: i32 = -2147483648"
+
+[[case]]
+name = "const_hex_value"
+source = "const MASK: u32 = 0xFF00_FF00"

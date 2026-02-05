@@ -104,3 +104,65 @@ gen fn filtered(): i32 {
     }
 }
 """
+
+[[case]]
+name = "gen_fn_all_clauses_combined"
+source = """
+gen fn transform(from input: T, scale: f64 = 1.0): Output throws ConvertError where T: Clone, Output {
+    yield input
+}
+"""
+
+[[case]]
+name = "gen_fn_mut_self"
+source = """
+impl Collection {
+    gen fn drain(&mut self): i32 { yield 0 }
+}
+"""
+
+[[case]]
+name = "gen_fn_pub"
+source = "pub gen fn items(): i32 { yield 1 }"
+
+[[case]]
+name = "gen_fn_pub_in_impl"
+source = """
+impl Foo {
+    pub gen fn values(&self): i32 { yield 0 }
+}
+"""
+
+[[case]]
+name = "gen_fn_where_with_bounds_and_default"
+source = "gen fn items(): T throws Error where T: Clone = i32 { yield T.default() }"
+
+[[case]]
+name = "gen_fn_nested_yield_in_match"
+source = """
+gen fn process(): i32 {
+    match state {
+        .Ready => yield 1,
+        .Done => yield 2,
+        _ => yield 0,
+    }
+}
+"""
+
+[[case]]
+name = "gen_fn_attributed"
+source = """
+#[inline]
+gen fn numbers(): i32 {
+    yield 1
+    yield 2
+}
+"""
+
+[[case]]
+name = "gen_fn_complex_return_type"
+source = "gen fn items(): Option(T: i32) { yield .Some(42) }"
+
+[[case]]
+name = "gen_fn_multiple_params"
+source = "gen fn range(from start: i32, to end: i32): i32 { yield start }"

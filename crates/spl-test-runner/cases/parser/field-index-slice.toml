@@ -150,3 +150,48 @@ source = "fn f() { a.b()?.c.d()?.e }"
 [[case]]
 name = "slice_from_dollar_minus"
 source = "fn f() { arr[$-3:] }"
+
+[[case]]
+name = "slice_dollar_complex"
+source = "fn f() { arr[$-3:$-1] }"
+
+[[case]]
+name = "slice_to_dollar_minus"
+source = "fn f() { arr[:$-1] }"
+
+[[case]]
+name = "optional_chain_deep"
+source = "fn f() { a?.b?.c?.d }"
+
+[[case]]
+name = "optional_chain_method_then_field"
+source = "fn f() { a?.method()?.field }"
+
+[[case]]
+name = "try_chained"
+source = "fn f() { a.b()!.c()! }"
+
+[[case]]
+name = "method_chain_mixed_ops"
+source = "fn f() { a.b().c?.d[0]!.e }"
+
+[[case]]
+name = "tuple_positional_access_nested"
+expect_error = "expected"  # Chained positional access (pair.0.1) not supported
+source = "fn f() { pair.0.1 }"
+
+[[case]]
+name = "field_then_index_then_method"
+source = "fn f() { obj.items[0].process() }"
+
+[[case]]
+name = "index_variable"
+source = "fn f() { arr[idx] }"
+
+[[case]]
+name = "slice_open_end"
+source = "fn f() { arr[start:] }"
+
+[[case]]
+name = "dollar_in_complex_expr"
+source = "fn f() { arr[$-1-offset] }"

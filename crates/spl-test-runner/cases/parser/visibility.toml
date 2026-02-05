@@ -62,3 +62,53 @@ source = "pub enum Color { Red, Green, Blue }"
 [[case]]
 name = "pub_type_alias"
 source = "pub type Result(T) = i32"
+
+[[case]]
+name = "pub_dollar_on_struct"
+source = "pub($) struct Internal(x: i32)"
+
+[[case]]
+name = "pub_dollar_on_enum"
+source = "pub($) enum CrateEnum { A, B }"
+
+[[case]]
+name = "pub_dollar_on_trait"
+source = """
+pub($) trait InternalTrait {
+    fn method(&self)
+}
+"""
+
+[[case]]
+name = "pub_dollar_on_const"
+source = "pub($) const INTERNAL: i32 = 42"
+
+[[case]]
+name = "pub_dollar_on_static"
+source = "pub($) static COUNTER: i32 = 0"
+
+[[case]]
+name = "pub_dollar_on_use"
+source = "pub($) use internal.Helper"
+
+[[case]]
+name = "pub_dollar_on_module"
+source = "pub($) module internal { fn helper() {} }"
+
+[[case]]
+name = "pub_dollar_deep_path"
+source = "pub($.path.to.module) fn scoped() {}"
+
+[[case]]
+name = "pub_super_on_struct"
+source = "pub(super) struct ParentVisible(x: i32)"
+
+[[case]]
+name = "pub_on_impl_method"
+source = """
+impl Foo {
+    pub fn public(&self) {}
+    pub(super) fn semi_public(&self) {}
+    pub($) fn crate_public(&self) {}
+}
+"""

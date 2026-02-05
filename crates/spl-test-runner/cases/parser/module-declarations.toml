@@ -141,3 +141,63 @@ module ffi {
     }
 }
 """
+
+[[case]]
+name = "module_nested_4_deep"
+source = """
+module a {
+    module b {
+        module c {
+            module d {
+                fn deepest() {}
+            }
+        }
+    }
+}
+"""
+
+[[case]]
+name = "module_with_visibility_on_nested_items"
+source = """
+module api {
+    pub fn public_endpoint() {}
+    pub(super) fn internal_helper() {}
+    fn private_impl() {}
+}
+"""
+
+[[case]]
+name = "module_with_all_item_types_extended"
+source = """
+module everything {
+    struct Point(x: i32)
+    enum Color { Red }
+    trait Foo { fn bar(&self) }
+    impl Point { fn new(): Point { Point(x: 0) } }
+    const MAX: i32 = 100
+    static COUNT: i32 = 0
+    type Id = i32
+    use super.Bar
+    module inner {}
+}
+"""
+
+[[case]]
+name = "module_with_const_and_static"
+source = """
+module config {
+    const VERSION: i32 = 1
+    static mut COUNTER: i32 = 0
+}
+"""
+
+[[case]]
+name = "module_attributed_inline"
+source = """
+#[cfg(test)]
+#[allow(unused)]
+module tests {
+    fn test_one() {}
+    fn test_two() {}
+}
+"""

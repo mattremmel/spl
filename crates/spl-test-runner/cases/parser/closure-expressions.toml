@@ -139,3 +139,38 @@ source = "fn f() { items.map(|x| x * 2) }"
 [[case]]
 name = "closure_nested_captures"
 source = "fn f() { @[x] |y| @[x, y] |z| x + y + z }"
+
+[[case]]
+name = "closure_returning_closure"
+source = "fn f() { let f = |x: i32| |y: i32| x + y }"
+
+[[case]]
+name = "closure_typed_params_and_block"
+source = """
+fn f() {
+    let c = |a: i32, b: i32| {
+        let sum = a + b
+        let product = a * b
+        (sum, product)
+    }
+}
+"""
+
+[[case]]
+name = "closure_as_direct_call_arg"
+source = "fn f() { execute(|x| x * 2, data) }"
+
+[[case]]
+name = "closure_only_typed_params"
+source = "fn f() { |x: i32, y: String, z: bool| x }"
+
+[[case]]
+name = "closure_with_match_body"
+source = """
+fn f() {
+    let handler = |x| match x {
+        .Some(v) => v,
+        .None => 0,
+    }
+}
+"""
