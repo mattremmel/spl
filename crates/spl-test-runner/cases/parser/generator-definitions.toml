@@ -32,3 +32,27 @@ gen fn fallible(): i32 throws {
 name = "gen_missing_fn"
 expect_error = "expected"
 source = "gen count() {}"
+
+[[case]]
+name = "gen_fn_typed_throws"
+source = """
+gen fn foo(): i32 throws Error {
+    yield 0
+}
+"""
+
+[[case]]
+name = "gen_fn_throws_where"
+source = """
+gen fn foo(): i32 throws where T {
+    yield 0
+}
+"""
+
+[[case]]
+name = "gen_fn_no_params"
+source = """
+gen fn empty(): i32 {
+    yield 0
+}
+"""

@@ -128,6 +128,7 @@ pub(crate) fn name_ref(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError
         || p.at(SyntaxKind::SELF_TYPE_KW)
         || p.at(SyntaxKind::SUPER_KW)
         || p.at(SyntaxKind::MODULE_KW)
+        || p.at(SyntaxKind::DOLLAR)
     {
         p.bump();
         Ok(m.complete(p, SyntaxKind::NameRef))

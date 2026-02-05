@@ -102,3 +102,94 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "pat_grouped"
+source = """
+fn f() {
+    match x {
+        (1 | 2) => 0,
+        _ => 1,
+    }
+}
+"""
+
+[[case]]
+name = "pat_slice_middle_rest"
+source = """
+fn f() {
+    match arr {
+        [first, ..middle, last] => first + last,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_enum_full_path"
+source = """
+fn f() {
+    match x {
+        Option.Some(v) => v,
+        Option.None => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_enum_shorthand_named"
+source = """
+fn f() {
+    match msg {
+        .Move(x: a, y: b) => a + b,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_enum_with_rest"
+source = """
+fn f() {
+    match msg {
+        .Move(x, ..) => x,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_nested"
+source = """
+fn f() {
+    match x {
+        (Point(a, _), .Some(b)) => a + b,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_empty_tuple"
+source = "fn f() { let () = unit_val }"
+
+[[case]]
+name = "pat_empty_slice"
+source = """
+fn f() {
+    match arr {
+        [] => 0,
+        _ => 1,
+    }
+}
+"""
+
+[[case]]
+name = "pat_or_enum_variants"
+source = """
+fn f() {
+    match x {
+        .Some(v) | .None => 0,
+    }
+}
+"""

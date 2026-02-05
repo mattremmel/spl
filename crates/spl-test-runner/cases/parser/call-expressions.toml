@@ -26,3 +26,15 @@ source = "fn f() { foo(1, 2,) }"
 [[case]]
 name = "call_nested"
 source = "fn f() { foo(bar(baz(1))) }"
+
+[[case]]
+name = "call_type_arg"
+source = "fn f() { identity(T: i32, 42) }"
+
+[[case]]
+name = "call_multiple_type_args"
+source = "fn f() { convert(From: i32, To: f64, value: 100) }"
+
+[[case]]
+name = "call_method_type_arg"
+source = "fn f() { obj.method(T: i32, x: 1) }"

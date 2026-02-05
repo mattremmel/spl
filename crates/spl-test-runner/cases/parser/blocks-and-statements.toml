@@ -57,3 +57,19 @@ fn f() {
     baz()
 }
 """
+
+[[case]]
+name = "block_nested_struct"
+source = """
+fn f() {
+    struct Inner(x: i32)
+}
+"""
+
+[[case]]
+name = "block_nested_enum"
+source = """
+fn f() {
+    enum Color { Red, Green, Blue }
+}
+"""

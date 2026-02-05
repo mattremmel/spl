@@ -59,3 +59,23 @@ pub extern fn exported(x: i32): i32 {
     x
 }
 """
+
+[[case]]
+name = "extern_fn_def_with_abi"
+source = """
+extern "C" fn callback(x: i32): i32 {
+    return x
+}
+"""
+
+[[case]]
+name = "extern_block_empty"
+source = """extern "C" {}"""
+
+[[case]]
+name = "extern_fn_no_params"
+source = """
+extern {
+    fn foo(): i32;
+}
+"""

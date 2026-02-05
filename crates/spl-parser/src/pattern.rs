@@ -39,6 +39,16 @@ fn single_pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
         L_PAREN => tuple_or_grouped_pat(p),
         // Slice pattern: [a, b]
         L_BRACKET => slice_pat(p),
+        // Mutable binding pattern: `mut x`
+        MUT_KW => {
+            let m = p.start();
+            p.bump(); // consume `mut`
+            if let Err(e) = crate::item::name(p) {
+                m.abandon(p);
+                return Err(e);
+            }
+            Ok(m.complete(p, SyntaxKind::IdentPat))
+        },
         // Wildcard, identifier, or struct pattern
         IDENT => {
             if p.current_text() == Some("_") {
@@ -92,22 +102,51 @@ fn enum_shorthand_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError>
     let m = p.start();
 
     // Consume the leading dot
-    p.expect(SyntaxKind::DOT)?;
+    if let Err(e) = p.expect(SyntaxKind::DOT) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Parse the variant name
-    crate::item::name(p)?;
+    if let Err(e) = crate::item::name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
-    // Optional pattern list: (pattern, ...)
-    if p.at(SyntaxKind::L_PAREN) {
-        p.expect(SyntaxKind::L_PAREN)?;
-        p.parse_delimited(SyntaxKind::R_PAREN, |p| {
-            pattern(p)?;
-            Ok(())
-        })?;
-        p.expect(SyntaxKind::R_PAREN)?;
+    // Optional field/pattern list: (name: pat, ...) or (pat, ...)
+    if p.at(SyntaxKind::L_PAREN)
+        && let Err(e) = parse_enum_variant_fields(p)
+    {
+        m.abandon(p);
+        return Err(e);
     }
 
     Ok(m.complete(p, SyntaxKind::EnumShorthandPat))
+}
+
+/// Parse enum variant fields: `(pat, ...)` or `(name: pat, ...)`
+///
+/// Each item can be a named field (`x: pattern`) or a positional pattern.
+/// Named fields are detected by IDENT followed by COLON.
+fn parse_enum_variant_fields(p: &mut Parser<'_>) -> Result<(), ParseError> {
+    p.expect(SyntaxKind::L_PAREN)?;
+    p.parse_delimited(SyntaxKind::R_PAREN, |p| {
+        // Check for rest pattern `..`
+        if p.at(SyntaxKind::DOT_DOT) {
+            rest_pat(p);
+            return Ok(());
+        }
+        // Check for named field: IDENT `:` pattern
+        if p.at(SyntaxKind::IDENT) && p.peek(1) == Some(SyntaxKind::COLON) {
+            struct_pat_field(p)?;
+            return Ok(());
+        }
+        // Otherwise parse as positional pattern
+        pattern(p)?;
+        Ok(())
+    })?;
+    p.expect(SyntaxKind::R_PAREN)?;
+    Ok(())
 }
 
 /// Parse a reference pattern: `&x`, `&mut x`

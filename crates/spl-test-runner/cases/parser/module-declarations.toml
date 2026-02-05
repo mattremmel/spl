@@ -18,3 +18,26 @@ pub module api {
     pub fn endpoint(): i32 { return 0 }
 }
 """
+
+[[case]]
+name = "module_reference"
+source = "module network;"
+
+[[case]]
+name = "module_nested"
+source = """
+module a {
+    module b {
+        fn foo() {}
+    }
+}
+"""
+
+[[case]]
+name = "module_with_items"
+source = """
+module helpers {
+    struct Point(x: i32, y: i32)
+    fn foo() {}
+}
+"""

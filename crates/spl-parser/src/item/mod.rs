@@ -544,6 +544,14 @@ fn where_type_param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseE
         }
     }
 
+    // Optional default type: `= Type`
+    if p.eat(SyntaxKind::EQ)
+        && let Err(e) = stmt::type_annotation(p)
+    {
+        m.abandon(p);
+        return Err(e);
+    }
+
     Ok(m.complete(p, SyntaxKind::GenericParam))
 }
 
@@ -625,16 +633,16 @@ fn is_self_param_start(p: &mut Parser<'_>) -> bool {
     p.at(SyntaxKind::SELF_VALUE_KW)
         || (p.at(SyntaxKind::AMP) && p.peek_at(1, SyntaxKind::SELF_VALUE_KW))
         || (p.at(SyntaxKind::AMP) && p.peek_at(1, SyntaxKind::MUT_KW))
+        || (p.at(SyntaxKind::MUT_KW) && p.peek_at(1, SyntaxKind::SELF_VALUE_KW))
 }
 
-/// Parse a self parameter: `self`, `&self`, or `&mut self`
+/// Parse a self parameter: `self`, `mut self`, `&self`, or `&mut self`
 fn self_param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
 
-    // Optional & and mut
-    if p.eat(SyntaxKind::AMP) {
-        p.eat(SyntaxKind::MUT_KW);
-    }
+    // Optional & (for references) and mut
+    p.eat(SyntaxKind::AMP);
+    p.eat(SyntaxKind::MUT_KW);
 
     if let Err(e) = p.expect(SyntaxKind::SELF_VALUE_KW) {
         m.abandon(p);
@@ -984,7 +992,7 @@ fn trait_item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> 
     }
 }
 
-/// Parse a trait method: `fn name(params) [: Type] (Block | ";")`
+/// Parse a trait method: `fn name(params) [: Type] [throws [Type]] [where ...] (Block | ";")`
 fn trait_method(
     p: &mut Parser<'_>,
     m: crate::Marker,
@@ -1001,6 +1009,11 @@ fn trait_method(
     // Optional return type
     if p.eat(SyntaxKind::COLON) {
         stmt::type_annotation(p)?;
+    }
+
+    // Optional throws clause
+    if let Some(Err(e)) = opt_throws_clause(p) {
+        return Err(e);
     }
 
     // Optional where clause
@@ -1293,18 +1306,25 @@ pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::P
     Ok(m.complete(p, SyntaxKind::TypeAlias))
 }
 
-/// Recovery set for impl block contents (functions only).
-const IMPL_ITEM_RECOVERY_SET: &[SyntaxKind] =
-    &[SyntaxKind::FN_KW, SyntaxKind::PUB_KW, SyntaxKind::R_BRACE];
+/// Recovery set for impl block contents.
+const IMPL_ITEM_RECOVERY_SET: &[SyntaxKind] = &[
+    SyntaxKind::FN_KW,
+    SyntaxKind::TYPE_KW,
+    SyntaxKind::PUB_KW,
+    SyntaxKind::R_BRACE,
+];
 
 /// Parse an impl block.
 ///
-/// Syntax: `[attrs] impl Type [where T, U] { items }`
+/// Syntax: `[attrs] ["unsafe"] "impl" [TraitType "for"] Type [where T, U] { items }`
 pub(crate) fn impl_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
 
     // Optional attributes
     opt_attributes(p);
+
+    // Optional unsafe
+    p.eat(SyntaxKind::UNSAFE_KW);
 
     // impl keyword
     if let Err(e) = p.expect(SyntaxKind::IMPL_KW) {
@@ -1312,8 +1332,17 @@ pub(crate) fn impl_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::P
         return Err(e);
     }
 
-    // Self type
+    // Parse first type (could be trait type or self type)
     if let Err(e) = stmt::type_annotation(p) {
+        m.abandon(p);
+        return Err(e);
+    }
+
+    // Check for `for` keyword — if present, previous type was the trait
+    // and we need to parse the self type
+    if p.eat(SyntaxKind::FOR_KW)
+        && let Err(e) = stmt::type_annotation(p)
+    {
         m.abandon(p);
         return Err(e);
     }
@@ -1384,14 +1413,23 @@ fn visibility_lookahead_at(p: &mut Parser<'_>, start_offset: usize) -> usize {
 pub(crate) fn extern_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
 
+    // Optional attributes
+    opt_attributes(p);
+
     // extern keyword
-    p.expect(SyntaxKind::EXTERN_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::EXTERN_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Optional ABI string (e.g., "C")
     p.eat(SyntaxKind::STRING_LITERAL);
 
     // Items block
-    p.expect(SyntaxKind::L_BRACE)?;
+    if let Err(e) = p.expect(SyntaxKind::L_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
         if let Err(err) = extern_fn(p) {
@@ -1399,7 +1437,10 @@ pub(crate) fn extern_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate:
         }
     }
 
-    p.expect(SyntaxKind::R_BRACE)?;
+    if let Err(e) = p.expect(SyntaxKind::R_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     Ok(m.complete(p, SyntaxKind::ExternBlock))
 }
@@ -1419,17 +1460,29 @@ fn extern_fn(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     opt_visibility(p);
 
     // fn keyword
-    p.expect(SyntaxKind::FN_KW)?;
+    if let Err(e) = p.expect(SyntaxKind::FN_KW) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Function name
-    name(p)?;
+    if let Err(e) = name(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Parameter list
-    param_list(p)?;
+    if let Err(e) = param_list(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Optional return type
-    if p.eat(SyntaxKind::COLON) {
-        stmt::type_annotation(p)?;
+    if p.eat(SyntaxKind::COLON)
+        && let Err(e) = stmt::type_annotation(p)
+    {
+        m.abandon(p);
+        return Err(e);
     }
 
     // Optional semicolon (no body)
@@ -1553,6 +1606,7 @@ fn is_use_path_segment_kind(kind: SyntaxKind) -> bool {
             | SyntaxKind::SELF_VALUE_KW
             | SyntaxKind::SUPER_KW
             | SyntaxKind::MODULE_KW
+            | SyntaxKind::DOLLAR
     )
 }
 
@@ -1669,7 +1723,7 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseEr
     }
 }
 
-/// Parse a module definition: `[attrs] [pub] module name { items }`
+/// Parse a module definition: `[attrs] [pub] module name { items }` or `module name;`
 pub(crate) fn module_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
 
@@ -1685,20 +1739,26 @@ pub(crate) fn module_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::P
     // Module name
     name(p)?;
 
-    // Items block
-    p.expect(SyntaxKind::L_BRACE)?;
+    // Either a block body or a semicolon (module reference)
+    if p.at(SyntaxKind::L_BRACE) {
+        // Items block
+        p.bump(); // {
 
-    while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
-        if let Err(err) = item(p) {
-            // Recover to next item in module
-            p.recover_with_error(
-                err,
-                &[SyntaxKind::FN_KW, SyntaxKind::PUB_KW, SyntaxKind::R_BRACE],
-            );
+        while !p.at(SyntaxKind::R_BRACE) && p.current().is_some() {
+            if let Err(err) = item(p) {
+                // Recover to next item in module
+                p.recover_with_error(
+                    err,
+                    &[SyntaxKind::FN_KW, SyntaxKind::PUB_KW, SyntaxKind::R_BRACE],
+                );
+            }
         }
-    }
 
-    p.expect(SyntaxKind::R_BRACE)?;
+        p.expect(SyntaxKind::R_BRACE)?;
+    } else {
+        // Module reference: `module name;`
+        stmt::eat_optional_semicolon(p);
+    }
 
     Ok(m.complete(p, SyntaxKind::ModuleDef))
 }

@@ -30,3 +30,19 @@ source = "fn f() { let x: [i32; 10] = arr }"
 [[case]]
 name = "let_semicolon"
 source = "fn f() { let x = 1; let y = 2; }"
+
+[[case]]
+name = "let_mut_in_pattern"
+source = "fn f() { let (mut a, b) = pair }"
+
+[[case]]
+name = "let_struct_pattern"
+source = "fn f() { let Point(x, y) = p }"
+
+[[case]]
+name = "let_type_and_pattern"
+source = "fn f() { let (a, b): (i32, i32) = pair }"
+
+[[case]]
+name = "let_ref_pattern"
+source = "fn f() { let &x = ref_val }"

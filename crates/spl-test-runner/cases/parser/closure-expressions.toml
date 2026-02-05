@@ -29,3 +29,27 @@ source = "fn f() { |x: i32| x + 1 }"
 [[case]]
 name = "closure_multi_params"
 source = "fn f() { |a, b| a + b }"
+
+[[case]]
+name = "closure_capture_simple"
+source = "fn f() { @[x] |y| x + y }"
+
+[[case]]
+name = "closure_capture_expr"
+source = "fn f() { @[x: &x] || x }"
+
+[[case]]
+name = "closure_capture_multiple"
+source = "fn f() { @[x, y: &y] |z| x + y + z }"
+
+[[case]]
+name = "closure_capture_empty"
+source = "fn f() { @[] || 42 }"
+
+[[case]]
+name = "closure_mut_param"
+source = "fn f() { |mut x: i32| x }"
+
+[[case]]
+name = "closure_trailing_comma"
+source = "fn f() { |a: i32, b: i32,| a + b }"

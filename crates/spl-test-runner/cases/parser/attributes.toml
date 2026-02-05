@@ -50,3 +50,59 @@ fn foo() {}
 name = "attr_unclosed"
 expect_error = "expected"
 source = "#[test fn foo() {}"
+
+[[case]]
+name = "attr_on_enum"
+source = "#[repr(u8)] enum Color { Red, Green, Blue }"
+
+[[case]]
+name = "attr_on_trait"
+source = """
+#[deprecated]
+trait Foo {
+    fn bar(&self)
+}
+"""
+
+[[case]]
+name = "attr_on_impl"
+source = """
+#[cfg(test)]
+impl Foo {
+    fn bar() {}
+}
+"""
+
+[[case]]
+name = "attr_on_const"
+source = "#[allow(unused)] const X: i32 = 0"
+
+[[case]]
+name = "attr_on_use"
+source = "#[cfg(test)] use std.io"
+
+[[case]]
+name = "attr_on_module"
+source = """
+#[cfg(test)]
+module test_mod {
+    fn helper() {}
+}
+"""
+
+[[case]]
+name = "inner_attr_multiple"
+source = """
+#![allow(unused)]
+#![feature(test)]
+fn foo() {}
+"""
+
+[[case]]
+name = "attr_link"
+source = """
+#[link(name = "foo")]
+extern {
+    fn bar(): i32;
+}
+"""

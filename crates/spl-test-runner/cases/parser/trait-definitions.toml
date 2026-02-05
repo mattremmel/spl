@@ -65,3 +65,76 @@ unsafe trait Send {
 [[case]]
 name = "trait_empty"
 source = "trait Marker {}"
+
+[[case]]
+name = "trait_multiple_supertraits_3plus"
+source = """
+trait Numeric: Add + Sub + Mul + Div {
+    fn zero(): Self
+}
+"""
+
+[[case]]
+name = "trait_unsafe_method"
+source = """
+unsafe trait Foo {
+    unsafe fn danger(&self)
+}
+"""
+
+[[case]]
+name = "trait_const_method"
+source = """
+trait Foo {
+    const fn compute(): i32;
+}
+"""
+
+[[case]]
+name = "trait_pub_item"
+source = """
+trait Foo {
+    pub fn bar(&self);
+}
+"""
+
+[[case]]
+name = "trait_method_throws"
+source = """
+trait Foo {
+    fn read(&self): i32 throws Error;
+}
+"""
+
+[[case]]
+name = "trait_method_where"
+source = """
+trait Foo {
+    fn convert(&self): i32 where U;
+}
+"""
+
+[[case]]
+name = "trait_multiple_assoc_types"
+source = """
+trait Foo {
+    type Item;
+    type Error;
+}
+"""
+
+[[case]]
+name = "trait_assoc_type_multiple_bounds"
+source = """
+trait Foo {
+    type Item: Clone + Debug;
+}
+"""
+
+[[case]]
+name = "trait_default_type_param"
+source = """
+trait Add where RHS = Self {
+    fn add(self): Self
+}
+"""

@@ -26,3 +26,31 @@ source = "fn foo(x: Vec(T: i32)) {}"
 [[case]]
 name = "path_shorthand_generic"
 source = "fn foo(x: Option(T)) {}"
+
+[[case]]
+name = "path_self_type"
+source = """
+impl Foo {
+    fn me(&self): Self { return self }
+}
+"""
+
+[[case]]
+name = "path_package_root"
+source = "fn f(x: $.utils.Config) {}"
+
+[[case]]
+name = "path_super_type"
+source = "fn f(x: super.Parent) {}"
+
+[[case]]
+name = "path_multiple_generic_args"
+source = "fn f(x: HashMap(K: String, V: i32)) {}"
+
+[[case]]
+name = "path_nested_generics"
+source = "fn f(x: Vec(T: Option(T: i32))) {}"
+
+[[case]]
+name = "path_optional_on_generic"
+source = "fn f(x: Option(T: i32)?) {}"

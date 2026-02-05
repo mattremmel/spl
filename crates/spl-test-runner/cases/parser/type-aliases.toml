@@ -31,3 +31,15 @@ source = "type StringMap(V, K) = i32 where V, K: Hash + Eq"
 name = "type_missing_eq"
 expect_error = "expected"
 source = "type Foo i32;"
+
+[[case]]
+name = "type_alias_with_semicolon"
+source = "type Int = i32;"
+
+[[case]]
+name = "type_alias_default"
+source = "type MyResult(T, E) = i32 where T, E = Error"
+
+[[case]]
+name = "type_alias_bounds_and_default"
+source = "type StringMap(V, K) = i32 where V, K: Hash + Eq = String"

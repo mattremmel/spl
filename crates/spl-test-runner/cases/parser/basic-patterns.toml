@@ -97,3 +97,36 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "pat_negative_float"
+source = """
+fn f() {
+    match x {
+        -3.14 => 0,
+        _ => 1,
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_chars"
+source = """
+fn f() {
+    match c {
+        'a'..='z' => 0,
+        _ => 1,
+    }
+}
+"""
+
+[[case]]
+name = "pat_half_open_range"
+source = """
+fn f() {
+    match x {
+        0.. => 0,
+        _ => 1,
+    }
+}
+"""

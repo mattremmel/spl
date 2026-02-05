@@ -39,3 +39,23 @@ source = "struct Pair(first: T, second: U) where T, U"
 name = "struct_missing_paren"
 expect_error = "expected"
 source = "struct Point x: i32)"
+
+[[case]]
+name = "struct_generic_positional"
+source = "struct Wrapper(T) where T"
+
+[[case]]
+name = "struct_where_with_bounds"
+source = "struct Container(items: i32) where T: Clone"
+
+[[case]]
+name = "struct_where_multiple_bounded"
+source = "struct Map(k: i32, v: i32) where K: Hash + Eq, V"
+
+[[case]]
+name = "struct_mixed_pub_fields"
+source = "struct Foo(pub x: i32, y: i32)"
+
+[[case]]
+name = "struct_pub_positional_field"
+source = "pub struct Newtype(pub i32)"

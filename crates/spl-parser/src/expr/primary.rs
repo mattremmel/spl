@@ -202,9 +202,12 @@ fn closure_params(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseErr
     Ok(m.complete(p, SyntaxKind::ClosureParams))
 }
 
-/// Parse a single closure parameter: name or name: type
+/// Parse a single closure parameter: [mut] name [: type]
 fn closure_param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
+
+    // Optional mut
+    p.eat(SyntaxKind::MUT_KW);
 
     // Parse name
     if let Err(e) = crate::item::name(p) {

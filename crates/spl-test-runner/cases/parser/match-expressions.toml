@@ -61,3 +61,75 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "match_or_pattern"
+source = """
+fn f() {
+    match x {
+        1 | 2 | 3 => 0,
+        _ => 1,
+    }
+}
+"""
+
+[[case]]
+name = "match_struct_pattern"
+source = """
+fn f() {
+    match p {
+        Point(x, y) => x + y,
+    }
+}
+"""
+
+[[case]]
+name = "match_block_arm"
+source = """
+fn f() {
+    match x {
+        0 => {
+            let y = 1
+            return y
+        },
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_complex_guard"
+source = """
+fn f() {
+    match x {
+        n if n > 0 && n < 100 => n,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_fully_qualified"
+source = """
+fn f() {
+    match x {
+        Option.Some(v) => v,
+        Option.None => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_empty"
+source = "fn f() { match x {} }"
+
+[[case]]
+name = "match_enum_shorthand_or"
+source = """
+fn f() {
+    match x {
+        .Some(0) | .None => 0,
+        .Some(n) => n,
+    }
+}
+"""

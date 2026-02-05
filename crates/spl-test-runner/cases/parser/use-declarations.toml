@@ -31,3 +31,23 @@ source = "use super.common"
 name = "use_missing_path"
 expect_error = "expected"
 source = "use"
+
+[[case]]
+name = "use_package_root"
+source = "use $.utils.helper"
+
+[[case]]
+name = "use_self_path"
+source = "use self.helper"
+
+[[case]]
+name = "use_grouped_with_rename"
+source = "use std.{HashMap as Map, HashSet}"
+
+[[case]]
+name = "use_trailing_comma_group"
+source = "use std.{HashMap, HashSet,}"
+
+[[case]]
+name = "use_deeply_nested"
+source = "use a.b.c.d.e.f"

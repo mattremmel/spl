@@ -52,3 +52,28 @@ source = "enum Color { Red, Green, Blue, }"
 [[case]]
 name = "enum_empty"
 source = "enum Empty {}"
+
+[[case]]
+name = "enum_multiple_type_params"
+source = """
+enum Result {
+    Ok(T),
+    Err(E),
+} where T, E
+"""
+
+[[case]]
+name = "enum_tuple_3_fields"
+source = """
+enum Msg {
+    Color(u8, u8, u8),
+}
+"""
+
+[[case]]
+name = "enum_variant_trailing_comma_fields"
+source = """
+enum Msg {
+    Move(x: i32, y: i32,),
+}
+"""

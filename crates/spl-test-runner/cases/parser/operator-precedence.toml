@@ -86,3 +86,75 @@ source = "fn f() { x += 1 }"
 [[case]]
 name = "precedence_bitwise_not"
 source = "fn f() { ~a }"
+
+[[case]]
+name = "precedence_exponentiation"
+source = "fn f() { 2 ** 3 }"
+
+[[case]]
+name = "precedence_exponent_right_assoc"
+source = "fn f() { 2 ** 3 ** 2 }"
+
+[[case]]
+name = "precedence_exponent_vs_unary"
+source = "fn f() { -2 ** 3 }"
+
+[[case]]
+name = "precedence_is_operator"
+source = "fn f() { x is .Some(v) }"
+
+[[case]]
+name = "precedence_is_and"
+source = "fn f() { value is .Some(x) && x > 0 }"
+
+[[case]]
+name = "precedence_coalesce_chain"
+source = "fn f() { a ?? b ?? c }"
+
+[[case]]
+name = "precedence_right_shift"
+source = "fn f() { a >> b }"
+
+[[case]]
+name = "precedence_comparison_gt"
+source = "fn f() { a > b }"
+
+[[case]]
+name = "precedence_comparison_gte"
+source = "fn f() { a >= b }"
+
+[[case]]
+name = "precedence_all_compound_assign"
+source = "fn f() { x -= 1; x *= 2; x /= 3; x %= 4 }"
+
+[[case]]
+name = "precedence_range_exclusive"
+source = "fn f() { 0..10 }"
+
+[[case]]
+name = "precedence_range_inclusive"
+source = "fn f() { 0..=10 }"
+
+[[case]]
+name = "precedence_range_open_end"
+source = "fn f() { 0.. }"
+
+[[case]]
+name = "precedence_range_open_start"
+source = "fn f() { ..10 }"
+
+[[case]]
+name = "precedence_range_full"
+source = "fn f() { .. }"
+
+[[case]]
+name = "precedence_ref_mut"
+source = "fn f() { &mut x }"
+
+[[case]]
+name = "precedence_chained_logical"
+source = "fn f() { a || b || c }"
+
+[[case]]
+name = "precedence_mixed_logical"
+source = "fn f() { a || b && c }"

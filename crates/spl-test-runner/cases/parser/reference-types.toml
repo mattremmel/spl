@@ -34,3 +34,19 @@ source = "fn foo(x: &&mut i32) {}"
 [[case]]
 name = "ref_nested_outer_mut"
 source = "fn foo(x: &mut &i32) {}"
+
+[[case]]
+name = "ref_to_generic"
+source = "fn f(x: &Vec(T: i32)) {}"
+
+[[case]]
+name = "ref_to_array"
+source = "fn f(x: &[i32; 10]) {}"
+
+[[case]]
+name = "ref_to_fn_type"
+source = "fn f(x: &fn(i32): bool) {}"
+
+[[case]]
+name = "ref_lifetime_nested"
+source = "fn f(x: &'a &'b i32) {}"

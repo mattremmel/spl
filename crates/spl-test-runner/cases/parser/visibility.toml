@@ -22,3 +22,19 @@ source = "pub($.path) fn scoped_fn() {}"
 [[case]]
 name = "vis_pub_fields"
 source = "pub struct Point(pub x: i32, pub y: i32)"
+
+[[case]]
+name = "vis_pub_on_trait_items"
+source = """
+trait Foo {
+    pub fn bar(&self);
+}
+"""
+
+[[case]]
+name = "vis_pub_on_impl_items"
+source = """
+impl Foo {
+    pub fn bar(&self) {}
+}
+"""

@@ -50,3 +50,27 @@ fn f() {
     let x = { 42 }
 }
 """
+
+[[case]]
+name = "assignment_to_field"
+source = "fn f() { obj.field = 1 }"
+
+[[case]]
+name = "assignment_to_index"
+source = "fn f() { arr[0] = 1 }"
+
+[[case]]
+name = "assignment_right_assoc"
+source = "fn f() { a = b = 1 }"
+
+[[case]]
+name = "all_compound_assigns"
+source = "fn f() { x -= 1; x *= 2; x /= 3; x %= 4; x &= 0xFF; x |= 1; x ^= 2; x <<= 1; x >>= 1 }"
+
+[[case]]
+name = "chained_unary"
+source = "fn f() { !!a }"
+
+[[case]]
+name = "ref_mut_expr"
+source = "fn f() { &mut x }"

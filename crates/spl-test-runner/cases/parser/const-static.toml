@@ -19,3 +19,23 @@ source = "static mut GLOBAL: i32 = 0"
 name = "const_missing_type"
 expect_error = "expected"
 source = "const FOO = 42"
+
+[[case]]
+name = "const_with_semicolon"
+source = "const PI: f64 = 3.14;"
+
+[[case]]
+name = "pub_const"
+source = "pub const MAX: i32 = 100"
+
+[[case]]
+name = "pub_static"
+source = "pub static COUNTER: i32 = 0"
+
+[[case]]
+name = "const_complex_expr"
+source = "const X: i32 = 1 + 2 * 3"
+
+[[case]]
+name = "pub_super_const"
+source = "pub(super) const Y: i32 = 5"

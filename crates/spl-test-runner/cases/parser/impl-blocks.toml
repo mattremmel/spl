@@ -46,3 +46,43 @@ impl Stack {
 name = "impl_missing_brace"
 expect_error = "expected"
 source = "impl Foo fn bar() {} }"
+
+[[case]]
+name = "impl_trait_for_type"
+source = """
+impl Clone for Point {
+    fn clone(&self): Self {
+        return self
+    }
+}
+"""
+
+[[case]]
+name = "impl_with_generic_args"
+source = """
+impl Box where T {
+    fn unwrap(self): i32 {
+        return 0
+    }
+}
+"""
+
+[[case]]
+name = "impl_unsafe"
+source = "unsafe impl Send for MyType {}"
+
+[[case]]
+name = "impl_type_assignment"
+source = """
+impl Foo {
+    type Output = i32
+}
+"""
+
+[[case]]
+name = "impl_method_where"
+source = """
+impl Vec where T {
+    fn convert(&self): i32 where U {}
+}
+"""

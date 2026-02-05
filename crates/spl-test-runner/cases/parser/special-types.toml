@@ -14,3 +14,11 @@ source = "fn foo(x: i32?) {}"
 [[case]]
 name = "ref_optional"
 source = "fn foo(x: &i32?) {}"
+
+[[case]]
+name = "never_in_let"
+source = "fn f() { let x: Never = loop {} }"
+
+[[case]]
+name = "never_as_generic_arg"
+source = "fn f(x: Result(T: Never, E: Error)) {}"

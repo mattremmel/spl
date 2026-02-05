@@ -36,3 +36,11 @@ source = "fn f() { let x: Option(T: Vec(T: i32)) = v }"
 [[case]]
 name = "method_vs_field"
 source = "fn f() { obj.field.method() }"
+
+[[case]]
+name = "struct_shorthand_mixed"
+source = "fn f() { Point(x, y: y + 1) }"
+
+[[case]]
+name = "named_tuple_not_grouped"
+source = "fn f() { (x: 1) }"

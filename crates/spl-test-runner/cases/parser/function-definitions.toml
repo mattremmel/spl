@@ -75,3 +75,51 @@ source = """fn greet(name: String = "World") {}"""
 name = "fn_missing_name"
 expect_error = "expected"
 source = "fn () {}"
+
+[[case]]
+name = "fn_self_by_value"
+source = """
+impl Foo {
+    fn consume(self) {}
+}
+"""
+
+[[case]]
+name = "fn_mut_self"
+source = """
+impl Foo {
+    fn take(mut self) {}
+}
+"""
+
+[[case]]
+name = "fn_multiple_defaults"
+source = """fn connect(host: String, port: i32 = 8080, timeout: i32 = 30) {}"""
+
+[[case]]
+name = "fn_where_multiple_params"
+source = "fn foo(a: T, b: U): i32 where T, U {}"
+
+[[case]]
+name = "fn_where_multiple_bounds"
+source = "fn foo(x: T): i32 where T: Clone + Debug {}"
+
+[[case]]
+name = "fn_where_default_type"
+source = "fn foo(x: T): i32 where T = i32 {}"
+
+[[case]]
+name = "fn_throws_untyped"
+source = "fn process(): i32 throws { return 0 }"
+
+[[case]]
+name = "fn_const_unsafe"
+source = "const unsafe fn danger(): i32 { return 0 }"
+
+[[case]]
+name = "fn_trailing_comma_params"
+source = "fn foo(a: i32, b: i32,) {}"
+
+[[case]]
+name = "fn_mixed_label_styles"
+source = "fn foo(to name: String, _ x: i32, y: i32) {}"

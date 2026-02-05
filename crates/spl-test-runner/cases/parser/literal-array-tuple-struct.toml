@@ -60,3 +60,31 @@ source = "fn f() { (x: 1) }"
 [[case]]
 name = "enum_shorthand"
 source = "fn f() { .Some(42) }"
+
+[[case]]
+name = "enum_shorthand_no_args"
+source = "fn f() { .Red }"
+
+[[case]]
+name = "enum_shorthand_named_args"
+source = "fn f() { .Move(x: 10, y: 20) }"
+
+[[case]]
+name = "single_element_tuple"
+source = "fn f() { (1,) }"
+
+[[case]]
+name = "unit_expression"
+source = "fn f() { () }"
+
+[[case]]
+name = "array_trailing_comma"
+source = "fn f() { [1, 2, 3,] }"
+
+[[case]]
+name = "empty_array"
+source = "fn f() { [] }"
+
+[[case]]
+name = "struct_with_type_args"
+source = "fn f() { Box(T: i32, value: 42) }"

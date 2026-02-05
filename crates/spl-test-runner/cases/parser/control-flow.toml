@@ -46,3 +46,67 @@ source = "fn f(): i32 { return 42 }"
 [[case]]
 name = "return_void"
 source = "fn f() { return }"
+
+[[case]]
+name = "labeled_loop"
+source = "fn f() { 'outer: loop { break } }"
+
+[[case]]
+name = "labeled_while"
+source = "fn f() { 'outer: while true { continue 'outer } }"
+
+[[case]]
+name = "labeled_for"
+source = "fn f() { 'outer: for x in items { break 'outer } }"
+
+[[case]]
+name = "labeled_block"
+source = "fn f() { 'calc: { break 'calc 42 } }"
+
+[[case]]
+name = "break_with_label"
+source = "fn f() { 'x: loop { break 'x } }"
+
+[[case]]
+name = "break_label_value"
+source = "fn f() { 'x: loop { break 'x 42 } }"
+
+[[case]]
+name = "continue_with_label"
+source = "fn f() { 'x: while true { continue 'x } }"
+
+[[case]]
+name = "nested_labeled_loops"
+source = """
+fn f() {
+    'outer: for x in a {
+        'inner: for y in b {
+            break 'outer
+        }
+    }
+}
+"""
+
+[[case]]
+name = "for_range"
+source = "fn f() { for i in 0..10 { i } }"
+
+[[case]]
+name = "while_is_pattern"
+source = "fn f() { while x is .Some(v) { v } }"
+
+[[case]]
+name = "if_is_pattern"
+source = "fn f() { if x is .Some(v) { v } }"
+
+[[case]]
+name = "yield_standalone"
+source = "gen fn f(): i32 { yield 42 }"
+
+[[case]]
+name = "throw_expr"
+source = "fn f() throws { throw err }"
+
+[[case]]
+name = "unsafe_block"
+source = "fn f() { unsafe { danger() } }"

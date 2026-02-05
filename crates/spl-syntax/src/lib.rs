@@ -256,6 +256,7 @@ pub enum SyntaxKind {
     Path,
     PathSegment,
     Lifetime,
+    LifetimeParams,
     Visibility,
 
     // Attributes

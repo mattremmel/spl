@@ -30,3 +30,43 @@ source = "fn f() { a[0][1] }"
 [[case]]
 name = "method_on_index"
 source = "fn f() { arr[0].method() }"
+
+[[case]]
+name = "optional_chain_field"
+source = "fn f() { x?.field }"
+
+[[case]]
+name = "optional_chain_method"
+source = "fn f() { x?.method() }"
+
+[[case]]
+name = "optional_chain_nested"
+source = "fn f() { a?.b?.c }"
+
+[[case]]
+name = "slice_range"
+source = "fn f() { arr[1:3] }"
+
+[[case]]
+name = "slice_from_start"
+source = "fn f() { arr[:3] }"
+
+[[case]]
+name = "slice_to_end"
+source = "fn f() { arr[1:] }"
+
+[[case]]
+name = "slice_full"
+source = "fn f() { arr[:] }"
+
+[[case]]
+name = "dollar_index"
+source = "fn f() { arr[$-1] }"
+
+[[case]]
+name = "dollar_in_slice"
+source = "fn f() { arr[1:$-1] }"
+
+[[case]]
+name = "try_propagate"
+source = "fn f() { result! }"
