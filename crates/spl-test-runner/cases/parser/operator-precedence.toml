@@ -178,3 +178,31 @@ source = "fn f() { for i in 0..10 {} }"
 [[case]]
 name = "bitwise_complement_precedence"
 source = "fn f() { let x = ~a & b }"
+
+[[case]]
+name = "precedence_is_vs_coalesce"
+source = "fn f() { x ?? y is .Some(v) }"
+
+[[case]]
+name = "precedence_all_bitwise_compound"
+source = """
+fn f() {
+    x &= 1;
+    x |= 2;
+    x ^= 3;
+    x <<= 4;
+    x >>= 5;
+}
+"""
+
+[[case]]
+name = "precedence_complex_chain"
+source = "fn f() { a + b * c ** d - e / f % g }"
+
+[[case]]
+name = "precedence_unary_chain"
+source = "fn f() { !-*&x }"
+
+[[case]]
+name = "precedence_range_in_arithmetic"
+source = "fn f() { 1 + 2..3 + 4 }"

@@ -34,3 +34,19 @@ source = "type T = ();"
 [[case]]
 name = "nested_tuples"
 source = "type T = ((i32, i32), (bool, bool));"
+
+[[case]]
+name = "single_element_tuple_type"
+source = "fn f(x: (i32,)) {}"
+
+[[case]]
+name = "array_type_complex_size"
+source = "fn f(x: [i32; N * 2]) {}"
+
+[[case]]
+name = "tuple_type_nested_named"
+source = "fn f(x: (inner: (a: i32, b: i32), y: i32)) {}"
+
+[[case]]
+name = "tuple_type_with_refs"
+source = "fn f(x: (&i32, &mut String)) {}"

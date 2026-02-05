@@ -53,3 +53,15 @@ name = "type_alias_multiple_params_mixed"
 source = """
 type StringMap(V) = HashMap(K: String, V: V) where V: Clone
 """
+
+[[case]]
+name = "type_alias_nested_generic"
+source = "type NestedOpt(T) = Option(T: Option(T: T)) where T"
+
+[[case]]
+name = "type_alias_fn_type"
+source = "type Callback = fn(i32, i32): i32"
+
+[[case]]
+name = "type_alias_ref_type"
+source = "type StrRef = &str"

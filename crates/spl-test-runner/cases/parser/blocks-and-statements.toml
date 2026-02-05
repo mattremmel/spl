@@ -73,3 +73,24 @@ fn f() {
     enum Color { Red, Green, Blue }
 }
 """
+
+[[case]]
+name = "block_nested_type_alias"
+source = "fn f() { type MyInt = i32 }"
+
+[[case]]
+name = "block_nested_const"
+source = "fn f() { const X: i32 = 42 }"
+
+[[case]]
+name = "block_expr_then_item"
+source = """
+fn f() {
+    foo();
+    fn helper(): i32 { 0 }
+}
+"""
+
+[[case]]
+name = "block_nested_static"
+source = "fn f() { static X: i32 = 0 }"

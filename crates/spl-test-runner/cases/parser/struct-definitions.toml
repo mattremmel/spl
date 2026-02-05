@@ -67,3 +67,15 @@ source = "struct Table(k: K, v: V) where K: Hash + Eq, V"
 [[case]]
 name = "struct_generic_positional_where_bounds"
 source = "struct Wrapper(T) where T: Clone"
+
+[[case]]
+name = "struct_where_bound_and_default"
+source = "struct Container(value: T) where T: Clone = i32"
+
+[[case]]
+name = "struct_mixed_visibility_fields"
+source = "struct Foo(pub x: i32, y: i32, pub z: i32)"
+
+[[case]]
+name = "struct_generic_multiple_bounds"
+source = "struct S(val: T) where T: Clone + Debug"

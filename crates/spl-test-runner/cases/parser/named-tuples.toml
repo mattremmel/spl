@@ -36,3 +36,15 @@ fn f() {
 [[case]]
 name = "named_tuple_single_element"
 source = "fn f() { (x: 1) }"
+
+[[case]]
+name = "named_tuple_optional_field_type"
+source = "fn f(p: (x: i32?, y: i32)) {}"
+
+[[case]]
+name = "named_tuple_generic_field_type"
+source = "fn f(p: (items: Vec(T: i32), count: i32)) {}"
+
+[[case]]
+name = "named_tuple_as_param_and_return"
+source = "fn f(p: (x: i32, y: i32)): (sum: i32, product: i32) {}"

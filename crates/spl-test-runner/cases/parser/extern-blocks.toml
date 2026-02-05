@@ -91,3 +91,27 @@ extern "C" {
 [[case]]
 name = "extern_fn_def_with_body"
 source = """extern "C" fn handler(code: i32): i32 { code + 1 }"""
+
+[[case]]
+name = "extern_variadic_only"
+source = """
+extern "C" {
+    fn variadic_only(...): i32;
+}
+"""
+
+[[case]]
+name = "extern_fn_multiple_params"
+source = """
+extern "C" {
+    fn multi(a: i32, b: i32, c: i32): i32;
+}
+"""
+
+[[case]]
+name = "extern_fn_return_void"
+source = """
+extern "C" {
+    fn exit(code: i32);
+}
+"""

@@ -56,3 +56,19 @@ gen fn empty(): i32 {
     yield 0
 }
 """
+
+[[case]]
+name = "gen_fn_labeled_param"
+source = "gen fn items(from start: i32): i32 { yield start }"
+
+[[case]]
+name = "gen_fn_default_param"
+source = "gen fn range(start: i32 = 0): i32 { yield start }"
+
+[[case]]
+name = "gen_fn_self_param"
+source = """
+impl Foo {
+    gen fn iter(&self): i32 { yield 0 }
+}
+"""

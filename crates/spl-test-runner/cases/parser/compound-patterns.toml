@@ -247,3 +247,52 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "pat_or_inside_tuple"
+source = "fn f() { let (1 | 2, b) = pair }"
+
+[[case]]
+name = "pat_wildcard_in_struct"
+source = """
+fn f() {
+    match p {
+        Point(_, y) => y,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_enum_nested_struct"
+source = """
+fn f() {
+    match x {
+        .Some(Point(x, y)) => x + y,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_dollar_path"
+source = """
+fn f() {
+    match x {
+        $.constants.MAX => true,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "pat_self_type"
+source = """
+impl Foo {
+    fn check(self) {
+        match self {
+            Self(a, b) => a + b,
+        }
+    }
+}
+"""

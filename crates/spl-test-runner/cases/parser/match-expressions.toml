@@ -179,3 +179,59 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "match_guard_with_is"
+source = """
+fn f() {
+    match x {
+        n if n is .Some(_) => 1,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_on_method_call"
+source = """
+fn f() {
+    match obj.get() {
+        .Some(v) => v,
+        .None => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_arm_with_block_return"
+source = """
+fn f() {
+    match x {
+        0 => { return 0 },
+        _ => 1,
+    }
+}
+"""
+
+[[case]]
+name = "match_string_patterns"
+source = """
+fn f() {
+    match s {
+        "yes" => true,
+        "no" => false,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "match_multiple_or_with_guard"
+source = """
+fn f() {
+    match x {
+        1 | 2 | 3 if x > 1 => true,
+        _ => false,
+    }
+}
+"""

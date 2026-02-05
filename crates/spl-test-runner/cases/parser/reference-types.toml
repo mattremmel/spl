@@ -50,3 +50,23 @@ source = "fn f(x: &fn(i32): bool) {}"
 [[case]]
 name = "ref_lifetime_nested"
 source = "fn f(x: &'a &'b i32) {}"
+
+[[case]]
+name = "ref_lifetime_both"
+source = "fn f(x: &'a mut &'b i32) {}"
+
+[[case]]
+name = "ref_to_tuple"
+source = "fn f(x: &(i32, String)) {}"
+
+[[case]]
+name = "ref_to_never"
+source = "fn f(x: &Never) {}"
+
+[[case]]
+name = "ref_to_optional"
+source = "fn f(x: &i32?) {}"
+
+[[case]]
+name = "ref_to_fn_type_complex"
+source = "fn f(x: &fn(i32): bool) {}"

@@ -58,3 +58,19 @@ source = "fn f(x: fn(fn(i32): bool): i32) {}"
 [[case]]
 name = "fn_type_trailing_comma"
 source = "fn f(x: fn(i32, bool,): i32) {}"
+
+[[case]]
+name = "fn_type_multiple_lifetimes"
+source = "fn f(x: fn('a, 'b)(&'a i32, &'b i32): &'a i32) {}"
+
+[[case]]
+name = "fn_type_optional_return"
+source = "fn f(x: fn(i32): i32?) {}"
+
+[[case]]
+name = "fn_type_nested"
+source = "fn f(x: fn(fn(i32): i32): bool) {}"
+
+[[case]]
+name = "fn_type_unsafe_extern_combo"
+source = "fn f(x: unsafe extern \"C\" fn(i32): i32) {}"

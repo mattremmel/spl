@@ -90,3 +90,23 @@ source = "fn f() { matrix[$-1][$-1] }"
 [[case]]
 name = "method_chain_long"
 source = "fn f() { a.b().c.d().e }"
+
+[[case]]
+name = "field_after_call"
+source = "fn f() { foo().field }"
+
+[[case]]
+name = "index_after_method"
+source = "fn f() { obj.items()[0] }"
+
+[[case]]
+name = "optional_chain_then_index"
+source = "fn f() { x?.items[0] }"
+
+[[case]]
+name = "try_after_method"
+source = "fn f() { obj.get()! }"
+
+[[case]]
+name = "slice_nested"
+source = "fn f() { matrix[0][1:3] }"

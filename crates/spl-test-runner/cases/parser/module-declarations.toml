@@ -41,3 +41,29 @@ module helpers {
     fn foo() {}
 }
 """
+
+[[case]]
+name = "module_with_use"
+source = """
+module foo {
+    use super.Bar
+}
+"""
+
+[[case]]
+name = "module_with_attributes"
+source = """
+#[cfg(test)]
+module tests {
+    fn test_foo() {}
+}
+"""
+
+[[case]]
+name = "module_nested_items"
+source = """
+module inner {
+    struct Point(x: i32)
+    fn new(): Point { Point(x: 0) }
+}
+"""

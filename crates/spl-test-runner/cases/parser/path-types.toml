@@ -54,3 +54,31 @@ source = "fn f(x: Vec(T: Option(T: i32))) {}"
 [[case]]
 name = "path_optional_on_generic"
 source = "fn f(x: Option(T: i32)?) {}"
+
+[[case]]
+name = "path_deeply_nested_generic"
+source = "fn f(x: Vec(T: HashMap(K: String, V: Vec(T: i32)))) {}"
+
+[[case]]
+name = "path_self_associated_type"
+source = """
+impl Foo {
+    fn bar(&self): Self.Output { self }
+}
+"""
+
+[[case]]
+name = "path_triple_nesting"
+source = "fn f(x: A(T: B(T: C(T: i32)))) {}"
+
+[[case]]
+name = "path_generic_shorthand_mixed"
+source = "fn f(x: Result(T, E: Error)) {}"
+
+[[case]]
+name = "path_self_in_generic"
+source = """
+impl Foo {
+    fn wrap(&self): Option(T: Self) { .Some(self) }
+}
+"""

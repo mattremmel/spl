@@ -54,3 +54,23 @@ source = "fn f() { parse(T: Config, input: text) }"
 [[case]]
 name = "call_shorthand_struct_fields"
 source = "fn f() { Point(x, y) }"
+
+[[case]]
+name = "call_struct_update"
+source = "fn f() { Point(x: 1, ..base) }"
+
+[[case]]
+name = "call_struct_update_only"
+source = "fn f() { Point(..other) }"
+
+[[case]]
+name = "call_method_type_arg_collect"
+source = "fn f() { items.collect(T: Vec(T: i32)) }"
+
+[[case]]
+name = "call_nested_struct"
+source = "fn f() { Outer(inner: Inner(x: 1)) }"
+
+[[case]]
+name = "call_empty_args"
+source = "fn f() { foo() }"

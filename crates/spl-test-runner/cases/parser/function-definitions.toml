@@ -193,3 +193,23 @@ source = """extern "C" fn callback(x: i32): i32 { x }"""
 [[case]]
 name = "fn_extern_bare_fn_def"
 source = """extern fn my_fn(x: i32): i32 { x }"""
+
+[[case]]
+name = "fn_where_bound_and_default"
+source = "fn f(a: T): i32 where T: Clone = i32 {}"
+
+[[case]]
+name = "fn_where_three_params"
+source = "fn f(a: A, b: B, c: C) where A: Clone, B: Debug, C {}"
+
+[[case]]
+name = "fn_param_default_complex_expr"
+source = "fn foo(x: i32 = 1 + 2 * 3) {}"
+
+[[case]]
+name = "fn_lifetime_in_params"
+source = "fn foo(x: &'a T): &'a T where T {}"
+
+[[case]]
+name = "fn_all_modifiers"
+source = "const unsafe fn foo() {}"

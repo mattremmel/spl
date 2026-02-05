@@ -22,3 +22,23 @@ source = "fn f() { let x: Never = loop {} }"
 [[case]]
 name = "never_as_generic_arg"
 source = "fn f(x: Result(T: Never, E: Error)) {}"
+
+[[case]]
+name = "never_in_array"
+source = "fn f(x: [Never; 0]) {}"
+
+[[case]]
+name = "optional_complex_type"
+source = "fn f(x: Vec(T: i32)?) {}"
+
+[[case]]
+name = "optional_on_fn_type"
+source = "fn f(x: fn(): i32?) {}"
+
+[[case]]
+name = "optional_on_ref"
+source = "fn f(x: &i32?) {}"
+
+[[case]]
+name = "never_in_result"
+source = "fn f(x: Result(T: i32, E: Never)) {}"

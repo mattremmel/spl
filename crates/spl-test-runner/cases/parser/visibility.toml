@@ -38,3 +38,15 @@ impl Foo {
     pub fn bar(&self) {}
 }
 """
+
+[[case]]
+name = "vis_pub_package_on_field"
+source = "struct Foo(pub($) x: i32)"
+
+[[case]]
+name = "vis_pub_package_path_on_field"
+source = "struct Foo(pub($.internal) x: i32)"
+
+[[case]]
+name = "vis_pub_static_mut"
+source = "pub static mut COUNTER: i32 = 0"

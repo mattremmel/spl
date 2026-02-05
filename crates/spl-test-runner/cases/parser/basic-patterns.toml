@@ -163,3 +163,58 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "pat_range_path_bound"
+source = """
+fn f() {
+    match x {
+        0..MAX => true,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_path_both_bounds"
+source = """
+fn f() {
+    match x {
+        MIN..MAX => true,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_inclusive_path"
+source = """
+fn f() {
+    match x {
+        0..=MAX_VAL => true,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_half_open_path"
+source = """
+fn f() {
+    match x {
+        MIN.. => true,
+        _ => false,
+    }
+}
+"""
+
+[[case]]
+name = "pat_range_qualified_path"
+source = """
+fn f() {
+    match x {
+        0..config.MAX => true,
+        _ => false,
+    }
+}
+"""

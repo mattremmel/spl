@@ -155,3 +155,37 @@ trait Add where RHS = Self {
     fn add(&self, rhs: RHS): Self.Output
 }
 """
+
+[[case]]
+name = "trait_supertrait_and_where"
+source = """
+trait Foo: Clone where T: Debug {
+    fn bar(&self)
+}
+"""
+
+[[case]]
+name = "trait_assoc_type_with_bounds_default"
+source = """
+trait Foo {
+    type Output: Clone
+}
+"""
+
+[[case]]
+name = "trait_multiple_methods_semicolons"
+source = """
+trait Foo {
+    fn a(&self)
+    fn b(&self): i32
+    fn c(&mut self)
+}
+"""
+
+[[case]]
+name = "trait_unsafe_fn_in_trait"
+source = """
+trait Foo {
+    unsafe fn dangerous(&self)
+}
+"""

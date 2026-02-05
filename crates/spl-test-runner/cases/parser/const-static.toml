@@ -39,3 +39,15 @@ source = "const X: i32 = 1 + 2 * 3"
 [[case]]
 name = "pub_super_const"
 source = "pub(super) const Y: i32 = 5"
+
+[[case]]
+name = "const_bitshift_expr"
+source = "const MASK: u32 = 0xFF << 8"
+
+[[case]]
+name = "static_array_type"
+source = "static ITEMS: [i32; 3] = [1, 2, 3]"
+
+[[case]]
+name = "const_string"
+source = """const GREETING: str = "hello" """

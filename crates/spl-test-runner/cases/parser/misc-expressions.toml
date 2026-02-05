@@ -106,3 +106,27 @@ source = "fn f() { arr[$-1] }"
 [[case]]
 name = "exponentiation_right_assoc"
 source = "fn f() { 2 ** 3 ** 2 }"
+
+[[case]]
+name = "assign_nested_field"
+source = "fn f() { a.b.c = 1 }"
+
+[[case]]
+name = "compound_assign_field"
+source = "fn f() { obj.count += 1 }"
+
+[[case]]
+name = "compound_assign_index"
+source = "fn f() { arr[0] *= 2 }"
+
+[[case]]
+name = "is_with_tuple_pattern"
+source = "fn f() { x is (1, 2) }"
+
+[[case]]
+name = "is_with_range_pattern"
+source = "fn f() { x is 0..10 }"
+
+[[case]]
+name = "is_negated"
+source = "fn f() { if !(x is .None) {} }"

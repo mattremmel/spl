@@ -46,3 +46,23 @@ source = "fn f() { let (a, b): (i32, i32) = pair }"
 [[case]]
 name = "let_ref_pattern"
 source = "fn f() { let &x = ref_val }"
+
+[[case]]
+name = "let_enum_shorthand_pat"
+source = "fn f() { let .Some(x) = opt }"
+
+[[case]]
+name = "let_nested_destructure"
+source = "fn f() { let (Point(x, _), y) = pair }"
+
+[[case]]
+name = "let_mut_in_tuple"
+source = "fn f() { let (mut a, mut b) = pair }"
+
+[[case]]
+name = "let_no_init_complex_type"
+source = "fn f() { let x: Vec(T: i32) }"
+
+[[case]]
+name = "let_or_pattern"
+source = "fn f() { let (1 | 2 | 3) = val }"

@@ -160,3 +160,31 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "if_as_expression"
+source = "fn f() { let x = if true { 1 } else { 0 } }"
+
+[[case]]
+name = "for_tuple_destructure"
+source = "fn f() { for (a, b) in pairs {} }"
+
+[[case]]
+name = "while_is_pattern_pop"
+source = "fn f() { while stack.pop() is .Some(item) {} }"
+
+[[case]]
+name = "loop_labeled_break_expr"
+source = "fn f() { let x = 'l: loop { break 'l 1 + 2 } }"
+
+[[case]]
+name = "nested_labeled_loops_break"
+source = """
+fn f() {
+    'a: for x in xs {
+        'b: for y in ys {
+            break 'a
+        }
+    }
+}
+"""

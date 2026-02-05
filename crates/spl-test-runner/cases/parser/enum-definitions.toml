@@ -105,3 +105,20 @@ name = "enum_variant_single_tuple_field"
 source = """
 enum Wrapper { Value(T) } where T
 """
+
+[[case]]
+name = "enum_variant_mixed_data_styles"
+source = "enum Msg { Quit, Move(x: i32, y: i32), Data(String, i32) }"
+
+[[case]]
+name = "enum_attr_on_variant"
+expect_error = "expected"
+source = "enum Color { #[deprecated] Red, Green, Blue }"
+
+[[case]]
+name = "enum_where_bound_and_default"
+source = "enum Container { Item(T), Empty } where T: Clone = i32"
+
+[[case]]
+name = "enum_single_variant_tuple"
+source = "enum Wrapper { Value(i32) }"

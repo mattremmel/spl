@@ -76,3 +76,19 @@ source = """fn f() { items.map(|x| x + 1) }"""
 [[case]]
 name = "closure_nested"
 source = """fn f() { let f = |x| |y| x + y }"""
+
+[[case]]
+name = "closure_in_method_chain"
+source = "fn f() { items.filter(|x| x > 0).map(|x| x * 2) }"
+
+[[case]]
+name = "closure_capture_ref"
+source = "fn f() { @[x: &x] |y| x + y }"
+
+[[case]]
+name = "closure_empty_capture"
+source = "fn f() { @[] |x| x + 1 }"
+
+[[case]]
+name = "closure_multi_capture_mixed"
+source = "fn f() { @[a, b: &b] || a + b }"

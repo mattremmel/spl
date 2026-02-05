@@ -61,8 +61,8 @@ fn single_pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
         },
         // Path-starting keywords that can begin qualified patterns (module.Type, super.Type, etc.)
         // Note: 'crate' keyword was removed - use '$' for package root
-        MODULE_KW | SUPER_KW | SELF_VALUE_KW => {
-            // These keywords can start paths in patterns (e.g., module.Point(x: x))
+        MODULE_KW | SUPER_KW | SELF_VALUE_KW | SELF_TYPE_KW | DOLLAR => {
+            // These keywords/tokens can start paths in patterns (e.g., module.Point(x: x), $.constants.MAX, Self(a, b))
             path_or_struct_or_enum_pat(p)
         },
         // Enum shorthand pattern: .Variant or .Variant(patterns)
@@ -186,9 +186,22 @@ fn ident_or_struct_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError
     // Check if it looks like a struct pattern: Path(IDENT = ...)
     let is_struct = has_parens && looks_like_struct_pat(p);
 
-    if is_path {
-        // This is a path - could be struct pattern or enum pattern with qualified name
-        path_or_struct_or_enum_pat(p)
+    // Check if this is a range pattern with an ident start bound: `MAX..`, `MIN..MAX`
+    let is_range = !is_path
+        && !has_parens
+        && matches!(
+            p.peek(1),
+            Some(SyntaxKind::DOT_DOT) | Some(SyntaxKind::DOT_DOT_EQ)
+        );
+
+    if is_range {
+        // Path range pattern: ident as start bound, followed by `..` or `..=`
+        let m = p.start();
+        crate::path::path_no_generics(p)?;
+        Ok(maybe_range_tail(p, m, SyntaxKind::IdentPat))
+    } else if is_path {
+        // This is a path - could be struct pattern, enum pattern, or range pattern
+        path_or_struct_or_enum_range_pat(p)
     } else if is_struct {
         // Struct pattern with named fields: Name(x: a, ...)
         struct_pat(p)
@@ -246,6 +259,42 @@ fn path_or_struct_or_enum_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, Par
         }
     } else {
         // Just a path used as identifier pattern (for unit enum variants like None)
+        Ok(m.complete(p, SyntaxKind::IdentPat))
+    }
+}
+
+/// Parse a path and determine if it's followed by struct fields, enum args, or range operator.
+/// Used when we already know the path starts with a dot-qualified name.
+fn path_or_struct_or_enum_range_pat(
+    p: &mut Parser<'_>,
+) -> Result<CompletedMarker, ParseError> {
+    let m = p.start();
+
+    // Use structured path parsing (no generics in patterns)
+    crate::path::path_no_generics(p)?;
+
+    // Check if followed by range operator (path as range start bound)
+    if p.at(SyntaxKind::DOT_DOT) || p.at(SyntaxKind::DOT_DOT_EQ) {
+        return Ok(maybe_range_tail(p, m, SyntaxKind::IdentPat));
+    }
+
+    // Check if followed by ( for struct or enum pattern
+    if p.at(SyntaxKind::L_PAREN) {
+        let first = p.peek(1);
+        let second = p.peek(2);
+        let is_struct = matches!(
+            (first, second),
+            (Some(SyntaxKind::IDENT), Some(SyntaxKind::COLON))
+        );
+
+        if is_struct {
+            parse_struct_fields(p)?;
+            Ok(m.complete(p, SyntaxKind::StructPat))
+        } else {
+            parse_enum_args(p)?;
+            Ok(m.complete(p, SyntaxKind::TuplePat))
+        }
+    } else {
         Ok(m.complete(p, SyntaxKind::IdentPat))
     }
 }
@@ -320,13 +369,17 @@ fn rest_pat(p: &mut Parser<'_>) -> CompletedMarker {
     m.complete(p, SyntaxKind::RestPat)
 }
 
-/// Try to parse a range tail (`..` or `..=` plus optional end literal).
-/// If present, completes `m` as `RangePat`; otherwise completes as `LiteralPat`.
-fn maybe_range_tail(p: &mut Parser<'_>, m: crate::Marker) -> CompletedMarker {
+/// Try to parse a range tail (`..` or `..=` plus optional end bound).
+/// If present, completes `m` as `RangePat`; otherwise completes as the given `fallback` kind.
+fn maybe_range_tail(
+    p: &mut Parser<'_>,
+    m: crate::Marker,
+    fallback: SyntaxKind,
+) -> CompletedMarker {
     if p.at(SyntaxKind::DOT_DOT) || p.at(SyntaxKind::DOT_DOT_EQ) {
         p.bump(); // consume `..` or `..=`
 
-        // Optional end literal (may be negative)
+        // Optional end bound: negative literal, literal, or path
         if p.at(SyntaxKind::MINUS) {
             p.bump(); // consume `-`
         }
@@ -337,12 +390,30 @@ fn maybe_range_tail(p: &mut Parser<'_>, m: crate::Marker) -> CompletedMarker {
                 | Some(SyntaxKind::CHAR_LITERAL)
         ) {
             p.bump(); // consume end literal
+        } else if is_range_bound_path_start(p) {
+            // Path as range end bound: e.g., `0..MAX`, `0..config.MAX`
+            // Errors here are non-fatal — just means half-open range
+            if let Err(e) = crate::path::path_no_generics(p) {
+                p.error(e);
+            }
         }
 
         m.complete(p, SyntaxKind::RangePat)
     } else {
-        m.complete(p, SyntaxKind::LiteralPat)
+        m.complete(p, fallback)
     }
+}
+
+/// Check if the current token can start a path used as a range bound.
+fn is_range_bound_path_start(p: &mut Parser<'_>) -> bool {
+    matches!(
+        p.current(),
+        Some(SyntaxKind::IDENT)
+            | Some(SyntaxKind::DOLLAR)
+            | Some(SyntaxKind::SELF_VALUE_KW)
+            | Some(SyntaxKind::SUPER_KW)
+            | Some(SyntaxKind::MODULE_KW)
+    )
 }
 
 /// Parse a negative literal pattern: `-1`, `-3.14`, or a range starting with a negative literal.
@@ -350,14 +421,14 @@ fn negative_literal_or_range_pat(p: &mut Parser<'_>) -> CompletedMarker {
     let m = p.start();
     p.bump(); // consume `-`
     p.bump(); // consume the literal
-    maybe_range_tail(p, m)
+    maybe_range_tail(p, m, SyntaxKind::LiteralPat)
 }
 
 /// Parse a literal pattern, or a range pattern if followed by `..` or `..=`
 fn literal_or_range_pat(p: &mut Parser<'_>) -> CompletedMarker {
     let m = p.start();
     p.bump(); // consume the literal
-    maybe_range_tail(p, m)
+    maybe_range_tail(p, m, SyntaxKind::LiteralPat)
 }
 
 /// Parse a tuple or grouped pattern.

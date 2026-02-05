@@ -106,3 +106,19 @@ extern {
     fn bar(): i32;
 }
 """
+
+[[case]]
+name = "attr_positional_expr"
+source = "#[cfg(feature, test)] fn foo() {}"
+
+[[case]]
+name = "attr_on_static_mut"
+source = "#[allow(unused)] static mut X: i32 = 0"
+
+[[case]]
+name = "attr_nested_kv_multiple"
+source = """#[cfg(target_os = "linux", target_arch = "x86")] fn foo() {}"""
+
+[[case]]
+name = "attr_equals_string"
+source = """#[doc = "documentation"] fn foo() {}"""

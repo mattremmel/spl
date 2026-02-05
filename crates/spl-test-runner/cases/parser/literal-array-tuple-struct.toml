@@ -104,3 +104,19 @@ source = "fn f() { (1, name: 2) }"
 [[case]]
 name = "array_repeat_expr"
 source = "fn f() { [x + 1; count * 2] }"
+
+[[case]]
+name = "struct_only_type_args"
+source = "fn f() { Vec(T: i32) }"
+
+[[case]]
+name = "array_nested"
+source = "fn f() { [[1, 2], [3, 4]] }"
+
+[[case]]
+name = "tuple_nested_named"
+source = "fn f() { (a: (b: 1, c: 2), d: 3) }"
+
+[[case]]
+name = "struct_generic_instantiation"
+source = "fn f() { Box(T: i32, value: 42) }"
