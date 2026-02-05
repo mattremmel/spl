@@ -174,3 +174,19 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "closure_as_struct_field_value"
+source = "fn f() { Handler(callback: |x| x > 0) }"
+
+[[case]]
+name = "closure_immediately_called"
+source = "fn f() { (|x| x > 0)(value) }"
+
+[[case]]
+name = "closure_capture_mut_ref"
+source = "fn f() { @[x: &mut x] || x }"
+
+[[case]]
+name = "closure_assigned_to_typed_binding"
+source = "fn f() { let c: fn(i32): i32 = |x| x + 1 }"

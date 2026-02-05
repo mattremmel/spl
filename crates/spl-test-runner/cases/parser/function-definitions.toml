@@ -289,7 +289,6 @@ source = "fn f(x: T) where T: Clone, {}"
 
 [[case]]
 name = "fn_param_mut_with_type"
-expect_error = "expected"
 source = "fn f(mut x: i32) {}"
 
 [[case]]

@@ -95,3 +95,15 @@ source = "fn f(x: [i32; 10]?) {}"
 [[case]]
 name = "optional_on_slice"
 source = "fn f(x: [i32]?) {}"
+
+[[case]]
+name = "extern_c_fn_standalone_type"
+source = """fn f(cb: extern "C" fn(i32): i32) {}"""
+
+[[case]]
+name = "extern_bare_fn_standalone_type"
+source = "fn f(cb: extern fn(i32): i32) {}"
+
+[[case]]
+name = "unsafe_extern_c_fn_standalone_type"
+source = """fn f(cb: unsafe extern "C" fn(i32): i32) {}"""

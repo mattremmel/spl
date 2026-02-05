@@ -213,3 +213,74 @@ pub const unsafe fn complex(from x: T, _ y: f64 = 1.0): Output throws ConvertErr
     x
 }
 """
+
+# is with enum shorthand named fields
+
+[[case]]
+name = "is_enum_shorthand_named_fields"
+source = "fn f() { msg is .Move(x: a, y: b) }"
+
+# Nested optional chaining + coalesce
+
+[[case]]
+name = "nested_optional_chain_coalesce"
+source = """fn f() { a?.b?.c ?? d?.e ?? "default" }"""
+
+# Deeply nested closures
+
+[[case]]
+name = "deeply_nested_closures_3_levels"
+source = "fn f() { |x| |y| |z| x + y + z }"
+
+# Match in closure in method chain
+
+[[case]]
+name = "match_in_closure_in_chain"
+source = """
+fn f() {
+    items.map(|x| match x {
+        .Some(v) => v,
+        .None => 0,
+    }).collect()
+}
+"""
+
+# Struct expr in if condition
+
+[[case]]
+name = "struct_expr_method_in_if"
+source = "fn f() { if Point(x: 1, y: 2).is_origin() {} }"
+
+# Type expression method call
+
+[[case]]
+name = "type_expr_method_call"
+source = "fn f() { Vec(T: i32).new() }"
+
+# Multiple try propagation
+
+[[case]]
+name = "multiple_try_propagation"
+source = "fn f() { a!.b()!.c! }"
+
+# extern fn types in type aliases
+
+[[case]]
+name = "extern_c_fn_type_alias"
+source = """type Callback = extern "C" fn(i32): i32;"""
+
+[[case]]
+name = "extern_bare_fn_type_alias"
+source = "type Callback = extern fn(i32): i32;"
+
+# For with or-pattern
+
+[[case]]
+name = "for_with_or_pattern"
+source = "fn f() { for .Some(x) | .None in items {} }"
+
+# Unit struct with semicolon
+
+[[case]]
+name = "struct_unit_semicolon"
+source = "struct Unit;"

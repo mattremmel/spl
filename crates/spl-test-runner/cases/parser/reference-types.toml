@@ -122,3 +122,7 @@ source = "fn f(x: &[String]) {}"
 [[case]]
 name = "ref_to_nested_array"
 source = "fn f(x: &[[i32; 3]; 3]) {}"
+
+[[case]]
+name = "ref_and_and_with_lifetime"
+source = "fn f(x: &&'a i32) {}"

@@ -114,3 +114,11 @@ source = "fn f(cb: fn([i32]): i32) {}"
 [[case]]
 name = "fn_type_no_params_no_return"
 source = "fn f(cb: fn()) {}"
+
+[[case]]
+name = "fn_type_nested_in_tuple"
+source = "fn f(x: (fn(i32): bool, fn(): i32)) {}"
+
+[[case]]
+name = "fn_type_with_lifetime_ref_return"
+source = "fn f(cb: fn('a)(&'a str): &'a str) {}"

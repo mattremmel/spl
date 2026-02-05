@@ -1,0 +1,72 @@
+[section]
+id = "types.where_clauses"
+spec_chapter = "2"
+name = "Where Clauses"
+
+# Single type param variations
+
+[[case]]
+name = "where_no_bounds"
+source = "fn f(x: T) where T {}"
+
+[[case]]
+name = "where_single_bound"
+source = "fn f(x: T) where T: Clone {}"
+
+[[case]]
+name = "where_multiple_bounds"
+source = "fn f(x: T) where T: Clone + Debug + Send {}"
+
+[[case]]
+name = "where_default_only"
+source = "fn f(x: T) where T = i32 {}"
+
+[[case]]
+name = "where_bound_and_default"
+source = "fn f(x: T) where T: Clone = i32 {}"
+
+# Multiple type params
+
+[[case]]
+name = "where_mixed_params"
+source = "fn f(a: A, b: B, c: C) where A: Clone + Debug, B = i32, C: Send + Sync = String {}"
+
+[[case]]
+name = "where_trailing_comma"
+source = "fn f(x: T) where T: Clone, {}"
+
+# Path-type bounds
+
+[[case]]
+name = "where_path_type_bound"
+source = "fn f(x: T) where T: std.io.Read {}"
+
+# Generic bounds
+
+[[case]]
+name = "where_generic_bound"
+source = "fn f(x: T) where T: Into(Target: String) {}"
+
+# Where on different items
+
+[[case]]
+name = "where_on_struct"
+source = "struct Container(T: T) where T: Clone"
+
+[[case]]
+name = "where_on_enum"
+source = "enum Color { Red, Green, Blue } where T: Clone"
+
+[[case]]
+name = "where_on_trait"
+source = "trait Iterable where T: Clone { fn next(&mut self): i32 }"
+
+[[case]]
+name = "where_on_impl"
+source = "impl Container where T: Clone + Debug {}"
+
+# Stress test
+
+[[case]]
+name = "where_five_params"
+source = "fn f(a: A, b: B, c: C, d: D, e: E) where A: Clone, B: Debug, C: Send, D: Sync, E: Copy {}"

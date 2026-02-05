@@ -500,3 +500,46 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "match_as_assigned_value"
+source = """
+fn f() {
+    let result = match x {
+        0 => "zero",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "match_struct_named_field_renames"
+source = """
+fn f() {
+    match p {
+        Point(x: a, y: b) => a + b,
+    }
+}
+"""
+
+[[case]]
+name = "match_fully_qualified_enum_with_data"
+source = """
+fn f() {
+    match msg {
+        Message.Move(x: a, y: b) => a + b,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_no_trailing_comma_last_arm"
+source = """
+fn f() {
+    match x {
+        0 => "zero",
+        _ => "other"
+    }
+}
+"""

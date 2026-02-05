@@ -163,3 +163,19 @@ source = "fn f() { foo(T: (i32, bool), x: 1) }"
 [[case]]
 name = "call_type_arg_never_type"
 source = "fn f() { foo(T: Never, x: 1) }"
+
+[[case]]
+name = "call_struct_update_with_type_arg"
+source = "fn f() { Point(T: i32, x: 1, ...base) }"
+
+[[case]]
+name = "call_mixed_positional_and_named"
+source = "fn f() { foo(1, name: 2, 3) }"
+
+[[case]]
+name = "call_empty_struct_construction"
+source = "fn f() { Empty() }"
+
+[[case]]
+name = "call_unit_value_as_arg"
+source = "fn f() { foo(()) }"

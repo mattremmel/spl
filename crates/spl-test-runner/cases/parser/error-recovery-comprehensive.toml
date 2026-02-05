@@ -180,3 +180,18 @@ source = "fn f() -> i32 { 0 }"
 [[case]]
 name = "missing_equals_in_let"
 source = "fn f() { let x: i32 1 }"  # Parser accepts: `let x: i32` (no init) then `1` as expr stmt
+
+[[case]]
+name = "rust_angle_bracket_generics"
+expect_error = "expected"
+source = "fn f(x: Vec<i32>) {}"
+
+[[case]]
+name = "rust_dyn_trait"
+expect_error = "expected"
+source = "fn f(x: &dyn Clone) {}"
+
+[[case]]
+name = "rust_impl_trait_in_param"
+expect_error = "expected"
+source = "fn f(x: impl Clone) {}"

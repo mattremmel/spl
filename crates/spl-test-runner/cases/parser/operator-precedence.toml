@@ -322,3 +322,31 @@ source = "fn f() { start()..end() }"
 [[case]]
 name = "precedence_is_range"
 source = "fn f() { x is 1..10 }"
+
+[[case]]
+name = "precedence_try_then_field"
+source = "fn f() { x!.field }"
+
+[[case]]
+name = "precedence_optional_chain_then_try"
+source = "fn f() { x?.value! }"
+
+[[case]]
+name = "precedence_deref_then_field"
+source = "fn f() { (*p).field }"
+
+[[case]]
+name = "precedence_is_vs_equality"
+source = "fn f() { x == 1 && y is .Some(v) }"
+
+[[case]]
+name = "precedence_coalesce_vs_assign"
+source = "fn f() { x = a ?? b }"
+
+[[case]]
+name = "precedence_try_method_chain"
+source = "fn f() { x!.method().field }"
+
+[[case]]
+name = "precedence_range_in_is"
+source = "fn f() { x is 0..10 && y > 0 }"

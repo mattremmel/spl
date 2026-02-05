@@ -670,6 +670,9 @@ fn param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     // Optional label spec
     opt_label_spec(p);
 
+    // Optional mut
+    p.eat(SyntaxKind::MUT_KW);
+
     // Parameter name
     if let Err(err) = name(p) {
         m.abandon(p);

@@ -229,3 +229,7 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "block_unlabeled_break_value"
+source = "fn f() { let x = 'b: { break 'b 42 } }"
