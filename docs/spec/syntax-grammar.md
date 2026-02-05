@@ -1640,7 +1640,7 @@ ReferencePattern = "&" [ "mut" ] Pattern ;
 
 This asymmetry mirrors the distinction between struct definitions and struct patterns throughout the grammar.
 
-**Note:** At most one `RestPattern` (`..` or `..name`) is allowed per slice pattern. This is enforced semantically, not syntactically.
+**Note:** At most one `RestPattern` (`...` or `...name`) is allowed per slice pattern. This is enforced semantically, not syntactically.
 
 **Tuple Patterns for Struct Destructuring:**
 
@@ -1669,13 +1669,13 @@ This works because the compiler knows `point` is a `Point` and can match tuple p
 | `0..MAX`              | Match range with const path as bound |
 | `(a, b)`              | Destructure tuple                    |
 | `[a, b, c]`           | Destructure fixed-size array/slice   |
-| `[first, ..]`         | Match first, ignore rest             |
-| `[first, ..rest]`     | Match first, bind rest to `rest`     |
-| `[.., last]`          | Match last element                   |
-| `[first, ..middle, last]` | Match first, last, bind middle   |
+| `[first, ...]`         | Match first, ignore rest             |
+| `[first, ...rest]`     | Match first, bind rest to `rest`     |
+| `[..., last]`          | Match last element                   |
+| `[first, ...middle, last]` | Match first, last, bind middle   |
 | `Point(x, y)`         | Destructure struct (shorthand)       |
 | `Point(x: a, y: b)`   | Destructure with rename              |
-| `Point(x, ..)`        | Partial struct destructure           |
+| `Point(x, ...)`        | Partial struct destructure           |
 | `(a, b) = struct_val` | Destructure struct via type inference |
 | `Some(x)`             | Match tuple-style enum variant       |
 | `None`                | Match unit enum variant              |
@@ -1683,7 +1683,7 @@ This works because the compiler knows `point` is a `Point` and can match tuple p
 | `Err(e)`              | Match Result Err variant             |
 | `.Move(x, y)`         | Enum shorthand with implicit field bindings |
 | `.Move(x: a, y: b)`   | Shorthand with explicit bindings     |
-| `Message.Move(x, ..)`  | Named variant partial destructure   |
+| `Message.Move(x, ...)`  | Named variant partial destructure   |
 | `&x`                  | Match reference                      |
 | `&mut x`              | Match mutable reference              |
 | `1 \| 2 \| 3`         | Or-pattern: match any alternative    |
@@ -2323,8 +2323,8 @@ fn main() {
     let (a, b) = (1, 2)                // Tuple destructuring
     let Point(x, y) = target           // Struct destructuring (explicit)
     let (px, py) = target              // Struct destructuring (inferred from type)
-    let [first, ..rest] = [1, 2, 3, 4] // Slice pattern with rest
-    let [head, .., tail] = [1, 2, 3]   // First and last
+    let [first, ...rest] = [1, 2, 3, 4] // Slice pattern with rest
+    let [head, ..., tail] = [1, 2, 3]   // First and last
 
     // Block with break
     let computed = 'calc: {

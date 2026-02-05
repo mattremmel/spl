@@ -66,9 +66,9 @@ match c {
 ```spl
 let (x, y) = (1, 2);
 let (a, _, c) = (1, 2, 3);       // Ignore middle element
-let (first, ..) = (1, 2, 3, 4);  // Ignore rest
-let (.., last) = (1, 2, 3, 4);   // Ignore all but last
-let (first, .., last) = tuple;   // First and last only
+let (first, ...) = (1, 2, 3, 4);  // Ignore rest
+let (..., last) = (1, 2, 3, 4);   // Ignore all but last
+let (first, ..., last) = tuple;   // First and last only
 ```
 
 ### 1.5 Struct Patterns
@@ -77,7 +77,7 @@ let (first, .., last) = tuple;   // First and last only
 struct Point(x: i32, y: i32)
 
 let Point(x, y) = point;              // Destructure all fields
-let Point(x, ..) = point;             // Destructure some, ignore rest
+let Point(x, ...) = point;             // Destructure some, ignore rest
 let Point(x: a, y: b) = point;        // Rename bindings
 let Point(x, y: _) = point;           // Ignore specific field
 ```
@@ -118,16 +118,16 @@ match color {
 
 ```spl
 let [first, second, third] = arr;     // Exact length match
-let [first, ..] = arr;                // At least one element
-let [first, .., last] = arr;          // At least two elements
-let [first, ..rest] = arr;            // Bind rest to slice
-let [.., second_last, last] = arr;    // Last two elements
+let [first, ...] = arr;                // At least one element
+let [first, ..., last] = arr;          // At least two elements
+let [first, ...rest] = arr;            // Bind rest to slice
+let [..., second_last, last] = arr;    // Last two elements
 let [] = arr;                         // Empty slice
 ```
 
 **Rest patterns can only appear once:**
 ```spl
-let [..a, middle, ..b] = arr;  // ERROR: multiple rest patterns
+let [...a, middle, ...b] = arr;  // ERROR: multiple rest patterns
 ```
 
 ### 1.8 Reference Patterns
@@ -645,10 +645,10 @@ let Point(x: i32, y) = point;  // Only x annotated
 | Wildcard | `_` | No |
 | Literal | `42`, `'a'`, `true` | Yes |
 | Range | `0..10`, `'a'..='z'` | Yes |
-| Tuple | `(a, b)`, `(x, ..)` | No |
+| Tuple | `(a, b)`, `(x, ...)` | No |
 | Struct | `Point(x, y)` | No |
 | Enum | `Some(x)`, `None` | Yes |
-| Slice | `[a, b]`, `[first, ..]` | Yes (length) |
+| Slice | `[a, b]`, `[first, ...]` | Yes (length) |
 | Reference | `&x`, `&mut x` | No |
 | Or | `A \| B` | Depends |
 

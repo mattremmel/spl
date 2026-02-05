@@ -122,6 +122,7 @@ SPL reserves 37 keywords that cannot be used as identifiers:
 | `&`      | Reference                         |
 | `..`     | Exclusive range (end not included) |
 | `..=`    | Inclusive range (end included)    |
+| `...`    | Spread / rest / variadic         |
 | `$`      | Package root (paths) / array length (indexing/slices) |
 | `!`      | Try/propagate (postfix)           |
 | `?.`     | Optional chaining                 |
