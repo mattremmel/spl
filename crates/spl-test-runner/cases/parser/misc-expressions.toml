@@ -138,3 +138,59 @@ source = "fn f() { x is .Some(v) && v > 0 && v < 100 }"
 [[case]]
 name = "is_in_while_condition"
 source = "fn f() { while queue.pop() is .Some(item) { process(item) } }"
+
+[[case]]
+name = "deref_basic"
+source = "fn f() { *p }"
+
+[[case]]
+name = "deref_double"
+source = "fn f() { *(*p) }"
+
+[[case]]
+name = "deref_ref"
+source = "fn f() { *&x }"
+
+[[case]]
+name = "deref_assignment"
+source = "fn f() { *p = 42 }"
+
+[[case]]
+name = "deref_field_access"
+source = "fn f() { (*p).field }"
+
+[[case]]
+name = "deref_method_call"
+source = "fn f() { (*p).method() }"
+
+[[case]]
+name = "range_from"
+source = "fn f() { 0.. }"
+
+[[case]]
+name = "range_from_variable"
+source = "fn f() { let r = start.. }"
+
+[[case]]
+name = "enum_shorthand_return"
+source = "fn f(): Option(T: i32) { return .Some(42) }"
+
+[[case]]
+name = "enum_shorthand_assignment"
+source = "fn f() { let x: Color = .Blue }"
+
+[[case]]
+name = "enum_shorthand_in_array"
+source = "fn f() { [.Red, .Green, .Blue] }"
+
+[[case]]
+name = "block_expr_with_stmts"
+source = "fn f() { let x = { let a = 1; a + 1 } }"
+
+[[case]]
+name = "exponent_assign"
+source = "fn f() { x **= 2 }"
+
+[[case]]
+name = "nested_optional_chaining"
+source = "fn f() { a?.b?.c?.d }"

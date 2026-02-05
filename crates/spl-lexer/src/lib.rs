@@ -185,12 +185,8 @@ pub enum Token {
     Eq,
 
     // Other operators
-    #[token("->")]
-    Arrow,
     #[token("=>")]
     FatArrow,
-    #[token("::")]
-    ColonColon,
     #[token("...")]
     Ellipsis,
     #[token("..=")]

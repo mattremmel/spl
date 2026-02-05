@@ -307,18 +307,8 @@ fn op_percent_eq() {
 // ============================================================
 
 #[test]
-fn op_arrow() {
-    check_single("->", Token::Arrow);
-}
-
-#[test]
 fn op_dot() {
     check_single(".", Token::Dot);
-}
-
-#[test]
-fn op_colon_colon() {
-    check_single("::", Token::ColonColon);
 }
 
 #[test]
@@ -739,16 +729,6 @@ fn ambiguity_eq_followed_by_eq() {
     check("= =", &[(Token::Eq, "="), (Token::Eq, "=")]);
 }
 
-#[test]
-fn ambiguity_arrow_not_minus_gt() {
-    check_single("->", Token::Arrow);
-}
-
-#[test]
-fn ambiguity_colon_colon_not_two_colons() {
-    check_single("::", Token::ColonColon);
-}
-
 // ============================================================
 // Combined/Integration Tests
 // ============================================================
@@ -770,7 +750,7 @@ fn combined_let_statement() {
 #[test]
 fn combined_function_signature() {
     check(
-        "fn add(a: i32, b: i32) -> i32",
+        "fn add(a: i32, b: i32): i32",
         &[
             (Token::Fn, "fn"),
             (Token::Ident, "add"),
@@ -783,7 +763,7 @@ fn combined_function_signature() {
             (Token::Colon, ":"),
             (Token::Ident, "i32"),
             (Token::RParen, ")"),
-            (Token::Arrow, "->"),
+            (Token::Colon, ":"),
             (Token::Ident, "i32"),
         ],
     );
@@ -891,10 +871,10 @@ fn combined_type_cast() {
 #[test]
 fn combined_path_expression() {
     check(
-        "Point::new(0.0, 0.0)",
+        "Point.new(0.0, 0.0)",
         &[
             (Token::Ident, "Point"),
-            (Token::ColonColon, "::"),
+            (Token::Dot, "."),
             (Token::Ident, "new"),
             (Token::LParen, "("),
             (Token::Float, "0.0"),
@@ -1000,7 +980,7 @@ fn combined_slice_full() {
 #[test]
 fn combined_impl_self() {
     check(
-        "impl Point { fn new() -> Self { } }",
+        "impl Point { fn new(): Self { } }",
         &[
             (Token::Impl, "impl"),
             (Token::Ident, "Point"),
@@ -1009,7 +989,7 @@ fn combined_impl_self() {
             (Token::Ident, "new"),
             (Token::LParen, "("),
             (Token::RParen, ")"),
-            (Token::Arrow, "->"),
+            (Token::Colon, ":"),
             (Token::SelfType, "Self"),
             (Token::LBrace, "{"),
             (Token::RBrace, "}"),
@@ -1040,7 +1020,7 @@ fn combined_with_comments() {
 #[test]
 fn combined_method_with_self() {
     check(
-        "fn distance(&self, other: &Point) -> f64",
+        "fn distance(&self, other: &Point): f64",
         &[
             (Token::Fn, "fn"),
             (Token::Ident, "distance"),
@@ -1053,7 +1033,7 @@ fn combined_method_with_self() {
             (Token::Amp, "&"),
             (Token::Ident, "Point"),
             (Token::RParen, ")"),
-            (Token::Arrow, "->"),
+            (Token::Colon, ":"),
             (Token::Ident, "f64"),
         ],
     );
@@ -1383,20 +1363,6 @@ fn edge_dot_vs_dotdot() {
 }
 
 #[test]
-fn edge_colon_vs_coloncolon() {
-    check(
-        "a:b::c",
-        &[
-            (Token::Ident, "a"),
-            (Token::Colon, ":"),
-            (Token::Ident, "b"),
-            (Token::ColonColon, "::"),
-            (Token::Ident, "c"),
-        ],
-    );
-}
-
-#[test]
 fn edge_amp_vs_andand() {
     check("&&&", &[(Token::AndAnd, "&&"), (Token::Amp, "&")]);
 }
@@ -1437,7 +1403,7 @@ fn edge_all_assignment_operators() {
 
 #[test]
 fn example_program_from_docs() {
-    // This is the example program from lexical-grammar.md
+    // Example program using SPL syntax (. for paths, : for return types)
     let source = r#"
 // Point struct with public fields
 pub struct Point {
@@ -1446,11 +1412,11 @@ y: f64,
 }
 
 impl Point {
-pub fn new(x: f64, y: f64) -> Point {
+pub fn new(x: f64, y: f64): Point {
     Point { x: x, y: y }
 }
 
-pub fn distance(&self, other: &Point) -> f64 {
+pub fn distance(&self, other: &Point): f64 {
     let dx = self.x - other.x;
     let dy = self.y - other.y;
     (dx * dx + dy * dy).sqrt()
@@ -1458,8 +1424,8 @@ pub fn distance(&self, other: &Point) -> f64 {
 }
 
 fn main() {
-let mut p1 = Point::new(0.0, 0.0);
-let p2 = Point::new(3.0, 4.0);
+let mut p1 = Point.new(0.0, 0.0);
+let p2 = Point.new(3.0, 4.0);
 
 // Calculate distance
 let dist = p1.distance(&p2);
@@ -1534,13 +1500,12 @@ loop {
     assert!(token_types.contains(&Token::As));
     assert!(token_types.contains(&Token::True));
     assert!(token_types.contains(&Token::SelfValue));
-    assert!(token_types.contains(&Token::Arrow));
     assert!(token_types.contains(&Token::DotDot));
     assert!(token_types.contains(&Token::Float));
     assert!(token_types.contains(&Token::Integer));
     assert!(token_types.contains(&Token::String));
     assert!(token_types.contains(&Token::Char));
-    assert!(token_types.contains(&Token::ColonColon));
+    assert!(token_types.contains(&Token::Dot));
     assert!(token_types.contains(&Token::Amp));
     assert!(token_types.contains(&Token::PlusEq));
     assert!(token_types.contains(&Token::Percent));
@@ -2457,7 +2422,7 @@ fn combined_generator_function() {
 #[test]
 fn combined_throws_function() {
     check(
-        "fn parse(s: str) throws -> i32",
+        "fn parse(s: str): i32 throws",
         &[
             (Token::Fn, "fn"),
             (Token::Ident, "parse"),
@@ -2466,9 +2431,9 @@ fn combined_throws_function() {
             (Token::Colon, ":"),
             (Token::Ident, "str"),
             (Token::RParen, ")"),
-            (Token::Throws, "throws"),
-            (Token::Arrow, "->"),
+            (Token::Colon, ":"),
             (Token::Ident, "i32"),
+            (Token::Throws, "throws"),
         ],
     );
 }

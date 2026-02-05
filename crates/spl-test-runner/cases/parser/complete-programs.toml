@@ -1,0 +1,235 @@
+[section]
+id = "programs.complete"
+spec_chapter = "7"
+name = "Complete Programs"
+
+[[case]]
+name = "generic_struct_with_impl"
+source = """
+struct Pair(first: T, second: U) where T, U
+
+impl Pair where T, U {
+    fn new(first: T, second: U): Pair { Pair(first, second) }
+    fn first(&self): &T { &self.first }
+    fn second(&self): &U { &self.second }
+}
+"""
+
+[[case]]
+name = "trait_impl_with_where"
+source = """
+trait Displayable {
+    fn display(&self): String
+}
+
+impl Displayable for Pair where T: Displayable, U: Displayable {
+    fn display(&self): String {
+        self.first.display()
+    }
+}
+"""
+
+[[case]]
+name = "function_all_clauses"
+source = """
+fn transform(from input: T, _ scale: f64 = 1.0): Output throws ConvertError where T: Clone, Output {
+    return input
+}
+"""
+
+[[case]]
+name = "match_multiple_arm_types"
+source = """
+fn categorize(x: i32): String {
+    match x {
+        0 => "zero",
+        1 | 2 | 3 => "small",
+        n if n > 100 => "large",
+        .Some(v) => "wrapped",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "closure_method_chain"
+source = """
+fn process(items: Vec(T: i32)): Vec(T: i32) {
+    items.filter(|x| x > 0)
+         .map(|x| x * 2)
+         .collect()
+}
+"""
+
+[[case]]
+name = "labeled_block_break"
+source = """
+fn find(items: Vec(T: i32)): i32 {
+    let result = 'search: {
+        for item in items {
+            if item > 100 {
+                break 'search item
+            }
+        }
+        break 'search -1
+    }
+    result
+}
+"""
+
+[[case]]
+name = "complex_type_annotations"
+source = """
+fn f() {
+    let x: Vec(T: Option(T: i32)) = Vec.new()
+    let y: Result(T: String, E: Error) = .Ok("hello")
+}
+"""
+
+[[case]]
+name = "struct_with_methods_and_trait"
+source = """
+struct Counter(count: i32)
+
+impl Counter {
+    fn new(): Counter { Counter(count: 0) }
+    fn increment(&mut self) { self.count += 1 }
+    fn get(&self): i32 { self.count }
+}
+
+trait Resettable {
+    fn reset(&mut self)
+}
+
+impl Resettable for Counter {
+    fn reset(&mut self) { self.count = 0 }
+}
+"""
+
+[[case]]
+name = "generator_iteration"
+source = """
+gen fn fibonacci(): i64 {
+    let mut a = 0
+    let mut b = 1
+    loop {
+        yield a
+        let temp = a + b
+        a = b
+        b = temp
+    }
+}
+"""
+
+[[case]]
+name = "enum_with_methods"
+source = """
+enum Shape {
+    Circle(radius: f64),
+    Rectangle(width: f64, height: f64),
+    Triangle(a: f64, b: f64, c: f64),
+}
+
+impl Shape {
+    fn area(&self): f64 {
+        match self {
+            .Circle(r) => 3.14 * r * r,
+            .Rectangle(w, h) => w * h,
+            .Triangle(a, b, c) => 0.0,
+        }
+    }
+}
+"""
+
+[[case]]
+name = "use_and_module"
+source = """
+module utils {
+    pub fn helper(): i32 { 42 }
+}
+
+use utils.helper
+
+fn main() {
+    let x = helper()
+}
+"""
+
+[[case]]
+name = "error_handling_pattern"
+source = """
+fn read_data(path: &str): Data throws IoError {
+    let file = open(path)!
+    let content = file.read()!
+    return parse(content)
+}
+
+fn main() {
+    match read_data("data.txt") {
+        .Ok(data) => process(data),
+        .Err(e) => log(e),
+    }
+}
+"""
+
+[[case]]
+name = "optional_chaining_pattern"
+source = """
+fn get_name(user: User?): String {
+    user?.profile?.name ?? "anonymous"
+}
+"""
+
+[[case]]
+name = "const_and_static_in_module"
+source = """
+module config {
+    pub const MAX_SIZE: i32 = 1024
+    pub const VERSION: str = "1.0"
+    pub static mut COUNTER: i32 = 0
+}
+"""
+
+[[case]]
+name = "unsafe_operations"
+source = """
+unsafe trait RawPointer {
+    unsafe fn deref(&self): i32
+}
+
+unsafe impl RawPointer for Ptr {
+    unsafe fn deref(&self): i32 {
+        unsafe { *self.ptr }
+    }
+}
+"""
+
+[[case]]
+name = "complex_patterns_match"
+source = """
+fn process(msg: Message) {
+    match msg {
+        .Text(content) if content.len() > 0 => handle_text(content),
+        .Binary(data, ..) => handle_binary(data),
+        .Close | .Error(_) => disconnect(),
+        _ => {},
+    }
+}
+"""
+
+[[case]]
+name = "attributed_items"
+source = """
+#[derive(Clone, Debug)]
+pub struct Config(name: String, value: i32)
+
+#[inline]
+fn fast_add(a: i32, b: i32): i32 { a + b }
+
+#[cfg(test)]
+module tests {
+    fn test_add() {
+        let result = fast_add(1, 2)
+    }
+}
+"""

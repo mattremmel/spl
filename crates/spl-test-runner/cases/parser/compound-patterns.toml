@@ -318,3 +318,47 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "pat_enum_shorthand_named_move"
+source = """
+fn f() {
+    match msg {
+        .Move(x: dx, y: dy) => dx + dy,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_negative_literal"
+source = """
+fn f() {
+    match x {
+        -1 => "neg one",
+        0 => "zero",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "pat_multiple_or_with_enum"
+source = """
+fn f() {
+    match color {
+        .Red | .Green | .Blue => "primary",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "pat_struct_with_multiple_rest"
+source = """
+fn f() {
+    match p {
+        Point(x: a, ..) => a,
+    }
+}
+"""

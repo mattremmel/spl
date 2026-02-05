@@ -72,3 +72,35 @@ impl Foo {
     gen fn iter(&self): i32 { yield 0 }
 }
 """
+
+[[case]]
+name = "gen_fn_multiple_yields"
+source = """
+gen fn count(): i32 {
+    yield 1
+    yield 2
+    yield 3
+}
+"""
+
+[[case]]
+name = "gen_fn_yield_in_loop"
+source = """
+gen fn repeat(): i32 {
+    loop {
+        yield 42
+    }
+}
+"""
+
+[[case]]
+name = "gen_fn_yield_conditional"
+source = """
+gen fn filtered(): i32 {
+    for x in items {
+        if x > 0 {
+            yield x
+        }
+    }
+}
+"""

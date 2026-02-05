@@ -246,3 +246,39 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "match_mixed_arm_types"
+source = """
+fn f() {
+    match x {
+        0 => "zero",
+        .Some(v) if v > 0 => "positive",
+        1 | 2 | 3 => "small",
+        _ => "other",
+    }
+}
+"""
+
+[[case]]
+name = "match_char_pattern"
+source = """
+fn f() {
+    match ch {
+        'a' => 1,
+        'b' => 2,
+        _ => 0,
+    }
+}
+"""
+
+[[case]]
+name = "match_bool_pattern"
+source = """
+fn f() {
+    match flag {
+        true => "yes",
+        false => "no",
+    }
+}
+"""

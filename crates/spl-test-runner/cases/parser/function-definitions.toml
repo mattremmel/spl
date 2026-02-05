@@ -226,3 +226,23 @@ pub const unsafe fn transform(from input: T, _ scale: f64 = 1.0): Output throws 
 [[case]]
 name = "fn_extern_with_where"
 source = """extern "C" fn convert(x: T): i32 where T: Into(T: i32) { x }"""
+
+[[case]]
+name = "fn_default_with_explicit_label"
+source = """fn send(to recipient: String, message: String = "Hello") {}"""
+
+[[case]]
+name = "fn_default_expr"
+source = "fn log(msg: String, ts: DateTime = DateTime.now()) {}"
+
+[[case]]
+name = "fn_non_default_after_default"
+source = "fn example(a: i32 = 1, b: i32) {}"
+
+[[case]]
+name = "fn_all_clauses"
+source = """
+fn transform(input: T): Output throws ConvertError where T: Clone, Output {
+    return input
+}
+"""

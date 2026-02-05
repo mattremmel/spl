@@ -107,3 +107,7 @@ fn f() {
     }
 }
 """
+
+[[case]]
+name = "closure_in_long_chain"
+source = "fn f() { items.filter(|x| x > 0).map(|x| x * 2).collect() }"

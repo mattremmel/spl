@@ -82,3 +82,19 @@ source = "fn f() { let t = (x: 1) }"
 [[case]]
 name = "disambiguation_type_method_chain_push"
 source = "fn f() { Vec(T: i32).with_capacity(10).push(1) }"
+
+[[case]]
+name = "disambiguation_nested_generics"
+source = "fn f() { let x: Vec(T: Option(T: i32)) = Vec.new() }"
+
+[[case]]
+name = "disambiguation_string_method_chain"
+source = """fn f() { Vec(T: String).with_capacity(10).push("hello".to_string()) }"""
+
+[[case]]
+name = "disambiguation_result_type"
+source = "fn f() { let r: Result(T: i32, E: Error) = .Ok(42) }"
+
+[[case]]
+name = "disambiguation_shorthand_comparison"
+source = "fn f() { x == .None }"

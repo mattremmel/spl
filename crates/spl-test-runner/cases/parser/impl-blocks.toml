@@ -165,3 +165,27 @@ name = "impl_unsafe_trait_for_generic_with_where"
 source = """
 unsafe impl Send for Box(T: T) where T: Send {}
 """
+
+[[case]]
+name = "impl_unsafe_with_methods"
+source = """
+unsafe impl Sync for Foo {
+    fn check(&self): bool { true }
+}
+"""
+
+[[case]]
+name = "impl_method_using_self_output"
+source = """
+impl Processor {
+    fn compute(&self): Self.Output { self.value }
+}
+"""
+
+[[case]]
+name = "impl_different_generic_name"
+source = """
+impl Wrapper(T: R) where R {
+    fn get(&self): &R { &self.inner }
+}
+"""

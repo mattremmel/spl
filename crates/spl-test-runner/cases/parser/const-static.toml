@@ -51,3 +51,19 @@ source = "static ITEMS: [i32; 3] = [1, 2, 3]"
 [[case]]
 name = "const_string"
 source = """const GREETING: str = "hello" """
+
+[[case]]
+name = "const_path_type"
+source = "const MAX: config.Limit = 100"
+
+[[case]]
+name = "static_generic_type"
+source = "static CACHE: Vec(T: i32) = Vec.new()"
+
+[[case]]
+name = "const_bool"
+source = "const DEBUG: bool = false"
+
+[[case]]
+name = "static_with_semicolon"
+source = "static INSTANCE: Config = Config.default();"

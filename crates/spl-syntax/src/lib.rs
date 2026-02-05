@@ -91,9 +91,7 @@ pub enum SyntaxKind {
     SHR_EQ,
 
     // Operators - Other
-    ARROW,
     FAT_ARROW,
-    COLON_COLON,
     DOT_DOT,
     DOT_DOT_EQ,
     ELLIPSIS,
@@ -360,9 +358,7 @@ impl From<Token> for SyntaxKind {
             Token::ShlEq => Self::SHL_EQ,
             Token::ShrEq => Self::SHR_EQ,
             // Operators - Other
-            Token::Arrow => Self::ARROW,
             Token::FatArrow => Self::FAT_ARROW,
-            Token::ColonColon => Self::COLON_COLON,
             Token::DotDot => Self::DOT_DOT,
             Token::DotDotEq => Self::DOT_DOT_EQ,
             Token::Ellipsis => Self::ELLIPSIS,
@@ -437,7 +433,7 @@ mod tests {
 
     #[test]
     fn token_to_syntax_kind_all_variants() {
-        // Test all 52 token variants map correctly
+        // Test token variants map correctly
         assert_eq!(SyntaxKind::from(Token::Let), SyntaxKind::LET_KW);
         assert_eq!(SyntaxKind::from(Token::Plus), SyntaxKind::PLUS);
         assert_eq!(SyntaxKind::from(Token::Integer), SyntaxKind::INT_LITERAL);

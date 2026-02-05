@@ -94,3 +94,28 @@ fn f() {
 [[case]]
 name = "block_nested_static"
 source = "fn f() { static X: i32 = 0 }"
+
+[[case]]
+name = "block_multiple_stmts_semicolons"
+source = "fn f() { let x = 1; let y = 2; x + y }"
+
+[[case]]
+name = "block_nested_trait"
+source = """
+fn f() {
+    trait Local {
+        fn method(&self): i32
+    }
+}
+"""
+
+[[case]]
+name = "block_nested_impl"
+source = """
+fn f() {
+    struct Inner(x: i32)
+    impl Inner {
+        fn new(): Inner { Inner(x: 0) }
+    }
+}
+"""

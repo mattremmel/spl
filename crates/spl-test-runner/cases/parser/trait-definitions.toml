@@ -199,3 +199,38 @@ trait Converter {
     }
 }
 """
+
+[[case]]
+name = "trait_method_returning_self_assoc"
+source = """
+trait Iterator {
+    type Item
+    fn next(&mut self): Self.Item
+}
+"""
+
+[[case]]
+name = "trait_method_returning_optional_assoc"
+source = """
+trait Iterator {
+    type Item
+    fn try_next(&mut self): Self.Item?
+}
+"""
+
+[[case]]
+name = "trait_method_with_generic_using_assoc"
+source = """
+trait Collection {
+    type Item
+    fn items(&self): Vec(T: Self.Item)
+}
+"""
+
+[[case]]
+name = "trait_where_mixed_bounds_defaults"
+source = """
+trait Convert where T: Clone, U: Debug = String {
+    fn convert(&self): U
+}
+"""
