@@ -52,8 +52,14 @@ source = "use std.{HashMap, HashSet,}"
 name = "use_deeply_nested"
 source = "use a.b.c.d.e.f"
 
-## NOTE: Three test cases removed here that trigger Marker panics in use_tree_list:
-## - use_deeply_nested_groups: `use std.{io.{Read, Write}, collections.{HashMap, HashSet}}`
-## - use_group_with_glob: `use std.io.{Read, *}` (glob inside group)
-## - use_renamed_grouped: `use std.collections.{HashMap as Map, HashSet as Set}` (rename inside group)
-## Filed as a parser bug to fix the missing m.abandon(p) in use tree group parsing.
+[[case]]
+name = "use_deeply_nested_groups"
+source = "use std.{io.{Read, Write}, collections.{HashMap, HashSet}}"
+
+[[case]]
+name = "use_group_with_glob"
+source = "use std.io.{Read, *}"
+
+[[case]]
+name = "use_renamed_grouped"
+source = "use std.collections.{HashMap as Map, HashSet as Set}"

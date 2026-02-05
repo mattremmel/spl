@@ -1536,7 +1536,16 @@ fn use_tree(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
 
     // Check for leading group: `{...}`
     if p.at(SyntaxKind::L_BRACE) {
-        use_tree_list(p)?;
+        if let Err(e) = use_tree_list(p) {
+            m.abandon(p);
+            return Err(e);
+        }
+        return Ok(m.complete(p, SyntaxKind::UseTree));
+    }
+
+    // Check for standalone glob: `*` (inside a group like `{Read, *}`)
+    if p.at(SyntaxKind::STAR) {
+        p.bump();
         return Ok(m.complete(p, SyntaxKind::UseTree));
     }
 
@@ -1548,7 +1557,10 @@ fn use_tree(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     }
 
     // Parse first segment
-    use_path_segment(p)?;
+    if let Err(e) = use_path_segment(p) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Continue parsing `.segment` until we hit a terminator
     loop {
@@ -1567,13 +1579,19 @@ fn use_tree(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
             // Group: `.{...}`
             Some(SyntaxKind::L_BRACE) => {
                 p.bump(); // .
-                use_tree_list(p)?;
+                if let Err(e) = use_tree_list(p) {
+                    m.abandon(p);
+                    return Err(e);
+                }
                 return Ok(m.complete(p, SyntaxKind::UseTree));
             }
             // Another path segment
             Some(k) if is_use_path_segment_kind(k) => {
                 p.bump(); // .
-                use_path_segment(p)?;
+                if let Err(e) = use_path_segment(p) {
+                    m.abandon(p);
+                    return Err(e);
+                }
             }
             // End of path
             _ => break,
@@ -1583,7 +1601,10 @@ fn use_tree(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     // Check for rename: `as name`
     if p.at(SyntaxKind::AS_KW) {
         p.bump(); // as
-        name(p)?;
+        if let Err(e) = name(p) {
+            m.abandon(p);
+            return Err(e);
+        }
     }
 
     Ok(m.complete(p, SyntaxKind::UseTree))
@@ -1622,22 +1643,34 @@ fn use_path_segment(p: &mut Parser<'_>) -> Result<(), crate::ParseError> {
 /// Parse a use tree list: `{item1, item2, ...}`
 fn use_tree_list(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
     let m = p.start();
-    p.expect(SyntaxKind::L_BRACE)?;
+    if let Err(e) = p.expect(SyntaxKind::L_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
 
     // Parse comma-separated use trees
     if !p.at(SyntaxKind::R_BRACE) {
-        use_tree(p)?;
+        if let Err(e) = use_tree(p) {
+            m.abandon(p);
+            return Err(e);
+        }
 
         while p.eat(SyntaxKind::COMMA) {
             // Allow trailing comma
             if p.at(SyntaxKind::R_BRACE) {
                 break;
             }
-            use_tree(p)?;
+            if let Err(e) = use_tree(p) {
+                m.abandon(p);
+                return Err(e);
+            }
         }
     }
 
-    p.expect(SyntaxKind::R_BRACE)?;
+    if let Err(e) = p.expect(SyntaxKind::R_BRACE) {
+        m.abandon(p);
+        return Err(e);
+    }
     Ok(m.complete(p, SyntaxKind::UseTreeList))
 }
 
