@@ -281,7 +281,7 @@ impl Package {
             all_errors.sort_by(|(a, _), (b, _)| a.cmp(b));
 
             let total_errors: usize = all_errors.iter().map(|(_, errs)| errs.len()).sum();
-            warn!(
+            debug!(
                 file_count = all_errors.len(),
                 total_errors,
                 "parse errors in source files"
