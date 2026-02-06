@@ -1839,6 +1839,7 @@ fn lower_i32_add() {
 }
 
 #[test]
+#[ignore = "requires Cranelift LLVM ABI extensions for i128 args/returns"]
 fn lower_i128_add() {
     let mut runner = JitTestRunner::new();
     let i128_ty = runner.types_mut().primitive(PrimitiveKind::I128);
@@ -2000,6 +2001,7 @@ fn lower_u64_add() {
 }
 
 #[test]
+#[ignore = "requires Cranelift LLVM ABI extensions for i128 args/returns"]
 fn lower_u128_add() {
     let mut runner = JitTestRunner::new();
     let u128_ty = runner.types_mut().primitive(PrimitiveKind::U128);
