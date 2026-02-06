@@ -70,3 +70,17 @@ source = "impl Container where T: Clone + Debug {}"
 [[case]]
 name = "where_five_params"
 source = "fn f(a: A, b: B, c: C, d: D, e: E) where A: Clone, B: Debug, C: Send, D: Sync, E: Copy {}"
+
+# Complex bound combinations
+
+[[case]]
+name = "where_multiple_params_mixed_bounds_and_defaults"
+source = "fn f(x: T, y: U) where T: Clone + Debug = String, U: Send + Sync {}"
+
+[[case]]
+name = "where_bound_with_generic_constraint"
+source = "fn f(x: T) where T: Into(Target: String) + Clone {}"
+
+[[case]]
+name = "where_on_impl_multiple"
+source = "impl Pair where A: Clone + Debug, B: Clone + Debug {}"

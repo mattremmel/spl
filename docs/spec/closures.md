@@ -11,7 +11,7 @@ Closures are anonymous functions that can capture variables from their enclosing
 - **Escaping vs Non-escaping**: Different defaults based on whether the closure outlives its creation context
 - **Move by default**: Escaping closures move non-Copy captures (no hidden allocations)
 - **Borrow by default**: Non-escaping closures borrow non-Copy captures (zero-cost)
-- **Explicit clone**: Use `~` sigil when cloning is intended
+- **Explicit captures**: Use `@[...]` capture lists for explicit control over capture behavior
 
 ---
 
@@ -20,14 +20,19 @@ Closures are anonymous functions that can capture variables from their enclosing
 ### Basic Closures
 
 ```ebnf
-ClosureExpr = [ "clone" | "move" ] ClosureParams ClosureBody ;
+ClosureExpr = [ "@" CaptureList ] ClosureParams ClosureBody ;
+
+CaptureList = "[" [ Capture { "," Capture } [ "," ] ] "]" ;
+
+Capture = IDENTIFIER                       (* shorthand: x means x: x *)
+        | IDENTIFIER ":" Expression ;      (* explicit: name: expr *)
 
 ClosureParams = "||"
               | "|" [ ClosureParamList ] "|" ;
 
 ClosureParamList = ClosureParam { "," ClosureParam } [ "," ] ;
 
-ClosureParam = [ "~" ] [ "mut" ] IDENTIFIER [ ":" Type ] ;
+ClosureParam = [ "mut" ] IDENTIFIER [ ":" Type ] ;
 
 ClosureBody = Block | Expression ;
 ```
@@ -121,27 +126,27 @@ The compiler infers escaping from:
 | Type | Non-Escaping | Escaping (default) | Escaping (explicit) |
 |------|--------------|-------------------|---------------------|
 | Copy types | copy | copy | copy |
-| Non-Copy types | borrow | **move** | `~` = clone |
+| Non-Copy types | borrow | **move** | `@[x: x.clone()]` = clone |
 
-> **Copy and Clone:** All `Copy` types implicitly implement `Clone` with trivial (bitwise) semantics. Using `~` on a Copy type is valid but redundant—it simply copies the value. A future lint may warn about unnecessary `~` on Copy types.
+> **Copy and Clone:** All `Copy` types implicitly implement `Clone` with trivial (bitwise) semantics. Using `.clone()` in a capture expression on a Copy type is valid but redundant. A future lint may warn about unnecessary clones on Copy types.
 
-### The `~` Clone Modifier
+### Explicit Capture Lists
 
-Use `~` before a capture to clone it at closure creation time:
+Use `@[...]` before the closure parameters to explicitly control how variables are captured:
 
 ```spl
 let data = Arc.new(vec![1, 2, 3]);
 
-// Without ~: data is moved (escaping default)
+// Without capture list: data is moved (escaping default)
 let f = || process(data);
 // data no longer valid
 
-// With ~: data is cloned at capture time
-let f = |~data| process(data);
-// data still valid (was cloned into closure)
+// With capture list: data is cloned at capture time
+let f = @[data: data.clone()] || process(data);
+// data still valid (was cloned)
 ```
 
-**Why `~` instead of `.clone()` in the body?**
+**Why clone in a capture list instead of `.clone()` in the body?**
 
 Captures happen at closure *creation* time, but expressions in the body execute at *call* time:
 
@@ -156,56 +161,37 @@ f();  // clone #1
 f();  // clone #2
 
 // RIGHT: clone happens once at capture
-let f = |~data| {
+let f = @[data: data.clone()] || {
     process(data);  // uses the single clone
 };
 f();  // no clone
 f();  // no clone
 ```
 
-### Clone-All Shorthand
+### Capture by Reference
 
-When cloning multiple captures, use the `clone` keyword:
+Use `&` in the capture expression to capture by reference:
 
 ```spl
-// Without shorthand - repetitive
-spawn(|~config, ~logger, ~metrics| {
-    worker_loop(config, logger, metrics);
-});
+let data = vec![1, 2, 3];
 
-// With clone shorthand - cleaner
-spawn(clone |config, logger, metrics| {
-    worker_loop(config, logger, metrics);
-});
+// Capture data by reference
+let f = @[data: &data] || data.len();
+// data still valid (was borrowed)
 ```
 
-### Move-All (Explicit)
+### Shorthand Captures
 
-The `move` keyword makes move semantics explicit:
+When the capture name matches the variable name, use the shorthand form:
 
 ```spl
-// Explicit move (same as escaping default, for clarity)
-let f = move |data, config| {
-    process(data, config);
+// Shorthand: @[x] is equivalent to @[x: x] (moves x)
+let f = @[x] |y| x + y;
+
+// Multiple captures with mixed forms
+let f = @[config: config.clone(), logger: &logger] || {
+    logger.log("Starting with config: " + config.name);
 };
-```
-
-**When is `move` useful?**
-
-For escaping closures, `move` is redundant since move is already the default. However, `move` is useful for:
-
-1. **Documentation**: Making capture behavior explicit for readers
-2. **Non-escaping closures**: Forcing move semantics when the closure would otherwise borrow
-3. **Future-proofing**: If a closure's escaping status changes, explicit `move` preserves the intended behavior
-
-```spl
-// Without move: items.each() takes non-escaping closure, so data is borrowed
-items.each(|item| use_with(data, item));
-// data still valid
-
-// With move: force move even though closure is non-escaping
-items.each(move |item| use_with(data, item));
-// data no longer valid (was moved)
 ```
 
 ---
@@ -368,7 +354,7 @@ fn create_button(label: String, counter: Arc(T: Cell(T: i32))): Button {
     // counter cloned to allow sharing
     return Button(
         label: label,
-        on_click: |~counter| {
+        on_click: @[counter: counter.clone()] || {
             counter.set(counter.get() + 1);
         },
     );
@@ -385,7 +371,7 @@ fn parallel_process(data: Vec(T: Item), config: Arc(T: Config)): Vec(T: Handle) 
     for chunk in data.chunks(100) {
         // spawn() takes escaping closure
         // chunk moved, config cloned
-        let handle = spawn(|~config| {
+        let handle = spawn(@[config: config.clone()] || {
             for item in chunk {
                 process_item(item, config);
             }
@@ -416,7 +402,7 @@ fn make_prefixer(prefix: String): fn(String): String {
 fn make_shared_counter(initial: i32): fn(): i32 {
     let count = Arc.new(Cell.new(initial));
     // Clone Arc to keep local reference
-    return |~count| {
+    return @[count: count.clone()] || {
         let val = count.get();
         count.set(val + 1);
         return val;
@@ -436,7 +422,7 @@ fn build_pipeline(
 ): fn(): Result(T: (), E: Error) {
     // source and sink moved (pipeline owns them)
     // transform and logger cloned (shared elsewhere)
-    return |~transform, ~logger| {
+    return @[transform: transform.clone(), logger: logger.clone()] || {
         logger.log("Starting pipeline");
         for item in source.read() {
             let transformed = transform.apply(item);
@@ -476,7 +462,7 @@ error[E0382]: use of moved value: `data`
 8 |     println(data.len());
   |             ^^^^ value used after move
   |
-  = help: to keep using `data`, capture with clone: |~data|
+  = help: to keep using `data`, capture with clone: @[data: data.clone()]
 ```
 
 ### Fix with Clone
@@ -484,7 +470,7 @@ error[E0382]: use of moved value: `data`
 ```spl
 let data = Vec.new();
 
-let sender = |~data| {  // Clone at capture
+let sender = @[data: data.clone()] || {  // Clone at capture
     send(data);
 };
 
@@ -501,16 +487,16 @@ println(data.len());  // OK - data was cloned
 | No parameters | `\|\| expr` | Empty parameter list |
 | Block body | `\|x\| { ... }` | Multi-statement body |
 | Type annotation | `\|x: i32\|` | Explicit parameter type |
-| Clone capture | `\|~x\|` | Clone `x` at capture time |
-| Clone all | `clone \|x, y\|` | Clone all non-Copy captures |
-| Move all | `move \|x, y\|` | Explicit move (escaping default) |
+| Capture by move | `@[x] \|\| ...` | Move `x` into closure |
+| Capture by ref | `@[x: &x] \|\| ...` | Borrow `x` into closure |
+| Capture with clone | `@[x: x.clone()] \|\| ...` | Clone `x` at capture time |
+| Empty captures | `@[] \|\| ...` | No captures |
 
 | Context | Non-Copy Capture Behavior |
 |---------|---------------------------|
 | Non-escaping | Borrow (default) |
 | Escaping | Move (default) |
-| Escaping + `~` | Clone |
-| Escaping + `clone` | Clone all |
+| Escaping + `@[x: x.clone()]` | Clone |
 
 ---
 

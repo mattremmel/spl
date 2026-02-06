@@ -119,20 +119,37 @@ fn tuple_type_element(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::Pars
     Ok(m.complete(p, SyntaxKind::TupleTypeElement))
 }
 
-/// Parse a type annotation: `BaseType [ "?" ]`
+/// Parse a type annotation: `BaseType { "?" }`
 ///
 /// The optional `?` postfix makes the type optional (sugar for `Option(T: T)`).
+/// Multiple `?` are allowed: `T??` = `Option(T: Option(T: T))`.
 pub(crate) fn type_annotation(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
-    let base = base_type(p)?;
+    let mut result = base_type(p)?;
 
-    // Optional postfix: T? = Option(T: T)
-    if p.at(SyntaxKind::QUESTION) {
-        let m = base.precede(p);
-        p.bump(); // consume `?`
-        return Ok(m.complete(p, SyntaxKind::OptionalType));
+    // Optional postfix: T? = Option(T: T), T?? = Option(T: Option(T: T))
+    // The lexer emits `??` as a single QUESTION_QUESTION token, so we handle
+    // both QUESTION and QUESTION_QUESTION here.
+    loop {
+        if p.at(SyntaxKind::QUESTION) {
+            let m = result.precede(p);
+            p.bump(); // consume `?`
+            result = m.complete(p, SyntaxKind::OptionalType);
+        } else if p.at(SyntaxKind::QUESTION_QUESTION) {
+            // `??` as a single token — wrap in two nested OptionalType nodes.
+            // The inner OptionalType gets a synthetic `?` token, the outer gets
+            // the actual `??` token (which represents the second `?`).
+            let m_inner = result.precede(p);
+            p.emit_synthetic_token(SyntaxKind::QUESTION, "?".to_string());
+            result = m_inner.complete(p, SyntaxKind::OptionalType);
+            let m_outer = result.precede(p);
+            p.bump(); // consume the `??` token
+            result = m_outer.complete(p, SyntaxKind::OptionalType);
+        } else {
+            break;
+        }
     }
 
-    Ok(base)
+    Ok(result)
 }
 
 /// Parse a base type (without optional `?` postfix).
@@ -684,6 +701,78 @@ mod tests {
                         INT_LITERAL@10..11 "1"
                     WHITESPACE@11..12 " "
                     R_BRACE@12..13 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn double_optional_type() {
+        check_item(
+            "fn f(x: i32??) {}",
+            &expect![[r#"
+                FunctionDef@0..18
+                  FN_KW@0..2 "fn"
+                  Name@2..4
+                    WHITESPACE@2..3 " "
+                    IDENT@3..4 "f"
+                  ParamList@4..15
+                    L_PAREN@4..5 "("
+                    Param@5..14
+                      Name@5..6
+                        IDENT@5..6 "x"
+                      COLON@6..7 ":"
+                      OptionalType@7..14
+                        OptionalType@7..12
+                          PathType@7..11
+                            Path@7..11
+                              PathSegment@7..11
+                                NameRef@7..11
+                                  WHITESPACE@7..8 " "
+                                  IDENT@8..11 "i32"
+                          QUESTION@11..12 "?"
+                        QUESTION_QUESTION@12..14 "??"
+                    R_PAREN@14..15 ")"
+                  Block@15..18
+                    WHITESPACE@15..16 " "
+                    L_BRACE@16..17 "{"
+                    R_BRACE@17..18 "}"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn triple_optional_type() {
+        check_item(
+            "fn f(x: i32???) {}",
+            &expect![[r#"
+                FunctionDef@0..19
+                  FN_KW@0..2 "fn"
+                  Name@2..4
+                    WHITESPACE@2..3 " "
+                    IDENT@3..4 "f"
+                  ParamList@4..16
+                    L_PAREN@4..5 "("
+                    Param@5..15
+                      Name@5..6
+                        IDENT@5..6 "x"
+                      COLON@6..7 ":"
+                      OptionalType@7..15
+                        OptionalType@7..14
+                          OptionalType@7..12
+                            PathType@7..11
+                              Path@7..11
+                                PathSegment@7..11
+                                  NameRef@7..11
+                                    WHITESPACE@7..8 " "
+                                    IDENT@8..11 "i32"
+                            QUESTION@11..12 "?"
+                          QUESTION_QUESTION@12..14 "??"
+                        QUESTION@14..15 "?"
+                    R_PAREN@15..16 ")"
+                  Block@16..19
+                    WHITESPACE@16..17 " "
+                    L_BRACE@17..18 "{"
+                    R_BRACE@18..19 "}"
             "#]],
         );
     }

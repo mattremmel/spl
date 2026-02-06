@@ -210,3 +210,15 @@ source = "fn f() { return |x| x + 1 }"
 [[case]]
 name = "closure_in_array_literal"
 source = "fn f() { [|x| x + 1, |x| x * 2] }"
+
+[[case]]
+name = "closure_as_last_arg_no_trailing_comma"
+source = "fn f() { run(data, |x| x + 1) }"
+
+[[case]]
+name = "closure_returning_closure_typed"
+source = "fn f() { let g: fn(i32): fn(i32): i32 = |x| |y| x + y }"
+
+[[case]]
+name = "closure_param_complex_types"
+source = "fn f() { |x: Vec(T: i32), y: &String, z: Option(T: bool)| x }"

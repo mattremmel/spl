@@ -81,8 +81,11 @@ impl Foo {
 
 [[case]]
 name = "optional_double"
-ignore = true  # Parser does not support double optional types
 source = "fn f(x: i32??) {}"
+
+[[case]]
+name = "optional_triple"
+source = "fn f(x: i32???) {}"
 
 [[case]]
 name = "optional_on_tuple"

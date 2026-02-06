@@ -134,3 +134,29 @@ source = "fn f(x: $.internal.Config) {}"
 [[case]]
 name = "path_four_segment"
 source = "fn f(x: a.b.c.D) {}"
+
+# Self-type in various positions
+
+[[case]]
+name = "path_optional_self"
+source = """
+impl Foo {
+    fn maybe(): Self? { .None }
+}
+"""
+
+[[case]]
+name = "path_mut_ref_self_return"
+source = """
+impl Foo {
+    fn as_mut(&mut self): &mut Self { self }
+}
+"""
+
+[[case]]
+name = "path_self_in_array"
+source = """
+impl Foo {
+    fn array(): [Self; 3] { [Self(x: 1), Self(x: 2), Self(x: 3)] }
+}
+"""
