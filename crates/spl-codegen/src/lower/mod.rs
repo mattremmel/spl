@@ -17,6 +17,7 @@ use cranelift_codegen::ir::{
 use cranelift_frontend::{FunctionBuilder, Variable};
 use cranelift_module::{DataDescription, DataId, Linkage, Module};
 use rustc_hash::FxHashMap;
+use tracing::{debug, debug_span, trace};
 
 use crate::error::CodegenError;
 use crate::layout::LayoutComputer;
@@ -63,6 +64,15 @@ impl<'a> FunctionLowerer<'a> {
         types: &TypeInterner,
         name: &str,
     ) -> Result<*const u8, CodegenError> {
+        let _span = debug_span!(
+            "compile_function",
+            function_name = %name,
+            param_count = body.args().count(),
+            block_count = body.num_blocks(),
+            local_count = body.num_locals(),
+        )
+        .entered();
+
         // Build signature
         let type_mapper = ctx.type_mapper();
         let mut sig = ctx.new_signature();
@@ -70,6 +80,7 @@ impl<'a> FunctionLowerer<'a> {
         // Add return type (if not ZST)
         let return_ty = body.return_ty();
         if let Some(clif_ty) = type_mapper.map_type(return_ty, types) {
+            trace!(return_type = ?clif_ty, type_id = return_ty.index(), "mapped return type");
             sig.returns.push(AbiParam::new(clif_ty));
         }
 
@@ -77,6 +88,7 @@ impl<'a> FunctionLowerer<'a> {
         for arg in body.args() {
             let arg_ty = body.local_decl(arg).ty;
             if let Some(clif_ty) = type_mapper.map_type(arg_ty, types) {
+                trace!(param = arg.0, type_id = arg_ty.index(), clif_type = ?clif_ty, "mapped param type");
                 sig.params.push(AbiParam::new(clif_ty));
             }
         }
@@ -152,6 +164,12 @@ impl<'a> FunctionLowerer<'a> {
 
     /// Lower the entire MIR body to Cranelift IR.
     pub fn lower_body(mut self) -> Result<(), CodegenError> {
+        trace!(
+            block_count = self.body.num_blocks(),
+            local_count = self.body.num_locals(),
+            "lowering function body"
+        );
+
         // Create Cranelift blocks for each MIR block
         for i in 0..self.body.num_blocks() {
             let mir_bb = BasicBlock::new(i as u32);
@@ -177,6 +195,7 @@ impl<'a> FunctionLowerer<'a> {
         // Lower each basic block
         for bb_idx in 0..self.body.num_blocks() {
             let mir_bb = BasicBlock::new(bb_idx as u32);
+            trace!(block_index = bb_idx, "lowering basic block");
             if bb_idx > 0 {
                 let clif_block = self.block_map[&mir_bb];
                 self.builder.switch_to_block(clif_block);
@@ -192,6 +211,7 @@ impl<'a> FunctionLowerer<'a> {
         }
 
         self.builder.finalize();
+        trace!("function body lowering complete");
         Ok(())
     }
 
@@ -205,15 +225,18 @@ impl<'a> FunctionLowerer<'a> {
                 // Scalar type: use a Cranelift variable (SSA)
                 let var = self.local_map.alloc_variable(local);
                 self.builder.declare_var(var, clif_ty);
+                trace!(local = i, type_id = decl.ty.index(), clif_type = ?clif_ty, storage = "variable", "declared local");
             } else if self.type_mapper.is_zst(decl.ty, self.types) {
                 // ZST - no storage needed
                 self.local_map.set_zst(local);
+                trace!(local = i, type_id = decl.ty.index(), storage = "zst", "declared local");
             } else {
                 // Compound type: allocate a stack slot
                 let layout = self.layout.layout_of(decl.ty);
                 if layout.size == 0 {
                     // Zero-size layout means ZST
                     self.local_map.set_zst(local);
+                    trace!(local = i, type_id = decl.ty.index(), storage = "zst", "declared local (zero-size layout)");
                 } else {
                     let slot = self.builder.create_sized_stack_slot(StackSlotData::new(
                         StackSlotKind::ExplicitSlot,
@@ -221,6 +244,7 @@ impl<'a> FunctionLowerer<'a> {
                         layout.align.try_into().unwrap_or(0),
                     ));
                     self.local_map.set_stack_slot(local, slot);
+                    trace!(local = i, type_id = decl.ty.index(), size = layout.size, align = layout.align, storage = "stack_slot", "declared local");
                 }
             }
         }
@@ -274,6 +298,12 @@ impl<'a> FunctionLowerer<'a> {
     /// Lower a single MIR basic block.
     fn lower_block(&mut self, bb: BasicBlock) -> Result<(), CodegenError> {
         let block_data = self.body.block(bb);
+        trace!(
+            block = bb.index(),
+            statement_count = block_data.statements.len(),
+            has_terminator = block_data.terminator.is_some(),
+            "lowering block"
+        );
 
         // Lower all statements
         for stmt in &block_data.statements {
@@ -406,8 +436,11 @@ impl<'a> FunctionLowerer<'a> {
     ///
     /// Strings are deduplicated within the same function.
     fn declare_string_data(&mut self, s: &str) -> Result<GlobalValue, CodegenError> {
+        trace!(string_len = s.len(), "declaring string data");
         let module = self.module.as_mut().ok_or_else(|| {
-            CodegenError::Internal("module required for string constants".to_string())
+            let err = CodegenError::Internal("module required for string constants".to_string());
+            debug!("string data declaration failed: module not available");
+            err
         })?;
 
         // Check if we already declared this string

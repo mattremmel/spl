@@ -42,6 +42,7 @@ use crate::types::{Mutability, PrimitiveKind, TypeId, TypeInterner, TypeVar};
 use rustc_hash::FxHashMap;
 use spl_diagnostic::Diagnostic;
 use spl_lexer::Span;
+use tracing::debug;
 
 use super::{InferResult, SelfParam};
 
@@ -331,6 +332,13 @@ impl<'a> InferEngine<'a> {
                 "INVALID DefId found in binding_types after inference - resolution phase produced invalid binding"
             );
         }
+
+        debug!(
+            diagnostic_count = self.diagnostics.len(),
+            expr_type_count = self.results.expr_types.len(),
+            binding_count = self.results.binding_types.len(),
+            "inference complete"
+        );
 
         InferResult {
             types: self.types,

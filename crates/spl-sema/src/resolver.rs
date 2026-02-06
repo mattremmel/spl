@@ -43,7 +43,7 @@ use spl_ast::{
 };
 use spl_diagnostic::Diagnostic;
 use spl_lexer::Span;
-use tracing::debug;
+use tracing::{debug, debug_span, trace, warn};
 
 /// Result of name resolution.
 pub struct ResolveResult {
@@ -279,8 +279,11 @@ impl<'ctx> Resolver<'ctx> {
 
     /// Collect all items from a source file (pass 1).
     pub fn collect_source_file(&mut self, source_file: &SourceFile) {
-        for item in source_file.items() {
-            self.collect_item(&item);
+        let _span = debug_span!("collect_items").entered();
+        let items: Vec<_> = source_file.items().collect();
+        debug!(item_count = items.len(), "collecting top-level items");
+        for item in &items {
+            self.collect_item(item);
         }
     }
 
@@ -422,8 +425,10 @@ impl<'ctx> Resolver<'ctx> {
 
             if let Some(def_id) = self.ctx.lookup(interned) {
                 // Check visibility if needed (for now, all items in same module are visible)
+                debug!(path = ?import.path, def_id = def_id.index(), "import resolved");
                 self.add_import_binding(import, def_id);
             } else {
+                warn!(path = ?import.path, name = %name, "import resolution failed: not found");
                 self.emit_diagnostic(
                     Diagnostic::error(format!("cannot find `{name}` in this scope"))
                         .with_label(import.span.clone(), "not found"),
@@ -613,15 +618,18 @@ impl<'ctx> Resolver<'ctx> {
         // Handle the result - now we can mutably borrow the module tree
         match lookup_result {
             Ok(def_id) => {
+                debug!(path = ?import.path, def_id = def_id.index(), "cross-module import resolved");
                 self.add_import_binding(import, def_id);
             }
             Err(Some(_)) => {
+                warn!(path = ?import.path, item = %item_name, "import resolution failed: item is private");
                 self.emit_diagnostic(
                     Diagnostic::error(format!("`{item_name}` is private"))
                         .with_label(import.span.clone(), "private item"),
                 );
             }
             Err(None) => {
+                warn!(path = ?import.path, item = %item_name, module = %mod_path_owned.join("."), "import resolution failed: not found in module");
                 self.emit_diagnostic(
                     Diagnostic::error(format!(
                         "cannot find `{}` in module `{}`",
@@ -712,6 +720,10 @@ impl<'ctx> Resolver<'ctx> {
 
     fn collect_function(&mut self, func: &FunctionDef) {
         if let Some(name) = func.name() {
+            let fn_name = Self::get_ident_token(&name)
+                .map(|t| t.text().to_string())
+                .unwrap_or_default();
+            debug!(name = %fn_name, scope = self.ctx.current_scope_id().index(), "collecting function");
             let vis = self.convert_visibility(func.visibility().as_ref());
             self.define_name(&name, SymbolKind::Function, vis, false);
         }
@@ -719,6 +731,14 @@ impl<'ctx> Resolver<'ctx> {
 
     fn collect_struct(&mut self, struct_def: &StructDef) {
         if let Some(name) = struct_def.name() {
+            let struct_name = Self::get_ident_token(&name)
+                .map(|t| t.text().to_string())
+                .unwrap_or_default();
+            let field_count = struct_def
+                .field_list()
+                .map(|fl| fl.fields().count())
+                .unwrap_or(0);
+            debug!(name = %struct_name, field_count, "collecting struct");
             let vis = self.convert_visibility(struct_def.visibility().as_ref());
             self.define_name(&name, SymbolKind::Struct, vis, false);
         }
@@ -726,12 +746,26 @@ impl<'ctx> Resolver<'ctx> {
 
     fn collect_type_alias(&mut self, type_alias: &TypeAlias) {
         if let Some(name) = type_alias.name() {
+            let alias_name = Self::get_ident_token(&name)
+                .map(|t| t.text().to_string())
+                .unwrap_or_default();
+            debug!(name = %alias_name, "collecting type alias");
             let vis = self.convert_visibility(type_alias.visibility().as_ref());
             self.define_name(&name, SymbolKind::TypeAlias, vis, false);
         }
     }
 
     fn collect_impl_block(&mut self, impl_block: &ImplBlock) {
+        let target_name = impl_block
+            .self_ty()
+            .map(|ty| ty.syntax().text().to_string())
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let method_count = impl_block
+            .items()
+            .filter(|i| matches!(i, Item::Function(_)))
+            .count();
+        debug!(target = %target_name, method_count, "collecting impl block");
+
         // Create a synthetic name for the impl block using its span
         let span = impl_block.syntax().text_range();
         let synthetic_name = self
@@ -753,6 +787,7 @@ impl<'ctx> Resolver<'ctx> {
 
         // Enter impl scope and collect methods
         self.ctx.enter_scope(ScopeKind::Impl);
+        trace!(scope = self.ctx.current_scope_id().index(), kind = "Impl", "entered scope");
 
         for item in impl_block.items() {
             if let Item::Function(func) = item
@@ -767,6 +802,8 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn collect_extern_block(&mut self, extern_block: &ExternBlock) {
+        let fn_count = extern_block.extern_fns().count();
+        debug!(extern_fn_count = fn_count, "collecting extern block");
         // Collect all extern function declarations
         for extern_fn in extern_block.extern_fns() {
             self.collect_extern_fn(&extern_fn);
@@ -807,6 +844,7 @@ impl<'ctx> Resolver<'ctx> {
 
     /// Resolve all references in a source file (pass 2).
     pub fn resolve_source_file(&mut self, source_file: &SourceFile) {
+        let _span = debug_span!("resolve_bodies").entered();
         for item in source_file.items() {
             self.resolve_item(&item);
         }
@@ -827,7 +865,15 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_function(&mut self, func: &FunctionDef) {
+        let fn_name = func
+            .name()
+            .and_then(|n| Self::get_ident_token(&n))
+            .map(|t| t.text().to_string())
+            .unwrap_or_else(|| "<anonymous>".to_string());
+        let _span = debug_span!("resolve_function", name = %fn_name).entered();
+
         self.ctx.enter_scope(ScopeKind::Function);
+        trace!(scope = self.ctx.current_scope_id().index(), kind = "Function", "entered scope");
 
         // Define generic parameters from where clause
         if let Some(where_clause) = func.where_clause() {
@@ -903,7 +949,14 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_impl_block(&mut self, impl_block: &ImplBlock) {
+        let target_name = impl_block
+            .self_ty()
+            .map(|ty| ty.syntax().text().to_string())
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let _span = debug_span!("resolve_impl", target = %target_name).entered();
+
         self.ctx.enter_scope(ScopeKind::Impl);
+        trace!(scope = self.ctx.current_scope_id().index(), kind = "Impl", "entered scope");
 
         // Define generic parameters from where clause
         if let Some(where_clause) = impl_block.where_clause() {
@@ -1046,6 +1099,7 @@ impl<'ctx> Resolver<'ctx> {
         let scope_depth_before = self.ctx.scope_depth();
 
         self.ctx.enter_scope(ScopeKind::Block);
+        trace!(scope = self.ctx.current_scope_id().index(), kind = "Block", "entered scope");
 
         // Process all children in source order (statements and bare expressions)
         // This is important because bare expressions (like `while` without semicolon)
@@ -1391,6 +1445,7 @@ impl<'ctx> Resolver<'ctx> {
 
         // Enter for-loop scope
         self.ctx.enter_scope(ScopeKind::ForLoop);
+        trace!(scope = self.ctx.current_scope_id().index(), kind = "ForLoop", "entered scope");
 
         // Define the loop variable bindings (immutable by default)
         if let Some(pat) = for_expr.pat() {
@@ -1408,6 +1463,8 @@ impl<'ctx> Resolver<'ctx> {
     // ===== Path Resolution =====
 
     fn resolve_path(&mut self, path: &Path) {
+        let path_text = path.syntax().text().to_string();
+        trace!(path = %path_text, "resolving path");
         // For now, we only resolve the first segment as a simple name lookup
         // Multi-segment paths (qualified paths) would need module resolution
         if let Some(first_segment) = path.segments().next() {
@@ -1484,6 +1541,21 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn define_pattern(&mut self, pat: &Pat, outer_mutable: bool) {
+        let pat_kind = match pat {
+            Pat::Ident(_) => "ident",
+            Pat::Wildcard(_) => "wildcard",
+            Pat::Literal(_) => "literal",
+            Pat::Tuple(_) => "tuple",
+            Pat::Slice(_) => "slice",
+            Pat::Struct(_) => "struct",
+            Pat::Ref(_) => "ref",
+            Pat::EnumShorthand(_) => "enum_shorthand",
+            Pat::Or(_) => "or",
+            Pat::Grouped(_) => "grouped",
+            Pat::Rest(_) => "rest",
+            Pat::Range(_) => "range",
+        };
+        trace!(kind = pat_kind, mutable = outer_mutable, "defining pattern bindings");
         match pat {
             Pat::Ident(ident_pat) => {
                 // Get IDENT token directly from IdentPat (may be wrapped in Name or direct)
@@ -1605,6 +1677,8 @@ impl<'ctx> Resolver<'ctx> {
     // ===== Type Resolution =====
 
     fn resolve_type(&mut self, ty: &Type) {
+        let ty_text = ty.syntax().text().to_string();
+        trace!(ty = %ty_text, "resolving type");
         match ty {
             Type::Path(path_type) => {
                 if let Some(path) = path_type.path() {

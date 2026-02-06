@@ -7,6 +7,7 @@
 use cranelift_codegen::ir::AbiParam;
 use cranelift_codegen::ir::Type as ClifType;
 use cranelift_codegen::ir::types;
+use tracing::{debug, trace};
 
 use spl_sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
 
@@ -51,7 +52,13 @@ impl TypeMapper {
     /// or `None` for ZSTs and compound types that require stack allocation.
     pub fn map_type(&self, type_id: TypeId, interner: &TypeInterner) -> Option<ClifType> {
         let ty = interner.get(type_id);
-        self.map_type_inner(ty, interner)
+        let result = self.map_type_inner(ty, interner);
+        trace!(
+            type_id = type_id.index(),
+            clif_type = ?result,
+            "mapped SPL type to Cranelift type"
+        );
+        result
     }
 
     fn map_type_inner(&self, ty: &Type, _interner: &TypeInterner) -> Option<ClifType> {
@@ -79,7 +86,10 @@ impl TypeMapper {
             | Type::SelfType
             | Type::StrRef
             | Type::Error
-            | Type::Module(_) => None,
+            | Type::Module(_) => {
+                debug!(ty = ?ty, "type has no direct Cranelift representation");
+                None
+            }
         }
     }
 
@@ -118,7 +128,11 @@ impl TypeMapper {
     /// ZSTs have no runtime representation and don't need storage.
     pub fn is_zst(&self, type_id: TypeId, interner: &TypeInterner) -> bool {
         let ty = interner.get(type_id);
-        self.is_zst_inner(ty, interner)
+        let result = self.is_zst_inner(ty, interner);
+        if result {
+            trace!(type_id = type_id.index(), "type is zero-sized");
+        }
+        result
     }
 
     fn is_zst_inner(&self, ty: &Type, interner: &TypeInterner) -> bool {
@@ -165,11 +179,17 @@ impl TypeMapper {
 
         // Check for fat pointer types
         let ty = interner.get(type_id);
-        match ty {
+        let repr = match ty {
             Type::StrRef | Type::Slice(_) => AbiRepr::FatPointer { num_fields: 2 },
             // Everything else that's not scalar or ZST is passed indirectly
             _ => AbiRepr::Indirect,
-        }
+        };
+        trace!(
+            type_id = type_id.index(),
+            repr = ?repr,
+            "resolved ABI representation"
+        );
+        repr
     }
 
     /// Get ABI parameters for a type in function signatures.
@@ -226,6 +246,11 @@ pub fn build_signature(
         }
     }
 
+    trace!(
+        return_count = sig.returns.len(),
+        param_count = sig.params.len(),
+        "built function signature"
+    );
     sig
 }
 

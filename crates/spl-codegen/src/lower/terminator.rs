@@ -2,6 +2,7 @@
 
 use cranelift_codegen::ir::{InstBuilder, MemFlags, TrapCode, Value};
 use cranelift_module::Module;
+use tracing::{debug, trace};
 
 use crate::error::{CodegenError, TRAP_ASSERT_FAILED, TRAP_RESUME, TRAP_UNREACHABLE};
 use spl_mir::operand::{Constant, Operand};
@@ -13,19 +14,33 @@ use super::FunctionLowerer;
 impl<'a> FunctionLowerer<'a> {
     /// Lower a MIR terminator to Cranelift IR.
     pub(super) fn lower_terminator(&mut self, term: &Terminator) -> Result<(), CodegenError> {
+        let term_kind = match &term.kind {
+            TerminatorKind::Return => "Return",
+            TerminatorKind::Goto(_) => "Goto",
+            TerminatorKind::SwitchInt { .. } => "SwitchInt",
+            TerminatorKind::Call { .. } => "Call",
+            TerminatorKind::Drop { .. } => "Drop",
+            TerminatorKind::Assert { .. } => "Assert",
+            TerminatorKind::Unreachable => "Unreachable",
+            TerminatorKind::Resume => "Resume",
+        };
+        trace!(kind = term_kind, "lowering terminator");
         match &term.kind {
             TerminatorKind::Return => {
                 // Get return value if not ZST
                 if let Some(val) = self.use_var(Local::RETURN_PLACE) {
+                    trace!(has_value = true, "emitting return");
                     self.builder.ins().return_(&[val]);
                 } else {
                     // Unit return
+                    trace!(has_value = false, "emitting return");
                     self.builder.ins().return_(&[]);
                 }
                 Ok(())
             }
 
             TerminatorKind::Goto(target) => {
+                trace!(target_block = target.index(), "emitting goto");
                 let target_block = self.get_block(*target);
                 self.builder.ins().jump(target_block, &[]);
                 Ok(())
@@ -39,6 +54,11 @@ impl<'a> FunctionLowerer<'a> {
 
                 // For boolean switch (single target + otherwise), use brif
                 let target_pairs: Vec<_> = targets.iter().collect();
+                trace!(
+                    target_count = target_pairs.len(),
+                    otherwise_block = targets.otherwise().index(),
+                    "emitting switch"
+                );
 
                 if target_pairs.len() == 1 && target_pairs[0].0 == 0 {
                     // Boolean switch: 0 -> false_target, otherwise -> true_target
@@ -104,6 +124,8 @@ impl<'a> FunctionLowerer<'a> {
                         ));
                     }
                 };
+
+                debug!(callee = ?def_id, arg_count = args.len(), dest = ?destination.local, "emitting function call");
 
                 // Look up the function in the registry
                 let registry = self.func_registry.ok_or_else(|| {
@@ -218,6 +240,7 @@ impl<'a> FunctionLowerer<'a> {
             }
 
             TerminatorKind::Drop { target, .. } => {
+                trace!(target_block = target.index(), "emitting drop (no-op)");
                 // For now, drops are no-ops (we don't have destructors yet)
                 let target_block = self.get_block(*target);
                 self.builder.ins().jump(target_block, &[]);
@@ -229,6 +252,7 @@ impl<'a> FunctionLowerer<'a> {
                 expected,
                 target,
             } => {
+                trace!(expected = expected, target_block = target.index(), "emitting assert");
                 let cond_val = self
                     .lower_operand(cond)?
                     .ok_or_else(|| CodegenError::Internal("ZST assert condition".to_string()))?;
@@ -260,6 +284,7 @@ impl<'a> FunctionLowerer<'a> {
             }
 
             TerminatorKind::Unreachable => {
+                trace!("emitting unreachable trap");
                 self.builder
                     .ins()
                     .trap(TrapCode::user(TRAP_UNREACHABLE).unwrap());
@@ -267,6 +292,7 @@ impl<'a> FunctionLowerer<'a> {
             }
 
             TerminatorKind::Resume => {
+                trace!("emitting resume trap");
                 // Resume unwinding - for now just trap
                 self.builder
                     .ins()

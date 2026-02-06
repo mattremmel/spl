@@ -7,7 +7,7 @@ use rustc_hash::FxHashSet;
 use spl_ast::{Expr, ExternFn, FunctionDef, Item, SourceFile, WhereClause};
 use spl_diagnostic::Diagnostic;
 
-use tracing::debug;
+use tracing::{debug, debug_span};
 
 use super::engine::{FnSignature, InferEngine, LoopKind, ParamInfo};
 use super::helpers::text_range_to_span;
@@ -298,6 +298,15 @@ impl<'a> InferEngine<'a> {
             .map(|t| self.ast_type_to_type_id(&t))
             .unwrap_or_else(|| self.types.unit());
 
+        let function_name = token.text();
+        debug!(
+            function_name = %function_name,
+            def_id = def_id.index(),
+            param_count = params.len(),
+            return_type = ret.index(),
+            "collected function signature"
+        );
+
         self.defs.fn_signatures.insert(
             def_id,
             FnSignature {
@@ -482,6 +491,13 @@ impl<'a> InferEngine<'a> {
         // Get the target type
         if let Some(ty) = type_alias.ty() {
             let target_ty = self.ast_type_to_type_id(&ty);
+            let alias_name = token.text();
+            debug!(
+                alias_name = %alias_name,
+                def_id = def_id.index(),
+                target_type = target_ty.index(),
+                "collected type alias"
+            );
             self.defs.type_alias_targets.insert(def_id, target_ty);
         }
     }
@@ -619,6 +635,14 @@ impl<'a> InferEngine<'a> {
             }
         }
 
+        let struct_name = token.text();
+        debug!(
+            struct_name = %struct_name,
+            def_id = def_id.index(),
+            field_count = fields.len(),
+            "collected struct info"
+        );
+
         self.defs.struct_fields.insert(def_id, fields);
     }
 
@@ -744,6 +768,20 @@ impl<'a> InferEngine<'a> {
 
     /// Infer all method bodies in an impl block (public for multi-file inference).
     pub fn infer_impl_bodies(&mut self, impl_block: &spl_ast::ImplBlock) {
+        let method_count = impl_block
+            .items()
+            .filter(|item| matches!(item, Item::Function(_)))
+            .count();
+        let struct_name = impl_block
+            .self_ty()
+            .map(|t| t.syntax().text().to_string())
+            .unwrap_or_default();
+        debug!(
+            struct_name = %struct_name,
+            method_count,
+            "inferring impl block bodies"
+        );
+
         for item in impl_block.items() {
             if let Item::Function(func) = item {
                 self.infer_function(&func);
@@ -762,7 +800,8 @@ impl<'a> InferEngine<'a> {
 
         let span = text_range_to_span(token.text_range());
         let function_name = token.text().to_string();
-        debug!(function_name = %function_name, "inferring function");
+        let _fn_span = debug_span!("infer_function", function_name = %function_name).entered();
+        debug!("inferring function body");
         let def_id = match self.resolutions.get(&span) {
             Some(id) => *id,
             None => return,

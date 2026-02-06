@@ -5,7 +5,7 @@
 
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{FuncId, Linkage};
-use tracing::debug;
+use tracing::{debug, debug_span};
 
 use super::aot::AotContext;
 use super::context::CodegenContext;
@@ -170,6 +170,7 @@ impl ModuleCompiler {
         for (func_def, func_id) in functions.iter().zip(func_ids.iter()) {
             // Skip extern functions - they don't have function pointers in our module
             if func_def.name.starts_with("__") {
+                debug!(function_name = %func_def.name, "skipping extern function during finalization");
                 continue;
             }
             let ptr = compiler.ctx.get_function_ptr(*func_id);
@@ -247,6 +248,13 @@ impl ModuleCompiler {
         types: &TypeInterner,
         func_id: FuncId,
     ) -> Result<(), CodegenError> {
+        let _span = debug_span!(
+            "jit_compile_function",
+            function_name = %func_def.name,
+            def_id = ?func_def.def_id,
+        )
+        .entered();
+
         let type_mapper = self.ctx.type_mapper();
         let call_conv = self.ctx.call_conv();
         let sig = build_signature(call_conv, &type_mapper, func_def.body, types);
@@ -419,6 +427,13 @@ impl AotModuleCompiler {
         types: &TypeInterner,
         func_id: FuncId,
     ) -> Result<(), CodegenError> {
+        let _span = debug_span!(
+            "aot_compile_function",
+            function_name = %func_def.name,
+            def_id = ?func_def.def_id,
+        )
+        .entered();
+
         let type_mapper = self.ctx.type_mapper();
         let call_conv = self.ctx.call_conv();
         let sig = build_signature(call_conv, &type_mapper, func_def.body, types);

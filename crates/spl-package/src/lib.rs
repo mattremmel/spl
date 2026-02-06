@@ -195,6 +195,7 @@ impl Package {
         let root = path.as_ref().to_path_buf();
 
         if !root.is_dir() {
+            debug!(path = %root.display(), "path is not a directory");
             return Err(PackageError::NotADirectory(root));
         }
 
@@ -208,6 +209,7 @@ impl Package {
             let config_content = fs::read_to_string(&config_path)?;
             parse_package_directives(&config_content)?
         } else {
+            debug!("no _module.spl found, using default directives");
             PackageDirectives::default()
         };
 
@@ -230,6 +232,7 @@ impl Package {
         let included = try_resolve_includes(&file_names, &directives, conditions)?;
 
         if included.is_empty() {
+            debug!(path = %root.display(), "no source files after include resolution");
             return Err(PackageError::NoSourceFiles(root));
         }
 
@@ -239,6 +242,7 @@ impl Package {
 
         for file_name in &included {
             let file_path = root.join(file_name);
+            debug!(file = %file_path.display(), "loading source file");
             let content = fs::read_to_string(&file_path)?;
             let id = source_map.add_file(&file_path, content);
             file_ids.push(id);
@@ -276,6 +280,13 @@ impl Package {
             // Sort by file path for deterministic output
             all_errors.sort_by(|(a, _), (b, _)| a.cmp(b));
 
+            let total_errors: usize = all_errors.iter().map(|(_, errs)| errs.len()).sum();
+            warn!(
+                file_count = all_errors.len(),
+                total_errors,
+                "parse errors in source files"
+            );
+
             return Err(PackageError::ParseErrors { errors: all_errors });
         }
 
@@ -305,7 +316,15 @@ impl Package {
             let subdir = root.join(mod_name);
             // Attempt to load, but don't fail the parent if child module fails
             match Self::load_with_conditions(&subdir, conditions) {
-                Ok(child_mod) => modules.push(child_mod),
+                Ok(child_mod) => {
+                    debug!(
+                        parent = %name,
+                        child = %child_mod.name(),
+                        child_files = child_mod.file_count(),
+                        "linked child module"
+                    );
+                    modules.push(child_mod);
+                }
                 Err(e) => {
                     warn!(module_name = %mod_name, error = %e, "failed to load child module");
                     warnings.push(PackageWarning::ModuleLoadFailed {

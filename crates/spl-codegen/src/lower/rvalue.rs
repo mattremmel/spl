@@ -3,6 +3,7 @@
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::types;
 use cranelift_codegen::ir::{InstBuilder, MemFlags, Value};
+use tracing::{debug, trace};
 
 use crate::LocalStorage;
 use crate::error::CodegenError;
@@ -19,6 +20,19 @@ impl<'a> FunctionLowerer<'a> {
         rvalue: &Rvalue,
         dest: Local,
     ) -> Result<Option<Value>, CodegenError> {
+        let rvalue_kind = match rvalue {
+            Rvalue::Use(_) => "Use",
+            Rvalue::BinaryOp(..) => "BinaryOp",
+            Rvalue::UnaryOp(..) => "UnaryOp",
+            Rvalue::Cast(..) => "Cast",
+            Rvalue::Ref(..) => "Ref",
+            Rvalue::AddressOf(..) => "AddressOf",
+            Rvalue::Len(_) => "Len",
+            Rvalue::Aggregate(..) => "Aggregate",
+            Rvalue::Discriminant(_) => "Discriminant",
+            Rvalue::Repeat(..) => "Repeat",
+        };
+        trace!(kind = rvalue_kind, dest = dest.0, "lowering rvalue");
         match rvalue {
             Rvalue::Use(operand) => {
                 // Special handling for string constants (compound type)
@@ -246,6 +260,7 @@ impl<'a> FunctionLowerer<'a> {
         kind: &AggregateKind,
         operands: &[Operand],
     ) -> Result<Option<Value>, CodegenError> {
+        debug!(kind = ?kind, field_count = operands.len(), dest = dest.0, "constructing aggregate");
         // Get the destination address
         let dest_addr = match self.local_storage(dest) {
             Some(LocalStorage::StackSlot(slot)) => {
@@ -604,6 +619,7 @@ impl<'a> FunctionLowerer<'a> {
         rhs: &Operand,
         dest: Local,
     ) -> Result<Option<Value>, CodegenError> {
+        trace!(op = ?op, dest = dest.0, "lowering binary op");
         // Get the operand type from the destination for most ops,
         // but comparisons return bool while operating on the operand types
         let operand_ty = self.infer_operand_type(lhs)?;
@@ -745,6 +761,7 @@ impl<'a> FunctionLowerer<'a> {
         operand: &Operand,
         dest: Local,
     ) -> Result<Option<Value>, CodegenError> {
+        trace!(op = ?op, dest = dest.0, "lowering unary op");
         let dest_ty = self
             .local_type(dest)
             .ok_or_else(|| CodegenError::Internal("ZST destination for unary op".to_string()))?;
@@ -792,6 +809,7 @@ impl<'a> FunctionLowerer<'a> {
 
         // Get the source value
         let source_ty = self.infer_operand_type(operand)?;
+        debug!(cast_kind = ?kind, source_clif_type = ?source_ty, target_clif_type = ?target_clif_ty, target_type_id = target_ty.index(), "lowering cast");
         let val = self
             .lower_operand_as(operand, source_ty)?
             .ok_or_else(|| CodegenError::Internal("ZST source in cast".to_string()))?;

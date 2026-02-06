@@ -2,6 +2,7 @@
 
 use cranelift_codegen::ir::types;
 use cranelift_codegen::ir::{InstBuilder, MemFlags, Value};
+use tracing::trace;
 
 use crate::LocalStorage;
 use crate::error::CodegenError;
@@ -17,6 +18,12 @@ impl<'a> FunctionLowerer<'a> {
         &mut self,
         operand: &Operand,
     ) -> Result<Option<Value>, CodegenError> {
+        let operand_kind = match operand {
+            Operand::Copy(_) => "Copy",
+            Operand::Move(_) => "Move",
+            Operand::Constant(_) => "Constant",
+        };
+        trace!(kind = operand_kind, "lowering operand");
         match operand {
             Operand::Copy(place) | Operand::Move(place) => self.lower_place_read(place),
             Operand::Constant(constant) => self.lower_constant(constant),
@@ -249,23 +256,28 @@ impl<'a> FunctionLowerer<'a> {
     ) -> Result<Option<Value>, CodegenError> {
         match constant {
             Constant::Int(value, _ty) => {
+                trace!(value = *value as i64, clif_type = "i64", "materializing int constant");
                 // Default to i64 for constants; will be cast as needed
                 let val = self.builder.ins().iconst(types::I64, *value as i64);
                 Ok(Some(val))
             }
             Constant::Bool(value) => {
+                trace!(value = *value, clif_type = "i8", "materializing bool constant");
                 let val = self.builder.ins().iconst(types::I8, *value as i64);
                 Ok(Some(val))
             }
             Constant::Float(value, _ty) => {
+                trace!(value = *value, clif_type = "f64", "materializing float constant");
                 let val = self.builder.ins().f64const(*value);
                 Ok(Some(val))
             }
             Constant::Char(value) => {
+                trace!(value = *value as u32, clif_type = "i32", "materializing char constant");
                 let val = self.builder.ins().iconst(types::I32, *value as i64);
                 Ok(Some(val))
             }
             Constant::Unit => {
+                trace!("materializing unit constant (no value)");
                 // Unit has no runtime representation
                 Ok(None)
             }
@@ -299,6 +311,7 @@ impl<'a> FunctionLowerer<'a> {
                 Ok(Some(addr))
             }
             Constant::Zeroed(ty) => {
+                trace!(type_id = ty.index(), "materializing zeroed constant");
                 if let Some(clif_ty) = self.type_mapper.map_type(*ty, self.types) {
                     // Scalar type: emit zero constant
                     let val = if clif_ty.is_float() {

@@ -14,7 +14,7 @@ use spl_ast::{Block, LetStmt, LiteralExpr, Stmt};
 use spl_diagnostic::Diagnostic;
 use spl_syntax::SyntaxKind;
 
-use tracing::debug;
+use tracing::{debug, trace};
 
 use super::UnifyError;
 use super::engine::{InferEngine, LoopKind};
@@ -289,6 +289,41 @@ impl<'a> InferEngine<'a> {
             return type_id;
         }
 
+        let expr_kind = match expr {
+            Expr::Literal(_) => "literal",
+            Expr::Path(_) => "path",
+            Expr::Paren(_) => "paren",
+            Expr::Tuple(_) => "tuple",
+            Expr::Array(_) => "array",
+            Expr::Call(_) => "call",
+            Expr::Binary(_) => "binary",
+            Expr::Prefix(_) => "prefix",
+            Expr::Ref(_) => "ref",
+            Expr::Field(_) => "field",
+            Expr::Index(_) => "index",
+            Expr::Slice(_) => "slice",
+            Expr::If(_) => "if",
+            Expr::While(_) => "while",
+            Expr::For(_) => "for",
+            Expr::Loop(_) => "loop",
+            Expr::Break(_) => "break",
+            Expr::Continue(_) => "continue",
+            Expr::Return(_) => "return",
+            Expr::Yield(_) => "yield",
+            Expr::Block(_) => "block",
+            Expr::Range(_) => "range",
+            Expr::Is(_) => "is",
+            Expr::Match(_) => "match",
+            Expr::EnumShorthand(_) => "enum_shorthand",
+            Expr::Try(_) => "try",
+            Expr::Closure(_) => "closure",
+            Expr::OptionalField(_) => "optional_field",
+            Expr::Dollar(_) => "dollar",
+            Expr::Unsafe(_) => "unsafe",
+            Expr::Throw(_) => "throw",
+        };
+        trace!(expr_kind, "synthesizing expression");
+
         let type_id = match expr {
             Expr::Literal(lit) => self.synth_literal(lit),
             Expr::Path(path_expr) => self.synth_path(path_expr),
@@ -496,10 +531,18 @@ impl<'a> InferEngine<'a> {
         let span = text_range_to_span(token.text_range());
 
         // Look up the resolved DefId
-        let def_id = match self.resolutions.get(&span) {
-            Some(id) => *id,
-            None => return self.types.error(),
+        let def_id = if let Some(id) = self.resolutions.get(&span) {
+            *id
+        } else {
+            debug!("synth_path: no resolution for span");
+            return self.types.error();
         };
+
+        debug!(
+            def_id = def_id.index(),
+            segment_count = segments.len(),
+            "synthesizing path"
+        );
 
         // Check if this is a module - if so, return Type::Module
         let symbol = self.resolve_ctx.get_symbol(def_id);
@@ -1360,6 +1403,13 @@ impl<'a> InferEngine<'a> {
         struct_def_id: crate::DefId,
         receiver_type_args: &[TypeId],
     ) -> TypeId {
+        debug!(
+            struct_def_id = struct_def_id.index(),
+            param_count = sig.params.len(),
+            return_type = sig.ret.index(),
+            "synthesizing method call with receiver"
+        );
+
         // Get struct type params for building substitution map
         let struct_type_params = self
             .defs
@@ -1425,7 +1475,13 @@ impl<'a> InferEngine<'a> {
         sig: &super::engine::FnSignature,
     ) -> TypeId {
         let (param_infos, ret_ty) = self.instantiate_signature_with_labels(sig);
-        debug!(arg_count = call.args().count(), "resolved function call");
+        debug!(
+            arg_count = call.args().count(),
+            param_count = param_infos.len(),
+            return_type = ret_ty.index(),
+            type_param_count = sig.type_params.len(),
+            "resolved function call"
+        );
 
         // Check argument count
         let args: Vec<_> = call.args().collect();
@@ -1488,6 +1544,19 @@ impl<'a> InferEngine<'a> {
 
     /// Synthesize type for an apply expression being used as struct instantiation
     fn synth_call_as_struct(&mut self, call: &CallExpr, struct_def_id: crate::DefId) -> TypeId {
+        let field_count = self
+            .defs
+            .struct_fields
+            .get(&struct_def_id)
+            .map(Vec::len)
+            .unwrap_or(0);
+        debug!(
+            struct_def_id = struct_def_id.index(),
+            field_count,
+            arg_count = call.args().count(),
+            "synthesizing struct instantiation"
+        );
+
         // Get struct type params and create substitution map
         let type_params = self
             .defs
@@ -1625,6 +1694,8 @@ impl<'a> InferEngine<'a> {
         let Some(rhs) = bin.rhs() else {
             return self.types.error();
         };
+
+        debug!(operator = %op.text(), "synthesizing binary expression");
 
         match op.kind() {
             // Arithmetic operators - result is same as operands
@@ -1830,6 +1901,7 @@ impl<'a> InferEngine<'a> {
         const MAX_DEREF: usize = 100;
 
         let Some(base) = field.expr() else {
+            debug!("synth_field: missing base expression");
             return self.types.error();
         };
 
@@ -1868,6 +1940,12 @@ impl<'a> InferEngine<'a> {
                 },
             },
         };
+
+        debug!(
+            receiver_type = resolved.index(),
+            field_name = %field_name,
+            "synthesizing field access"
+        );
 
         // Check if it's a tuple index
         if let Ok(idx) = field_name.parse::<usize>()
@@ -2043,8 +2121,16 @@ impl<'a> InferEngine<'a> {
 
     fn synth_call(&mut self, call: &CallExpr) -> TypeId {
         let Some(callee) = call.callee() else {
+            debug!("synth_call: missing callee");
             return self.types.error();
         };
+
+        let callee_kind = match &callee {
+            Expr::Path(_) => "path",
+            Expr::Field(_) => "method",
+            _ => "arbitrary",
+        };
+        debug!(callee_kind, arg_count = call.args().count(), "synthesizing call");
 
         // Dispatch based on callee type:
         // - PathExpr: function call or struct instantiation (old synth_apply)
@@ -2139,6 +2225,12 @@ impl<'a> InferEngine<'a> {
         // Resolve receiver type to find struct DefId
         let resolved = self.resolve_type(receiver_ty);
         let receiver_type = self.types.get(resolved).clone();
+
+        debug!(
+            receiver_type = resolved.index(),
+            method_name = %method_name,
+            "synthesizing method call"
+        );
 
         // Check primitive type methods first (e.g., str.ptr(), str.len())
         if let Some(method_def_ids) = self.methods.primitive_methods.get(&resolved).cloned() {
@@ -2472,6 +2564,9 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_if(&mut self, if_expr: &IfExpr) -> TypeId {
+        let has_else = if_expr.else_branch().is_some() || if_expr.else_block().is_some();
+        debug!(has_else, "synthesizing if expression");
+
         // Check condition is bool
         if let Some(cond) = if_expr.condition() {
             let cond_ty = self.synth_expr(&cond);
@@ -2516,6 +2611,8 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_while(&mut self, while_expr: &WhileExpr) -> TypeId {
+        debug!("synthesizing while loop");
+
         // Check condition is bool
         if let Some(cond) = while_expr.condition() {
             let cond_ty = self.synth_expr(&cond);
@@ -2545,6 +2642,8 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_for(&mut self, for_expr: &ForExpr) -> TypeId {
+        debug!("synthesizing for loop");
+
         // Synthesize iterable and get element type
         // For range expressions, the synthesized type IS the element type
         let elem_ty = if let Some(iterable) = for_expr.iterable() {
@@ -2589,6 +2688,8 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_loop(&mut self, loop_expr: &LoopExpr) -> TypeId {
+        debug!("synthesizing loop");
+
         // Create a fresh type variable for the loop's break value
         let break_ty = self.fresh_type_var();
         let old_break_ty = self.ctx.loop_break_type.replace(break_ty);
@@ -2742,6 +2843,7 @@ impl<'a> InferEngine<'a> {
     fn synth_block_expr(&mut self, block_expr: &BlockExpr) -> TypeId {
         match block_expr.block() {
             Some(block) => {
+                debug!("synthesizing block expression");
                 // Set up yield context for block expressions
                 let yield_ty = self.fresh_type_var();
                 let old_yield_ty = self.ctx.block_yield_type.replace(yield_ty);
@@ -2975,6 +3077,9 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_match(&mut self, match_expr: &MatchExpr) -> TypeId {
+        let arm_count = match_expr.arms().count();
+        debug!(arm_count, "synthesizing match expression");
+
         // Synthesize the scrutinee type
         let scrutinee_ty = if let Some(scrutinee) = match_expr.scrutinee() {
             self.synth_expr(&scrutinee)

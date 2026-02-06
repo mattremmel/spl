@@ -8,6 +8,7 @@
 //! Uses simple C-like layout rules: fields laid out sequentially with alignment padding.
 
 use cranelift_codegen::ir::Type as ClifType;
+use tracing::{debug, trace};
 
 use spl_sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
 
@@ -71,7 +72,14 @@ impl<'a> LayoutComputer<'a> {
     /// Compute the layout of a type.
     pub fn layout_of(&self, ty: TypeId) -> TypeLayout {
         let ty_data = self.types.get(ty);
-        self.layout_of_inner(ty_data)
+        let layout = self.layout_of_inner(ty_data);
+        trace!(
+            type_id = ty.index(),
+            size = layout.size,
+            align = layout.align,
+            "computed type layout"
+        );
+        layout
     }
 
     fn layout_of_inner(&self, ty: &Type) -> TypeLayout {
@@ -94,6 +102,14 @@ impl<'a> LayoutComputer<'a> {
                 }
                 let stride = TypeLayout::align_to(elem_layout.size, elem_layout.align);
                 let size = stride * (*count as u32);
+                trace!(
+                    elem_type_id = elem_ty.index(),
+                    elem_size = elem_layout.size,
+                    stride = stride,
+                    count = count,
+                    total_size = size,
+                    "computed array layout"
+                );
                 TypeLayout::new(size, elem_layout.align)
             }
 
@@ -141,14 +157,22 @@ impl<'a> LayoutComputer<'a> {
         let mut size: u32 = 0;
         let mut align: u32 = 1;
 
-        for &field_ty in field_types {
+        for (i, &field_ty) in field_types.iter().enumerate() {
             let field_layout = self.layout_of(field_ty);
 
             // Align the current offset for this field
-            size = TypeLayout::align_to(size, field_layout.align);
+            let offset = TypeLayout::align_to(size, field_layout.align);
 
-            // Add the field's size
-            size += field_layout.size;
+            trace!(
+                field_index = i,
+                field_type_id = field_ty.index(),
+                field_size = field_layout.size,
+                field_align = field_layout.align,
+                offset = offset,
+                "laid out struct field"
+            );
+
+            size = offset + field_layout.size;
 
             // Update overall alignment to be the max of all field alignments
             align = align.max(field_layout.align);
@@ -157,13 +181,20 @@ impl<'a> LayoutComputer<'a> {
         // Final size must be a multiple of alignment (for arrays of this type)
         size = TypeLayout::align_to(size, align);
 
+        debug!(
+            field_count = field_types.len(),
+            total_size = size,
+            align = align,
+            "computed struct/tuple layout"
+        );
+
         TypeLayout::new(size, align)
     }
 
     /// Compute the offset of a field in a struct/tuple.
     pub fn field_offset(&self, ty: TypeId, field_idx: usize) -> u32 {
         let ty_data = self.types.get(ty);
-        match ty_data {
+        let offset = match ty_data {
             Type::Tuple(elems) => self.compute_field_offset(elems, field_idx),
             Type::Struct(def_id, _) => {
                 if let Some(field_types) = self.types.struct_field_types(*def_id) {
@@ -187,7 +218,14 @@ impl<'a> LayoutComputer<'a> {
                 }
             }
             _ => 0,
-        }
+        };
+        trace!(
+            type_id = ty.index(),
+            field_idx = field_idx,
+            offset = offset,
+            "computed field offset"
+        );
+        offset
     }
 
     fn compute_field_offset(&self, field_types: &[TypeId], field_idx: usize) -> u32 {
@@ -259,7 +297,14 @@ impl<'a> LayoutComputer<'a> {
         match ty_data {
             Type::Array(elem_ty, _) => {
                 let elem_layout = self.layout_of(*elem_ty);
-                TypeLayout::align_to(elem_layout.size, elem_layout.align)
+                let stride = TypeLayout::align_to(elem_layout.size, elem_layout.align);
+                trace!(
+                    type_id = ty.index(),
+                    elem_type_id = elem_ty.index(),
+                    stride = stride,
+                    "computed array element stride"
+                );
+                stride
             }
             _ => 0,
         }

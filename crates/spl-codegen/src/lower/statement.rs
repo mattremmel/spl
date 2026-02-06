@@ -1,6 +1,7 @@
 //! Statement lowering from MIR to Cranelift IR.
 
 use cranelift_codegen::ir::{InstBuilder, MemFlags};
+use tracing::trace;
 
 use crate::LocalStorage;
 use crate::error::CodegenError;
@@ -11,6 +12,13 @@ use super::FunctionLowerer;
 impl<'a> FunctionLowerer<'a> {
     /// Lower a MIR statement to Cranelift IR.
     pub(super) fn lower_statement(&mut self, stmt: &Statement) -> Result<(), CodegenError> {
+        let stmt_kind = match &stmt.kind {
+            StatementKind::Assign(..) => "Assign",
+            StatementKind::StorageLive(_) => "StorageLive",
+            StatementKind::StorageDead(_) => "StorageDead",
+            StatementKind::Nop => "Nop",
+        };
+        trace!(kind = stmt_kind, "lowering statement");
         match &stmt.kind {
             StatementKind::Assign(place, rvalue) => {
                 if place.is_local() {

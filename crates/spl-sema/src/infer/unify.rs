@@ -164,7 +164,15 @@ impl<'a> InferEngine<'a> {
 
     /// Resolve a type through the substitution chain.
     pub(super) fn resolve_type(&self, type_id: TypeId) -> TypeId {
-        self.resolve_type_inner(type_id, 0)
+        let result = self.resolve_type_inner(type_id, 0);
+        if result != type_id {
+            trace!(
+                from = type_id.index(),
+                to = result.index(),
+                "resolved type through substitution chain"
+            );
+        }
+        result
     }
 
     /// Internal depth-limited type resolution.
@@ -239,6 +247,8 @@ impl<'a> InferEngine<'a> {
 
         let a = self.resolve_type(a);
         let b = self.resolve_type(b);
+
+        trace!(a = a.index(), b = b.index(), "unifying types");
 
         if a == b {
             return Ok(());
@@ -365,6 +375,7 @@ impl<'a> InferEngine<'a> {
                         actual: *m2,
                     });
                 }
+                trace!(inner1 = inner1.index(), inner2 = inner2.index(), "unifying reference inner types");
                 self.unify(*inner1, *inner2)
             }
 
@@ -376,6 +387,7 @@ impl<'a> InferEngine<'a> {
                         actual: *len2,
                     });
                 }
+                trace!(elem1 = elem1.index(), elem2 = elem2.index(), "unifying array element types");
                 self.unify(*elem1, *elem2)
             }
 
@@ -390,6 +402,7 @@ impl<'a> InferEngine<'a> {
                         actual: elems2.len(),
                     });
                 }
+                trace!(arity = elems1.len(), "unifying tuple element types");
                 for (e1, e2) in elems1.iter().zip(elems2.iter()) {
                     self.unify(*e1, *e2)?;
                 }
@@ -428,11 +441,17 @@ impl<'a> InferEngine<'a> {
                 },
             ) => {
                 if p1.len() != p2.len() {
+                    debug!(
+                        expected = p1.len(),
+                        actual = p2.len(),
+                        "function type param count mismatch"
+                    );
                     return Err(UnifyError::ArityMismatch {
                         expected: p1.len(),
                         actual: p2.len(),
                     });
                 }
+                trace!(param_count = p1.len(), "unifying function pointer types");
                 for (param_a, param_b) in p1.iter().zip(p2.iter()) {
                     self.unify(*param_a, *param_b)?;
                 }

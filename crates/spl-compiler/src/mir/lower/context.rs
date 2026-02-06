@@ -19,7 +19,7 @@ use crate::mir::types::{FieldIdx, Local, Place, PlaceElem};
 use crate::sema::symbol::DefId;
 use crate::sema::types::Type;
 use rustc_hash::FxHashMap;
-use tracing::debug;
+use tracing::{debug, error, trace};
 
 /// Context for tracking loop targets during control flow lowering.
 ///
@@ -121,6 +121,13 @@ impl<'hir> MirLoweringContext<'hir> {
                         return Ok(idx as u32);
                     }
                 }
+                error!(
+                    field = %field_name,
+                    struct_name = %s.name,
+                    struct_def_id = ?struct_def_id,
+                    ?span,
+                    "ICE: field not found in struct"
+                );
                 return Err(IceError::FieldNotFound {
                     field: field_name.to_string(),
                     struct_name: s.name.clone(),
@@ -129,6 +136,12 @@ impl<'hir> MirLoweringContext<'hir> {
                 });
             }
         }
+        error!(
+            struct_def_id = ?struct_def_id,
+            field = %field_name,
+            ?span,
+            "ICE: struct definition not found for DefId"
+        );
         Err(IceError::StructNotFound {
             def_id: struct_def_id,
             field_being_accessed: field_name.to_string(),
@@ -150,6 +163,35 @@ impl<'hir> MirLoweringContext<'hir> {
         let expr = self.hir.expr(expr_id);
         let ty = expr.ty;
         let span = expr.span.clone();
+
+        let expr_kind = match &expr.kind {
+            HirExprKind::Literal(_) => "literal",
+            HirExprKind::Var(_) => "var",
+            HirExprKind::Binary { .. } => "binary",
+            HirExprKind::Unary { .. } => "unary",
+            HirExprKind::Block { .. } => "block",
+            HirExprKind::Return { .. } => "return",
+            HirExprKind::If { .. } => "if",
+            HirExprKind::Loop { .. } => "loop",
+            HirExprKind::Break { .. } => "break",
+            HirExprKind::Continue => "continue",
+            HirExprKind::Call { .. } => "call",
+            HirExprKind::MethodCall { .. } => "method_call",
+            HirExprKind::Array { .. } => "array",
+            HirExprKind::Tuple { .. } => "tuple",
+            HirExprKind::Struct { .. } => "struct",
+            HirExprKind::TupleField { .. } => "tuple_field",
+            HirExprKind::Index { .. } => "index",
+            HirExprKind::Field { .. } => "field",
+            HirExprKind::Ref { .. } => "ref",
+            HirExprKind::Cast { .. } => "cast",
+            HirExprKind::ArrayRepeat { .. } => "array_repeat",
+            HirExprKind::Is { .. } => "is",
+            HirExprKind::Match { .. } => "match",
+            HirExprKind::Yield { .. } => "yield",
+            HirExprKind::Missing => "missing",
+        };
+        trace!(expr_kind, ty = ?ty, "lowering HIR expression to MIR place");
 
         match &expr.kind {
             HirExprKind::Literal(lit) => {
@@ -368,6 +410,13 @@ impl<'hir> MirLoweringContext<'hir> {
                         self.resolve_field_index(*def_id, field, Some(span.clone()))?
                     }
                     other => {
+                        error!(
+                            type_description = ?other,
+                            base_ty = ?base_ty,
+                            field = %field,
+                            ?span,
+                            "ICE: field access on non-struct type"
+                        );
                         return Err(IceError::FieldAccessOnNonStruct {
                             type_description: format!("{other:?}"),
                             type_id: base_ty,
@@ -475,6 +524,8 @@ impl<'hir> MirLoweringContext<'hir> {
                 Ok(place)
             }
             HirExprKind::Match { scrutinee, arms } => {
+                debug!(arm_count = arms.len(), scrutinee_ty = ?self.hir.expr(*scrutinee).ty, "lowering match to MIR");
+
                 // Allocate result place for the match expression
                 let result_place = Place::from_local(builder.alloc_temp(ty));
 
@@ -599,6 +650,8 @@ impl<'hir> MirLoweringContext<'hir> {
         ty: crate::sema::types::TypeId,
         span: Span,
     ) -> IceResult<Place> {
+        trace!(op = ?op, result_ty = ?ty, "lowering binary operation to MIR");
+
         // Handle short-circuit operators specially
         if op == HirBinOp::And {
             self.lower_short_circuit_and(builder, lhs, rhs, ty, span)
@@ -813,6 +866,8 @@ impl<'hir> MirLoweringContext<'hir> {
         ty: crate::sema::types::TypeId,
         span: Span,
     ) -> IceResult<Place> {
+        trace!(has_else = else_branch.is_some(), "lowering if expression to MIR blocks");
+
         // Allocate result place
         let result_place = Place::from_local(builder.alloc_temp(ty));
 
@@ -880,6 +935,8 @@ impl<'hir> MirLoweringContext<'hir> {
         ty: crate::sema::types::TypeId,
         span: Span,
     ) -> IceResult<Place> {
+        trace!(loop_depth = self.loop_stack.len() + 1, "lowering loop to MIR blocks");
+
         // Allocate result place (for break value)
         let result_place = Place::from_local(builder.alloc_temp(ty));
 
@@ -929,14 +986,14 @@ impl<'hir> MirLoweringContext<'hir> {
         );
 
         // Get current loop context
-        let loop_ctx = match self.loop_stack.last() {
-            Some(ctx) => ctx.clone(),
-            None => {
-                return Err(IceError::ControlFlowOutsideLoop {
-                    keyword: "break",
-                    span: Some(span),
-                });
-            }
+        let loop_ctx = if let Some(ctx) = self.loop_stack.last() {
+            ctx.clone()
+        } else {
+            error!(?span, "ICE: break outside of loop");
+            return Err(IceError::ControlFlowOutsideLoop {
+                keyword: "break",
+                span: Some(span),
+            });
         };
 
         // Lower break value (if any) and assign to result place
@@ -968,14 +1025,14 @@ impl<'hir> MirLoweringContext<'hir> {
         );
 
         // Get current loop context
-        let loop_ctx = match self.loop_stack.last() {
-            Some(ctx) => ctx.clone(),
-            None => {
-                return Err(IceError::ControlFlowOutsideLoop {
-                    keyword: "continue",
-                    span: Some(span),
-                });
-            }
+        let loop_ctx = if let Some(ctx) = self.loop_stack.last() {
+            ctx.clone()
+        } else {
+            error!(?span, "ICE: continue outside of loop");
+            return Err(IceError::ControlFlowOutsideLoop {
+                keyword: "continue",
+                span: Some(span),
+            });
         };
 
         // Jump to header block
@@ -996,6 +1053,14 @@ impl<'hir> MirLoweringContext<'hir> {
         ty: crate::sema::types::TypeId,
         span: Span,
     ) -> IceResult<Place> {
+        let callee_expr = self.hir.expr(callee);
+        let callee_def_id = if let HirExprKind::Var(def_id) = &callee_expr.kind {
+            Some(def_id)
+        } else {
+            None
+        };
+        debug!(callee_def_id = ?callee_def_id, arg_count = args.len(), "lowering call to MIR");
+
         // Lower callee - check if it's a direct function ref or expression
         let func_operand = self.lower_callee_operand(builder, callee)?;
 
@@ -1047,6 +1112,7 @@ impl<'hir> MirLoweringContext<'hir> {
             method_def_id.is_valid(),
             "Method call at expr {expr_id:?} resolved to INVALID DefId - type inference failed to resolve this method"
         );
+        debug!(method_def_id = ?method_def_id, arg_count = args.len(), "lowering method call to MIR");
 
         // Receiver becomes first argument
         let receiver_operand = self.lower_expr_as_operand(builder, receiver)?;
@@ -1130,6 +1196,12 @@ impl<'hir> MirLoweringContext<'hir> {
     fn lower_stmt(&mut self, builder: &mut MirBuilder, stmt_id: StmtId) -> IceResult<()> {
         let stmt = self.hir.stmt(stmt_id);
         let span = stmt.span.clone();
+
+        let stmt_kind = match &stmt.kind {
+            HirStmtKind::Let { .. } => "let",
+            HirStmtKind::Expr { .. } => "expr",
+        };
+        trace!(stmt_kind, "lowering statement to MIR");
 
         match &stmt.kind {
             HirStmtKind::Let { pat, ty: _, init } => {

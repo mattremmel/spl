@@ -72,7 +72,7 @@ use folding::{
     parse_char_literal, parse_float_literal_value, parse_int_literal_value, parse_string_literal,
 };
 use rowan::ast::AstNode;
-use tracing::{debug, info, info_span, warn};
+use tracing::{debug, info, info_span, trace, warn};
 
 // ============================================================================
 // Public API
@@ -209,6 +209,20 @@ impl<'a> LoweringContext<'a> {
     }
 
     fn lower_item(&mut self, item: &Item) -> Option<HirItem> {
+        let item_kind = match item {
+            Item::Function(_) => "function",
+            Item::Struct(_) => "struct",
+            Item::TypeAlias(_) => "type_alias",
+            Item::Impl(_) => "impl",
+            Item::Extern(_) => "extern",
+            Item::Use(_) => "use",
+            Item::Module(_) => "module",
+            Item::Enum(_) => "enum",
+            Item::Trait(_) => "trait",
+            Item::Generator(_) => "generator",
+        };
+        trace!(item_kind, "lowering item");
+
         match item {
             Item::Function(func) => self.lower_function(func).map(HirItem::Function),
             Item::Struct(struct_def) => self.lower_struct(struct_def).map(HirItem::Struct),
@@ -311,6 +325,11 @@ impl<'a> LoweringContext<'a> {
         let ident_token = extern_fn.name()?.ident_token()?;
         let name = ident_token.text().to_string();
         let span = Self::text_range_to_span(extern_fn.syntax().text_range());
+        let param_count = extern_fn
+            .param_list()
+            .map(|pl| pl.params().count())
+            .unwrap_or(0);
+        debug!(extern_fn_name = %name, param_count, "lowering extern function to HIR");
 
         // Get DefId from the function name span
         let name_span = Self::text_range_to_span(ident_token.text_range());
@@ -402,6 +421,11 @@ impl<'a> LoweringContext<'a> {
     fn lower_struct(&mut self, struct_def: &crate::ast::StructDef) -> Option<HirStruct> {
         let name = struct_def.name()?.ident_token()?.text().to_string();
         let span = Self::text_range_to_span(struct_def.syntax().text_range());
+        let field_count = struct_def
+            .field_list()
+            .map(|fl| fl.fields().count())
+            .unwrap_or(0);
+        debug!(struct_name = %name, field_count, "lowering struct to HIR");
 
         let name_span = struct_def
             .name()
@@ -507,6 +531,12 @@ impl<'a> LoweringContext<'a> {
     fn lower_impl(&mut self, impl_block: &crate::ast::ImplBlock) -> HirImpl {
         let span = Self::text_range_to_span(impl_block.syntax().text_range());
         let self_ty = self.get_type(&span);
+        let method_count = impl_block.items().count();
+        let target = impl_block
+            .self_ty()
+            .map(|t| t.syntax().text().to_string())
+            .unwrap_or_else(|| "<unknown>".to_string());
+        debug!(target = %target, self_ty = ?self_ty, method_count, "lowering impl block to HIR");
 
         let items = impl_block
             .items()
@@ -528,6 +558,8 @@ impl<'a> LoweringContext<'a> {
     fn lower_block(&mut self, block: &Block) -> ExprId {
         let span = Self::text_range_to_span(block.syntax().text_range());
         let ty = self.get_type(&span);
+        let stmt_count = block.syntax().children().count();
+        trace!(stmt_count, "lowering block");
 
         let mut stmts = Vec::new();
         let mut tail = None;
@@ -624,6 +656,22 @@ impl<'a> LoweringContext<'a> {
 
     fn lower_pattern(&mut self, pat: &Pat, outer_mutable: bool) -> PatId {
         let span = Self::text_range_to_span(pat.syntax().text_range());
+
+        let pat_kind = match pat {
+            Pat::Ident(_) => "ident",
+            Pat::Wildcard(_) => "wildcard",
+            Pat::Tuple(_) => "tuple",
+            Pat::Struct(_) => "struct",
+            Pat::Ref(_) => "ref",
+            Pat::Literal(_) => "literal",
+            Pat::Grouped(_) => "grouped",
+            Pat::Slice(_) => "slice",
+            Pat::Range(_) => "range",
+            Pat::Rest(_) => "rest",
+            Pat::EnumShorthand(_) => "enum_shorthand",
+            Pat::Or(_) => "or",
+        };
+        trace!(pat_kind, outer_mutable, "lowering pattern");
 
         match pat {
             Pat::Ident(ident_pat) => {
@@ -812,6 +860,41 @@ impl<'a> LoweringContext<'a> {
     fn lower_expr(&mut self, expr: &Expr) -> ExprId {
         let span = Self::text_range_to_span(expr.syntax().text_range());
         let ty = self.get_type(&span);
+
+        let expr_kind = match expr {
+            Expr::Literal(_) => "literal",
+            Expr::Path(_) => "path",
+            Expr::Paren(_) => "paren",
+            Expr::Tuple(_) => "tuple",
+            Expr::Array(_) => "array",
+            Expr::Call(_) => "call",
+            Expr::Binary(_) => "binary",
+            Expr::Prefix(_) => "prefix",
+            Expr::Ref(_) => "ref",
+            Expr::Field(_) => "field",
+            Expr::Index(_) => "index",
+            Expr::Slice(_) => "slice",
+            Expr::Range(_) => "range",
+            Expr::EnumShorthand(_) => "enum_shorthand",
+            Expr::Try(_) => "try",
+            Expr::OptionalField(_) => "optional_field",
+            Expr::Dollar(_) => "dollar",
+            Expr::Closure(_) => "closure",
+            Expr::Unsafe(_) => "unsafe",
+            Expr::Throw(_) => "throw",
+            Expr::Yield(_) => "yield",
+            Expr::For(_) => "for",
+            Expr::If(_) => "if",
+            Expr::While(_) => "while",
+            Expr::Loop(_) => "loop",
+            Expr::Break(_) => "break",
+            Expr::Continue(_) => "continue",
+            Expr::Return(_) => "return",
+            Expr::Block(_) => "block",
+            Expr::Is(_) => "is",
+            Expr::Match(_) => "match",
+        };
+        trace!(expr_kind, ty = ?ty, "lowering expression");
 
         match expr {
             Expr::Literal(lit) => self.lower_literal(lit, span, ty),
@@ -1255,6 +1338,10 @@ impl<'a> LoweringContext<'a> {
         let Some(callee) = call.callee() else {
             return self.lower_missing(span);
         };
+
+        let arg_count = call.args().count();
+        let callee_text = callee.syntax().text().to_string();
+        debug!(callee = %callee_text, arg_count, "lowering call expression");
 
         // Dispatch based on callee type
         match &callee {
@@ -2021,6 +2108,9 @@ impl<'a> LoweringContext<'a> {
     }
 
     fn lower_match_expr(&mut self, match_expr: &MatchExpr, span: Span, ty: TypeId) -> ExprId {
+        let arm_count = match_expr.arms().count();
+        debug!(arm_count, "lowering match expression");
+
         let scrutinee = match_expr
             .scrutinee()
             .map(|e| self.lower_expr(&e))
