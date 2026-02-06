@@ -53,7 +53,7 @@ pub use helpers::{hir_binop_to_mir, hir_unop_to_mir, literal_to_operand, lower_l
 use crate::hir::{HirDatabase, HirItem};
 use crate::mir::body::Body;
 use crate::mir::error::IceResult;
-use tracing::{info, info_span};
+use tracing::{debug, info, info_span};
 
 /// Lower all functions in an HIR database to MIR bodies.
 ///
@@ -76,6 +76,7 @@ pub fn lower_hir_to_mir(hir: &HirDatabase) -> IceResult<Vec<Body>> {
 
     for item in &hir.items {
         if let HirItem::Function(func) = item {
+            debug!(function_name = %func.name, "lowering function to MIR");
             let body = ctx.lower_function(func)?;
             ctx.bodies.push(body);
         }

@@ -10,6 +10,7 @@
 
 use logos::Logos;
 use std::fmt;
+use tracing::{debug, warn};
 
 /// All token types in the SPL language.
 #[derive(Logos, Debug, Clone, PartialEq)]
@@ -565,6 +566,8 @@ fn classify_error(source: &str, token: &SpannedToken<'_>) -> LexError {
     let text = token.text;
     let span = token.span.clone();
 
+    debug!(text = %text, span = ?span, "classifying lex error");
+
     // Check for unterminated raw string
     if text.starts_with("r#") || text.starts_with("r\"") {
         return LexError::new(LexErrorKind::UnterminatedRawString, span);
@@ -727,18 +730,21 @@ fn check_unterminated(source: &str) -> Option<LexError> {
 
     // Check for unterminated constructs
     if in_string {
+        warn!(kind = "UnterminatedString", start = string_start, "unterminated construct at end of input");
         return Some(LexError::new(
             LexErrorKind::UnterminatedString,
             string_start..source.len(),
         ));
     }
     if in_char {
+        warn!(kind = "UnterminatedChar", start = char_start, "unterminated construct at end of input");
         return Some(LexError::new(
             LexErrorKind::UnterminatedChar,
             char_start..source.len(),
         ));
     }
     if block_comment_depth > 0 {
+        warn!(kind = "UnterminatedBlockComment", start = comment_start, "unterminated construct at end of input");
         return Some(LexError::new(
             LexErrorKind::UnterminatedBlockComment,
             comment_start..source.len(),

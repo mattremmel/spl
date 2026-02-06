@@ -7,6 +7,7 @@ use crate::mir::terminator::{BasicBlock, Terminator, TerminatorKind};
 use crate::mir::types::Local;
 use crate::sema::symbol::DefId;
 use crate::sema::types::TypeId;
+use tracing::trace;
 
 /// Builder for constructing MIR bodies incrementally.
 ///
@@ -47,13 +48,14 @@ impl MirBuilder {
     /// Allocate a new local variable.
     ///
     /// Returns the Local ID for the newly allocated variable.
-    pub fn alloc_local(&mut self, ty: TypeId, mutable: bool, name: Option<String>) -> Local {
+    pub fn alloc_local(&mut self, ty: TypeId, mutable: bool, name: Option<&str>) -> Local {
         let idx = self.locals.len() as u32;
         let decl = match name {
             Some(n) => LocalDecl::with_name(ty, mutable, n),
             None => LocalDecl::new(ty, mutable),
         };
         self.locals.push(decl);
+        trace!(local = idx, mutable = mutable, name = ?name, "allocated local");
         Local(idx)
     }
 
@@ -94,6 +96,7 @@ impl MirBuilder {
     pub fn alloc_block(&mut self) -> BasicBlock {
         let idx = self.basic_blocks.len() as u32;
         self.basic_blocks.push(BasicBlockData::new());
+        trace!(block_index = idx, "allocated basic block");
         BasicBlock(idx)
     }
 

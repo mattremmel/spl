@@ -97,7 +97,7 @@ pub use tracing_init::{LogFormat, init_tracing, init_tracing_with_options, init_
 // ============================================================================
 
 use rowan::ast::AstNode;
-use tracing::{info, info_span};
+use tracing::{debug, error, info, info_span, warn};
 
 /// Maximum number of diagnostics to report before stopping.
 /// This prevents overwhelming output on heavily broken code.
@@ -106,6 +106,7 @@ const MAX_DIAGNOSTICS: usize = 100;
 /// Truncate diagnostics to `MAX_DIAGNOSTICS` if exceeded, adding an "error limit reached" note.
 fn truncate_diagnostics_if_needed(diagnostics: &mut Vec<Diagnostic>) {
     if diagnostics.len() > MAX_DIAGNOSTICS {
+        warn!(total = diagnostics.len(), limit = MAX_DIAGNOSTICS, "diagnostic limit reached, truncating");
         diagnostics.truncate(MAX_DIAGNOSTICS);
         diagnostics.push(Diagnostic::warning(format!(
             "error limit reached ({MAX_DIAGNOSTICS} errors), stopping"
@@ -187,6 +188,8 @@ pub fn compile(source: &str) -> CompileResult {
     }
     truncate_diagnostics_if_needed(&mut diagnostics);
 
+    debug!(error_count = diagnostics.len(), ok = parse.ok(), "parse complete");
+
     // If there are parse errors, we cannot continue
     if !parse.ok() {
         return CompileResult {
@@ -217,6 +220,8 @@ pub fn compile(source: &str) -> CompileResult {
     diagnostics.append(&mut resolve_diags);
     truncate_diagnostics_if_needed(&mut diagnostics);
 
+    debug!(diagnostic_count = diagnostics.len(), "resolution complete");
+
     // Phase 4: Type inference
     let mut infer_result = sema::infer(&source_file, &resolve_result);
     // Convert spl_diagnostic::Diagnostic to crate::Diagnostic
@@ -227,6 +232,8 @@ pub fn compile(source: &str) -> CompileResult {
         .collect();
     diagnostics.append(&mut infer_diags);
     truncate_diagnostics_if_needed(&mut diagnostics);
+
+    debug!(diagnostic_count = diagnostics.len(), "inference complete");
 
     // Check for errors before lowering
     let has_errors = diagnostics.iter().any(|d| d.severity == Severity::Error);
@@ -245,6 +252,7 @@ pub fn compile(source: &str) -> CompileResult {
     let bodies = match mir::lower_hir_to_mir(&hir_db) {
         Ok(bodies) => bodies,
         Err(ice) => {
+            error!(ice = %ice, "internal compiler error during MIR lowering");
             diagnostics.push(Diagnostic::from(ice.to_diagnostic()));
             return CompileResult {
                 bodies: None,

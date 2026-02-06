@@ -43,6 +43,7 @@ use spl_ast::{
 };
 use spl_diagnostic::Diagnostic;
 use spl_lexer::Span;
+use tracing::debug;
 
 /// Result of name resolution.
 pub struct ResolveResult {
@@ -221,6 +222,7 @@ impl<'ctx> Resolver<'ctx> {
             Ok(def_id) => {
                 // Store span → DefId mapping for inference phase
                 self.resolutions.insert(span.clone(), def_id);
+                debug!(name = %name_text, def_id = def_id.index(), kind = ?kind, scope = self.ctx.current_scope_id().index(), "defined symbol");
 
                 debug_assert!(
                     self.ctx
@@ -233,6 +235,7 @@ impl<'ctx> Resolver<'ctx> {
             }
             Err(existing_def_id) => {
                 let existing = self.ctx.get_symbol(existing_def_id);
+                debug!(name = %name_text, existing_def_id = existing_def_id.index(), "duplicate definition");
                 self.error_duplicate(&name_text, span, existing.span.clone());
                 None
             }
@@ -247,8 +250,10 @@ impl<'ctx> Resolver<'ctx> {
 
         if let Some(def_id) = self.ctx.lookup(interned) {
             self.resolutions.insert(span, def_id);
+            debug!(name = %name_text, def_id = def_id.index(), "resolved name");
             Some(def_id)
         } else {
+            debug!(name = %name_text, "unresolved name");
             self.error_undefined(&name_text, span);
             None
         }
@@ -398,6 +403,7 @@ impl<'ctx> Resolver<'ctx> {
             return; // Error already reported
         }
         let path = resolved_path.unwrap();
+        debug!(path = ?import.path, local_name = %import.local_name, "resolving import");
 
         // After stripping prefix, we should have the item name
         if path.is_empty() {

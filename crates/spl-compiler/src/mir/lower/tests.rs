@@ -57,7 +57,7 @@ fn test_mir_builder_new() {
 fn test_mir_builder_alloc_local() {
     let mut builder = MirBuilder::new(TypeId::new(1));
 
-    let local = builder.alloc_local(TypeId::new(2), true, Some("x".to_string()));
+    let local = builder.alloc_local(TypeId::new(2), true, Some("x"));
 
     assert_eq!(local, Local(1)); // After return place
     assert_eq!(builder.locals.len(), 2);

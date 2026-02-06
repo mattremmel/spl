@@ -19,6 +19,7 @@ use crate::mir::types::{FieldIdx, Local, Place, PlaceElem};
 use crate::sema::symbol::DefId;
 use crate::sema::types::Type;
 use rustc_hash::FxHashMap;
+use tracing::debug;
 
 /// Context for tracking loop targets during control flow lowering.
 ///
@@ -1312,6 +1313,7 @@ impl<'hir> MirLoweringContext<'hir> {
     /// These conditions indicate compiler bugs, not user errors.
     pub fn lower_function(&mut self, func: &HirFunction) -> IceResult<Body> {
         let mut builder = self.start_function(func);
+        debug!(function_name = %func.name, param_count = func.params.len(), "lowering function to MIR");
         let span = func.span.clone();
 
         // Lower the body if present

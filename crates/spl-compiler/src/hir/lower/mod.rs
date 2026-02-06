@@ -72,7 +72,7 @@ use folding::{
     parse_char_literal, parse_float_literal_value, parse_int_literal_value, parse_string_literal,
 };
 use rowan::ast::AstNode;
-use tracing::{info, info_span};
+use tracing::{debug, info, info_span, warn};
 
 // ============================================================================
 // Public API
@@ -256,6 +256,7 @@ impl<'a> LoweringContext<'a> {
     fn lower_function(&mut self, func: &FunctionDef) -> Option<HirFunction> {
         let ident_token = func.name()?.ident_token()?;
         let name = ident_token.text().to_string();
+        debug!(function_name = %name, "lowering function to HIR");
         let span = Self::text_range_to_span(func.syntax().text_range());
 
         // Get DefId from the function name span (use token range to match resolver)
@@ -2060,6 +2061,7 @@ impl<'a> LoweringContext<'a> {
     }
 
     fn lower_missing(&mut self, span: Span) -> ExprId {
+        warn!("producing Missing HIR expression");
         let expr = HirExpr {
             kind: HirExprKind::Missing,
             ty: self.error_type(),

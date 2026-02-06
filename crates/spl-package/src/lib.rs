@@ -37,6 +37,7 @@ use spl_ast::Item;
 use spl_parser::ParseError;
 use std::path::{Path, PathBuf};
 use std::{fmt, fs, io};
+use tracing::{debug, warn};
 
 /// Errors that can occur when loading a package.
 #[derive(Debug)]
@@ -199,6 +200,7 @@ impl Package {
 
         // Scan directory for .spl files
         let all_files = scan_directory(&root)?;
+        debug!(file_count = all_files.len(), "scanned package directory");
 
         // Parse _module.spl if it exists
         let directives = if has_module_config(&root) {
@@ -305,6 +307,7 @@ impl Package {
             match Self::load_with_conditions(&subdir, conditions) {
                 Ok(child_mod) => modules.push(child_mod),
                 Err(e) => {
+                    warn!(module_name = %mod_name, error = %e, "failed to load child module");
                     warnings.push(PackageWarning::ModuleLoadFailed {
                         name: mod_name.clone(),
                         error: e.to_string(),

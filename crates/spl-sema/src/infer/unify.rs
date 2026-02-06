@@ -38,6 +38,7 @@ use rustc_hash::FxHashMap;
 use super::UnifyError;
 use super::engine::{FnSignature, InferEngine};
 use super::helpers::{is_float_type, is_integer_type};
+use tracing::{debug, trace};
 
 /// Maximum depth for type resolution to prevent stack overflow on deeply nested
 /// alias chains or pathological substitution patterns.
@@ -261,6 +262,7 @@ impl<'a> InferEngine<'a> {
                     return Err(UnifyError::InfiniteType { var: a, ty: b });
                 }
                 self.substitution.insert(*var, b);
+                trace!(var = var.index(), bound_to = b.index(), "bound type variable");
                 Ok(())
             }
             (_, Type::Infer(var, InferKind::General)) => {
@@ -268,6 +270,7 @@ impl<'a> InferEngine<'a> {
                     return Err(UnifyError::InfiniteType { var: b, ty: a });
                 }
                 self.substitution.insert(*var, a);
+                trace!(var = var.index(), bound_to = a.index(), "bound type variable");
                 Ok(())
             }
 
@@ -442,6 +445,10 @@ impl<'a> InferEngine<'a> {
                 actual: b,
             }),
         };
+
+        if let Err(ref e) = result {
+            debug!(a = a.index(), b = b.index(), error = ?e, "unification failed");
+        }
 
         // Postcondition: no cycles in the substitution
         #[cfg(debug_assertions)]

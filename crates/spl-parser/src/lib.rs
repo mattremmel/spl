@@ -67,6 +67,7 @@ use sink::Sink;
 use source::Source;
 use spl_lexer::{Lexer, SpannedToken};
 use spl_syntax::{SyntaxKind, SyntaxNode};
+use tracing::debug;
 
 pub use event::ParseError;
 
@@ -331,6 +332,7 @@ impl<'src> Parser<'src> {
         recovery_set: &[SyntaxKind],
     ) -> CompletedMarker {
         let m = self.start();
+        let error_msg = error.message.clone();
         self.error(error);
 
         // Always consume at least one token to ensure progress
@@ -349,6 +351,8 @@ impl<'src> Parser<'src> {
             self.bump();
             consumed += 1;
         }
+
+        debug!(error_message = %error_msg, consumed_tokens = consumed, "parser recovery");
 
         m.complete(self, SyntaxKind::ERROR)
     }
@@ -499,6 +503,7 @@ impl<'src> Parser<'src> {
             match parse_item(self) {
                 Ok(()) => {}
                 Err(err) => {
+                    debug!(error = %err.message, "delimited list recovery");
                     // Wrap error tokens in ERROR node
                     let m = self.start();
                     self.error(err);

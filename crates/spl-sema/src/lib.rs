@@ -107,6 +107,7 @@ pub use types::{Mutability, PrimitiveKind, Type, TypeId, TypeInterner, TypeVar};
 
 use lasso::{Rodeo, Spur};
 use spl_lexer::Span;
+use tracing::debug;
 
 pub use module::{ModuleId, ModuleTree, PathResolveError};
 
@@ -194,6 +195,7 @@ impl SemanticContext {
         let scope = Scope::new(id, kind, Some(self.current_scope));
         self.scopes.push(scope);
         self.current_scope = id;
+        debug!(scope_id = id.index(), kind = ?kind, parent = ?self.scopes[id.index() as usize].parent.map(scope::ScopeId::index), "entering scope");
         id
     }
 
@@ -206,6 +208,7 @@ impl SemanticContext {
             !self.is_at_root_scope(),
             "precondition: cannot exit root scope"
         );
+        debug!(scope_id = self.current_scope.index(), "exiting scope");
 
         let current = &self.scopes[self.current_scope.index() as usize];
         self.current_scope = current.parent.expect("cannot exit root scope");

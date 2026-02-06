@@ -14,6 +14,8 @@ use spl_ast::{Block, LetStmt, LiteralExpr, Stmt};
 use spl_diagnostic::Diagnostic;
 use spl_syntax::SyntaxKind;
 
+use tracing::debug;
+
 use super::UnifyError;
 use super::engine::{InferEngine, LoopKind};
 use super::helpers::{
@@ -1105,6 +1107,9 @@ impl<'a> InferEngine<'a> {
             receiver_type_val = self.types.get(inner_resolved).clone();
         }
 
+        let method_segment = segments.last().map(|s| s.syntax().text().to_string()).unwrap_or_default();
+        debug!(method_name = %method_segment, receiver_type = current_resolved.index(), "resolving method call");
+
         // Handle intermediate segments as field accesses
         // For c.inner.get(), segments are [c, inner, get]:
         // - First segment (index 0) is the receiver variable
@@ -1420,6 +1425,7 @@ impl<'a> InferEngine<'a> {
         sig: &super::engine::FnSignature,
     ) -> TypeId {
         let (param_infos, ret_ty) = self.instantiate_signature_with_labels(sig);
+        debug!(arg_count = call.args().count(), "resolved function call");
 
         // Check argument count
         let args: Vec<_> = call.args().collect();

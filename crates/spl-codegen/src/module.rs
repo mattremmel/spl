@@ -5,6 +5,7 @@
 
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{FuncId, Linkage};
+use tracing::debug;
 
 use super::aot::AotContext;
 use super::context::CodegenContext;
@@ -205,6 +206,8 @@ impl ModuleCompiler {
                 Linkage::Export
             };
 
+            debug!(function_name = %func_def.name, linkage = ?linkage, "declared function");
+
             let func_id = self
                 .ctx
                 .declare_function_with_linkage(&func_def.name, &sig, linkage)?;
@@ -231,6 +234,7 @@ impl ModuleCompiler {
             if func_def.name.starts_with("__") {
                 continue;
             }
+            debug!(function_name = %func_def.name, "compiling function body");
             self.define_single_function(func_def, types, *func_id)?;
         }
         Ok(())
@@ -385,6 +389,7 @@ impl AotModuleCompiler {
             let sig = build_signature(call_conv, &type_mapper, func_def.body, types);
             let func_id = self.ctx.declare_function(&func_def.name, &sig)?;
 
+            debug!(function_name = %func_def.name, "declared function");
             self.registry
                 .register(func_def.def_id, FunctionInfo::new(func_id, sig));
             func_ids.push(func_id);
@@ -401,6 +406,7 @@ impl AotModuleCompiler {
         func_ids: &[FuncId],
     ) -> Result<(), CodegenError> {
         for (func_def, func_id) in functions.iter().zip(func_ids.iter()) {
+            debug!(function_name = %func_def.name, "compiling function body");
             self.define_single_function(func_def, types, *func_id)?;
         }
         Ok(())

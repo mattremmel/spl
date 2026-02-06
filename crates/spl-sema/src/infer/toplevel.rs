@@ -7,6 +7,8 @@ use rustc_hash::FxHashSet;
 use spl_ast::{Expr, ExternFn, FunctionDef, Item, SourceFile, WhereClause};
 use spl_diagnostic::Diagnostic;
 
+use tracing::debug;
+
 use super::engine::{FnSignature, InferEngine, LoopKind, ParamInfo};
 use super::helpers::text_range_to_span;
 use super::{SelfParam, SelfParamKind};
@@ -759,6 +761,8 @@ impl<'a> InferEngine<'a> {
         };
 
         let span = text_range_to_span(token.text_range());
+        let function_name = token.text().to_string();
+        debug!(function_name = %function_name, "inferring function");
         let def_id = match self.resolutions.get(&span) {
             Some(id) => *id,
             None => return,
