@@ -4,7 +4,7 @@ use std::process;
 
 use clap::{Parser, ValueEnum};
 use spl_compiler::{
-    AotError, Diagnostic, DiagnosticRenderer, JitError, RenderConfig, Severity,
+    AotError, Diagnostic, DiagnosticRenderer, JitError, LogFormat, RenderConfig, Severity,
     init_tracing_with_options,
 };
 
@@ -30,6 +30,10 @@ struct Cli {
     /// Set the log level
     #[arg(long, value_name = "LEVEL")]
     log_level: Option<LogLevel>,
+
+    /// Set the log output format
+    #[arg(long, value_name = "FORMAT", default_value = "human")]
+    log_format: CliLogFormat,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -53,14 +57,31 @@ impl LogLevel {
     }
 }
 
+#[derive(Clone, ValueEnum)]
+enum CliLogFormat {
+    Human,
+    Json,
+}
+
+impl From<CliLogFormat> for LogFormat {
+    fn from(f: CliLogFormat) -> Self {
+        match f {
+            CliLogFormat::Human => LogFormat::Human,
+            CliLogFormat::Json => LogFormat::Json,
+        }
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
-    // Initialize tracing if requested
-    if let Some(level) = &cli.log_level {
-        init_tracing_with_options(level.as_str(), cli.time_passes);
-    } else if cli.time_passes {
-        init_tracing_with_options("info", true);
+    let format: LogFormat = cli.log_format.clone().into();
+    let is_json = matches!(format, LogFormat::Json);
+
+    // Initialize tracing if requested via --log-level, --time-passes, or --log-format=json
+    if cli.log_level.is_some() || cli.time_passes || is_json {
+        let filter = cli.log_level.as_ref().map(LogLevel::as_str);
+        init_tracing_with_options(filter, cli.time_passes, format);
     }
 
     // Read source file

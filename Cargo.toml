@@ -97,7 +97,7 @@ thiserror = "2"
 
 # Structured logging / tracing
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 
 # Dev dependencies
 datatest-stable = { version = "0.3.3", features = ["include-dir"] }

@@ -24,6 +24,30 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt;
 use tracing_subscriber::prelude::*;
 
+/// Output format for tracing logs.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum LogFormat {
+    /// Human-readable format (default).
+    #[default]
+    Human,
+    /// JSON lines format for tooling consumption.
+    Json,
+}
+
+/// Build an `EnvFilter` with correct precedence.
+///
+/// - `cli_filter = Some("debug")` — CLI flag was set, ignore env vars
+/// - `cli_filter = None` — fall back to `SPL_LOG`, then `RUST_LOG`, then `"info"`
+fn build_filter(cli_filter: Option<&str>) -> EnvFilter {
+    if let Some(f) = cli_filter {
+        EnvFilter::new(f)
+    } else {
+        EnvFilter::try_from_env("SPL_LOG")
+            .or_else(|_| EnvFilter::try_from_env("RUST_LOG"))
+            .unwrap_or_else(|_| EnvFilter::new("info"))
+    }
+}
+
 /// Initialize the global tracing subscriber with default settings.
 ///
 /// Reads filter directives from `SPL_LOG` (preferred) or `RUST_LOG` (fallback).
@@ -34,18 +58,7 @@ use tracing_subscriber::prelude::*;
 /// This should be called once, early in the program. Subsequent calls are no-ops
 /// (the global subscriber can only be set once).
 pub fn init_tracing() {
-    let filter = EnvFilter::try_from_env("SPL_LOG")
-        .or_else(|_| EnvFilter::try_from_env("RUST_LOG"))
-        .unwrap_or_else(|_| EnvFilter::new("info"));
-
-    let subscriber = fmt::layer()
-        .with_target(true)
-        .with_timer(fmt::time::uptime());
-
-    let _ = tracing_subscriber::registry()
-        .with(filter)
-        .with(subscriber)
-        .try_init();
+    init_tracing_with_options(None, false, LogFormat::Human);
 }
 
 /// Initialize the global tracing subscriber with span timing enabled.
@@ -56,39 +69,62 @@ pub fn init_tracing() {
 /// Reads filter directives from `SPL_LOG` (preferred) or `RUST_LOG` (fallback).
 /// Defaults to `info` level if neither is set.
 pub fn init_tracing_with_timing() {
-    init_tracing_with_options("info", true);
+    init_tracing_with_options(None, true, LogFormat::Human);
 }
 
-/// Initialize the global tracing subscriber with custom filter and timing options.
+/// Initialize the global tracing subscriber with custom filter, timing, and format options.
 ///
-/// The `filter` parameter sets the default log level (e.g. `"info"`, `"debug"`, `"trace"`).
-/// It is overridden by the `SPL_LOG` or `RUST_LOG` environment variables if set.
+/// When `filter` is `Some(level)`, CLI flag takes precedence over env vars.
+/// When `filter` is `None`, falls back to `SPL_LOG` or `RUST_LOG` env vars, then `"info"`.
 ///
 /// When `timing` is `true`, span close events are printed, showing how long each
 /// compilation pass took (equivalent to `--time-passes`).
 ///
+/// `format` selects between human-readable and JSON output.
+///
 /// This should be called once, early in the program. Subsequent calls are no-ops.
-pub fn init_tracing_with_options(filter: &str, timing: bool) {
-    let filter = EnvFilter::try_from_env("SPL_LOG")
-        .or_else(|_| EnvFilter::try_from_env("RUST_LOG"))
-        .unwrap_or_else(|_| EnvFilter::new(filter));
+pub fn init_tracing_with_options(filter: Option<&str>, timing: bool, format: LogFormat) {
+    let filter = build_filter(filter);
 
-    let subscriber = fmt::layer()
-        .with_target(true)
-        .with_timer(fmt::time::uptime());
+    match format {
+        LogFormat::Human => {
+            let layer = fmt::layer()
+                .with_target(true)
+                .with_timer(fmt::time::uptime());
 
-    // Conditionally add span events for timing output.
-    // We need separate branches because `with_span_events` changes the layer type.
-    if timing {
-        let subscriber = subscriber.with_span_events(fmt::format::FmtSpan::CLOSE);
-        let _ = tracing_subscriber::registry()
-            .with(filter)
-            .with(subscriber)
-            .try_init();
-    } else {
-        let _ = tracing_subscriber::registry()
-            .with(filter)
-            .with(subscriber)
-            .try_init();
+            if timing {
+                let layer = layer.with_span_events(fmt::format::FmtSpan::CLOSE);
+                let _ = tracing_subscriber::registry()
+                    .with(filter)
+                    .with(layer)
+                    .try_init();
+            } else {
+                let _ = tracing_subscriber::registry()
+                    .with(filter)
+                    .with(layer)
+                    .try_init();
+            }
+        }
+        LogFormat::Json => {
+            let layer = fmt::layer()
+                .json()
+                .with_current_span(true)
+                .with_span_list(true)
+                .with_target(true)
+                .with_timer(fmt::time::uptime());
+
+            if timing {
+                let layer = layer.with_span_events(fmt::format::FmtSpan::CLOSE);
+                let _ = tracing_subscriber::registry()
+                    .with(filter)
+                    .with(layer)
+                    .try_init();
+            } else {
+                let _ = tracing_subscriber::registry()
+                    .with(filter)
+                    .with(layer)
+                    .try_init();
+            }
+        }
     }
 }

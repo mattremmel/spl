@@ -90,7 +90,7 @@ pub use parser::{Parse, ParseError, parse};
 pub use sema::{DefId, SemanticContext, Symbol, SymbolKind};
 pub use session::CompileSession;
 pub use syntax::{Lang, SyntaxKind, SyntaxNode, SyntaxToken};
-pub use tracing_init::{init_tracing, init_tracing_with_options, init_tracing_with_timing};
+pub use tracing_init::{LogFormat, init_tracing, init_tracing_with_options, init_tracing_with_timing};
 
 // ============================================================================
 // High-Level Compile API
