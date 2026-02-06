@@ -152,6 +152,8 @@ impl ModuleCompiler {
         functions: &[FunctionDef<'_>],
         types: &TypeInterner,
     ) -> Result<CompiledModule, CodegenError> {
+        let _span =
+            tracing::info_span!("jit_module_compile", function_count = functions.len()).entered();
         let mut compiler = Self::new()?;
 
         // Pass 1: Declare all functions (imports and exports)
@@ -173,6 +175,7 @@ impl ModuleCompiler {
             function_ptrs.insert(func_def.def_id, ptr);
         }
 
+        tracing::info!("JIT module compilation complete");
         Ok(CompiledModule {
             function_ptrs,
             main_def_id: None,
@@ -342,6 +345,8 @@ impl AotModuleCompiler {
         functions: &[FunctionDef<'_>],
         types: &TypeInterner,
     ) -> Result<CompiledObjectFile, CodegenError> {
+        let _span =
+            tracing::info_span!("aot_module_compile", function_count = functions.len()).entered();
         let mut compiler = Self::new()?;
 
         // Pass 1: Declare all functions
@@ -358,6 +363,7 @@ impl AotModuleCompiler {
             function_names.insert(func_def.def_id, func_def.name.clone());
         }
 
+        tracing::info!(code_bytes = bytes.len(), "AOT module compilation complete");
         Ok(CompiledObjectFile {
             bytes,
             function_names,

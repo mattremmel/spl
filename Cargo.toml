@@ -92,6 +92,10 @@ include_dir = "0.7"
 # Error handling
 thiserror = "2"
 
+# Structured logging / tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
 # Dev dependencies
 datatest-stable = { version = "0.3.3", features = ["include-dir"] }
 pretty_assertions = "1.4"

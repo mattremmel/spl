@@ -5,6 +5,7 @@
 
 use rustc_hash::FxHashMap;
 use spl_ast::Item;
+use tracing::{debug_span, info, info_span};
 
 use crate::package::Package;
 
@@ -47,6 +48,7 @@ fn build_module_structure(tree: &mut ModuleTree, parent_id: ModuleId, package: &
 /// A `ResolveResult` containing the semantic context with resolved symbols
 /// and any diagnostics produced during resolution.
 pub fn resolve_package(package: &Package) -> ResolveResult {
+    let _span = info_span!("resolve_package", package = package.name()).entered();
     // Build module tree from package hierarchy
     let module_tree = module_tree_from_package_structure(package);
     let root_id = module_tree.root_id();
@@ -63,13 +65,22 @@ pub fn resolve_package(package: &Package) -> ResolveResult {
         let mut module_scopes: FxHashMap<ModuleId, ScopeId> = FxHashMap::default();
 
         // Phase 1: Collect all items from ALL modules (through Resolver to track resolutions)
-        collect_all_items_through_resolver(package, &mut resolver, root_id, &mut module_scopes);
+        {
+            let _phase = debug_span!("collect_items").entered();
+            collect_all_items_through_resolver(package, &mut resolver, root_id, &mut module_scopes);
+        }
 
         // Phase 2: Resolve imports for all modules
-        resolve_all_imports(package, &mut resolver, root_id, &module_scopes);
+        {
+            let _phase = debug_span!("resolve_imports").entered();
+            resolve_all_imports(package, &mut resolver, root_id, &module_scopes);
+        }
 
         // Phase 3: Resolve bodies for all modules
-        resolve_all_bodies(package, &mut resolver, root_id, &module_scopes);
+        {
+            let _phase = debug_span!("resolve_bodies").entered();
+            resolve_all_bodies(package, &mut resolver, root_id, &module_scopes);
+        }
 
         (
             resolver.resolutions().clone(),
@@ -77,6 +88,12 @@ pub fn resolve_package(package: &Package) -> ResolveResult {
             resolver.module_scopes().clone(),
         )
     };
+
+    let diagnostic_count = diagnostics.len();
+    info!(
+        resolution_count = resolutions.len(),
+        diagnostic_count, "package resolution complete"
+    );
 
     ResolveResult {
         ctx,
@@ -301,13 +318,20 @@ fn resolve_all_bodies(
 /// Takes the resolved package and produces type assignments for all expressions
 /// and bindings across all files.
 pub fn infer_package(package: &Package, resolve_result: &ResolveResult) -> InferResult {
+    let _span = info_span!("infer_package", package = package.name()).entered();
     let mut engine = InferEngine::new(resolve_result);
 
     // Phase 1: Collect signatures from ALL modules first
-    collect_all_signatures(package, &mut engine);
+    {
+        let _phase = debug_span!("collect_signatures").entered();
+        collect_all_signatures(package, &mut engine);
+    }
 
     // Phase 2: Infer all bodies
-    infer_all_bodies(package, &mut engine);
+    {
+        let _phase = debug_span!("infer_bodies").entered();
+        infer_all_bodies(package, &mut engine);
+    }
 
     engine.apply_defaults();
     engine.into_result()

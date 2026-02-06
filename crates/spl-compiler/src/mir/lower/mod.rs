@@ -53,6 +53,7 @@ pub use helpers::{hir_binop_to_mir, hir_unop_to_mir, literal_to_operand, lower_l
 use crate::hir::{HirDatabase, HirItem};
 use crate::mir::body::Body;
 use crate::mir::error::IceResult;
+use tracing::{info, info_span};
 
 /// Lower all functions in an HIR database to MIR bodies.
 ///
@@ -70,6 +71,7 @@ use crate::mir::error::IceResult;
 /// The user should have already received error diagnostics for any
 /// issues in their source code.
 pub fn lower_hir_to_mir(hir: &HirDatabase) -> IceResult<Vec<Body>> {
+    let _span = info_span!("lower_hir_to_mir", hir_items = hir.items.len()).entered();
     let mut ctx = MirLoweringContext::new(hir);
 
     for item in &hir.items {
@@ -79,5 +81,6 @@ pub fn lower_hir_to_mir(hir: &HirDatabase) -> IceResult<Vec<Body>> {
         }
     }
 
+    info!(body_count = ctx.bodies.len(), "MIR lowering complete");
     Ok(ctx.bodies)
 }

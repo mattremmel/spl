@@ -53,10 +53,10 @@ mod tests;
 pub use folding::try_lower_expr;
 
 use crate::ast::{
-    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, Expr, ExternFn, FieldExpr,
-    ForExpr, FunctionDef, IfExpr, IndexExpr, IsExpr, Item, LetStmt, LiteralExpr, LoopExpr,
-    MatchExpr, ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt,
-    TupleExpr, WhileExpr, YieldExpr,
+    ArrayExpr, BinExpr, Block, BlockExpr, BreakExpr, CallExpr, Expr, ExternFn, FieldExpr, ForExpr,
+    FunctionDef, IfExpr, IndexExpr, IsExpr, Item, LetStmt, LiteralExpr, LoopExpr, MatchExpr,
+    ParenExpr, Pat, PathExpr, PrefixExpr, RefExpr, ReturnExpr, SourceFile, Stmt, TupleExpr,
+    WhileExpr, YieldExpr,
 };
 use crate::hir::{
     BinOp, ExprId, HirDatabase, HirExpr, HirExprKind, HirField, HirFunction, HirImpl, HirItem,
@@ -72,6 +72,7 @@ use folding::{
     parse_char_literal, parse_float_literal_value, parse_int_literal_value, parse_string_literal,
 };
 use rowan::ast::AstNode;
+use tracing::{info, info_span};
 
 // ============================================================================
 // Public API
@@ -81,9 +82,12 @@ use rowan::ast::AstNode;
 ///
 /// This takes the AST and inference results and produces a fully typed HIR.
 pub fn lower_to_hir(source_file: &SourceFile, infer_result: &InferResult) -> HirDatabase {
+    let _span = info_span!("lower_to_hir").entered();
     let mut ctx = LoweringContext::new(infer_result);
     ctx.lower_source_file(source_file);
-    ctx.into_database()
+    let db = ctx.into_database();
+    info!(item_count = db.items.len(), "HIR lowering complete");
+    db
 }
 
 /// Lower a multi-file package to HIR.
@@ -94,9 +98,12 @@ pub fn lower_package_to_hir(
     package: &crate::package::Package,
     infer_result: &InferResult,
 ) -> HirDatabase {
+    let _span = info_span!("lower_package_to_hir", package = package.name()).entered();
     let mut ctx = LoweringContext::new(infer_result);
     lower_package_files(package, &mut ctx);
-    ctx.into_database()
+    let db = ctx.into_database();
+    info!(item_count = db.items.len(), "package HIR lowering complete");
+    db
 }
 
 /// Helper to recursively lower all files in a package hierarchy.

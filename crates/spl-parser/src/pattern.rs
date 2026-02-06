@@ -271,9 +271,7 @@ fn path_or_struct_or_enum_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, Par
 
 /// Parse a path and determine if it's followed by struct fields, enum args, or range operator.
 /// Used when we already know the path starts with a dot-qualified name.
-fn path_or_struct_or_enum_range_pat(
-    p: &mut Parser<'_>,
-) -> Result<CompletedMarker, ParseError> {
+fn path_or_struct_or_enum_range_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
     let m = p.start();
 
     // Use structured path parsing (no generics in patterns)
@@ -377,11 +375,7 @@ fn rest_pat(p: &mut Parser<'_>) -> CompletedMarker {
 
 /// Try to parse a range tail (`..` or `..=` plus optional end bound).
 /// If present, completes `m` as `RangePat`; otherwise completes as the given `fallback` kind.
-fn maybe_range_tail(
-    p: &mut Parser<'_>,
-    m: crate::Marker,
-    fallback: SyntaxKind,
-) -> CompletedMarker {
+fn maybe_range_tail(p: &mut Parser<'_>, m: crate::Marker, fallback: SyntaxKind) -> CompletedMarker {
     if p.at(SyntaxKind::DOT_DOT) || p.at(SyntaxKind::DOT_DOT_EQ) {
         p.bump(); // consume `..` or `..=`
 
@@ -437,9 +431,9 @@ fn prefix_range_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
             Some(SyntaxKind::INT_LITERAL) | Some(SyntaxKind::FLOAT_LITERAL)
         ) {
             m.abandon(p);
-            return Err(p.error_at_current(
-                "expected literal after '-' in range pattern".to_string(),
-            ));
+            return Err(
+                p.error_at_current("expected literal after '-' in range pattern".to_string())
+            );
         }
         p.bump();
     } else if matches!(
@@ -457,9 +451,7 @@ fn prefix_range_pat(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
         }
     } else {
         m.abandon(p);
-        return Err(p.error_at_current(
-            "expected range bound after '..' or '..='".to_string(),
-        ));
+        return Err(p.error_at_current("expected range bound after '..' or '..='".to_string()));
     }
 
     Ok(m.complete(p, SyntaxKind::RangePat))

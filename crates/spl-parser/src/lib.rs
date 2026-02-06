@@ -615,9 +615,12 @@ impl CompletedMarker {
 
 /// Parse source code and return the syntax tree.
 pub fn parse(source: &str) -> Parse {
+    let _span = tracing::info_span!("parse", source_bytes = source.len()).entered();
     let mut parser = Parser::new(source);
     parser.parse_source_file();
-    parser.finish()
+    let result = parser.finish();
+    tracing::info!(error_count = result.errors.len(), "parsing complete");
+    result
 }
 
 #[cfg(test)]

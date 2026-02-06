@@ -535,6 +535,7 @@ impl<'a> LexResult<'a> {
 /// assert!(result.tokens.iter().any(|t| t.token == Token::Let));
 /// ```
 pub fn lex_all(source: &str) -> LexResult<'_> {
+    let _span = tracing::info_span!("lex", source_bytes = source.len()).entered();
     let mut tokens = Vec::new();
     let mut errors = Vec::new();
 
@@ -551,6 +552,11 @@ pub fn lex_all(source: &str) -> LexResult<'_> {
         errors.push(error);
     }
 
+    tracing::info!(
+        token_count = tokens.len(),
+        error_count = errors.len(),
+        "lexing complete"
+    );
     LexResult { tokens, errors }
 }
 

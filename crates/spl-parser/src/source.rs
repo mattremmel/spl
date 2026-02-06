@@ -50,8 +50,7 @@ impl<'src> Source<'src> {
     fn fixup_chained_field_access(tokens: &mut Vec<Token<'src>>) {
         let mut i = 0;
         while i + 1 < tokens.len() {
-            if tokens[i].kind == SyntaxKind::DOT
-                && tokens[i + 1].kind == SyntaxKind::FLOAT_LITERAL
+            if tokens[i].kind == SyntaxKind::DOT && tokens[i + 1].kind == SyntaxKind::FLOAT_LITERAL
             {
                 let text = tokens[i + 1].text;
                 let span_start = tokens[i + 1].span.start;

@@ -188,10 +188,16 @@ impl InferResult {
 /// Takes the resolved AST and produces type assignments for all expressions and bindings.
 /// The `ResolveResult` is borrowed, allowing it to be reused after inference completes.
 pub fn infer(source_file: &SourceFile, resolve_result: &ResolveResult) -> InferResult {
+    let _span = tracing::info_span!("infer").entered();
     let mut engine = InferEngine::new(resolve_result);
     engine.infer_source_file(source_file);
     engine.apply_defaults();
-    engine.into_result()
+    let result = engine.into_result();
+    tracing::info!(
+        diagnostic_count = result.diagnostics.len(),
+        "type inference complete"
+    );
+    result
 }
 
 /// The kind of receiver for a method.

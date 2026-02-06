@@ -67,6 +67,7 @@
 
 pub mod ast;
 pub mod diagnostic;
+mod tracing_init;
 
 /// Native code generation via Cranelift.
 ///
@@ -89,12 +90,14 @@ pub use parser::{Parse, ParseError, parse};
 pub use sema::{DefId, SemanticContext, Symbol, SymbolKind};
 pub use session::CompileSession;
 pub use syntax::{Lang, SyntaxKind, SyntaxNode, SyntaxToken};
+pub use tracing_init::{init_tracing, init_tracing_with_timing};
 
 // ============================================================================
 // High-Level Compile API
 // ============================================================================
 
 use rowan::ast::AstNode;
+use tracing::{info, info_span};
 
 /// Maximum number of diagnostics to report before stopping.
 /// This prevents overwhelming output on heavily broken code.
@@ -172,6 +175,7 @@ impl CompileResult {
 /// ```
 #[must_use]
 pub fn compile(source: &str) -> CompileResult {
+    let _span = info_span!("compile", source_bytes = source.len()).entered();
     let mut diagnostics = Vec::new();
 
     // Phase 1: Parse
@@ -253,6 +257,9 @@ pub fn compile(source: &str) -> CompileResult {
     // Preserve the type interner for codegen
     let types = hir_db.types;
 
+    let body_count = bodies.len();
+    info!(body_count, "compilation complete");
+
     CompileResult {
         bodies: Some(bodies),
         types: Some(types),
@@ -308,6 +315,7 @@ pub enum JitError {
 /// Returns `JitError::RuntimeError` if execution fails (e.g., traps).
 #[must_use = "JIT execution result should be used"]
 pub fn jit_execute(source: &str) -> Result<i32, JitError> {
+    let _span = info_span!("jit_execute").entered();
     // Compile source to MIR
     let result = compile(source);
     if result.is_err() {
@@ -401,6 +409,7 @@ pub enum AotError {
 /// Returns `AotError::CodegenError` if code generation fails.
 #[must_use = "compiled object bytes should be used"]
 pub fn compile_to_object(source: &str) -> Result<Vec<u8>, AotError> {
+    let _span = info_span!("compile_to_object").entered();
     // Compile source to MIR
     let result = compile(source);
     if result.is_err() {
@@ -459,6 +468,7 @@ pub fn compile_to_object(source: &str) -> Result<Vec<u8>, AotError> {
 /// Returns `AotError::LinkError` if linking fails.
 #[must_use = "compilation result should be checked for errors"]
 pub fn compile_and_link(source: &str, output: &Path) -> Result<(), AotError> {
+    let _span = info_span!("compile_and_link", output = %output.display()).entered();
     let object_bytes = compile_to_object(source)?;
     codegen::link_object_to_executable(&object_bytes, output, None)?;
     Ok(())
@@ -540,6 +550,7 @@ pub enum ProjectError {
 /// (e.g., path doesn't exist, not a directory, no source files, parse errors).
 #[must_use = "compilation result should be checked"]
 pub fn compile_project(path: &Path) -> Result<CompileResult, ProjectError> {
+    let _span = info_span!("compile_project", path = %path.display()).entered();
     let pkg = package::Package::load(path)?;
     Ok(package::compile_package(&pkg))
 }

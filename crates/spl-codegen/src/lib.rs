@@ -97,6 +97,7 @@ pub fn codegen_jit(
     bodies: &[(DefId, &str, &Body)],
     types: &TypeInterner,
 ) -> Result<CompiledModule, CodegenError> {
+    let _span = tracing::info_span!("codegen_jit", function_count = bodies.len()).entered();
     let function_defs: Vec<_> = bodies
         .iter()
         .map(|(def_id, name, body)| FunctionDef::new(*def_id, *name, body))

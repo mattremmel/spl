@@ -6,8 +6,8 @@ use crate::{SymbolKind, Visibility};
 use rowan::ast::AstNode;
 use rustc_hash::FxHashMap;
 use spl_ast::{
-    ArrayExpr, BinExpr, BlockExpr, BreakExpr, CallExpr, ContinueExpr, Expr, FieldExpr,
-    ForExpr, IfExpr, IndexExpr, IsExpr, LoopExpr, MatchExpr, ParenExpr, Pat, PathExpr, PrefixExpr,
+    ArrayExpr, BinExpr, BlockExpr, BreakExpr, CallExpr, ContinueExpr, Expr, FieldExpr, ForExpr,
+    IfExpr, IndexExpr, IsExpr, LoopExpr, MatchExpr, ParenExpr, Pat, PathExpr, PrefixExpr,
     RangeExpr, RefExpr, ReturnExpr, SliceExpr, TupleExpr, WhileExpr, YieldExpr,
 };
 use spl_ast::{Block, LetStmt, LiteralExpr, Stmt};

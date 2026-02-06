@@ -134,32 +134,116 @@ spl --log-format=json ...          # JSON output for tooling
 
 ## Structured Logging
 
-Use the `tracing` crate for structured logging with "wide events" philosophy:
+SPL uses the `tracing` crate for structured logging, following the "wide events" philosophy. This means:
 
-### Logging Levels
+- **Canonical log lines** - One rich, structured log per operation containing all debugging context
+- **Structured format** - Key-value pairs instead of plain strings for queryability
+- **High-cardinality data** - Include contextual data like function names, counts, sizes
+- **Zero-cost when off** - Tracing has no overhead when no subscriber is active; can be compile-time disabled for production via feature flags
 
-| Level | Use for |
-|-------|---------|
-| `error` | Unrecoverable failures |
-| `warn` | Recoverable issues, deprecations |
-| `info` | High-level progress, pass completion |
-| `debug` | Detailed progress, intermediate results |
-| `trace` | Very verbose, per-item processing |
+### Using the Logging
 
-### Pattern
+```bash
+# Normal compilation (no logging by default)
+spl source.spl -o output
+
+# Show timing per pass
+spl --time-passes source.spl -o output
+
+# Enable debug logging
+spl --log-level=debug source.spl -o output
+RUST_LOG=debug spl source.spl -o output
+
+# JSON format for tooling integration
+spl --log-format=json --log-level=debug source.spl -o output
+
+# Filter to specific module
+RUST_LOG=spl_sema::resolver=trace spl source.spl -o output
+```
+
+### Adding Instrumentation
+
+Each compilation pass should have a tracing span wrapping the work:
 
 ```rust
 use tracing::{info_span, info};
 
 pub fn my_pass(input: &Input) -> Result<Output> {
+    // Create a span for the pass - includes timing automatically
     let _span = info_span!("my_pass").entered();
-    // ... process ...
-    info!(item_count = result.items.len(), "pass complete");
+
+    // Do the work...
+    let result = process(input)?;
+
+    // Log completion with useful metrics
+    info!(
+        item_count = result.items.len(),
+        "pass complete"
+    );
+
     Ok(result)
 }
 ```
 
-Use spans for timing (automatically captured) and events for outcomes with structured fields.
+### Logging Levels
+
+| Level | Use for | Example |
+|-------|---------|---------|
+| `error` | Compilation failures, internal compiler errors | ICE, unrecoverable errors |
+| `warn` | Suspicious patterns (surfaced via diagnostics) | Deprecated feature usage |
+| `info` | Per-pass completion with summary metrics | "lexing complete", token counts |
+| `debug` | Decision points, intermediate state | "resolving symbol X to Y" |
+| `trace` | Detailed internal state, individual instructions | Instruction-by-instruction output |
+
+### Good vs Bad Examples
+
+**Good:** Wide event with context
+```rust
+let _span = info_span!(
+    "codegen",
+    arch = "x86_64",
+    function_count = functions.len()
+).entered();
+
+// ... do code generation ...
+
+info!(
+    code_bytes = total_bytes,
+    "code generation complete"
+);
+```
+
+**Bad:** Scattered debug statements
+```rust
+println!("Starting codegen...");
+for func in functions {
+    println!("Generating function: {:?}", func.name);
+}
+println!("Done!");
+```
+
+**Good:** Structured key-value data
+```rust
+info!(
+    token_count = tokens.len(),
+    source_bytes = source.len(),
+    "lexing complete"
+);
+```
+
+**Bad:** String interpolation
+```rust
+println!("Lexed {} tokens from {} bytes", tokens.len(), source.len());
+```
+
+### Key Principles
+
+- **Spans for timing**: Wrap passes in `info_span!()` — this enables `--time-passes`
+- **Events for outcomes**: Use `info!()` after completing work with metrics
+- **Context in spans**: Include high-level context (file, function count) in span fields
+- **Metrics in events**: Include computed metrics (instruction counts, sizes) in events
+- **Zero-cost when off**: Tracing has no overhead when no subscriber is active
+- **Feature-gated**: Use `tracing` feature flag so tracing can be compiled out entirely for production builds if needed for performance
 
 ## Language Modification Checklist
 

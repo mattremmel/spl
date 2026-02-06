@@ -12,6 +12,7 @@ spl-parser.workspace = true
 spl-ast.workspace = true
 rowan.workspace = true
 rustc-hash.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true

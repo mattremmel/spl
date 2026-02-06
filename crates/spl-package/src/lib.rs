@@ -178,6 +178,7 @@ impl Package {
     /// - Any source file has parse errors
     /// - An explicitly included file is not found
     pub fn load(path: impl AsRef<Path>) -> Result<Self, PackageError> {
+        let _span = tracing::info_span!("package_load", path = %path.as_ref().display()).entered();
         Self::load_with_conditions(path, &[] as &[&str])
     }
 
@@ -311,6 +312,13 @@ impl Package {
                 }
             }
         }
+
+        tracing::info!(
+            name = %name,
+            file_count = compilation_unit.file_count(),
+            module_count = modules.len(),
+            "package loaded"
+        );
 
         Ok(Package {
             name,

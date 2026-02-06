@@ -1688,11 +1688,18 @@ pub fn define_builtins(ctx: &mut SemanticContext) {
 ///
 /// This is the main entry point for name resolution.
 pub fn resolve(source_file: &SourceFile) -> ResolveResult {
+    let _span = tracing::info_span!("resolve").entered();
     let mut ctx = SemanticContext::new();
     define_builtins(&mut ctx);
 
     let resolver = Resolver::new(&mut ctx);
     let (resolutions, diagnostics, module_scopes) = resolver.resolve(source_file);
+
+    tracing::info!(
+        resolution_count = resolutions.len(),
+        diagnostic_count = diagnostics.len(),
+        "resolution complete"
+    );
 
     ResolveResult {
         ctx,
