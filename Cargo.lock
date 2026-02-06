@@ -1075,6 +1075,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "spl-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "spl-compiler",
+]
+
+[[package]]
 name = "spl-codegen"
 version = "0.1.0"
 dependencies = [

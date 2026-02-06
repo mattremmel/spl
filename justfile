@@ -47,6 +47,10 @@ spec-file name:
 test-serial:
     cargo test -- --test-threads=1
 
+# Run the CLI
+run *ARGS:
+    cargo run -p spl-cli -- {{ARGS}}
+
 # Clean build artifacts
 clean:
     cargo clean
