@@ -309,3 +309,39 @@ impl Foo {
     }
 }
 """
+
+# Unsafe impl interactions
+
+[[case]]
+name = "impl_unsafe_trait_empty"
+source = "unsafe impl Send for MyType {}"
+
+[[case]]
+name = "impl_unsafe_trait_with_method"
+source = """
+unsafe impl Sync for MyType {
+    fn is_sync(&self): bool { true }
+}
+"""
+
+[[case]]
+name = "impl_unsafe_trait_generic"
+source = "unsafe impl Send for Box(T: T) where T: Send {}"
+
+[[case]]
+name = "impl_unsafe_fn_in_inherent"
+source = """
+impl Buffer {
+    unsafe fn raw_ptr(&self): i32 { 0 }
+    fn safe_method(&self): i32 { 1 }
+}
+"""
+
+[[case]]
+name = "impl_unsafe_trait_with_type_assignment"
+source = """
+unsafe impl Iterator for UnsafeIter {
+    type Item = i32
+    fn next(&mut self): Self.Item? { .None }
+}
+"""

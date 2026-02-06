@@ -1,0 +1,111 @@
+[section]
+id = "stmts.block_values"
+spec_chapter = "3"
+name = "Block Value Semantics"
+
+# Tests for block value rules from spec section 3
+
+[[case]]
+name = "single_expr_block_value"
+source = "fn f() { let x = { 42 } }"
+
+[[case]]
+name = "multi_stmt_block_no_value"
+source = """
+fn f() {
+    {
+        let a = 1
+        let b = 2
+    }
+}
+"""
+
+[[case]]
+name = "multi_stmt_block_break_value"
+source = "fn f() { let x = 'a: { let y = 1; break 'a y + 1 } }"
+
+[[case]]
+name = "labeled_block_break_value"
+source = """
+fn f() {
+    let x = 'label: {
+        let a = 1
+        break 'label a + 1
+    }
+}
+"""
+
+[[case]]
+name = "if_else_as_expr_single_expr_branches"
+source = "fn f() { let x = if cond { 1 } else { 0 } }"
+
+[[case]]
+name = "loop_with_break_value"
+source = "fn f() { let x = loop { break 42 } }"
+
+[[case]]
+name = "nested_labeled_blocks_different_targets"
+source = """
+fn f() {
+    let x = 'outer: {
+        let y = 'inner: {
+            break 'inner 10
+        }
+        break 'outer y + 1
+    }
+}
+"""
+
+[[case]]
+name = "break_label_no_value"
+source = "fn f() { 'x: loop { break 'x } }"
+
+[[case]]
+name = "block_in_return_position_single_expr"
+source = "fn double(x: i32): i32 { x * 2 }"
+
+[[case]]
+name = "block_in_return_position_multi_stmt"
+source = """
+fn double(x: i32): i32 {
+    let y = x * 2
+    return y
+}
+"""
+
+[[case]]
+name = "nested_block_single_expr"
+source = "fn f() { let x = { { { 42 } } } }"
+
+[[case]]
+name = "labeled_block_with_early_break"
+source = """
+fn f() {
+    let x = 'calc: {
+        if error {
+            break 'calc 0
+        }
+        compute()
+    }
+}
+"""
+
+[[case]]
+name = "block_expr_as_condition"
+source = "fn f() { if { compute() } { do_something() } }"
+
+[[case]]
+name = "loop_break_complex_value"
+source = """
+fn f() {
+    let result = loop {
+        if done {
+            break compute() + 1
+        }
+    }
+}
+"""
+
+[[case]]
+name = "for_labeled_break_value"
+source = "fn f() { let found = 'search: for item in items { break 'search item } }"

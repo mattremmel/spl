@@ -84,3 +84,42 @@ source = "fn f() { let p: (x: i32, y: i32) = (x: 1, y: 2) }"
 [[case]]
 name = "named_tuple_expr_trailing_comma"
 source = "fn f() { (x: 1, y: 2,) }"
+
+# Named tuple edge cases
+
+[[case]]
+name = "named_tuple_in_fn_return_type"
+source = "fn f(): (x: i32, y: i32) {}"
+
+[[case]]
+name = "named_tuple_in_fn_param_type"
+source = "fn f(point: (x: i32, y: i32)) {}"
+
+[[case]]
+name = "named_tuple_destructure_positional"
+source = "fn f() { let (a, b) = named_tuple }"
+
+[[case]]
+name = "empty_tuple_unit"
+source = "fn f() { () }"
+
+[[case]]
+name = "named_and_positional_in_type"
+source = "fn f(x: (i32, name: String)) {}"
+
+[[case]]
+name = "named_tuple_method_call"
+source = """
+fn f() {
+    let t = (x: 1, y: 2)
+    t.x
+}
+"""
+
+[[case]]
+name = "named_tuple_nested_in_array"
+source = "fn f() { [(x: 1, y: 2), (x: 3, y: 4)] }"
+
+[[case]]
+name = "named_tuple_as_fn_arg"
+source = "fn f() { process((x: 1, y: 2)) }"

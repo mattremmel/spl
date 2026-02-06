@@ -1,0 +1,132 @@
+[section]
+id = "parser.grammar_violations"
+spec_chapter = "1"
+name = "Grammar Violations"
+
+# Things the spec says should fail to parse
+
+[[case]]
+name = "const_gen_fn"
+source = "const gen fn foo(): i32 { yield 1 }"
+expect_error = "expected"
+
+[[case]]
+name = "gen_missing_fn_keyword"
+source = "gen count(): i32 { yield 1 }"
+expect_error = "expected"
+
+[[case]]
+name = "fn_missing_name"
+source = "fn () {}"
+expect_error = "expected"
+
+[[case]]
+name = "fn_missing_parens"
+source = "fn foo {}"
+expect_error = "expected"
+
+[[case]]
+name = "fn_missing_body"
+source = "fn foo(): i32"
+expect_error = "expected"
+
+[[case]]
+name = "fn_double_return_type"
+source = "fn foo(): i32: i32 {}"
+expect_error = "expected"
+
+[[case]]
+name = "struct_missing_name"
+source = "struct (x: i32)"
+expect_error = "expected"
+
+[[case]]
+name = "enum_empty_variants"
+source = "enum Foo {,}"
+expect_error = "expected"
+
+[[case]]
+name = "impl_missing_type"
+source = "impl { fn foo() {} }"
+expect_error = "expected"
+
+[[case]]
+name = "trait_missing_name"
+source = "trait { fn foo() }"
+expect_error = "expected"
+
+[[case]]
+name = "let_outside_fn"
+source = "let x = 1"
+expect_error = "expected"
+
+[[case]]
+name = "double_visibility"
+source = "pub pub fn foo() {}"
+expect_error = "expected"
+
+[[case]]
+name = "missing_comma_in_params"
+source = "fn f(a: i32 b: i32) {}"
+expect_error = "expected"
+
+[[case]]
+name = "extra_comma_in_params"
+source = "fn f(a: i32,, b: i32) {}"
+expect_error = "expected"
+
+[[case]]
+name = "keyword_as_fn_name"
+source = "fn if() {}"
+expect_error = "expected"
+
+[[case]]
+name = "keyword_as_variable"
+source = "fn f() { let fn = 1 }"
+expect_error = "expected"
+
+[[case]]
+name = "unclosed_brace"
+source = """
+fn f() {
+    let x = 1
+"""
+expect_error = "expected"
+
+[[case]]
+name = "unclosed_paren_in_params"
+source = """
+fn f(a: i32, b: i32 {
+    a + b
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "match_missing_brace"
+source = """
+fn f() {
+    match x {
+        1 => "one",
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "invalid_pattern_in_let"
+source = """
+fn f() {
+    let + = 1
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "double_throws"
+source = "fn f(): i32 throws Error throws Error {}"
+expect_error = "expected"
+
+[[case]]
+name = "where_before_throws"
+source = "fn f(): i32 where T throws Error {}"
+expect_error = "expected"

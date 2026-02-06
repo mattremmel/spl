@@ -1,0 +1,53 @@
+[section]
+id = "types.lifetimes"
+spec_chapter = "2"
+name = "Lifetime Types"
+
+# Tests for lifetime syntax in type positions
+# Lifetime = "'" IDENTIFIER ;
+# ReferenceType = "&" [ Lifetime ] [ "mut" ] BaseType ;
+
+[[case]]
+name = "ref_with_lifetime"
+source = "fn f(x: &'a i32) {}"
+
+[[case]]
+name = "mut_ref_with_lifetime"
+source = "fn f(x: &'a mut i32) {}"
+
+[[case]]
+name = "lifetime_in_fn_param_and_return"
+source = "fn borrow(s: &'a str): &'a str { s }"
+
+[[case]]
+name = "multiple_lifetimes_in_fn"
+source = "fn f(a: &'a str, b: &'b str): &'a str { a }"
+
+[[case]]
+name = "lifetime_with_generic_type"
+source = "fn f(x: &'a Vec(T: i32)) where T {}"
+
+[[case]]
+name = "lifetime_in_return_type"
+source = "fn f(x: &'a str): &'a str { x }"
+
+[[case]]
+name = "label_vs_char_literal"
+source = """
+fn f() {
+    let x = 'a'
+    'b: loop { break 'b }
+}
+"""
+
+[[case]]
+name = "lifetime_in_struct_field_type"
+source = "struct Parser(input: &'a str)"
+
+[[case]]
+name = "lifetime_ref_to_ref"
+source = "fn f(x: &'a &'b i32) {}"
+
+[[case]]
+name = "lifetime_mut_ref_to_ref"
+source = "fn f(x: &'a mut &'b i32) {}"

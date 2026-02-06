@@ -383,3 +383,41 @@ impl Foo {
 [[case]]
 name = "fn_all_param_styles_combined"
 source = "fn complex(to name: String, _ count: i32, verbose: bool = false): Result(T: i32, E: Error) throws where T {}"
+
+# Default parameter edge cases
+
+[[case]]
+name = "fn_default_block_expr"
+source = "fn f(x: i32 = { let a = 1; a + 2 }) {}"
+
+[[case]]
+name = "fn_default_with_method_call"
+source = "fn f(x: DateTime = DateTime.now()) {}"
+
+[[case]]
+name = "fn_default_with_labeled_and_underscore"
+source = """fn add(_ a: i32 = 0, _ b: i32 = 0): i32 { a + b }"""
+
+[[case]]
+name = "fn_default_in_impl_method"
+source = """
+impl Config {
+    fn with_timeout(&self, timeout: i32 = 30): Config { Config(timeout: timeout) }
+}
+"""
+
+[[case]]
+name = "fn_multiple_defaults_all"
+source = """fn create(name: String = "unnamed", size: i32 = 0, enabled: bool = true) {}"""
+
+[[case]]
+name = "fn_default_with_enum_shorthand"
+source = "fn f(x: Option(T: i32) = .None) {}"
+
+[[case]]
+name = "fn_default_with_struct_expr"
+source = "fn f(p: Point = Point(x: 0, y: 0)) {}"
+
+[[case]]
+name = "fn_default_with_array_expr"
+source = "fn f(items: [i32] = [1, 2, 3]) {}"

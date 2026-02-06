@@ -194,3 +194,37 @@ source = "fn f() { arr[start:] }"
 [[case]]
 name = "dollar_in_complex_expr"
 source = "fn f() { arr[$-1-offset] }"
+
+# Additional $ index/slice edge cases
+
+[[case]]
+name = "dollar_second_to_last"
+source = "fn f() { arr[$-2] }"
+
+[[case]]
+name = "slice_one_to_dollar"
+source = "fn f() { arr[1:$] }"
+
+[[case]]
+name = "slice_one_to_dollar_minus_one"
+source = "fn f() { arr[1:$-1] }"
+
+[[case]]
+name = "slice_start_to_dollar_minus_one"
+source = "fn f() { arr[:$-1] }"
+
+[[case]]
+name = "slice_dollar_range"
+source = "fn f() { arr[$-3:$-1] }"
+
+[[case]]
+name = "slice_dollar_last_element"
+source = "fn f() { arr[$-1:$] }"
+
+[[case]]
+name = "slice_zero_to_dollar"
+source = "fn f() { arr[0:$] }"
+
+[[case]]
+name = "dollar_in_nested_index"
+source = "fn f() { matrix[0][$-1] }"

@@ -185,6 +185,41 @@ source = "fn f() { Point(x: 1, y: 2, ...base) }"
 name = "struct_spread_nested"
 source = "fn f() { Outer(inner: Inner(x: 1, ...defaults)) }"
 
+# Struct update syntax edge cases
+
+[[case]]
+name = "struct_spread_with_method_call"
+source = "fn f() { Point(x: 1, ...other.clone()) }"
+
+[[case]]
+name = "struct_spread_with_field_access"
+source = "fn f() { Point(x: 1, ...self.default_point) }"
+
+[[case]]
+name = "struct_spread_shorthand_and_update"
+source = """
+fn f() {
+    let x = 1
+    Point(x, ...other)
+}
+"""
+
+[[case]]
+name = "struct_spread_type_and_value_args"
+source = "fn f() { Container(T: i32, value: 1, ...base) }"
+
+[[case]]
+name = "struct_spread_deeply_nested"
+source = "fn f() { Outer(inner: Inner(x: 1, ...inner_base), ...outer_base) }"
+
+[[case]]
+name = "struct_spread_only_update"
+source = "fn f() { Config(...defaults) }"
+
+[[case]]
+name = "struct_spread_all_fields_plus_update"
+source = "fn f() { Point(x: 1, y: 2, z: 3, ...base) }"
+
 [[case]]
 name = "literal_c_string"
 source = """fn f() { c"hello" }"""

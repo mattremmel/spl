@@ -1,0 +1,100 @@
+[section]
+id = "expr.is_expression"
+spec_chapter = "4"
+name = "Is Expression"
+
+# Tests for `is` operator edge cases and precedence
+# IsExpr = EqualityExpr [ "is" Pattern ] ;
+# Precedence: tighter than && (level 4), looser than == (level 6)
+
+[[case]]
+name = "is_basic_enum_pattern"
+source = "fn f() { value is .Some(x) }"
+
+[[case]]
+name = "is_with_and"
+source = "fn f() { value is .Some(x) && x > 0 }"
+
+[[case]]
+name = "is_precedence_comparison_tighter"
+source = "fn f() { x > 0 && y is .Some(v) }"
+
+[[case]]
+name = "is_in_if_condition"
+source = """
+fn f() {
+    if value is .Some(x) {
+        use_value(x)
+    }
+}
+"""
+
+[[case]]
+name = "is_in_while_condition"
+source = """
+fn f() {
+    while queue.pop() is .Some(item) {
+        process(item)
+    }
+}
+"""
+
+[[case]]
+name = "is_with_or"
+source = "fn f() { value is .Some(x) || value is .None }"
+
+[[case]]
+name = "is_negated"
+source = "fn f() { !(value is .None) }"
+
+[[case]]
+name = "is_with_struct_pattern"
+source = "fn f() { value is Point(x, y) }"
+
+[[case]]
+name = "is_with_literal_pattern"
+source = "fn f() { value is 42 }"
+
+[[case]]
+name = "is_with_wildcard"
+source = "fn f() { value is _ }"
+
+[[case]]
+name = "is_nested"
+source = "fn f() { outer is .Some(inner) && inner is .Some(value) }"
+
+[[case]]
+name = "is_in_if_else_expr"
+source = "fn f() { let x = if v is .Some(val) { val } else { 0 } }"
+
+[[case]]
+name = "is_with_method_call_lhs"
+source = "fn f() { iter.next() is .Some(item) }"
+
+[[case]]
+name = "is_in_complex_bool_expr"
+source = "fn f() { a > 0 && b is .Some(v) && v < 100 }"
+
+[[case]]
+name = "is_with_tuple_pattern"
+source = "fn f() { value is (a, b) }"
+
+[[case]]
+name = "is_with_slice_pattern"
+source = "fn f() { data is [first, ...rest] }"
+
+[[case]]
+name = "is_with_or_pattern"
+source = "fn f() { value is .Red || value is .Blue }"
+
+[[case]]
+name = "is_with_nested_enum_pattern"
+source = "fn f() { value is .Some(.Inner(x)) }"
+
+[[case]]
+name = "is_combined_and_or"
+source = "fn f() { (a is .Some(x) && x > 0) || b is .None }"
+
+[[case]]
+name = "is_with_ref_pattern"
+source = "fn f() { value is &x }"

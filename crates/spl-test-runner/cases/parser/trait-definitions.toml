@@ -336,3 +336,34 @@ trait Mixed {
     fn another_default(&self): bool { true }
 }
 """
+
+# Unsafe trait interactions
+
+[[case]]
+name = "trait_unsafe_empty"
+source = "unsafe trait Send {}"
+
+[[case]]
+name = "trait_unsafe_with_method"
+source = """
+unsafe trait Sync {
+    fn is_sync(&self): bool
+}
+"""
+
+[[case]]
+name = "trait_unsafe_with_default_method"
+source = """
+unsafe trait Allocator {
+    fn allocate(&self, size: i32): i32 { 0 }
+}
+"""
+
+[[case]]
+name = "trait_unsafe_fn_inside_safe_trait"
+source = """
+trait Container {
+    unsafe fn raw_ptr(&self): i32
+    fn safe_method(&self): i32
+}
+"""

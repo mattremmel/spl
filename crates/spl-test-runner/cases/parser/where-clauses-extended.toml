@@ -1,0 +1,86 @@
+[section]
+id = "types.where_clauses_extended"
+spec_chapter = "2"
+name = "Where Clauses Extended"
+
+# Extended where clause interaction tests
+
+[[case]]
+name = "where_on_struct_after_body"
+source = "struct Container(value: T) where T"
+
+[[case]]
+name = "where_on_struct_with_bounds"
+source = "struct Container(value: T) where T: Clone + Debug"
+
+[[case]]
+name = "where_on_enum_after_body"
+source = "enum Option { Some(T), None } where T"
+
+[[case]]
+name = "where_on_trait_before_body"
+source = """
+trait Container where T {
+    fn get(&self): T
+}
+"""
+
+[[case]]
+name = "where_on_impl_before_body"
+source = """
+impl Container where T: Clone {
+    fn clone_value(&self): T { self.value.clone() }
+}
+"""
+
+[[case]]
+name = "where_on_type_alias"
+source = "type MyResult(T) = Result(T: T, E: Error) where T"
+
+[[case]]
+name = "where_method_level_additional_params"
+source = """
+impl Container where T {
+    fn convert(&self): Vec(T: U) where U, T: Into(Target: U) { Vec.new() }
+}
+"""
+
+[[case]]
+name = "where_multiple_params_mixed_bounds_defaults"
+source = "fn f(a: A, b: B, c: C) where A: Clone, B = i32, C: Send = String {}"
+
+[[case]]
+name = "where_trailing_comma_multiple"
+source = "fn f(x: T, y: U) where T: Clone, U: Debug, {}"
+
+[[case]]
+name = "where_with_supertrait_bounds"
+source = "fn f(x: T) where T: Add + Sub + Mul {}"
+
+[[case]]
+name = "where_single_param_no_bounds"
+source = "fn f(x: T) where T {}"
+
+[[case]]
+name = "where_bound_with_multiple_generics"
+source = "fn f(x: T) where T: Into(Target: String) + Clone + Send {}"
+
+[[case]]
+name = "where_on_impl_with_concrete_type_arg"
+source = """
+impl Container(T: i32) where U: Clone {
+    fn convert(&self): U { U.from(self.value) }
+}
+"""
+
+[[case]]
+name = "where_on_trait_with_supertrait"
+source = """
+trait Ordered: Eq where T: Debug {
+    fn compare(&self, other: &T): i32
+}
+"""
+
+[[case]]
+name = "where_nested_generic_bounds"
+source = "fn f(x: T) where T: Iterator(Item: U), U: Clone {}"

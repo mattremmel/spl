@@ -1,0 +1,88 @@
+[section]
+id = "expr.closure_disambiguation"
+spec_chapter = "4"
+name = "Closure Disambiguation"
+
+# Tests for closure vs OR disambiguation and closure edge cases
+
+[[case]]
+name = "empty_closure_then_or"
+source = """
+fn f() {
+    let a = || 42
+    let b = x || y
+}
+"""
+
+[[case]]
+name = "closure_in_argument_position"
+source = "fn f() { foo(|| 42) }"
+
+[[case]]
+name = "closure_in_let_with_block"
+source = "fn f() { let f = || { 42 } }"
+
+[[case]]
+name = "closure_immediately_invoked"
+source = "fn f() { (|| 42)() }"
+
+[[case]]
+name = "closure_vs_or_in_complex_expr"
+source = """
+fn f() {
+    let x = a || b
+    let f = || a || b
+}
+"""
+
+[[case]]
+name = "capture_list_empty_with_expr"
+source = "fn f() { @[] || 42 }"
+
+[[case]]
+name = "capture_with_expression_value"
+source = "fn f() { @[x: x.clone()] |y| x + y }"
+
+[[case]]
+name = "capture_shorthand_multiple"
+source = "fn f() { @[x, y] || x + y }"
+
+[[case]]
+name = "nested_closures_3_deep"
+source = "fn f() { |x| |y| |z| x + y + z }"
+
+[[case]]
+name = "closure_as_last_arg"
+source = "fn f() { items.map(|x| x * 2) }"
+
+[[case]]
+name = "closure_block_body_multi_stmt"
+source = """
+fn f() {
+    let c = |x| {
+        let y = x + 1
+        let z = y * 2
+        z
+    }
+}
+"""
+
+[[case]]
+name = "closure_in_or_expression"
+source = "fn f() { let result = try_a() || try_b() }"
+
+[[case]]
+name = "or_operator_chained"
+source = "fn f() { let x = a || b || c }"
+
+[[case]]
+name = "closure_returning_or_expr"
+source = "fn f() { let f = |x| x || default }"
+
+[[case]]
+name = "closure_in_array"
+source = "fn f() { [|x| x + 1, |x| x * 2, |x| x - 1] }"
+
+[[case]]
+name = "closure_with_capture_in_method_chain"
+source = "fn f() { let f = @[total] |x| x + total; items.filter(|x| x > 0).map(f) }"
