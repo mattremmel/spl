@@ -210,3 +210,52 @@ source = """#[no_mangle] pub extern "C" fn exported(x: i32, y: i32): i32 { x + y
 [[case]]
 name = "extern_bare_fn_def_with_body"
 source = """extern fn callback(value: i32): i32 { value + 1 }"""
+
+# --- Negative tests: invalid items inside extern blocks ---
+
+[[case]]
+name = "extern_block_struct_invalid"
+source = """
+extern "C" {
+    struct Foo(x: i32)
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "extern_block_const_invalid"
+source = """
+extern "C" {
+    const X: i32 = 42
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "extern_block_type_invalid"
+source = """
+extern "C" {
+    type Foo = i32;
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "extern_block_impl_invalid"
+source = """
+extern "C" {
+    impl Foo {
+        fn bar() {}
+    }
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "extern_block_use_invalid"
+source = """
+extern "C" {
+    use std.io
+}
+"""
+expect_error = "expected"

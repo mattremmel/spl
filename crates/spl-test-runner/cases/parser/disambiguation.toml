@@ -73,3 +73,46 @@ fn f() {
     }
 }
 """
+
+# --- Negative tests: case-based disambiguation violations ---
+
+[[case]]
+name = "lowercase_type_arg_fails"
+source = "fn f() { let x: Vec(t: i32) = v }"
+expect_error = "expected"
+
+[[case]]
+name = "lowercase_named_value_arg_accepted"
+source = "fn f() { add(x: 1, y: 2) }"
+
+[[case]]
+name = "uppercase_type_arg_accepted"
+source = "fn f() { identity(T: i32, 42) }"
+
+[[case]]
+name = "lowercase_value_arg_no_type_syntax"
+source = "fn f() { foo(t: 42) }"
+
+[[case]]
+name = "mixed_case_args_in_call"
+source = "fn f() { convert(From: i32, to: 100) }"
+
+[[case]]
+name = "uppercase_ident_colon_is_type_arg"
+source = "fn f() { let x: Result(T: i32, E: String) = r }"
+
+[[case]]
+name = "lowercase_ident_colon_is_value_arg"
+source = "fn f() { Point(x: 1, y: 2) }"
+
+[[case]]
+name = "type_arg_shorthand_uppercase_only"
+source = "fn f() { Option(T).unwrap() }"
+
+[[case]]
+name = "multiple_type_args_uppercase"
+source = "fn f() { HashMap(K: String, V: i32).new() }"
+
+[[case]]
+name = "value_and_type_args_mixed"
+source = "fn f() { process(T: i32, value: 42, U: bool) }"

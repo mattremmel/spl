@@ -112,3 +112,30 @@ impl Foo {
     pub($) fn crate_public(&self) {}
 }
 """
+
+# --- Negative tests: invalid visibility syntax ---
+
+[[case]]
+name = "pub_invalid_scope_keyword"
+source = "pub(invalid) fn foo() {}"
+expect_error = "expected"
+
+[[case]]
+name = "pub_super_super_duplicate"
+source = "pub(super super) fn foo() {}"
+expect_error = "expected"
+
+[[case]]
+name = "double_pub_visibility"
+source = "pub pub fn foo() {}"
+expect_error = "expected"
+
+[[case]]
+name = "pub_dollar_missing_close_paren"
+source = "pub($ fn foo() {}"
+expect_error = "expected"
+
+[[case]]
+name = "pub_nested_parens"
+source = "pub((super)) fn foo() {}"
+expect_error = "expected"

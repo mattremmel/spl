@@ -130,3 +130,69 @@ expect_error = "expected"
 name = "where_before_throws"
 source = "fn f(): i32 where T throws Error {}"
 expect_error = "expected"
+
+# --- Invalid modifier combinations and ordering ---
+
+[[case]]
+name = "unsafe_const_fn_wrong_order"
+source = "unsafe const fn foo() {}"
+expect_error = "expected"
+
+[[case]]
+name = "gen_unsafe_fn_invalid"
+source = "gen unsafe fn foo(): i32 { yield 1 }"
+expect_error = "expected"
+
+[[case]]
+name = "gen_const_fn_invalid"
+source = "gen const fn foo(): i32 { yield 1 }"
+expect_error = "expected"
+
+[[case]]
+name = "unsafe_unsafe_fn_duplicate"
+source = "unsafe unsafe fn foo() {}"
+expect_error = "expected"
+
+[[case]]
+name = "const_const_fn_duplicate"
+source = "const const fn foo() {}"
+expect_error = "expected"
+
+[[case]]
+name = "extern_gen_fn_invalid"
+source = "extern gen fn foo(): i32 { yield 1 }"
+expect_error = "expected"
+
+# --- Where clause errors ---
+
+[[case]]
+name = "where_no_params"
+source = "fn f() where {}"
+expect_error = "expected"
+
+[[case]]
+name = "where_trailing_colon_no_bound"
+source = "fn f() where T: {}"
+expect_error = "expected"
+
+[[case]]
+name = "where_trailing_plus_no_bound"
+source = "fn f() where T: Clone + {}"
+expect_error = "expected"
+
+# --- Invalid use declaration paths ---
+
+[[case]]
+name = "use_leading_dot"
+source = "use .std.io"
+expect_error = "expected"
+
+[[case]]
+name = "use_double_dot"
+source = "use std..io"
+expect_error = "expected"
+
+[[case]]
+name = "use_trailing_dot"
+source = "use std.io."
+expect_error = "expected"

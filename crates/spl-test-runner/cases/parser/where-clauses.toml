@@ -84,3 +84,21 @@ source = "fn f(x: T) where T: Into(Target: String) + Clone {}"
 [[case]]
 name = "where_on_impl_multiple"
 source = "impl Pair where A: Clone + Debug, B: Clone + Debug {}"
+
+# Trailing comma in non-brace contexts (A4 fix verification)
+
+[[case]]
+name = "where_trailing_comma_struct"
+source = "struct Container(x: T) where T: Clone,"
+
+[[case]]
+name = "where_trailing_comma_enum"
+source = "enum Color { Red, Green } where T: Clone,"
+
+[[case]]
+name = "where_trailing_comma_multiple_params"
+source = "fn f(x: T, y: U) where T: Clone, U: Debug, {}"
+
+[[case]]
+name = "where_trailing_comma_struct_with_semicolon"
+source = "struct Wrapper(x: T) where T: Clone,;"

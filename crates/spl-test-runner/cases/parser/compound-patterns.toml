@@ -648,3 +648,36 @@ fn f() {
 [[case]]
 name = "pat_or_in_for_loop"
 source = "fn f() { for (1 | 2 | 3, b) in items {} }"
+
+# --- Negative tests: invalid pattern combinations ---
+
+[[case]]
+name = "pat_invalid_token_in_pattern"
+source = """
+fn f() {
+    let + = 1
+}
+"""
+expect_error = "expected"
+
+[[case]]
+name = "pat_enum_shorthand_missing_dot"
+source = """
+fn f() {
+    match opt {
+        Some(x) => x,
+        None => 0,
+    }
+}
+"""
+
+[[case]]
+name = "pat_empty_or"
+source = """
+fn f() {
+    match x {
+        | => 0,
+    }
+}
+"""
+expect_error = "expected"

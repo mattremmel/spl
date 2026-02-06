@@ -486,8 +486,8 @@ fn where_clause(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError
             break;
         }
 
-        // Allow trailing comma before block
-        if p.at(SyntaxKind::L_BRACE) {
+        // Allow trailing comma: break if next token can't start a type param
+        if !p.at(SyntaxKind::IDENT) {
             break;
         }
     }
