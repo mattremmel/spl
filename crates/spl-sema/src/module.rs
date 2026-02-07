@@ -25,6 +25,7 @@
 
 use lasso::Spur;
 use rustc_hash::FxHashMap;
+use tracing::{debug, trace};
 
 use super::symbol::DefId;
 
@@ -161,11 +162,14 @@ impl ModuleTree {
             .children
             .insert(name_spur, id);
 
+        debug!(parent = parent.0, child = id.0, name, "added child module");
+
         id
     }
 
     /// Add an item to a module.
     pub fn add_item(&mut self, module_id: ModuleId, name: &str, def_id: DefId) {
+        trace!(module_id = module_id.0, name, def_id = def_id.index(), "added item to module");
         let name_spur = self.interner.get_or_intern(name);
         self.modules[module_id.0 as usize]
             .items
@@ -174,6 +178,7 @@ impl ModuleTree {
 
     /// Add an export to a module.
     pub fn add_export(&mut self, module_id: ModuleId, name: &str, def_id: DefId) {
+        trace!(module_id = module_id.0, name, def_id = def_id.index(), "added export to module");
         let name_spur = self.interner.get_or_intern(name);
         self.modules[module_id.0 as usize]
             .exports
@@ -192,6 +197,8 @@ impl ModuleTree {
             let module = &self.modules[current.0 as usize];
             current = *module.children.get(&segment_spur)?;
         }
+
+        trace!(from = from.0, path = ?path, result = current.0, "resolved child path");
 
         Some(current)
     }
@@ -226,8 +233,12 @@ impl ModuleTree {
 
         // Resolve remaining segments as child path
         let string_segments: Vec<&str> = rest.to_vec();
-        self.resolve_child_path(start, &string_segments)
-            .ok_or(PathResolveError::ModuleNotFound)
+        let result = self.resolve_child_path(start, &string_segments)
+            .ok_or(PathResolveError::ModuleNotFound);
+
+        trace!(from = from.0, segments = ?segments, result = ?result, "resolved path");
+
+        result
     }
 
     /// Intern a string.

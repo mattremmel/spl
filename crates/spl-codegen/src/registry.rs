@@ -5,6 +5,7 @@
 use cranelift_codegen::ir::Signature;
 use cranelift_module::FuncId;
 use rustc_hash::FxHashMap;
+use tracing::{debug, trace};
 
 use spl_sema::symbol::DefId;
 
@@ -43,12 +44,17 @@ impl FunctionRegistry {
 
     /// Register a function.
     pub fn register(&mut self, def_id: DefId, info: FunctionInfo) {
+        debug!(def_id = ?def_id, func_id = ?info.func_id, "registered function");
         self.functions.insert(def_id, info);
     }
 
     /// Look up a function by its `DefId`.
     pub fn get(&self, def_id: DefId) -> Option<&FunctionInfo> {
-        self.functions.get(&def_id)
+        let result = self.functions.get(&def_id);
+        if result.is_none() {
+            trace!(def_id = ?def_id, "function lookup missed");
+        }
+        result
     }
 
     /// Check if a function is registered.

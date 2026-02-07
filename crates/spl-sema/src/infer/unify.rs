@@ -370,6 +370,7 @@ impl<'a> InferEngine<'a> {
             | (Type::RawPtr(m1, inner1), Type::RawPtr(m2, inner2)) => {
                 // m1 = expected mutability, m2 = actual mutability
                 // Allow if same, or if actual is mutable and expected is shared
+                trace!(expected = ?m1, actual = ?m2, "unifying reference mutability");
                 let mutability_ok =
                     m1 == m2 || (*m2 == Mutability::Mutable && *m1 == Mutability::Shared);
                 if !mutability_ok {
@@ -414,6 +415,7 @@ impl<'a> InferEngine<'a> {
 
             // Structs must have same DefId and unifiable type args
             (Type::Struct(def1, args1), Type::Struct(def2, args2)) => {
+                trace!(def1 = def1.index(), def2 = def2.index(), "unifying structs");
                 if def1 != def2 {
                     return Err(UnifyError::TypeMismatch {
                         expected: a,
@@ -716,11 +718,13 @@ impl<'a> InferEngine<'a> {
         match ty {
             Type::Infer(var, InferKind::Int) => {
                 if !self.substitution.contains_key(&var) {
+                    debug!(var = var.index(), default = "i32", "collected default for int variable");
                     defaults.push((var, self.types.i32()));
                 }
             }
             Type::Infer(var, InferKind::Float) => {
                 if !self.substitution.contains_key(&var) {
+                    debug!(var = var.index(), default = "f64", "collected default for float variable");
                     defaults.push((var, self.types.f64()));
                 }
             }

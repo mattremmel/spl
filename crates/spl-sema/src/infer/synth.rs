@@ -30,6 +30,7 @@ impl<'a> InferEngine<'a> {
     /// Check if an expression is a valid assignment target (a mutable place).
     /// Returns an error message if not assignable, None if OK.
     pub(super) fn check_assignable(&self, expr: &Expr) -> Option<String> {
+        trace!(expr_kind = ?expr.syntax().kind(), "checking assignability");
         match expr {
             Expr::Path(path_expr) => {
                 // Look up the path to get the DefId
@@ -140,6 +141,7 @@ impl<'a> InferEngine<'a> {
     /// Check if we can take a mutable borrow of an expression.
     /// Returns an error message if not borrowable as mutable, None if OK.
     pub(super) fn check_mutable_borrow(&self, expr: &Expr) -> Option<String> {
+        trace!(expr_kind = ?expr.syntax().kind(), "checking mutable borrow eligibility");
         match expr {
             Expr::Path(path_expr) => {
                 // Look up the path to get the DefId
@@ -866,6 +868,8 @@ impl<'a> InferEngine<'a> {
         call: &CallExpr,
         segments: &[spl_ast::PathSegment],
     ) -> TypeId {
+        let path_text = segments.iter().map(|s| s.syntax().text().to_string()).collect::<Vec<_>>().join(".");
+        debug!(path = %path_text, segment_count = segments.len(), "synthesizing qualified path call");
         // Get the first segment
         let first_segment = &segments[0];
         let Some(first_name_ref) = first_segment.name() else {
@@ -980,6 +984,10 @@ impl<'a> InferEngine<'a> {
         segments: &[spl_ast::PathSegment],
         initial_module_def_id: crate::symbol::DefId,
     ) -> TypeId {
+        let func_name = segments.last().and_then(spl_ast::PathSegment::name).and_then(|n| n.token()).map(|t| t.text().to_string()).unwrap_or_default();
+        let module_symbol = self.resolve_ctx.get_symbol(initial_module_def_id);
+        let module_name = self.resolve_ctx.resolve(module_symbol.name);
+        debug!(module = %module_name, function = %func_name, "synthesizing module-qualified call");
         // Navigate through nested modules until we reach the final item
         let mut current_module_def_id = initial_module_def_id;
 
@@ -2155,6 +2163,8 @@ impl<'a> InferEngine<'a> {
 
     /// Handle call where callee is a path (function call or struct instantiation)
     fn synth_call_path(&mut self, call: &CallExpr, path_expr: &PathExpr) -> TypeId {
+        let path_text = path_expr.syntax().text().to_string();
+        debug!(path = %path_text, "synthesizing path call");
         let Some(path) = path_expr.path() else {
             return self.types.error();
         };
@@ -2319,6 +2329,9 @@ impl<'a> InferEngine<'a> {
         module_def_id: crate::DefId,
         method_name: &str,
     ) -> TypeId {
+        let module_symbol = self.resolve_ctx.get_symbol(module_def_id);
+        let module_name = self.resolve_ctx.resolve(module_symbol.name);
+        debug!(module = %module_name, function = %method_name, "synthesizing module function call");
         // Look up the method name in the module's scope
         if let Some(&scope_id) = self.module_scopes.get(&module_def_id) {
             let Some(interned) = self.resolve_ctx.try_get_interned(method_name) else {
@@ -2376,6 +2389,7 @@ impl<'a> InferEngine<'a> {
         receiver_ty: TypeId,
         method_name: &str,
     ) -> TypeId {
+        debug!(method = %method_name, receiver_type_id = receiver_ty.index(), "synthesizing struct method call");
         let resolved = self.resolve_type(receiver_ty);
         let receiver_type = self.types.get(resolved).clone();
 
@@ -2453,6 +2467,7 @@ impl<'a> InferEngine<'a> {
 
     /// Handle call with an arbitrary expression as callee (e.g., `(get_fn())(args)`)
     fn synth_call_arbitrary(&mut self, call: &CallExpr, callee: &Expr) -> TypeId {
+        debug!(callee_kind = ?callee.syntax().kind(), "synthesizing arbitrary callee call");
         let callee_ty = self.synth_expr(callee);
         let resolved = self.resolve_type(callee_ty);
         let callee_type = self.types.get(resolved).clone();
@@ -2477,6 +2492,7 @@ impl<'a> InferEngine<'a> {
         ret_ty: TypeId,
     ) -> TypeId {
         let args: Vec<_> = call.args().collect();
+        trace!(expected = param_types.len(), actual = args.len(), "checking call arguments");
 
         if args.len() != param_types.len() {
             let span = text_range_to_span(call.syntax().text_range());
@@ -3475,6 +3491,9 @@ impl<'a> InferEngine<'a> {
 
     /// Infer types for a let statement. Returns true if the initializer diverges.
     pub(super) fn infer_let_stmt(&mut self, let_stmt: &LetStmt) -> bool {
+        let binding_name = let_stmt.pat().map(|p| p.syntax().text().to_string()).unwrap_or_default();
+        let has_annotation = let_stmt.ty().is_some();
+        trace!(binding = %binding_name, has_annotation, "inferring let statement");
         // Get the type annotation if present
         let annotation_ty = let_stmt.ty().map(|ty| self.ast_type_to_type_id(&ty));
 
@@ -3510,6 +3529,7 @@ impl<'a> InferEngine<'a> {
     }
 
     pub(super) fn define_pattern(&mut self, pat: &Pat, ty: TypeId) {
+        trace!(pattern_kind = ?pat.syntax().kind(), type_id = ty.index(), "defining pattern binding");
         match pat {
             Pat::Ident(ident_pat) => {
                 // Get the DefId from the resolution
@@ -3588,8 +3608,10 @@ impl<'a> InferEngine<'a> {
     // =========================================================================
 
     pub(super) fn ast_type_to_type_id(&mut self, ty: &spl_ast::Type) -> TypeId {
+        let ast_text = ty.syntax().text().to_string();
         let span = text_range_to_span(ty.syntax().text_range());
         let type_id = self.ast_type_to_type_id_inner(ty);
+        trace!(ast_type = %ast_text, type_id = type_id.index(), "converted AST type to type id");
         self.results.type_annotation_types.insert(span, type_id);
         type_id
     }

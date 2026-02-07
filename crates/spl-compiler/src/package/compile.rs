@@ -5,6 +5,7 @@
 
 use super::{Package, SourceMap};
 use crate::{CompileResult, Diagnostic, Severity, hir, mir, sema};
+use tracing::{debug, info, info_span, warn};
 
 /// Maximum number of diagnostics to report before stopping.
 const MAX_DIAGNOSTICS: usize = 100;
@@ -52,6 +53,8 @@ fn attach_file_paths(diagnostics: &mut [Diagnostic], source_map: &SourceMap) {
 /// }
 /// ```
 pub fn compile_package(package: &Package) -> CompileResult {
+    let _span = info_span!("compile_package").entered();
+
     let mut diagnostics = Vec::new();
     let source_map = package.compilation_unit().source_map();
 
@@ -63,11 +66,14 @@ pub fn compile_package(package: &Package) -> CompileResult {
         .drain(..)
         .map(Diagnostic::from)
         .collect();
+    let resolve_diagnostic_count = resolve_diags.len();
     diagnostics.append(&mut resolve_diags);
     truncate_diagnostics_if_needed(&mut diagnostics);
+    debug!(diagnostic_count = resolve_diagnostic_count, "resolution complete");
 
     // Check for errors before type inference
     if has_errors(&diagnostics) {
+        warn!(diagnostic_count = diagnostics.len(), "early stop after resolution due to errors");
         attach_file_paths(&mut diagnostics, source_map);
         return CompileResult {
             bodies: None,
@@ -84,11 +90,14 @@ pub fn compile_package(package: &Package) -> CompileResult {
         .drain(..)
         .map(Diagnostic::from)
         .collect();
+    let infer_diagnostic_count = infer_diags.len();
     diagnostics.append(&mut infer_diags);
     truncate_diagnostics_if_needed(&mut diagnostics);
+    debug!(diagnostic_count = infer_diagnostic_count, "inference complete");
 
     // Check for errors before lowering
     if has_errors(&diagnostics) {
+        warn!(diagnostic_count = diagnostics.len(), "early stop after inference due to errors");
         attach_file_paths(&mut diagnostics, source_map);
         return CompileResult {
             bodies: None,
@@ -99,11 +108,16 @@ pub fn compile_package(package: &Package) -> CompileResult {
 
     // Phase 3: HIR lowering
     let hir_db = hir::lower::lower_package_to_hir(package, &infer_result);
+    debug!("HIR lowering complete");
 
     // Phase 4: MIR lowering
     let bodies = match mir::lower_hir_to_mir(&hir_db) {
-        Ok(bodies) => bodies,
+        Ok(bodies) => {
+            debug!(body_count = bodies.len(), "MIR lowering complete");
+            bodies
+        }
         Err(ice) => {
+            warn!("MIR lowering failed with ICE");
             diagnostics.push(Diagnostic::from(ice.to_diagnostic()));
             attach_file_paths(&mut diagnostics, source_map);
             return CompileResult {
@@ -119,6 +133,8 @@ pub fn compile_package(package: &Package) -> CompileResult {
 
     // Attach file paths to any remaining diagnostics (warnings)
     attach_file_paths(&mut diagnostics, source_map);
+
+    info!(body_count = bodies.len(), diagnostic_count = diagnostics.len(), "package compilation complete");
 
     CompileResult {
         bodies: Some(bodies),

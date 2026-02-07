@@ -30,6 +30,7 @@ use crate::parser::Parse;
 use crate::sema::infer::InferResult;
 use crate::sema::resolver::ResolveResult;
 use rowan::ast::AstNode;
+use tracing::{debug, debug_span, info, info_span, warn};
 
 /// Maximum number of diagnostics to report before stopping.
 const MAX_DIAGNOSTICS: usize = 100;
@@ -37,6 +38,11 @@ const MAX_DIAGNOSTICS: usize = 100;
 /// Truncate diagnostics if they exceed the maximum, adding a warning.
 fn truncate_diagnostics_if_needed(diagnostics: &mut Vec<Diagnostic>) {
     if diagnostics.len() > MAX_DIAGNOSTICS {
+        warn!(
+            diagnostic_count = diagnostics.len(),
+            max = MAX_DIAGNOSTICS,
+            "truncating diagnostics to limit"
+        );
         diagnostics.truncate(MAX_DIAGNOSTICS);
         diagnostics.push(Diagnostic::warning(format!(
             "error limit reached ({MAX_DIAGNOSTICS} errors), stopping"
@@ -179,8 +185,17 @@ impl<'src> CompileSession<'src> {
     ///
     /// This runs the full pipeline and returns the result.
     pub fn into_result(mut self) -> CompileResult {
+        let _span = info_span!("session_compile").entered();
+
         // Run full pipeline
         let _ = self.mir();
+
+        info!(
+            has_bodies = self.mir.is_some(),
+            diagnostic_count = self.diagnostics.len(),
+            has_errors = self.has_errors(),
+            "session compilation complete"
+        );
 
         // Extract types from HIR if available
         let types = self.hir.map(|db| db.types);
@@ -197,9 +212,12 @@ impl<'src> CompileSession<'src> {
     // ========================================================================
 
     fn run_parse(&mut self) {
+        let _span = debug_span!("run_parse", source_bytes = self.source.len()).entered();
+
         let parse = crate::parser::parse(self.source);
 
         // Convert parse errors to diagnostics
+        let error_count = parse.errors().len();
         for error in parse.errors() {
             self.diagnostics
                 .push(Diagnostic::error(&error.message).with_label(error.range.clone(), ""));
@@ -208,11 +226,16 @@ impl<'src> CompileSession<'src> {
 
         // Only cache if parsing succeeded
         if parse.ok() {
+            debug!(error_count = 0, "parse succeeded");
             self.parse = Some(parse);
+        } else {
+            debug!(error_count, "parse failed");
         }
     }
 
     fn run_ast(&mut self) {
+        let _span = debug_span!("run_ast").entered();
+
         // Ensure parse ran
         if self.parse.is_none() && !self.phase_attempted.parse {
             self.phase_attempted.parse = true;
@@ -226,14 +249,18 @@ impl<'src> CompileSession<'src> {
 
         // Cast to AST
         if let Some(source_file) = SourceFile::cast(parse.syntax()) {
+            debug!("AST cast succeeded");
             self.ast = Some(source_file);
         } else {
+            debug!("AST cast failed");
             self.diagnostics
                 .push(Diagnostic::error("failed to parse source file"));
         }
     }
 
     fn run_resolve(&mut self) {
+        let _span = debug_span!("run_resolve").entered();
+
         // Ensure AST is available
         if self.ast.is_none() && !self.phase_attempted.ast {
             self.phase_attempted.ast = true;
@@ -251,12 +278,17 @@ impl<'src> CompileSession<'src> {
             .drain(..)
             .map(crate::Diagnostic::from)
             .collect();
+        let diagnostic_count = resolve_diags.len();
         self.diagnostics.append(&mut resolve_diags);
         truncate_diagnostics_if_needed(&mut self.diagnostics);
+
+        debug!(diagnostic_count, "resolution complete");
         self.resolve = Some(result);
     }
 
     fn run_infer(&mut self) {
+        let _span = debug_span!("run_infer").entered();
+
         // Ensure resolve ran
         if self.resolve.is_none() && !self.phase_attempted.resolve {
             self.phase_attempted.resolve = true;
@@ -277,12 +309,17 @@ impl<'src> CompileSession<'src> {
             .drain(..)
             .map(crate::Diagnostic::from)
             .collect();
+        let diagnostic_count = infer_diags.len();
         self.diagnostics.append(&mut infer_diags);
         truncate_diagnostics_if_needed(&mut self.diagnostics);
+
+        debug!(diagnostic_count, "inference complete");
         self.infer = Some(result);
     }
 
     fn run_hir(&mut self) {
+        let _span = debug_span!("run_hir").entered();
+
         // Ensure infer ran
         if self.infer.is_none() && !self.phase_attempted.infer {
             self.phase_attempted.infer = true;
@@ -291,6 +328,7 @@ impl<'src> CompileSession<'src> {
 
         // Check for errors - HIR lowering requires error-free input
         if self.has_errors() {
+            debug!("HIR lowering skipped due to prior errors");
             return;
         }
 
@@ -302,10 +340,13 @@ impl<'src> CompileSession<'src> {
         };
 
         let hir_db = crate::hir::lower::lower_to_hir(source_file, infer_result);
+        debug!("HIR lowering complete");
         self.hir = Some(hir_db);
     }
 
     fn run_mir(&mut self) {
+        let _span = debug_span!("run_mir").entered();
+
         // Ensure HIR ran
         if self.hir.is_none() && !self.phase_attempted.hir {
             self.phase_attempted.hir = true;
@@ -317,8 +358,12 @@ impl<'src> CompileSession<'src> {
         };
 
         match crate::mir::lower_hir_to_mir(hir_db) {
-            Ok(bodies) => self.mir = Some(bodies),
+            Ok(bodies) => {
+                debug!(body_count = bodies.len(), "MIR lowering complete");
+                self.mir = Some(bodies);
+            }
             Err(ice) => {
+                debug!("MIR lowering failed with ICE");
                 self.diagnostics
                     .push(crate::Diagnostic::from(ice.to_diagnostic()));
             }

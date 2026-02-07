@@ -8,6 +8,7 @@
 use cranelift_codegen::ir::StackSlot;
 use cranelift_frontend::Variable;
 use rustc_hash::FxHashMap;
+use tracing::trace;
 
 use spl_mir::Local;
 
@@ -50,17 +51,20 @@ impl LocalMap {
         let var = Variable::from_u32(self.next_variable);
         self.next_variable += 1;
         self.storage.insert(local, LocalStorage::Variable(var));
+        trace!(local_index = local.index(), variable_index = var.as_u32(), "allocated variable for local");
         var
     }
 
     /// Set a local to use a stack slot.
     pub fn set_stack_slot(&mut self, local: Local, slot: StackSlot) {
         self.storage.insert(local, LocalStorage::StackSlot(slot));
+        trace!(local_index = local.index(), slot = ?slot, "assigned stack slot to local");
     }
 
     /// Mark a local as a ZST (no storage needed).
     pub fn set_zst(&mut self, local: Local) {
         self.storage.insert(local, LocalStorage::Zst);
+        trace!(local_index = local.index(), "marked local as zero-sized");
     }
 
     /// Get the storage location for a local.
@@ -72,8 +76,10 @@ impl LocalMap {
 
     /// Clear all mappings (for reuse between functions).
     pub fn clear(&mut self) {
+        let previous_count = self.storage.len();
         self.storage.clear();
         self.next_variable = 0;
+        trace!(previous_count, "cleared local map");
     }
 
     /// Returns the number of locals currently mapped.

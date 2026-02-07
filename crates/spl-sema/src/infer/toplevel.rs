@@ -7,7 +7,7 @@ use rustc_hash::FxHashSet;
 use spl_ast::{Expr, ExternFn, FunctionDef, Item, SourceFile, WhereClause};
 use spl_diagnostic::Diagnostic;
 
-use tracing::{debug, debug_span};
+use tracing::{debug, debug_span, trace};
 
 use super::engine::{FnSignature, InferEngine, LoopKind, ParamInfo};
 use super::helpers::text_range_to_span;
@@ -413,6 +413,7 @@ impl<'a> InferEngine<'a> {
     fn check_recursive_types(&mut self) {
         // Build a dependency graph: struct -> structs it directly contains (not via reference)
         let struct_ids: Vec<DefId> = self.defs.struct_fields.keys().copied().collect();
+        debug!(type_count = struct_ids.len(), "checking for recursive types");
 
         for &struct_id in &struct_ids {
             // Check if this struct is part of a cycle using DFS
@@ -441,6 +442,7 @@ impl<'a> InferEngine<'a> {
         in_progress: &mut FxHashSet<DefId>,
         path: &mut Vec<DefId>,
     ) -> bool {
+        trace!(struct_def_id = struct_id.index(), "checking struct for recursive type");
         if in_progress.contains(&struct_id) {
             // Found a cycle
             return true;
@@ -525,6 +527,7 @@ impl<'a> InferEngine<'a> {
     /// Check for cyclic type alias definitions.
     fn check_type_alias_cycles(&mut self) {
         let alias_ids: Vec<DefId> = self.defs.type_alias_targets.keys().copied().collect();
+        debug!(alias_count = alias_ids.len(), "checking for type alias cycles");
         let mut cyclic_aliases = Vec::new();
 
         for &alias_id in &alias_ids {
@@ -556,6 +559,7 @@ impl<'a> InferEngine<'a> {
         visited: &mut FxHashSet<DefId>,
         in_progress: &mut FxHashSet<DefId>,
     ) -> bool {
+        trace!(alias_def_id = alias_id.index(), "checking alias for cycle");
         if in_progress.contains(&alias_id) {
             return true;
         }
@@ -696,6 +700,7 @@ impl<'a> InferEngine<'a> {
         where_clause: &WhereClause,
         type_params: &mut Vec<DefId>,
     ) {
+        let initial_count = type_params.len();
         for param in where_clause.type_params() {
             if let Some(name) = param.name()
                 && let Some(token) = name.ident_token()
@@ -706,6 +711,7 @@ impl<'a> InferEngine<'a> {
                 }
             }
         }
+        trace!(param_count = type_params.len() - initial_count, "collected type params from where clause");
     }
 
     /// Collect signatures for all methods in an impl block (public for multi-file inference).

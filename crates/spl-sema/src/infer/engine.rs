@@ -42,7 +42,7 @@ use crate::types::{Mutability, PrimitiveKind, TypeId, TypeInterner, TypeVar};
 use rustc_hash::FxHashMap;
 use spl_diagnostic::Diagnostic;
 use spl_lexer::Span;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use super::{InferResult, SelfParam};
 
@@ -283,6 +283,11 @@ impl<'a> InferEngine<'a> {
         self.methods
             .intrinsic_methods
             .insert(len_def_id, IntrinsicKind::FieldAccess(1));
+
+        debug!(
+            method_count = self.methods.builtin_method_names.len(),
+            "registered builtin primitive methods"
+        );
     }
 
     /// Create a builtin method with a synthetic `DefId` and register its signature.
@@ -371,17 +376,23 @@ impl<'a> InferEngine<'a> {
 
     /// Create a fresh type variable.
     pub(super) fn fresh_type_var(&mut self) -> TypeId {
-        self.types.fresh_type_var()
+        let id = self.types.fresh_type_var();
+        trace!(type_id = id.index(), "engine created fresh type var");
+        id
     }
 
     /// Create a fresh integer type variable (defaults to i32 if unconstrained).
     pub(super) fn fresh_int_var(&mut self) -> TypeId {
-        self.types.fresh_int_var()
+        let id = self.types.fresh_int_var();
+        trace!(type_id = id.index(), "engine created fresh int var");
+        id
     }
 
     /// Create a fresh float type variable (defaults to f64 if unconstrained).
     pub(super) fn fresh_float_var(&mut self) -> TypeId {
-        self.types.fresh_float_var()
+        let id = self.types.fresh_float_var();
+        trace!(type_id = id.index(), "engine created fresh float var");
+        id
     }
 
     // =========================================================================

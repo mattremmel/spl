@@ -18,6 +18,7 @@
 
 use rustc_hash::FxHashMap;
 use std::collections::HashMap;
+use tracing::trace;
 
 use super::symbol::DefId;
 
@@ -409,6 +410,7 @@ impl TypeInterner {
         );
 
         let id = TypeId(self.types.len() as u32);
+        trace!(type_id = id.0, ty = %ty, "interned new type");
         self.types.push(ty.clone());
         self.type_to_id.insert(ty, id);
         id
@@ -434,6 +436,7 @@ impl TypeInterner {
             "precondition: type variable ID overflow"
         );
         let var = TypeVar(self.next_type_var);
+        trace!(var_index = self.next_type_var, kind = "general", "created fresh type variable");
         self.next_type_var += 1;
         self.intern(Type::Infer(var, InferKind::General))
     }
@@ -445,6 +448,7 @@ impl TypeInterner {
             "precondition: type variable ID overflow"
         );
         let var = TypeVar(self.next_type_var);
+        trace!(var_index = self.next_type_var, kind = "int", "created fresh type variable");
         self.next_type_var += 1;
         self.intern(Type::Infer(var, InferKind::Int))
     }
@@ -456,6 +460,7 @@ impl TypeInterner {
             "precondition: type variable ID overflow"
         );
         let var = TypeVar(self.next_type_var);
+        trace!(var_index = self.next_type_var, kind = "float", "created fresh type variable");
         self.next_type_var += 1;
         self.intern(Type::Infer(var, InferKind::Float))
     }
@@ -524,6 +529,7 @@ impl TypeInterner {
     /// This should be called during HIR lowering when processing struct definitions.
     /// The field types are stored in declaration order and used by codegen for layout computation.
     pub fn register_struct_fields(&mut self, def_id: DefId, field_types: Vec<TypeId>) {
+        trace!(def_id = def_id.index(), field_count = field_types.len(), "registered struct fields");
         self.struct_field_types.insert(def_id, field_types);
     }
 

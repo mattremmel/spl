@@ -14,6 +14,7 @@
 //! These are embedded at compile time using `include_dir!`.
 
 use include_dir::{Dir, include_dir};
+use tracing::{debug, info_span};
 
 use crate::Diagnostic;
 use crate::mir::Body;
@@ -51,14 +52,22 @@ impl StdlibDefs {
     /// assert!(stdlib.is_ok());
     /// ```
     pub fn compile() -> Result<Self, Vec<Diagnostic>> {
+        let _span = info_span!("compile_stdlib").entered();
+
         let mut all_source = String::new();
 
         // Collect all .spl files from the embedded stdlib
         collect_spl_files(&STDLIB_DIR, &mut all_source);
+        debug!(
+            file_count = STDLIB_DIR.files().count(),
+            source_bytes = all_source.len(),
+            "stdlib files collected"
+        );
 
         // If there's no actual code, return empty bodies
         // (prelude is currently just comments)
         if all_source.trim().is_empty() || !all_source.contains("fn ") {
+            debug!("no compilable stdlib source, returning empty bodies");
             return Ok(StdlibDefs { bodies: Vec::new() });
         }
 
@@ -66,8 +75,15 @@ impl StdlibDefs {
         let result = crate::compile(&all_source);
 
         if result.is_err() {
+            debug!(
+                diagnostic_count = result.diagnostics.len(),
+                "stdlib compilation failed"
+            );
             return Err(result.diagnostics);
         }
+
+        let body_count = result.bodies.as_ref().map_or(0, Vec::len);
+        debug!(body_count, "stdlib compilation succeeded");
 
         Ok(StdlibDefs {
             bodies: result.bodies.unwrap_or_default(),

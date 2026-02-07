@@ -10,6 +10,8 @@ use cranelift_codegen::settings::{self, Configurable, Flags};
 use cranelift_native;
 use target_lexicon::Triple;
 
+use tracing::{debug, info};
+
 use super::error::CodegenError;
 
 /// Target configuration for code generation.
@@ -51,6 +53,9 @@ impl TargetConfig {
             .map_err(|e| CodegenError::IsaConfiguration(e.to_string()))?;
 
         let triple = isa.triple().clone();
+        let pointer_type = isa.pointer_type();
+
+        info!(%triple, ?pointer_type, "configured native JIT target");
 
         Ok(Self { isa, flags, triple })
     }
@@ -72,6 +77,8 @@ impl TargetConfig {
             .map_err(|e| CodegenError::UnsupportedTarget(e.to_string()))?
             .finish(flags.clone())
             .map_err(|e| CodegenError::IsaConfiguration(e.to_string()))?;
+
+        debug!(%triple, "configured JIT target");
 
         Ok(Self { isa, flags, triple })
     }
@@ -101,6 +108,8 @@ impl TargetConfig {
 
         let triple = isa.triple().clone();
 
+        info!(%triple, "configured native AOT target");
+
         Ok(Self { isa, flags, triple })
     }
 
@@ -126,6 +135,8 @@ impl TargetConfig {
             .map_err(|e| CodegenError::UnsupportedTarget(e.to_string()))?
             .finish(flags.clone())
             .map_err(|e| CodegenError::IsaConfiguration(e.to_string()))?;
+
+        debug!(%triple, "configured AOT target");
 
         Ok(Self { isa, flags, triple })
     }
