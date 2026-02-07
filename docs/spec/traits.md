@@ -143,7 +143,7 @@ impl ToString for T where T: Display {
     }
 }
 
-// Implement Into<U> for anything that implements From<T>
+// Implement Into(T: U) for anything that implements From(T: T)
 impl Into(T: U) for T where T, U: From(T: T) {
     fn into(self): U {
         return U.from(self);

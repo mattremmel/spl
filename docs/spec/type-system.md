@@ -711,6 +711,9 @@ fn convert(input: T): U where T: Into(Target: U), U {
     return input.into();
 }
 
+// Note: The `From` trait is used by the `!` (try) operator for automatic
+// error conversion. See error-handling.md sections 6-7 for details.
+
 // Bounds on struct type parameters
 struct SortedVec(items: Vec(T: T)) where T: Ord
 

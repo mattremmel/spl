@@ -639,6 +639,25 @@ fn process_file(path: &str): Config throws ConfigError {
 }
 ```
 
+### Closures and `throw`
+
+In closures, `throw` desugars to `return Err(expr)` from the **closure body**, not the enclosing function. This matches the behavior of `!` in closures (section 8). A closure that uses `throw` must have a `Result` return type:
+
+```spl
+fn validate_all(items: Vec(T: Item)): Result(T: Vec(T: Item), E: Error) {
+    // throw inside the closure returns Err from the closure, not from validate_all
+    let validated = items.iter()
+        .map(|item| {
+            if !item.is_valid() {
+                throw ValidationError.Invalid(item.id);  // returns Err from closure
+            }
+            return item.clone();
+        })
+        .collect()!;  // ! propagates the Err to validate_all
+    return Ok(validated);
+}
+```
+
 ---
 
 ## 14. Error Type Conversion with `throws`

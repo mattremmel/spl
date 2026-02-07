@@ -105,6 +105,7 @@ AttrArg = IDENTIFIER [ "=" Expression ]  (* key or key = value *)
 | `#[cfg(target_os = "linux")]` | Any item | Conditional compilation |
 | `#[no_mangle]` | Functions | Preserve symbol name for FFI |
 | `#[inline]` | Functions | Hint to inline |
+| `#[scoped]` | Structs | Marks a type as scoped (can hold references, restricted to non-escaping contexts) |
 | `#![name("...")]` | Module file | Module configuration |
 
 ### Const and Static Definitions
@@ -897,7 +898,7 @@ TypeArg = UPPER_IDENT [ ":" Type ] ;   (* T: i32 or T (shorthand for T: T) *)
 | `Result(T, E: Error)` | Mixed shorthand and explicit |
 | `i32?`              | Optional type (sugar for `Option(T: i32)`) |
 | `String?`           | Optional String                    |
-| `&T?`               | Reference to optional (rare)       |
+| `&T?`               | Optional reference = `(&T)?` = `Option(T: &T)` (rare) |
 
 ### Named Tuples
 

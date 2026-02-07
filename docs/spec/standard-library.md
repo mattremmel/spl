@@ -1,8 +1,6 @@
 # Standard Library
 
-This document provides an overview of SPL's standard library organization and core types.
-
-> **Status:** Skeleton with TODOs. This document outlines the planned standard library structure. Detailed specifications for each module are pending.
+This document specifies SPL's standard library organization and core types.
 
 ## Overview
 
@@ -64,58 +62,335 @@ ControlFlow             // Control flow enum
 
 ### 2.1 Option
 
+Represents an optional value — either `Some(T)` containing a value, or `None` representing absence.
+
 ```spl
 enum Option{ Some(T), None } where T
+```
 
+#### Core Methods
+
+```spl
 impl Option(T: T) where T {
-    fn is_some(&self): bool;
-    fn is_none(&self): bool;
-    fn unwrap(self): T;
-    fn unwrap_or(self, default: T): T;
-    fn unwrap_or_else(self, f: fn(): T): T;
-    fn map(self, f: fn(T): U): Option(T: U) where U;
-    fn and_then(self, f: fn(T): Option(T: U)): Option(T: U) where U;
-    fn or(self, other: Option(T: T)): Option(T: T);
-    fn or_else(self, f: fn(): Option(T: T)): Option(T: T);
-    fn ok_or(self, err: E): Result(T: T, E: E) where E;
-    fn ok_or_else(self, f: fn(): E): Result(T: T, E: E) where E;
-    fn as_ref(&self): Option(T: &T);
-    fn as_mut(&mut self): Option(T: &mut T);
-    fn take(&mut self): Option(T: T);
-    fn replace(&mut self, value: T): Option(T: T);
-    fn filter(self, predicate: fn(&T): bool): Option(T: T);
-    fn flatten(self): Option(T: T) where T: Option(T: U), U;
-    fn zip(self, other: Option(T: U)): Option(T: (T, U)) where U;
+    /// Panics if None. Prefer `unwrap_or`, `unwrap_or_else`, or pattern matching.
+    fn unwrap(self): T {
+        match self {
+            Some(v) => v,
+            None => panic("called unwrap() on None"),
+        }
+    }
+
+    /// Returns the contained value or a default.
+    fn unwrap_or(self, default: T): T {
+        match self {
+            Some(v) => v,
+            None => default,
+        }
+    }
+
+    /// Returns the contained value or computes it from a closure.
+    fn unwrap_or_else(self, f: fn(): T): T {
+        match self {
+            Some(v) => v,
+            None => f(),
+        }
+    }
+
+    /// Panics with a custom message if None.
+    fn expect(self, msg: &str): T {
+        match self {
+            Some(v) => v,
+            None => panic(msg),
+        }
+    }
 }
 ```
 
-**TODO:** Document Option in detail with examples
+#### Query Methods
+
+```spl
+impl Option(T: T) where T {
+    fn is_some(&self): bool {
+        match self { Some(_) => true, None => false }
+    }
+
+    fn is_none(&self): bool {
+        return !self.is_some();
+    }
+}
+```
+
+#### Transform Methods
+
+```spl
+impl Option(T: T) where T {
+    /// Maps an `Option(T)` to `Option(U)` by applying `f` to the contained value.
+    fn map(self, f: fn(T): U): Option(T: U) where U {
+        match self {
+            Some(v) => Some(f(v)),
+            None => None,
+        }
+    }
+
+    /// Returns None if self is None, otherwise calls `f` with the value and returns the result.
+    fn and_then(self, f: fn(T): Option(T: U)): Option(T: U) where U {
+        match self {
+            Some(v) => f(v),
+            None => None,
+        }
+    }
+
+    /// Returns None if self is None, otherwise returns `other`.
+    fn and(self, other: Option(T: U)): Option(T: U) where U {
+        match self {
+            Some(_) => other,
+            None => None,
+        }
+    }
+
+    /// Returns self if it contains a value, otherwise returns `other`.
+    fn or(self, other: Option(T: T)): Option(T: T) {
+        match self {
+            Some(v) => Some(v),
+            None => other,
+        }
+    }
+
+    /// Returns self if it contains a value, otherwise calls `f` and returns the result.
+    fn or_else(self, f: fn(): Option(T: T)): Option(T: T) {
+        match self {
+            Some(v) => Some(v),
+            None => f(),
+        }
+    }
+
+    /// Returns None if the option is None, otherwise calls `predicate` and
+    /// returns Some(v) if the predicate returns true, else None.
+    fn filter(self, predicate: fn(&T): bool): Option(T: T) {
+        match self {
+            Some(v) if predicate(&v) => Some(v),
+            _ => None,
+        }
+    }
+
+}
+
+impl Option(T: Option(T: U)) where U {
+    /// Converts `Option(T: Option(T: U))` to `Option(T: U)`.
+    fn flatten(self): Option(T: U) {
+        match self {
+            Some(inner) => inner,
+            None => None,
+        }
+    }
+}
+```
+
+#### Conversion Methods
+
+```spl
+impl Option(T: T) where T {
+    /// Converts Option to Result with an explicit error value.
+    fn ok_or(self, err: E): Result(T: T, E: E) where E {
+        match self {
+            Some(v) => Ok(v),
+            None => Err(err),
+        }
+    }
+
+    /// Converts Option to Result with a lazy error value.
+    fn ok_or_else(self, f: fn(): E): Result(T: T, E: E) where E {
+        match self {
+            Some(v) => Ok(v),
+            None => Err(f()),
+        }
+    }
+
+    /// Converts &Option(T) to Option(&T).
+    fn as_ref(&self): Option(T: &T) {
+        match self {
+            Some(v) => Some(v),
+            None => None,
+        }
+    }
+
+    /// Converts &mut Option(T) to Option(&mut T).
+    fn as_mut(&mut self): Option(T: &mut T) {
+        match self {
+            Some(v) => Some(v),
+            None => None,
+        }
+    }
+
+    /// Takes the value out, leaving None in its place.
+    fn take(&mut self): Option(T: T);
+
+    /// Replaces the value with Some(value), returning the old value.
+    fn replace(&mut self, value: T): Option(T: T);
+
+    /// Zips self with another Option.
+    fn zip(self, other: Option(T: U)): Option(T: (T, U)) where U {
+        match (self, other) {
+            (Some(a), Some(b)) => Some((a, b)),
+            _ => None,
+        }
+    }
+}
+```
+
+#### Optional Chaining (`?.`)
+
+The `?.` operator provides safe navigation through optional values. See [error-handling.md](error-handling.md) section 3 for full details.
+
+```spl
+// user?.email desugars to:
+match user {
+    Some(u) => Some(u.email),
+    None => None,
+}
+```
 
 ### 2.2 Result
 
+Represents the outcome of an operation that may fail — either `Ok(T)` on success, or `Err(E)` on failure.
+
 ```spl
 enum Result{ Ok(T), Err(E) } where T, E
+```
 
+#### Core Methods
+
+```spl
 impl Result(T: T, E: E) where T, E {
-    fn is_ok(&self): bool;
-    fn is_err(&self): bool;
-    fn unwrap(self): T;
-    fn unwrap_err(self): E;
-    fn unwrap_or(self, default: T): T;
-    fn unwrap_or_else(self, f: fn(E): T): T;
-    fn map(self, f: fn(T): U): Result(T: U, E: E) where U;
-    fn map_err(self, f: fn(E): F): Result(T: T, E: F) where F;
-    fn and_then(self, f: fn(T): Result(T: U, E: E)): Result(T: U, E: E) where U;
-    fn or(self, other: Result(T: T, E: F)): Result(T: T, E: F) where F;
-    fn or_else(self, f: fn(E): Result(T: T, E: F)): Result(T: T, E: F) where F;
-    fn ok(self): Option(T: T);
-    fn err(self): Option(T: E);
+    /// Returns the success value. Panics if Err.
+    fn unwrap(self): T {
+        match self {
+            Ok(v) => v,
+            Err(e) => panic("called unwrap() on Err"),
+        }
+    }
+
+    /// Returns the error value. Panics if Ok.
+    fn unwrap_err(self): E {
+        match self {
+            Ok(_) => panic("called unwrap_err() on Ok"),
+            Err(e) => e,
+        }
+    }
+
+    /// Returns the success value or a default.
+    fn unwrap_or(self, default: T): T {
+        match self { Ok(v) => v, Err(_) => default }
+    }
+
+    /// Returns the success value or computes it from the error.
+    fn unwrap_or_else(self, f: fn(E): T): T {
+        match self { Ok(v) => v, Err(e) => f(e) }
+    }
+
+    /// Panics with a custom message if Err.
+    fn expect(self, msg: &str): T {
+        match self {
+            Ok(v) => v,
+            Err(_) => panic(msg),
+        }
+    }
+
+    /// Panics with a custom message if Ok.
+    fn expect_err(self, msg: &str): E {
+        match self {
+            Ok(_) => panic(msg),
+            Err(e) => e,
+        }
+    }
+}
+```
+
+#### Query Methods
+
+```spl
+impl Result(T: T, E: E) where T, E {
+    fn is_ok(&self): bool {
+        match self { Ok(_) => true, Err(_) => false }
+    }
+
+    fn is_err(&self): bool {
+        return !self.is_ok();
+    }
+}
+```
+
+#### Transform Methods
+
+```spl
+impl Result(T: T, E: E) where T, E {
+    /// Maps the Ok value, leaving Err untouched.
+    fn map(self, f: fn(T): U): Result(T: U, E: E) where U {
+        match self {
+            Ok(v) => Ok(f(v)),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Maps the Err value, leaving Ok untouched.
+    fn map_err(self, f: fn(E): F): Result(T: T, E: F) where F {
+        match self {
+            Ok(v) => Ok(v),
+            Err(e) => Err(f(e)),
+        }
+    }
+
+    /// Chains a fallible operation on the Ok value.
+    fn and_then(self, f: fn(T): Result(T: U, E: E)): Result(T: U, E: E) where U {
+        match self {
+            Ok(v) => f(v),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Returns self if Ok, otherwise calls `f` with the error.
+    fn or_else(self, f: fn(E): Result(T: T, E: F)): Result(T: T, E: F) where F {
+        match self {
+            Ok(v) => Ok(v),
+            Err(e) => f(e),
+        }
+    }
+}
+```
+
+#### Conversion Methods
+
+```spl
+impl Result(T: T, E: E) where T, E {
+    /// Converts to Option(T), discarding the error.
+    fn ok(self): Option(T: T) {
+        match self { Ok(v) => Some(v), Err(_) => None }
+    }
+
+    /// Converts to Option(E), discarding the success value.
+    fn err(self): Option(T: E) {
+        match self { Ok(_) => None, Err(e) => Some(e) }
+    }
+
+    /// Converts &Result(T, E) to Result(&T, &E).
     fn as_ref(&self): Result(T: &T, E: &E);
+
+    /// Converts &mut Result(T, E) to Result(&mut T, &mut E).
     fn as_mut(&mut self): Result(T: &mut T, E: &mut E);
 }
 ```
 
-**TODO:** Document Result in detail with examples
+#### Try Operator (`!`)
+
+The `!` postfix operator provides concise error propagation. See [error-handling.md](error-handling.md) section 2 for full details and the `Try`/`FromResidual` traits.
+
+```spl
+// value! desugars to:
+match Try.branch(value) {
+    Continue(v) => v,
+    Break(r) => return FromResidual.from_residual(r),
+}
+```
 
 ### 2.3 String
 
@@ -153,8 +428,6 @@ impl String {
 }
 ```
 
-**TODO:** Document String in detail with examples
-
 ### 2.4 Vec
 
 ```spl
@@ -191,8 +464,6 @@ impl Vec(T: T) where T {
 }
 ```
 
-**TODO:** Document Vec in detail with examples
-
 ### 2.5 Box
 
 ```spl
@@ -204,13 +475,9 @@ impl Box(T: T) where T {
 }
 ```
 
-**TODO:** Document Box in detail with examples
-
 ---
 
 ## 3. Collections
-
-**TODO:** Specify each collection type
 
 ### 3.1 HashMap
 
@@ -258,8 +525,6 @@ struct BinaryHeap(T) where T: Ord { /* ... */ }
 
 ## 4. I/O
 
-**TODO:** Specify I/O traits and types
-
 ### 4.1 Traits
 
 ```spl
@@ -296,8 +561,6 @@ struct BufWriter(W) where W: Write { /* ... */ }
 
 ## 5. Filesystem
 
-**TODO:** Specify filesystem types and functions
-
 ```spl
 // std.fs
 
@@ -325,8 +588,6 @@ struct DirEntry { /* ... */ }
 
 ## 6. Networking
 
-**TODO:** Specify networking types
-
 ```spl
 // std.net
 
@@ -342,8 +603,6 @@ struct Ipv6Addr { /* ... */ }
 ---
 
 ## 7. Time
-
-**TODO:** Specify time types
 
 ```spl
 // std.time
@@ -373,8 +632,6 @@ impl Instant {
 
 ## 8. Formatting
 
-**TODO:** Specify formatting traits and macros
-
 ```spl
 // std.fmt
 
@@ -386,58 +643,157 @@ trait Display {
     fn fmt(&self, f: &mut Formatter): Result(T: (), E: Error);
 }
 
-// Macros
-format!("{}", value)      // Returns String
-print!("{}", value)       // Print to stdout
-println!("{}", value)     // Print line to stdout
-eprint!("{}", value)      // Print to stderr
-eprintln!("{}", value)    // Print line to stderr
+// Functions (not macros — SPL macros look like regular function calls)
+format("{}", value)      // Returns String
+print("{}", value)       // Print to stdout
+println("{}", value)     // Print line to stdout
+eprint("{}", value)      // Print to stderr
+eprintln("{}", value)    // Print line to stderr
 ```
 
 ---
 
-## 9. Iterator Utilities
+## 9. Iterator Traits
 
-**TODO:** Specify iterator adapters
+The `Iterator` trait provides sequential value iteration. It yields owned values via `next()`. See [iteration.md](iteration.md) for the full iteration model including `IndexIterator` and `RefIterator`.
+
+### 9.1 Iterator
 
 ```spl
-// std.iter
-
 trait Iterator {
     type Item;
-    fn next(&mut self): Option(T: Self.Item);
 
-    // Adapters (provided)
+    /// Returns the next element, or None if exhausted.
+    fn next(&mut self): Self.Item?;
+}
+```
+
+### 9.2 Provided Adapter Methods
+
+Adapters are lazy — they build a pipeline that executes only when a consumer is called.
+
+```spl
+impl Iterator {
+    /// Transforms each element.
     fn map(self, f: fn(Self.Item): U): impl Iterator(Item: U) where U;
-    fn filter(self, predicate: fn(&Self.Item): bool): impl Iterator(Item: Self.Item);
-    fn filter_map(self, f: fn(Self.Item): Option(T: U)): impl Iterator(Item: U) where U;
-    fn flat_map(self, f: fn(Self.Item): impl IntoIterator(Item: U)): impl Iterator(Item: U) where U;
-    fn flatten(self): impl Iterator(Item: U) where Self.Item: IntoIterator(Item: U), U;
-    fn take(self, n: usize): impl Iterator(Item: Self.Item);
-    fn skip(self, n: usize): impl Iterator(Item: Self.Item);
-    fn take_while(self, predicate: fn(&Self.Item): bool): impl Iterator(Item: Self.Item);
-    fn skip_while(self, predicate: fn(&Self.Item): bool): impl Iterator(Item: Self.Item);
-    fn chain(self, other: impl IntoIterator(Item: Self.Item)): impl Iterator(Item: Self.Item);
-    fn zip(self, other: impl IntoIterator(Item: U)): impl Iterator(Item: (Self.Item, U)) where U;
-    fn enumerate(self): impl Iterator(Item: (usize, Self.Item));
-    fn peekable(self): Peekable(I: Self);
-    fn fuse(self): Fuse(I: Self);
 
-    // Consumers (provided)
-    fn collect(self): C where C: FromIterator(Item: Self.Item);
-    fn count(self): usize;
-    fn last(self): Option(T: Self.Item);
-    fn nth(self, n: usize): Option(T: Self.Item);
+    /// Keeps only elements satisfying the predicate.
+    fn filter(self, predicate: fn(&Self.Item): bool): impl Iterator(Item: Self.Item);
+
+    /// Filters and maps in a single step.
+    fn filter_map(self, f: fn(Self.Item): Option(T: U)): impl Iterator(Item: U) where U;
+
+    /// Maps each element to an iterator and flattens the results.
+    fn flat_map(self, f: fn(Self.Item): impl IntoIterator(Item: U)): impl Iterator(Item: U) where U;
+
+    /// Flattens nested iterators.
+    fn flatten(self): impl Iterator(Item: U) where Self.Item: IntoIterator(Item: U), U;
+
+    /// Yields at most `n` elements.
+    fn take(self, n: usize): impl Iterator(Item: Self.Item);
+
+    /// Skips the first `n` elements.
+    fn skip(self, n: usize): impl Iterator(Item: Self.Item);
+
+    /// Yields elements while the predicate is true.
+    fn take_while(self, predicate: fn(&Self.Item): bool): impl Iterator(Item: Self.Item);
+
+    /// Skips elements while the predicate is true.
+    fn skip_while(self, predicate: fn(&Self.Item): bool): impl Iterator(Item: Self.Item);
+
+    /// Chains two iterators end-to-end.
+    fn chain(self, other: impl IntoIterator(Item: Self.Item)): impl Iterator(Item: Self.Item);
+
+    /// Zips two iterators into pairs. Stops when either is exhausted.
+    fn zip(self, other: impl IntoIterator(Item: U)): impl Iterator(Item: (Self.Item, U)) where U;
+
+    /// Yields `(index, element)` pairs starting from 0.
+    fn enumerate(self): impl Iterator(Item: (usize, Self.Item));
+
+    /// Wraps in a peekable iterator that supports `peek()`.
+    fn peekable(self): Peekable(I: Self);
+
+    /// Wraps to always return None after the first None.
+    fn fuse(self): Fuse(I: Self);
+}
+```
+
+### 9.3 Provided Consumer Methods
+
+Consumers drive the iterator and produce a final value.
+
+```spl
+impl Iterator {
+    /// Applies a function to each element for side effects.
+    fn for_each(self, f: fn(Self.Item)): ();
+
+    /// Left fold with initial accumulator.
     fn fold(self, init: B, f: fn(B, Self.Item): B): B where B;
-    fn reduce(self, f: fn(Self.Item, Self.Item): Self.Item): Option(T: Self.Item);
-    fn all(self, predicate: fn(Self.Item): bool): bool;
-    fn any(self, predicate: fn(Self.Item): bool): bool;
-    fn find(self, predicate: fn(&Self.Item): bool): Option(T: Self.Item);
-    fn position(self, predicate: fn(Self.Item): bool): Option(T: usize);
-    fn max(self): Option(T: Self.Item) where Self.Item: Ord;
-    fn min(self): Option(T: Self.Item) where Self.Item: Ord;
+
+    /// Reduces elements to a single value without initial accumulator.
+    fn reduce(self, f: fn(Self.Item, Self.Item): Self.Item): Self.Item?;
+
+    /// Collects into a target collection type.
+    fn collect(self): C where C: FromIterator(Item: Self.Item);
+
+    /// Counts the number of elements.
+    fn count(self): usize;
+
+    /// Returns the last element.
+    fn last(self): Self.Item?;
+
+    /// Returns the nth element (0-indexed).
+    fn nth(self, n: usize): Self.Item?;
+
+    /// Sums all elements.
     fn sum(self): S where S: Sum(Item: Self.Item);
+
+    /// Multiplies all elements.
     fn product(self): P where P: Product(Item: Self.Item);
+
+    /// Returns true if any element satisfies the predicate. Short-circuits.
+    fn any(self, predicate: fn(Self.Item): bool): bool;
+
+    /// Returns true if all elements satisfy the predicate. Short-circuits.
+    fn all(self, predicate: fn(Self.Item): bool): bool;
+
+    /// Returns the first element satisfying the predicate.
+    fn find(self, predicate: fn(&Self.Item): bool): Self.Item?;
+
+    /// Returns the position of the first element satisfying the predicate.
+    fn position(self, predicate: fn(Self.Item): bool): usize?;
+
+    /// Returns the maximum element.
+    fn max(self): Self.Item? where Self.Item: Ord;
+
+    /// Returns the minimum element.
+    fn min(self): Self.Item? where Self.Item: Ord;
+}
+```
+
+### 9.4 IntoIterator
+
+The `IntoIterator` trait converts a type into an `Iterator`. This is the trait used by `for x in collection` (consuming iteration).
+
+```spl
+trait IntoIterator {
+    type Item;
+    type IntoIter: Iterator(Item: Self.Item);
+
+    fn into_iter(self): Self.IntoIter;
+}
+```
+
+**Blanket implementation:** Every `Iterator` automatically implements `IntoIterator` (returning itself).
+
+### 9.5 FromIterator
+
+```spl
+trait FromIterator {
+    type Item;
+
+    /// Creates a collection from an iterator.
+    fn from_iter(iter: I): Self where I: IntoIterator(Item: Self.Item);
 }
 ```
 
@@ -445,91 +801,305 @@ trait Iterator {
 
 ## 10. Operator Traits
 
-**TODO:** Specify operator traits
+Operator traits are defined in `std.ops`. Each trait maps to one or more operators in the language.
+
+### 10.1 Arithmetic Operators
 
 ```spl
-// std.ops
-
-trait Add(RHS) where RHS {
+/// `a + b` desugars to `a.add(b)`
+trait Add(RHS) where RHS = Self {
     type Output;
     fn add(self, rhs: RHS): Self.Output;
 }
 
-trait Sub(RHS) where RHS {
+/// `a - b` desugars to `a.sub(b)`
+trait Sub(RHS) where RHS = Self {
     type Output;
     fn sub(self, rhs: RHS): Self.Output;
 }
 
-trait Mul(RHS) where RHS {
+/// `a * b` desugars to `a.mul(b)`
+trait Mul(RHS) where RHS = Self {
     type Output;
     fn mul(self, rhs: RHS): Self.Output;
 }
 
-trait Div(RHS) where RHS {
+/// `a / b` desugars to `a.div(b)`
+trait Div(RHS) where RHS = Self {
     type Output;
     fn div(self, rhs: RHS): Self.Output;
 }
 
-trait Rem(RHS) where RHS {
+/// `a % b` desugars to `a.rem(b)`
+trait Rem(RHS) where RHS = Self {
     type Output;
     fn rem(self, rhs: RHS): Self.Output;
 }
 
+/// `-a` desugars to `a.neg()`
 trait Neg {
     type Output;
     fn neg(self): Self.Output;
 }
+```
 
+**Built-in implementations:** All integer types (`i8`–`i128`, `u8`–`u128`, `isize`, `usize`) implement `Add`, `Sub`, `Mul`, `Div`, `Rem`. Signed types also implement `Neg`. Float types (`f32`, `f64`) implement all arithmetic traits. `decimal` implements all arithmetic traits.
+
+```spl
+// Example: implementing Add for a custom type
+impl Add for Point {
+    type Output = Point;
+    fn add(self, rhs: Point): Point {
+        return Point(x: self.x + rhs.x, y: self.y + rhs.y);
+    }
+}
+```
+
+### 10.2 Bitwise Operators
+
+```spl
+/// `a & b` desugars to `a.bitand(b)`
+trait BitAnd(RHS) where RHS = Self {
+    type Output;
+    fn bitand(self, rhs: RHS): Self.Output;
+}
+
+/// `a | b` desugars to `a.bitor(b)`
+trait BitOr(RHS) where RHS = Self {
+    type Output;
+    fn bitor(self, rhs: RHS): Self.Output;
+}
+
+/// `a ^ b` desugars to `a.bitxor(b)`
+trait BitXor(RHS) where RHS = Self {
+    type Output;
+    fn bitxor(self, rhs: RHS): Self.Output;
+}
+
+/// Prefix `!a` desugars to `a.not()` (logical NOT for `bool`, bitwise NOT for integers).
+/// Note: prefix `!` (Not operator) is distinct from postfix `!` (try operator, see error-handling.md section 2).
 trait Not {
     type Output;
     fn not(self): Self.Output;
 }
 
+/// `a << b` desugars to `a.shl(b)`
+trait Shl(RHS) where RHS = Self {
+    type Output;
+    fn shl(self, rhs: RHS): Self.Output;
+}
+
+/// `a >> b` desugars to `a.shr(b)`
+trait Shr(RHS) where RHS = Self {
+    type Output;
+    fn shr(self, rhs: RHS): Self.Output;
+}
+```
+
+**Built-in implementations:** All integer types implement `BitAnd`, `BitOr`, `BitXor`, `Not`, `Shl`, `Shr`. `bool` implements `Not`, `BitAnd`, `BitOr`, `BitXor`.
+
+### 10.3 Compound Assignment Operators
+
+```spl
+/// `a += b` desugars to `a.add_assign(b)`
+trait AddAssign(RHS) where RHS = Self {
+    fn add_assign(&mut self, rhs: RHS): ();
+}
+
+/// `a -= b` desugars to `a.sub_assign(b)`
+trait SubAssign(RHS) where RHS = Self {
+    fn sub_assign(&mut self, rhs: RHS): ();
+}
+
+/// `a *= b` desugars to `a.mul_assign(b)`
+trait MulAssign(RHS) where RHS = Self {
+    fn mul_assign(&mut self, rhs: RHS): ();
+}
+
+/// `a /= b` desugars to `a.div_assign(b)`
+trait DivAssign(RHS) where RHS = Self {
+    fn div_assign(&mut self, rhs: RHS): ();
+}
+
+/// `a %= b` desugars to `a.rem_assign(b)`
+trait RemAssign(RHS) where RHS = Self {
+    fn rem_assign(&mut self, rhs: RHS): ();
+}
+
+/// `a &= b`, `a |= b`, `a ^= b`, `a <<= b`, `a >>= b`
+trait BitAndAssign(RHS) where RHS = Self { fn bitand_assign(&mut self, rhs: RHS): (); }
+trait BitOrAssign(RHS) where RHS = Self { fn bitor_assign(&mut self, rhs: RHS): (); }
+trait BitXorAssign(RHS) where RHS = Self { fn bitxor_assign(&mut self, rhs: RHS): (); }
+trait ShlAssign(RHS) where RHS = Self { fn shl_assign(&mut self, rhs: RHS): (); }
+trait ShrAssign(RHS) where RHS = Self { fn shr_assign(&mut self, rhs: RHS): (); }
+```
+
+**Built-in implementations:** All types implementing the corresponding binary operator also implement the compound assignment variant.
+
+### 10.4 Index Operators
+
+```spl
+/// `collection[index]` desugars to `*collection.index(index)` (in value context)
+/// `&collection[index]` desugars to `collection.index(index)`
 trait Index(Idx) where Idx {
     type Output;
     fn index(&self, index: Idx): &Self.Output;
 }
 
-trait IndexMut(Idx) where Idx: Index(Idx) {
+/// `&mut collection[index]` desugars to `collection.index_mut(index)`
+/// `collection[index] = v` desugars to `*collection.index_mut(index) = v`
+trait IndexMut(Idx): Index(Idx) where Idx {
     fn index_mut(&mut self, index: Idx): &mut Self.Output;
 }
 ```
+
+**Built-in implementations:** `Vec(T)` implements `Index(Idx: usize)` and `IndexMut(Idx: usize)`. `[T; N]` and `[T]` implement `Index(Idx: usize)` and `IndexMut(Idx: usize)`. `HashMap(K, V)` implements `Index(Idx: K)`.
+
+See [memory-model.md](memory-model.md) section 4 for the full desugaring of index expressions in different contexts.
 
 ---
 
 ## 11. Comparison Traits
 
-**TODO:** Specify comparison traits
+Comparison traits are defined in `std.cmp`. They form a hierarchy: `PartialEq` ← `Eq`, `PartialOrd` ← `Ord`.
+
+### 11.1 PartialEq
+
+Provides equality comparison (`==` and `!=`).
 
 ```spl
-// std.cmp
-
-trait PartialEq(RHS) where RHS {
+/// `a == b` desugars to `a.eq(&b)`
+/// `a != b` desugars to `a.ne(&b)`
+trait PartialEq(RHS) where RHS = Self {
+    /// Required: returns true if self equals other.
     fn eq(&self, other: &RHS): bool;
-    fn ne(&self, other: &RHS): bool { return !self.eq(other); }
+
+    /// Provided: returns true if self does not equal other.
+    fn ne(&self, other: &RHS): bool {
+        return !self.eq(other);
+    }
 }
+```
 
-trait Eq: PartialEq(RHS: Self) { }
+**Contract:**
+- Symmetric: `a == b` implies `b == a`
+- Transitive: `a == b` and `b == c` implies `a == c`
 
-trait PartialOrd(RHS) where RHS: PartialEq(RHS) {
+**Note:** `PartialEq` does NOT require reflexivity (`a == a`). This allows types like `f32` and `f64` where `NaN != NaN`.
+
+**Built-in implementations:** All primitive types, `String`, `&str`, `bool`, `char`, tuples (element-wise), arrays (element-wise), `Option(T)` where `T: PartialEq`, `Result(T, E)` where `T: PartialEq, E: PartialEq`.
+
+### 11.2 Eq
+
+Marker trait extending `PartialEq` that additionally guarantees reflexivity (`a == a`).
+
+```spl
+trait Eq: PartialEq { }
+```
+
+**Contract:** In addition to `PartialEq`'s requirements:
+- Reflexive: `a == a` is always true
+
+**Note:** `f32` and `f64` implement `PartialEq` but NOT `Eq` (because `NaN != NaN`). `decimal` implements `Eq` (no NaN values).
+
+### 11.3 PartialOrd
+
+Provides ordering comparison (`<`, `>`, `<=`, `>=`).
+
+```spl
+trait PartialOrd(RHS): PartialEq where RHS = Self {
+    /// Required: returns the ordering between self and other, or None if incomparable.
     fn partial_cmp(&self, other: &RHS): Option(T: Ordering);
-    fn lt(&self, other: &RHS): bool;
-    fn le(&self, other: &RHS): bool;
-    fn gt(&self, other: &RHS): bool;
-    fn ge(&self, other: &RHS): bool;
-}
 
-trait Ord: Eq + PartialOrd(RHS: Self) {
+    /// Provided methods using partial_cmp:
+    fn lt(&self, other: &RHS): bool {
+        return self.partial_cmp(other) is Some(Ordering.Less);
+    }
+    fn le(&self, other: &RHS): bool {
+        match self.partial_cmp(other) {
+            Some(Ordering.Less) | Some(Ordering.Equal) => true,
+            _ => false,
+        }
+    }
+    fn gt(&self, other: &RHS): bool {
+        return self.partial_cmp(other) is Some(Ordering.Greater);
+    }
+    fn ge(&self, other: &RHS): bool {
+        match self.partial_cmp(other) {
+            Some(Ordering.Greater) | Some(Ordering.Equal) => true,
+            _ => false,
+        }
+    }
+}
+```
+
+**Built-in implementations:** All numeric types, `char`, `bool`, `String`, `&str`.
+
+### 11.4 Ord
+
+Provides total ordering. Every pair of values has a defined order.
+
+```spl
+trait Ord: Eq + PartialOrd {
+    /// Required: returns the ordering between self and other.
     fn cmp(&self, other: &Self): Ordering;
-    fn max(self, other: Self): Self;
-    fn min(self, other: Self): Self;
-    fn clamp(self, min: Self, max: Self): Self;
-}
 
-enum Ordering {
+    /// Provided: returns the larger of two values.
+    fn max(self, other: Self): Self {
+        if self.cmp(&other) is Ordering.Less { other } else { self }
+    }
+
+    /// Provided: returns the smaller of two values.
+    fn min(self, other: Self): Self {
+        if self.cmp(&other) is Ordering.Greater { other } else { self }
+    }
+
+    /// Provided: restricts a value to a range [min, max].
+    fn clamp(self, min: Self, max: Self): Self {
+        if self.cmp(&min) is Ordering.Less { return min; }
+        if self.cmp(&max) is Ordering.Greater { return max; }
+        return self;
+    }
+}
+```
+
+**Note:** `f32` and `f64` implement `PartialOrd` but NOT `Ord` (because NaN has no total ordering). All integer types, `char`, `bool`, `String`, and `decimal` implement `Ord`.
+
+### 11.5 Ordering
+
+```spl
+enum Ordering{
     Less,
     Equal,
     Greater,
+}
+
+impl Ordering {
+    /// Returns true if this ordering is Less.
+    fn is_lt(&self): bool { self is Ordering.Less }
+
+    /// Returns true if this ordering is Equal.
+    fn is_eq(&self): bool { self is Ordering.Equal }
+
+    /// Returns true if this ordering is Greater.
+    fn is_gt(&self): bool { self is Ordering.Greater }
+
+    /// Reverses the ordering: Less ↔ Greater, Equal stays Equal.
+    fn reverse(self): Ordering {
+        match self {
+            .Less => Ordering.Greater,
+            .Equal => Ordering.Equal,
+            .Greater => Ordering.Less,
+        }
+    }
+
+    /// Chains two orderings: uses `other` if self is Equal.
+    fn then(self, other: Ordering): Ordering {
+        match self {
+            .Equal => other,
+            _ => self,
+        }
+    }
 }
 ```
 
@@ -537,29 +1107,114 @@ enum Ordering {
 
 ## 12. Conversion Traits
 
-**TODO:** Specify conversion traits
+Conversion traits are defined in `std.convert`. They provide standard interfaces for converting between types.
+
+### 12.1 From
+
+Infallible conversion from one type to another. Also used by the `!` (try) operator for automatic error conversion — see [error-handling.md](error-handling.md) sections 6-7.
 
 ```spl
-// std.convert
-
 trait From(T) where T {
+    /// Converts from T to Self.
     fn from(value: T): Self;
 }
+```
 
+**Contract:** The conversion must always succeed (no panics, no errors).
+
+```spl
+// Example: converting IoError to AppError
+impl From(T: IoError) for AppError {
+    fn from(e: IoError): Self {
+        return AppError.Io(e);
+    }
+}
+
+// Usage with ! operator: IoError automatically converts to AppError
+fn read_data(path: &str): Data throws AppError {
+    let content = fs.read_to_string(path)!;  // IoError → AppError via From
+    return parse(content)!;
+}
+```
+
+### 12.2 Into
+
+The reciprocal of `From`. A blanket implementation provides `Into` for any type implementing `From`:
+
+```spl
 trait Into(T) where T {
+    /// Converts self into T.
     fn into(self): T;
 }
 
+// Blanket implementation (compiler-provided):
+impl Into(T: U) for T where T, U, U: From(T: T) {
+    fn into(self): U {
+        return U.from(self);
+    }
+}
+```
+
+**Guideline:** Implement `From`, not `Into`. The blanket impl gives you `Into` for free.
+
+### 12.3 TryFrom
+
+Fallible conversion from one type to another.
+
+```spl
 trait TryFrom(T) where T {
     type Error;
+
+    /// Attempts to convert from T to Self, returning an error on failure.
     fn try_from(value: T): Result(T: Self, E: Self.Error);
 }
+```
 
+```spl
+// Example: converting i64 to u8
+impl TryFrom(T: i64) for u8 {
+    type Error = TryFromIntError;
+
+    fn try_from(value: i64): Result(T: u8, E: TryFromIntError) {
+        if value < 0 || value > 255 {
+            return Err(TryFromIntError);
+        }
+        return Ok(value.truncate());
+    }
+}
+
+// Usage
+let small: u8 = 42i64.try_into()!;   // Ok(42)
+let big: u8 = 1000i64.try_into()!;    // Err(TryFromIntError)
+```
+
+### 12.4 TryInto
+
+The reciprocal of `TryFrom`. A blanket implementation provides `TryInto` for any type implementing `TryFrom`:
+
+```spl
 trait TryInto(T) where T {
     type Error;
+
+    /// Attempts to convert self into T.
     fn try_into(self): Result(T: T, E: Self.Error);
 }
 
+// Blanket implementation (compiler-provided):
+impl TryInto(T: U) for T where T, U, U: TryFrom(T: T) {
+    type Error = U.Error;
+
+    fn try_into(self): Result(T: U, E: U.Error) {
+        return U.try_from(self);
+    }
+}
+```
+
+### 12.5 AsRef and AsMut
+
+Cheap reference-to-reference conversions.
+
+```spl
 trait AsRef(T) where T {
     fn as_ref(&self): &T;
 }
@@ -569,11 +1224,11 @@ trait AsMut(T) where T {
 }
 ```
 
+**Built-in implementations:** `String` implements `AsRef(T: str)`, `Vec(T)` implements `AsRef(T: [T])`.
+
 ---
 
 ## 13. Error Handling
-
-**TODO:** Specify error types in detail
 
 ```spl
 // std.error
@@ -589,12 +1244,9 @@ trait Error {
 }
 
 /// Standard I/O error type
-struct IoError {
-    kind: IoErrorKind,
-    message: String,
-}
+struct IoError(kind: IoErrorKind, message: String)
 
-enum IoErrorKind {
+enum IoErrorKind{
     NotFound,
     PermissionDenied,
     ConnectionRefused,
@@ -625,6 +1277,8 @@ impl Error for IoError {
 ## References
 
 - [type-system.md](type-system.md) - Type system and traits
-- [iteration.md](iteration.md) - Iterator design
-- [error-handling.md](error-handling.md) - Result and Option usage
+- [iteration.md](iteration.md) - Iterator design (IndexIterator, RefIterator)
+- [error-handling.md](error-handling.md) - Result and Option usage, Try trait
 - [concurrency.md](concurrency.md) - Task and channel types
+- [memory-model.md](memory-model.md) - Ownership, references, index desugaring
+- [closures.md](closures.md) - Closure capture semantics

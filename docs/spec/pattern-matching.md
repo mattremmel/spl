@@ -114,6 +114,42 @@ match color {
 }
 ```
 
+### 1.6.1 Enum Pattern Shorthand Resolution
+
+When an enum variant has named fields, bare identifier patterns in enum pattern positions are resolved as follows:
+
+1. **If the identifier matches a field name** → shorthand for `field: binding` (binds field to a variable with the same name)
+2. **If the identifier does not match any field name** → positional binding (binds by position)
+3. **Explicit `field: pattern` always works** regardless of name matching
+
+```spl
+enum Shape{
+    Circle(radius: f64),
+    Rect(width: f64, height: f64),
+}
+
+// Shorthand: 'radius' matches field name → binds radius to the radius field
+match shape {
+    .Circle(radius) => use(radius),      // shorthand for .Circle(radius: radius)
+    .Rect(width, height) => use(width),  // shorthand for .Rect(width: width, height: height)
+}
+
+// Explicit field bindings with rename
+match shape {
+    .Circle(radius: r) => use(r),        // explicit: bind radius field to 'r'
+    .Rect(width: w, height: h) => w * h, // explicit: rename both fields
+}
+
+// Positional binding for tuple-style variants
+enum Option{ Some(T), None } where T
+match opt {
+    .Some(value) => use(value),   // positional: T has no field name
+    .None => default(),
+}
+```
+
+This mirrors struct field shorthand in expressions — `Point(x, y)` means `Point(x: x, y: y)`. See also [syntax-grammar.md](syntax-grammar.md) section on Ambiguity Resolution for the full semantic disambiguation rules.
+
 ### 1.7 Slice Patterns
 
 ```spl

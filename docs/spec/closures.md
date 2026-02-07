@@ -111,11 +111,17 @@ fn make_greeter(greeting: String): fn(String): String {
 
 ### How Escaping is Determined
 
-The compiler infers escaping from:
+A closure is **escaping** if any of the following conditions hold:
 
-1. **Function signatures**: Parameter types indicate whether closure escapes
-2. **Storage**: Assigned to struct field, returned, stored in collection
-3. **Known functions**: `spawn`, `thread::spawn`, etc. are known to require escaping closures
+1. **Returned from a function**: The closure is used as a return value
+2. **Stored in a struct field or collection**: Assigned to a field of a non-scoped struct, or pushed into a `Vec`, `HashMap`, etc.
+3. **Assigned to a variable with wider scope**: The variable outlives the closure's creation site (e.g., assigned to a variable declared in an outer scope)
+4. **Passed to a function parameter typed as `fn(...)`** (owned function type) or a generic bound requiring `'static` or `Send`
+5. **Passed to known escaping APIs**: `spawn`, stored in `Arc`, etc.
+
+Otherwise the closure is **non-escaping** (borrows by default, zero-cost). Non-escaping closures are those passed to functions that consume them synchronously within the call (e.g., `map`, `filter`, `each`, `sort_by`, or `scope`'s `s.spawn()`).
+
+**Implementation note:** The compiler performs this analysis at the point where the closure is created, based on how the closure value flows through the program. The analysis is conservative — if the compiler cannot prove a closure is non-escaping, it treats it as escaping.
 
 ---
 
@@ -328,7 +334,7 @@ let data = vec![1, 2, 3, 4];
 
 scope(|s| {
     for chunk in data.chunks(2) {
-        s.spawn(|chunk| {
+        s.spawn(|| {
             // chunk is a borrowed slice — non-escaping, no move required
             process(chunk);
         });

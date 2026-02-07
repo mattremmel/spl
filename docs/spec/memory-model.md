@@ -154,7 +154,7 @@ let s2 = s1.clone();  // Explicit deep copy
 
 ## 3. References and Intersection Semantics
 
-SPL uses **second-class references** with **intersection semantics**: references can be function parameters or returned from functions, but cannot be stored in structs. When a function returns a reference, it is assumed to borrow from **all** input references. The returned reference is valid only while all inputs remain valid.
+SPL uses **second-class references** with **intersection semantics**: references can be function parameters or returned from functions, but cannot be stored in struct fields (see below for references as generic type parameters, and section 8 for `#[scoped]` types that can hold references). When a function returns a reference, it is assumed to borrow from **all** input references. The returned reference is valid only while all inputs remain valid.
 
 ### The Intersection Rule
 
@@ -711,7 +711,7 @@ SPL distinguishes between **escaping** and **non-escaping** closures:
 | Non-escaping (e.g., `map`, `filter`) | Borrow by default |
 | Escaping (stored, returned, spawned) | Move by default |
 
-The `~` sigil clones a capture at closure creation time:
+Use `@[...]` capture lists for explicit control over capture behavior:
 
 ```spl
 let data = Arc.new(vec![1, 2, 3]);
@@ -720,8 +720,8 @@ let data = Arc.new(vec![1, 2, 3]);
 let f = || process(data);
 // data no longer valid
 
-// Escaping: data cloned
-let f = |~data| process(data);
+// Escaping: data cloned via capture list
+let f = @[data: data.clone()] || process(data);
 // data still valid
 ```
 
@@ -763,7 +763,7 @@ The `#[scoped]` attribute marks a struct as non-escaping. Unlike regular structs
 |------|-----------|
 | Cannot be stored in non-scoped structs | Prevents ref escape via embedding |
 | Cannot be returned from non-scoped functions | Prevents ref escape via return |
-| Cannot be sent to other threads | Thread-safety (no dangling refs) |
+| Cannot be sent to other tasks | Task-safety (no dangling refs) |
 | Must be used within lexical scope of creation | Prevents ref outliving source |
 | Can only be passed to functions expecting scoped types | Callee must respect scope |
 
@@ -806,12 +806,12 @@ struct IterHolder(
 )
 // Error: cannot store scoped type `HashMapIter` in non-scoped struct
 
-// ERROR: Sending scoped type to another thread
+// ERROR: Sending scoped type to another task
 let iter = map.ref_iter();
 spawn(|| {
     for item in iter { ... }
 });
-// Error: scoped type `HashMapIter` cannot be sent to another thread
+// Error: scoped type `HashMapIter` cannot be sent to another task
 ```
 
 ### Scoped Functions
@@ -1350,10 +1350,10 @@ fn to_uppercase(s: &str): String {
     return s.to_uppercase();  // Owned String, not a borrow
 }
 
-// Cross-thread scenarios (data must be owned or Arc-wrapped)
+// Cross-task scenarios (data must be owned or Arc-wrapped)
 fn spawn_with_data(data: String) {
     spawn(|| {
-        process(data);  // data moved into thread
+        process(data);  // data moved into task
     });
 }
 

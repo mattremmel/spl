@@ -23,7 +23,7 @@ SPL has second-class references, which creates a fundamental design constraint:
 **Non-indexed types** (hashmaps, linked lists, trees):
 - Use internal iteration: `.each(fn(&T))` for reference access
 - Use `IntoIterator` → `Iterator` for consuming iteration
-- **Future:** `RefIterator` trait will enable `for x in &hashmap` syntax
+- `RefIterator` trait enables `for x in &hashmap` syntax (see section 7)
 
 ---
 
@@ -152,7 +152,7 @@ The compiler automatically selects the appropriate desugaring based on the type.
 **Non-indexed collections** (hashmaps, linked lists, trees) use:
 - `.each(fn(&T))` for reference iteration (internal iteration)
 - `IntoIterator` for consuming iteration
-- **Future:** `RefIterator` trait for `for x in &hashmap` syntax
+- `RefIterator` trait for `for x in &hashmap` syntax (see section 7)
 
 ### Break and Continue
 
@@ -172,13 +172,13 @@ for item in &vec {
 
 ### Loop Labels
 
-Labels use postfix colon for definition and prefix colon for reference:
+Labels use tick-prefix with colon suffix for definition, and tick-prefix for reference:
 
 ```spl
-outer: for row in &matrix {
+'outer: for row in &matrix {
     for cell in row {
         if *cell == 0 {
-            break :outer;
+            break 'outer;
         }
     }
 }
@@ -783,9 +783,9 @@ For types that cannot be indexed (trees, hash maps), provide consuming iterators
 ```spl
 trait IntoIterator {
     type Item;
-    type Iter: Iterator(Item: Self.Item);
+    type IntoIter: Iterator(Item: Self.Item);
 
-    fn into_iter(self): Self.Iter;
+    fn into_iter(self): Self.IntoIter;
 }
 
 trait Iterator {
@@ -800,7 +800,7 @@ trait Iterator {
 ```spl
 impl IntoIterator for HashMap(K: K, V: V) where K, V {
     type Item = (K, V);
-    type Iter = HashMapIter(K: K, V: V);
+    type IntoIter = HashMapIter(K: K, V: V);
 
     fn into_iter(self): HashMapIter(K: K, V: V) {
         HashMapIter(map: self, index: 0)
@@ -1123,7 +1123,7 @@ struct IterHolder(
     iter: HashMapIter,  // compile error
 )
 
-// ERROR: Cannot send scoped type to another thread
+// ERROR: Cannot send scoped type to another task
 let iter = map.ref_iter();
 spawn(|| {
     for item in iter { ... }  // compile error

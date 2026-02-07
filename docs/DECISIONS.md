@@ -121,17 +121,17 @@ Traits support associated types.
 Escaping vs non-escaping semantics with move-by-default. See [ADR-012](designs/012-closures.md).
 
 **Non-escaping closures** (passed to `map`, `filter`, etc.): borrow by default
-**Escaping closures** (stored, returned, spawned): move by default, `~` for clone
+**Escaping closures** (stored, returned, spawned): move by default, `@[...]` for explicit captures
 
 ```spl
 // Non-escaping: borrows threshold
 items.filter(|x| x > threshold);
 
-// Escaping: data moved, config cloned
-spawn(|data, ~config| process(data, config));
+// Escaping: data moved, config cloned via capture list
+spawn(@[config: config.clone()] || process(data, config));
 
-// Clone all shorthand
-spawn(clone |a, b, c| { ... });
+// Explicit move capture
+spawn(@[data, config] || process(data, config));
 ```
 
 Single-expression closures allow implicit return: `|a, b| a + b`
@@ -324,7 +324,7 @@ Look like regular function calls - no `!` required.
 | Type casting | `as` | Methods |
 | Panic | Unwind or abort | Unwind (abort at FFI) |
 | Iteration | Exterior (iterators) | Interior (generators) |
-| Closures | Borrow default, `move` all | Move default, `~` for clone |
+| Closures | Borrow default, `move` all | Move default, `@[...]` for captures |
 | Concurrency | async/await (colored) | No coloring (Go-style) |
 | Runtime | External (tokio, etc.) | Built-in |
 | Macros | `macro!()` | `macro()` |

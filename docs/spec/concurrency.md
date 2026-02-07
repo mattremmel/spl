@@ -76,8 +76,8 @@ use std.task.spawn;
 let data = load_data();
 let config = Config.new();
 
-// data is moved, config is cloned
-let handle = spawn(|data, ~config| {
+// data is moved, config is cloned via capture list
+let handle = spawn(@[config: config.clone()] || {
     return process(data, config);
 });
 ```
@@ -111,7 +111,7 @@ use std.channel.unbounded;
 
 let (tx, rx) = unbounded();
 
-spawn(|tx| {
+spawn(|| {
     for i in 0..10 {
         tx.send(i);
     }
@@ -130,7 +130,7 @@ use std.channel.bounded;
 // Buffer up to 10 messages
 let (tx, rx) = bounded(10);
 
-spawn(|tx| {
+spawn(|| {
     for i in 0..100 {
         tx.send(i);  // Blocks when buffer is full
     }
@@ -180,7 +180,7 @@ let (tx, rx) = unbounded();
 
 for i in 0..4 {
     let tx = tx.clone();
-    spawn(|tx, i| {
+    spawn(|| {
         tx.send(format("from worker {}", i));
     });
 }
@@ -204,13 +204,13 @@ let (tx, rx) = broadcast(16);  // Broadcast channel
 let rx1 = rx.clone();
 let rx2 = rx.clone();
 
-spawn(|rx1| {
+spawn(|| {
     for msg in rx1 {
         handle_a(msg);
     }
 });
 
-spawn(|rx2| {
+spawn(|| {
     for msg in rx2 {
         handle_b(msg);
     }
@@ -228,7 +228,7 @@ use std.channel.oneshot;
 
 let (tx, rx) = oneshot();
 
-spawn(|tx| {
+spawn(|| {
     let result = expensive_computation();
     tx.send(result);  // Can only be called once
 });
@@ -441,7 +441,7 @@ let barrier = Barrier.new(4);
 
 for i in 0..4 {
     let barrier = barrier.clone();
-    spawn(|barrier, i| {
+    spawn(|| {
         work_phase_1(i);
         barrier.wait();  // All tasks sync here
         work_phase_2(i);
@@ -457,16 +457,18 @@ use std.sync.{Mutex, Condvar};
 let pair = (Mutex.new(false), Condvar.new());
 let (lock, cvar) = pair;
 
-// Waiting thread
-spawn(|lock, cvar| {
-    let mut guard = lock.lock();
+// Waiting task
+let lock_clone = lock.clone();
+let cvar_clone = cvar.clone();
+spawn(|| {
+    let mut guard = lock_clone.lock();
     while !*guard {
-        guard = cvar.wait(guard);
+        guard = cvar_clone.wait(guard);
     }
     println("condition met!");
 });
 
-// Notifying thread
+// Notifying task
 {
     let mut guard = lock.lock();
     *guard = true;
@@ -510,7 +512,7 @@ use std.task.CancellationToken;
 let token = CancellationToken.new();
 let token_clone = token.clone();
 
-let handle = spawn(|token_clone| {
+let handle = spawn(|| {
     while !token_clone.is_cancelled() {
         do_work();
     }
@@ -557,7 +559,7 @@ let data = vec![1, 2, 3, 4];
 
 scope(|s| {
     for chunk in data.chunks(2) {
-        s.spawn(|chunk| {
+        s.spawn(|| {
             process_chunk(chunk);
         });
     }
@@ -575,7 +577,7 @@ let data = vec![1, 2, 3, 4, 5, 6];
 
 scope(|s| {
     for chunk in data.chunks(2) {
-        s.spawn(|chunk| {
+        s.spawn(|| {
             // Each task borrows its chunk immutably
             let sum = chunk.iter().sum();
             sum
@@ -660,14 +662,14 @@ fn compute(): () {
 }
 ```
 
-### 7.4 Thread-Local Storage
+### 7.4 Task-Local Storage
 
-Per-task storage allows each task to maintain its own instance of a value. Declare task-local storage with `thread_local` and access it via the `.with()` callback:
+Per-task storage allows each task to maintain its own instance of a value. Task-local storage is provided as a library function via `std.task.local`:
 
 ```spl
-use std.task.thread_local;
+use std.task.local;
 
-let CACHE = thread_local(|| RefCell.new(HashMap.new()));
+let CACHE = local(|| RefCell.new(HashMap.new()));
 
 fn cached_lookup(key: &str): i32 {
     CACHE.with(|cache| {
@@ -679,7 +681,7 @@ fn cached_lookup(key: &str): i32 {
 }
 ```
 
-`thread_local(init)` declares a task-local variable initialized lazily by `init` on first access in each task. The `.with()` callback provides a reference to the task's instance. The exact mechanism (language feature, compiler intrinsic, or library function) is not yet decided.
+`local(init)` declares a task-local variable initialized lazily by `init` on first access in each task. The `.with()` callback provides a scoped, non-escaping reference to the task's instance — the reference cannot escape the closure (consistent with SPL's second-class reference rules). Task-local values are dropped when the task completes.
 
 ---
 
@@ -738,7 +740,7 @@ fn worker_pool(jobs: Receiver(T: Job), results: Sender(T: JobResult), n: usize):
     for _ in 0..n {
         let jobs = jobs.clone();
         let results = results.clone();
-        spawn(|jobs, results| {
+        spawn(|| {
             for job in jobs {
                 let result = process(job);
                 results.send(result);
@@ -756,7 +758,7 @@ fn fan_out_fan_in(input: Vec(T: Item)): Vec(T: Output) {
 
     for item in input {
         let result_tx = result_tx.clone();
-        spawn(|item, result_tx| {
+        spawn(|| {
             let result = process(item);
             result_tx.send(result);
         });
@@ -774,13 +776,13 @@ fn pipeline(input: Receiver(T: Raw)): Receiver(T: Final) {
     let (stage1_tx, stage1_rx) = bounded(10);
     let (stage2_tx, stage2_rx) = bounded(10);
 
-    spawn(|input, stage1_tx| {
+    spawn(|| {
         for raw in input {
             stage1_tx.send(parse(raw));
         }
     });
 
-    spawn(|stage1_rx, stage2_tx| {
+    spawn(|| {
         for parsed in stage1_rx {
             stage2_tx.send(transform(parsed));
         }
@@ -796,7 +798,7 @@ fn pipeline(input: Receiver(T: Raw)): Receiver(T: Final) {
 fn with_timeout(duration: Duration, f: fn(): T): Result(T: T, E: TimeoutError) where T {
     let (tx, rx) = oneshot();
 
-    spawn(|tx, f| {
+    spawn(|| {
         tx.send(f());
     });
 
