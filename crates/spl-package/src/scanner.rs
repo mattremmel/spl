@@ -6,6 +6,8 @@
 use std::path::{Path, PathBuf};
 use std::{fmt, io};
 
+use tracing::{debug, trace};
+
 /// Errors that can occur during directory scanning.
 #[derive(Debug)]
 pub enum ScanError {
@@ -49,6 +51,8 @@ impl From<io::Error> for ScanError {
 /// Returns `ScanError::NotADirectory` if the path is not a directory.
 /// Returns `ScanError::Io` for other I/O errors.
 pub fn scan_directory(path: &Path) -> Result<Vec<PathBuf>, ScanError> {
+    trace!(path = %path.display(), "scanning directory for .spl files");
+
     if !path.is_dir() {
         return Err(ScanError::NotADirectory(path.to_path_buf()));
     }
@@ -66,6 +70,7 @@ pub fn scan_directory(path: &Path) -> Result<Vec<PathBuf>, ScanError> {
 
     // Sort for deterministic ordering
     files.sort();
+    debug!(path = %path.display(), file_count = files.len(), "directory scan complete");
     Ok(files)
 }
 
@@ -79,6 +84,8 @@ pub fn scan_directory(path: &Path) -> Result<Vec<PathBuf>, ScanError> {
 /// Returns `ScanError::NotADirectory` if the path is not a directory.
 /// Returns `ScanError::Io` for other I/O errors.
 pub fn find_modules(path: &Path) -> Result<Vec<PathBuf>, ScanError> {
+    trace!(path = %path.display(), "scanning for child modules");
+
     if !path.is_dir() {
         return Err(ScanError::NotADirectory(path.to_path_buf()));
     }
@@ -96,6 +103,7 @@ pub fn find_modules(path: &Path) -> Result<Vec<PathBuf>, ScanError> {
 
     // Sort for deterministic ordering
     dirs.sort();
+    debug!(path = %path.display(), module_count = dirs.len(), "module scan complete");
     Ok(dirs)
 }
 

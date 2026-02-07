@@ -21,6 +21,8 @@
 mod constant;
 mod simplify;
 
+use tracing::{debug, debug_span, trace};
+
 use crate::sema::types::TypeInterner;
 
 use super::Body;
@@ -82,7 +84,9 @@ impl<'a> OptimizationContext<'a> {
     pub fn run_once(&self, body: &mut Body) -> bool {
         let mut changed = false;
         for pass in &self.passes {
+            let _span = debug_span!("opt_pass", pass = pass.name()).entered();
             let result = pass.run(body, self.types);
+            trace!(changed = result.changed, "pass complete");
             changed |= result.changed;
         }
         changed
@@ -92,21 +96,34 @@ impl<'a> OptimizationContext<'a> {
     ///
     /// Returns the number of iterations performed.
     pub fn run_to_fixpoint(&self, body: &mut Body, max_iterations: usize) -> usize {
+        let _span = debug_span!("fixpoint", max_iterations).entered();
         for i in 0..max_iterations {
+            trace!(iteration = i + 1, "starting iteration");
             if !self.run_once(body) {
+                debug!(iterations = i + 1, "fixpoint reached");
                 return i + 1;
             }
         }
+        debug!(iterations = max_iterations, "max iterations reached without fixpoint");
         max_iterations
     }
 }
 
 /// Optimize a MIR body with the default optimization pipeline.
 pub fn optimize_mir(body: &mut Body, types: &TypeInterner) {
+    let _span = debug_span!(
+        "optimize_mir",
+        blocks = body.num_blocks(),
+        locals = body.num_locals(),
+    )
+    .entered();
+
     let mut ctx = OptimizationContext::new(types);
     ctx.add_pass(SimplifyCfg);
     ctx.add_pass(ConstantFolding);
-    ctx.run_to_fixpoint(body, 10);
+    let iterations = ctx.run_to_fixpoint(body, 10);
+
+    debug!(iterations, "MIR optimization complete");
 }
 
 #[cfg(test)]

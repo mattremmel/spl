@@ -12,6 +12,8 @@ mod types;
 #[cfg(test)]
 pub(crate) mod test_helpers;
 
+use tracing::{debug, debug_span};
+
 use crate::sema::types::TypeInterner;
 
 use super::Body;
@@ -51,7 +53,14 @@ impl<'a> ValidationContext<'a> {
 /// Panics with a descriptive message if any validation check fails.
 /// Validation failures indicate compiler bugs.
 pub fn validate_mir(body: &Body, types: &TypeInterner) {
+    let _span = debug_span!(
+        "validate_mir",
+        blocks = body.num_blocks(),
+        locals = body.num_locals(),
+    )
+    .entered();
     ValidationContext::new(body, types).validate();
+    debug!("MIR validation passed");
 }
 
 #[cfg(test)]

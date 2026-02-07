@@ -4,6 +4,8 @@
 //! - All blocks have terminators
 //! - All successor references are valid
 
+use tracing::trace_span;
+
 use crate::mir::Body;
 
 /// Validate the CFG structure of a MIR body.
@@ -14,6 +16,7 @@ use crate::mir::Body;
 /// - Any block is missing a terminator
 /// - Any terminator references an invalid successor block
 pub fn validate_cfg(body: &Body) {
+    let _span = trace_span!("validate_cfg", blocks = body.num_blocks()).entered();
     // Check all blocks have terminators
     for (idx, block) in body.basic_blocks.iter().enumerate() {
         assert!(

@@ -4,6 +4,8 @@
 //! - `SwitchInt` discriminant must be integer type
 //! - Assert condition must be bool
 
+use tracing::trace_span;
+
 use crate::mir::Body;
 use crate::mir::operand::Operand;
 use crate::mir::terminator::TerminatorKind;
@@ -18,6 +20,7 @@ use crate::sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
 /// - `SwitchInt` discriminant is not an integer type
 /// - Assert condition is not bool
 pub fn validate_terminators(body: &Body, types: &TypeInterner) {
+    let _span = trace_span!("validate_terminators").entered();
     for (block_idx, block) in body.basic_blocks.iter().enumerate() {
         if let Some(term) = &block.terminator {
             let ctx = format!("BasicBlock({block_idx}).terminator");

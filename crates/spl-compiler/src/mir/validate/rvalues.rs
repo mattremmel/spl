@@ -6,6 +6,8 @@
 //! - Cast kinds valid for source/target types
 //! - Discriminant only on enum types
 
+use tracing::trace_span;
+
 use crate::mir::Body;
 use crate::mir::operand::{CastKind, Rvalue};
 use crate::mir::statement::StatementKind;
@@ -21,6 +23,7 @@ use crate::sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
 /// - Len is used on non-array/slice type
 /// - Cast kind is invalid for source/target types
 pub fn validate_rvalues(body: &Body, types: &TypeInterner) {
+    let _span = trace_span!("validate_rvalues").entered();
     for (block_idx, block) in body.basic_blocks.iter().enumerate() {
         for (stmt_idx, stmt) in block.statements.iter().enumerate() {
             let ctx = format!("BasicBlock({block_idx}).statements[{stmt_idx}]");

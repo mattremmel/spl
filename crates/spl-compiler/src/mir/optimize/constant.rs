@@ -3,6 +3,8 @@
 //! Folds constant binary operations at compile time.
 //! For example: `_1 = Add(const 2, const 3)` becomes `_1 = const 5`.
 
+use tracing::trace;
+
 use crate::mir::Body;
 use crate::mir::operand::{BinOp, Constant, Operand, Rvalue};
 use crate::mir::statement::StatementKind;
@@ -22,16 +24,27 @@ impl OptimizationPass for ConstantFolding {
 
     fn run(&self, body: &mut Body, _types: &TypeInterner) -> PassResult {
         let mut changed = false;
+        let mut fold_count = 0u32;
 
-        for block in &mut body.basic_blocks {
-            for stmt in &mut block.statements {
+        for (bb_idx, block) in body.basic_blocks.iter_mut().enumerate() {
+            for (stmt_idx, stmt) in block.statements.iter_mut().enumerate() {
                 if let StatementKind::Assign(_, rvalue) = &mut stmt.kind
                     && let Some(folded) = try_fold_rvalue(rvalue)
                 {
+                    trace!(
+                        bb = bb_idx,
+                        stmt = stmt_idx,
+                        "folded constant expression"
+                    );
                     *rvalue = folded;
                     changed = true;
+                    fold_count += 1;
                 }
             }
+        }
+
+        if fold_count > 0 {
+            trace!(fold_count, "constant folding summary");
         }
 
         PassResult { changed }

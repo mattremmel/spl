@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 
+use tracing::trace;
+
 use crate::mir::Body;
 use crate::mir::terminator::{BasicBlock, Terminator, TerminatorKind};
 use crate::sema::types::TypeInterner;
@@ -24,6 +26,7 @@ impl OptimizationPass for SimplifyCfg {
 
     fn run(&self, body: &mut Body, _types: &TypeInterner) -> PassResult {
         let mut changed = false;
+        let mut redirect_count = 0u32;
 
         // Build predecessor counts
         let pred_counts = compute_predecessor_counts(body);
@@ -64,6 +67,11 @@ impl OptimizationPass for SimplifyCfg {
                     .clone();
 
                 if let Some(target_term) = target_term {
+                    trace!(
+                        from = bb_idx,
+                        to = target.index(),
+                        "redirecting trivial goto"
+                    );
                     // Replace this block's terminator with target's terminator
                     // but keep the original span for debugging
                     body.basic_blocks[bb_idx].terminator = Some(Terminator {
@@ -71,8 +79,13 @@ impl OptimizationPass for SimplifyCfg {
                         span,
                     });
                     changed = true;
+                    redirect_count += 1;
                 }
             }
+        }
+
+        if redirect_count > 0 {
+            trace!(redirect_count, "SimplifyCfg summary");
         }
 
         PassResult { changed }

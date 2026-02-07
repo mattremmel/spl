@@ -5,6 +5,8 @@
 //! - Binary operations have compatible operand types
 //! - Unary operations are valid for operand types
 
+use tracing::trace_span;
+
 use crate::mir::Body;
 use crate::mir::operand::{BinOp, Operand, Rvalue, UnOp};
 use crate::mir::statement::StatementKind;
@@ -20,6 +22,7 @@ use crate::sema::types::{PrimitiveKind, Type, TypeId, TypeInterner};
 /// - Binary operation operands have incompatible types
 /// - Unary operation operand has invalid type
 pub fn validate_types(body: &Body, types: &TypeInterner) {
+    let _span = trace_span!("validate_types").entered();
     for (block_idx, block) in body.basic_blocks.iter().enumerate() {
         for (stmt_idx, stmt) in block.statements.iter().enumerate() {
             let ctx = format!("BasicBlock({block_idx}).statements[{stmt_idx}]");

@@ -10,6 +10,8 @@ use super::PackageDirectives;
 use std::collections::HashSet;
 use std::fmt;
 
+use tracing::{debug, trace};
+
 /// Errors that can occur during file resolution.
 #[derive(Debug, Clone)]
 pub enum ResolveError {
@@ -128,6 +130,12 @@ pub fn resolve_includes<S1: AsRef<str>, S2: AsRef<str>>(
     // Sort for deterministic ordering
     let mut sorted: Vec<String> = result.into_iter().map(String::from).collect();
     sorted.sort();
+    debug!(
+        included = sorted.len(),
+        auto_include = !directives.no_auto_include,
+        "file includes resolved"
+    );
+    trace!(?sorted, "resolved file list");
     sorted
 }
 
@@ -225,6 +233,12 @@ pub fn resolve_modules<S1: AsRef<str>, S2: AsRef<str>>(
     // Sort for deterministic ordering
     let mut sorted: Vec<String> = result.into_iter().map(String::from).collect();
     sorted.sort();
+    debug!(
+        included = sorted.len(),
+        auto_include = !directives.no_auto_include_modules,
+        "module includes resolved"
+    );
+    trace!(?sorted, "resolved module list");
     sorted
 }
 

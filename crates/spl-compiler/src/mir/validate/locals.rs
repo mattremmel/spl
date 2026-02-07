@@ -2,6 +2,8 @@
 //!
 //! Validates that all `Local` references in the MIR body are in bounds.
 
+use tracing::trace_span;
+
 use crate::mir::Body;
 use crate::mir::operand::{Operand, Rvalue};
 use crate::mir::statement::StatementKind;
@@ -14,6 +16,7 @@ use crate::mir::types::{Local, Place, PlaceElem};
 ///
 /// Panics if any `Local` reference is out of bounds.
 pub fn validate_locals(body: &Body) {
+    let _span = trace_span!("validate_locals", locals = body.num_locals()).entered();
     let num_locals = body.num_locals();
 
     for (block_idx, block) in body.basic_blocks.iter().enumerate() {
