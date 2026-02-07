@@ -317,6 +317,28 @@ println(name);
 
 This doesn't violate second-class references because the borrow exists only during the function call, not stored in the closure.
 
+### 5.1 Scoped Closures (Concurrency)
+
+The `scope()` function (see [concurrency.md](concurrency.md) §6) extends non-escaping borrow semantics to concurrent task closures. Within a scope, closures passed to `s.spawn()` are non-escaping — they are guaranteed to complete before `scope()` returns, so they can borrow immutably from the enclosing stack frame:
+
+```spl
+use std.task.scope;
+
+let data = vec![1, 2, 3, 4];
+
+scope(|s| {
+    for chunk in data.chunks(2) {
+        s.spawn(|chunk| {
+            // chunk is a borrowed slice — non-escaping, no move required
+            process(chunk);
+        });
+    }
+});
+// data still valid — borrows ended when scope() returned
+```
+
+This contrasts with `spawn()`, which creates an escaping closure that must own (move or clone) all captures and satisfy the `Send` bound. Scoped task closures follow the same non-escaping rules as closures passed to `map`, `filter`, etc. — the borrow is temporary and bounded by the call.
+
 ---
 
 ## 6. Examples

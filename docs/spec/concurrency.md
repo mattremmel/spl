@@ -27,12 +27,20 @@ let handle = spawn(|| {
 let result = handle.await();
 ```
 
+**Signature:**
+
+```spl
+fn spawn(f: F): JoinHandle(T: T) where F: FnOnce(): T + Send, T: Send
+```
+
+Task closures must capture only `Send` values, and the return type must be `Send`, since the value is transferred across task boundaries.
+
 ### 1.2 JoinHandle
 
 `spawn` returns a `JoinHandle(T: T)` for the task's result:
 
 ```spl
-struct JoinHandle(T) where T {
+struct JoinHandle(T) where T: Send {
     // Wait for task completion, get result
     fn await(self): T;
 
@@ -137,20 +145,20 @@ while rx.recv() is Some(value) {
 
 ```spl
 // Sender side
-struct Sender(T) where T {
+struct Sender(T) where T: Send {
     fn send(&self, value: T): ();
     fn try_send(&self, value: T): Result(T: (), E: SendError(T: T));
     fn is_closed(&self): bool;
 }
 
 // Receiver side
-struct Receiver(T) where T {
+struct Receiver(T) where T: Send {
     fn recv(&self): Option(T: T);
     fn try_recv(&self): Result(T: T, E: TryRecvError);
     fn is_empty(&self): bool;
 }
 
-enum SendError(T) where T {
+enum SendError(T) where T: Send {
     Disconnected(value: T),  // Channel closed, returns unsent value
     Full(value: T),          // Bounded channel full (try_send only)
 }
@@ -160,6 +168,8 @@ enum TryRecvError {
     Disconnected, // Channel closed
 }
 ```
+
+Values sent through channels cross task boundaries, so channel element types must be `Send`. This ensures thread-safety for all cross-task value transfers.
 
 ### 2.4 Multiple Producers
 
@@ -230,7 +240,9 @@ let value = rx.await();  // Wait for the single value
 
 ## 3. Select
 
-`select` waits on multiple channel operations:
+`select` waits on multiple channel operations.
+
+> **Note:** `select` is a built-in language construct with dedicated parser support, not a library function or macro.
 
 ### 3.1 Basic Select
 
@@ -380,6 +392,28 @@ Available atomic types:
 - `AtomicU8`, `AtomicU16`, `AtomicU32`, `AtomicU64`, `AtomicUsize`
 - `AtomicPtr(T: T)`
 
+**Memory Ordering:**
+
+```spl
+enum Ordering {
+    Relaxed,  // No ordering constraints
+    Acquire,  // Subsequent reads see writes before the paired Release
+    Release,  // Prior writes become visible to the paired Acquire
+    AcqRel,   // Combined Acquire + Release
+    SeqCst,   // Total ordering across all threads
+}
+```
+
+| Ordering | Use case |
+|----------|----------|
+| `Relaxed` | Counters, statistics — no cross-variable ordering needed |
+| `Acquire` | Reading a lock/flag before accessing shared data |
+| `Release` | Writing shared data before releasing a lock/flag |
+| `AcqRel` | Read-modify-write operations that both acquire and release |
+| `SeqCst` | Default. Use when unsure — provides strongest guarantees |
+
+When in doubt, use `Ordering.SeqCst`. Weaker orderings are an optimization for performance-critical code.
+
 ### 4.4 Once
 
 ```spl
@@ -440,6 +474,12 @@ spawn(|lock, cvar| {
 }
 ```
 
+**Condition variable semantics:**
+
+- **Lock release during wait:** `cvar.wait(guard)` atomically releases the mutex and suspends the task. When the task is woken, the mutex is re-acquired before `wait()` returns.
+- **Spurious wakeups:** `wait()` may return without a corresponding `notify_one()` or `notify_all()`. Always check the condition in a loop (as shown above with `while !*guard`).
+- **Mutex drop while waiting:** If the mutex is dropped while a task is waiting on the condvar, the waiting task panics on re-acquire. Ensure the mutex outlives all condvar waiters.
+
 ---
 
 ## 5. Task Cancellation
@@ -496,6 +536,12 @@ When a task is cancelled:
 - Explicit cancellation checks
 - I/O operations
 
+**Panic vs cancellation ordering:**
+
+- A panic takes precedence over a pending cancellation. If a task panics while a cancellation is pending, the panic is reported, not the cancellation.
+- `try_await()` returns `Err(TaskError.Panicked(msg))`, not `Err(TaskError.Cancelled)`, in this case.
+- A pending cancellation is ignored during panic unwinding — destructors run to completion as part of the panic, not the cancellation.
+
 ---
 
 ## 6. Scoped Tasks
@@ -522,24 +568,61 @@ scope(|s| {
 
 ### 6.2 Borrowing in Scoped Tasks
 
-Scoped tasks can borrow from the enclosing scope:
+Scoped tasks can borrow **immutably** from the enclosing scope. Multiple tasks may share read-only access to the same data:
 
 ```spl
-let mut results = Vec.new();
+let data = vec![1, 2, 3, 4, 5, 6];
+
+scope(|s| {
+    for chunk in data.chunks(2) {
+        s.spawn(|chunk| {
+            // Each task borrows its chunk immutably
+            let sum = chunk.iter().sum();
+            sum
+        });
+    }
+});
+// data is still valid here
+```
+
+For **shared mutable state**, use a synchronization primitive such as `Mutex`:
+
+```spl
+use std.sync.Mutex;
+
+let results = Mutex.new(Vec.new());
 
 scope(|s| {
     s.spawn(|| {
-        results.push(compute_a());  // Borrows results
+        let value = compute_a();
+        results.lock().push(value);
     });
     s.spawn(|| {
-        results.push(compute_b());  // Borrows results
+        let value = compute_b();
+        results.lock().push(value);
     });
 });
 
 // results contains both values
+let final_results = results.into_inner();
 ```
 
-**Note:** The borrow checker ensures safety - multiple mutable borrows would be rejected.
+**Note:** Shared mutation across concurrent tasks always requires synchronization. The borrow checker rejects multiple mutable borrows to the same data, so patterns like two tasks both calling `results.push()` on a bare `Vec` are compile errors. Use `Mutex`, `RwLock`, or channels to coordinate writes.
+
+### 6.3 Scoped vs Unscoped Task Closures
+
+`spawn()` and `s.spawn()` (within `scope()`) have different closure requirements:
+
+| | `spawn()` | `s.spawn()` (scoped) |
+|---|---|---|
+| **Closure kind** | Escaping — must own all captures | Non-escaping within scope — can borrow immutably |
+| **`Send` bound** | Required (`F: Send`, `T: Send`) | Not required (tasks join before scope exits) |
+| **Mutable shared state** | Via `Arc(T: Mutex(T: T))` or channels | Via `Mutex` (no `Arc` needed — scope guarantees lifetime) |
+| **Lifetime** | Unbounded — task may outlive caller | Bounded — all tasks complete before `scope()` returns |
+
+Because scoped tasks are guaranteed to complete before the enclosing `scope()` call returns, they can borrow from the enclosing stack frame without requiring `Send` or ownership transfer. This is the same non-escaping closure mechanism described in [closures.md](closures.md) §5.1 — the borrow exists only for the duration of the `scope()` call.
+
+See also [memory-model.md](memory-model.md) §8 for scoped type semantics.
 
 ---
 
@@ -579,12 +662,12 @@ fn compute(): () {
 
 ### 7.4 Thread-Local Storage
 
+Per-task storage allows each task to maintain its own instance of a value. Declare task-local storage with `thread_local` and access it via the `.with()` callback:
+
 ```spl
 use std.task.thread_local;
 
-thread_local! {
-    static CACHE: RefCell(HashMap(K: String, V: i32)) = RefCell.new(HashMap.new());
-}
+let CACHE = thread_local(|| RefCell.new(HashMap.new()));
 
 fn cached_lookup(key: &str): i32 {
     CACHE.with(|cache| {
@@ -595,6 +678,8 @@ fn cached_lookup(key: &str): i32 {
     })
 }
 ```
+
+`thread_local(init)` declares a task-local variable initialized lazily by `init` on first access in each task. The `.with()` callback provides a reference to the task's instance. The exact mechanism (language feature, compiler intrinsic, or library function) is not yet decided.
 
 ---
 
@@ -649,7 +734,7 @@ match result {
 use std.channel.bounded;
 use std.task.spawn;
 
-fn worker_pool(jobs: Receiver(Job), results: Sender(Result), n: usize): () {
+fn worker_pool(jobs: Receiver(T: Job), results: Sender(T: JobResult), n: usize): () {
     for _ in 0..n {
         let jobs = jobs.clone();
         let results = results.clone();
@@ -666,7 +751,7 @@ fn worker_pool(jobs: Receiver(Job), results: Sender(Result), n: usize): () {
 ### 9.2 Fan-Out/Fan-In
 
 ```spl
-fn fan_out_fan_in(input: Vec(T: Item)): Vec(T: Result) {
+fn fan_out_fan_in(input: Vec(T: Item)): Vec(T: Output) {
     let (result_tx, result_rx) = unbounded();
 
     for item in input {
@@ -685,7 +770,7 @@ fn fan_out_fan_in(input: Vec(T: Item)): Vec(T: Result) {
 ### 9.3 Pipeline
 
 ```spl
-fn pipeline(input: Receiver(Raw)): Receiver(Final) {
+fn pipeline(input: Receiver(T: Raw)): Receiver(T: Final) {
     let (stage1_tx, stage1_rx) = bounded(10);
     let (stage2_tx, stage2_rx) = bounded(10);
 
@@ -753,3 +838,5 @@ fn with_timeout(duration: Duration, f: fn(): T): Result(T: T, E: TimeoutError) w
 - [ADR-013: Concurrency Model](../designs/013-async-await.md) - Design rationale
 - [closures.md](closures.md) - Task closure capture semantics
 - [memory-model.md](memory-model.md) - Ownership with concurrency
+- [traits.md](traits.md) - Send, Sync, and other marker traits
+- [type-system.md](type-system.md) - Type system and bounds
