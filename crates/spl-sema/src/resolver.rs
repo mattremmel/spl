@@ -253,7 +253,7 @@ impl<'ctx> Resolver<'ctx> {
             debug!(name = %name_text, def_id = def_id.index(), "resolved name");
             Some(def_id)
         } else {
-            debug!(name = %name_text, "unresolved name");
+            debug!(name = %name_text, scope = self.ctx.current_scope_id().index(), "unresolved name");
             self.error_undefined(&name_text, span);
             None
         }
@@ -385,6 +385,9 @@ impl<'ctx> Resolver<'ctx> {
     pub fn resolve_imports(&mut self) {
         let imports = std::mem::take(&mut self.pending_imports);
 
+        let total_imports = imports.len();
+        let glob_count = imports.iter().filter(|i| i.is_glob).count();
+
         for import in imports {
             if import.is_glob {
                 self.resolve_glob_import(&import);
@@ -393,6 +396,12 @@ impl<'ctx> Resolver<'ctx> {
 
             self.resolve_single_import(&import);
         }
+
+        debug!(
+            total_imports,
+            glob_count,
+            "import resolution complete"
+        );
     }
 
     fn resolve_single_import(&mut self, import: &PendingImport) {

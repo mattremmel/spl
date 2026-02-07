@@ -177,7 +177,7 @@ impl ModuleCompiler {
             function_ptrs.insert(func_def.def_id, ptr);
         }
 
-        tracing::info!("JIT module compilation complete");
+        tracing::info!(function_count = function_ptrs.len(), "JIT module compilation complete");
         Ok(CompiledModule {
             function_ptrs,
             main_def_id: None,
@@ -237,6 +237,7 @@ impl ModuleCompiler {
             }
             debug!(function_name = %func_def.name, "compiling function body");
             self.define_single_function(func_def, types, *func_id)?;
+            debug!(function_name = %func_def.name, "function compilation complete");
         }
         Ok(())
     }
@@ -375,7 +376,7 @@ impl AotModuleCompiler {
             function_names.insert(func_def.def_id, func_def.name.clone());
         }
 
-        tracing::info!(code_bytes = bytes.len(), "AOT module compilation complete");
+        tracing::info!(code_bytes = bytes.len(), function_count = function_names.len(), "AOT module compilation complete");
         Ok(CompiledObjectFile {
             bytes,
             function_names,
@@ -416,6 +417,7 @@ impl AotModuleCompiler {
         for (func_def, func_id) in functions.iter().zip(func_ids.iter()) {
             debug!(function_name = %func_def.name, "compiling function body");
             self.define_single_function(func_def, types, *func_id)?;
+            debug!(function_name = %func_def.name, "function compilation complete");
         }
         Ok(())
     }

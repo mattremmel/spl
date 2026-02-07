@@ -352,7 +352,13 @@ impl<'src> Parser<'src> {
             consumed += 1;
         }
 
-        debug!(error_message = %error_msg, consumed_tokens = consumed, "parser recovery");
+        debug!(
+            error_message = %error_msg,
+            consumed_tokens = consumed,
+            recovery_set_size = recovery_set.len(),
+            stopped_at = ?self.current(),
+            "parser recovery"
+        );
 
         m.complete(self, SyntaxKind::ERROR)
     }
@@ -503,7 +509,7 @@ impl<'src> Parser<'src> {
             match parse_item(self) {
                 Ok(()) => {}
                 Err(err) => {
-                    debug!(error = %err.message, "delimited list recovery");
+                    debug!(error = %err.message, open = ?open, close = ?close, "delimited list recovery");
                     // Wrap error tokens in ERROR node
                     let m = self.start();
                     self.error(err);

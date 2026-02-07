@@ -1732,7 +1732,7 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseEr
         lookahead += 1;
     }
 
-    match p.peek(lookahead) {
+    let result = match p.peek(lookahead) {
         Some(SyntaxKind::GEN_KW) => generator_def(p),
         Some(SyntaxKind::FN_KW) => function_def(p),
         Some(SyntaxKind::STRUCT_KW) => struct_def(p),
@@ -1763,7 +1763,12 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseEr
             );
             Err(err)
         }
+    };
+
+    if let Ok(ref cm) = result {
+        tracing::debug!(kind = ?cm.kind(), "parsed item");
     }
+    result
 }
 
 /// Parse a module definition: `[attrs] [pub] module name { items }` or `module name;`
@@ -1822,13 +1827,19 @@ pub(crate) fn source_file(p: &mut Parser<'_>) -> CompletedMarker {
     // Parse inner attributes at the start of the file
     opt_inner_attributes(p);
 
+    let mut item_count: usize = 0;
+    let mut error_count: usize = 0;
     while p.current().is_some() {
         if let Err(err) = item(p) {
             // Recover to next item boundary, wrapping error in ERROR node
             p.recover_to_item(err);
+            error_count += 1;
+        } else {
+            item_count += 1;
         }
     }
 
+    tracing::debug!(item_count, error_count, "source file items parsed");
     m.complete(p, SyntaxKind::SourceFile)
 }
 

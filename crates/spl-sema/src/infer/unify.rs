@@ -133,6 +133,7 @@ impl<'a> InferEngine<'a> {
     ///
     /// Returns true if `var` appears anywhere within `type_id`.
     fn occurs_in(&self, var: TypeVar, type_id: TypeId) -> bool {
+        trace!(var = var.index(), type_id = type_id.index(), "performing occurs check");
         let resolved = self.resolve_type(type_id);
         let ty = self.types.get(resolved);
         match ty {
@@ -234,6 +235,8 @@ impl<'a> InferEngine<'a> {
     /// The substitution is extended in-place. On failure, partial substitutions
     /// may remain (caller should handle this appropriately).
     pub(super) fn unify(&mut self, a: TypeId, b: TypeId) -> Result<(), UnifyError> {
+        self.unification_count += 1;
+
         debug_assert!(
             self.is_valid_type_id(a),
             "precondition: type a ({}) must be valid",
@@ -466,6 +469,7 @@ impl<'a> InferEngine<'a> {
         };
 
         if let Err(ref e) = result {
+            self.unification_failures += 1;
             debug!(a = a.index(), b = b.index(), error = ?e, "unification failed");
         }
 
@@ -659,6 +663,16 @@ impl<'a> InferEngine<'a> {
             self.collect_defaults(type_id, &mut defaults);
         }
 
+        let int_defaults = defaults
+            .iter()
+            .filter(|(_, ty)| *ty == self.types.i32())
+            .count();
+        let float_defaults = defaults
+            .iter()
+            .filter(|(_, ty)| *ty == self.types.f64())
+            .count();
+        debug!(int_defaults, float_defaults, "collected numeric defaults");
+
         // Apply defaults
         for (var, default) in defaults {
             self.substitution.entry(var).or_insert(default);
@@ -667,6 +681,7 @@ impl<'a> InferEngine<'a> {
         // Resolve all binding types
         // First collect all the bindings to avoid borrow conflicts
         let bindings: Vec<_> = self.results.binding_types.drain().collect();
+        let bindings_count = bindings.len();
         for (def_id, type_id) in bindings {
             let resolved = self.fully_resolve_type(type_id);
             self.results.binding_types.insert(def_id, resolved);
@@ -674,6 +689,7 @@ impl<'a> InferEngine<'a> {
 
         // Resolve all expression types
         let exprs: Vec<_> = self.results.expr_types.drain().collect();
+        let exprs_count = exprs.len();
         for (span, type_id) in exprs {
             let resolved = self.fully_resolve_type(type_id);
             self.results.expr_types.insert(span, resolved);
@@ -681,10 +697,18 @@ impl<'a> InferEngine<'a> {
 
         // Resolve all type annotation types
         let annotations: Vec<_> = self.results.type_annotation_types.drain().collect();
+        let annotations_count = annotations.len();
         for (span, type_id) in annotations {
             let resolved = self.fully_resolve_type(type_id);
             self.results.type_annotation_types.insert(span, resolved);
         }
+
+        debug!(
+            bindings_resolved = bindings_count,
+            exprs_resolved = exprs_count,
+            annotations_resolved = annotations_count,
+            "defaults applied and types fully resolved"
+        );
     }
 
     fn collect_defaults(&self, type_id: TypeId, defaults: &mut Vec<(TypeVar, TypeId)>) {

@@ -5,7 +5,7 @@
 
 use rustc_hash::FxHashMap;
 use spl_ast::Item;
-use tracing::{debug_span, info, info_span};
+use tracing::{debug, debug_span, info, info_span};
 
 use crate::package::Package;
 
@@ -20,10 +20,21 @@ pub use spl_sema::*;
 ///
 /// This function is in spl-compiler because it depends on the Package type.
 fn module_tree_from_package_structure(package: &Package) -> ModuleTree {
+    let _span = debug_span!("build_module_tree").entered();
     let mut tree = ModuleTree::new();
     let root_id = tree.root_id();
     build_module_structure(&mut tree, root_id, package);
+    let module_count = count_modules(package);
+    debug!(module_count, "module tree built");
     tree
+}
+
+/// Count total modules (including the root) in a package hierarchy.
+fn count_modules(package: &Package) -> usize {
+    1 + package
+        .modules()
+        .map(count_modules)
+        .sum::<usize>()
 }
 
 fn build_module_structure(tree: &mut ModuleTree, parent_id: ModuleId, package: &Package) {
@@ -140,6 +151,8 @@ fn collect_all_items_through_resolver(
 
     // Populate module tree with items from this package
     populate_module_tree_from_scope(package, resolver, module_id);
+
+    debug!(module_id = ?module_id, "collect_items phase complete for module");
 
     // Recurse into child modules
     for child_mod in package.modules() {
@@ -262,6 +275,8 @@ fn resolve_all_imports(
     // Resolve imports
     resolver.resolve_imports();
 
+    debug!(module_id = ?module_id, "resolve_imports phase complete for module");
+
     // Recurse into child modules
     for child_mod in package.modules() {
         let child_id = {
@@ -299,6 +314,8 @@ fn resolve_all_bodies(
         resolver.resolve_source_file(&source_file);
     }
 
+    debug!(module_id = ?module_id, "resolve_bodies phase complete for module");
+
     // Recurse into child modules
     for child_mod in package.modules() {
         let child_id = {
@@ -333,8 +350,19 @@ pub fn infer_package(package: &Package, resolve_result: &ResolveResult) -> Infer
         infer_all_bodies(package, &mut engine);
     }
 
-    engine.apply_defaults();
-    engine.into_result()
+    {
+        let _phase = debug_span!("apply_defaults").entered();
+        engine.apply_defaults();
+    }
+
+    let result = engine.into_result();
+    info!(
+        expr_type_count = result.expr_types.len(),
+        binding_type_count = result.binding_types.len(),
+        diagnostic_count = result.diagnostics.len(),
+        "package type inference complete"
+    );
+    result
 }
 
 /// Phase 1: Collect function signatures, struct info, and type aliases from all modules.

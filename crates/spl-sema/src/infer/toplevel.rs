@@ -21,6 +21,7 @@ impl<'a> InferEngine<'a> {
     /// Infer types for a source file.
     pub fn infer_source_file(&mut self, source_file: &SourceFile) {
         // First pass: collect function signatures and struct info
+        let sig_span = debug_span!("collect_signatures").entered();
         for item in source_file.items() {
             match &item {
                 Item::Function(func) => self.collect_function_signature(func),
@@ -97,6 +98,8 @@ impl<'a> InferEngine<'a> {
                 }
                 Item::Extern(extern_block) => {
                     // Collect signatures for extern functions
+                    let extern_fn_count = extern_block.extern_fns().count();
+                    debug!(extern_fn_count, "collecting extern block signatures");
                     for extern_fn in extern_block.extern_fns() {
                         self.collect_extern_fn_signature(&extern_fn);
                     }
@@ -110,14 +113,24 @@ impl<'a> InferEngine<'a> {
                 Item::Use(_) | Item::Enum(_) | Item::Trait(_) | Item::Generator(_) => {}
             }
         }
+        debug!(
+            fn_signature_count = self.defs.fn_signatures.len(),
+            struct_count = self.defs.struct_fields.len(),
+            type_alias_count = self.defs.type_alias_targets.len(),
+            "signature collection complete"
+        );
+        drop(sig_span);
 
         // Check for recursive types (infinite size structs)
+        debug!("checking for recursive types");
         self.check_recursive_types();
 
         // Check for type alias cycles
+        debug!("checking for type alias cycles");
         self.check_type_alias_cycles();
 
         // Second pass: infer function bodies
+        let body_span = debug_span!("infer_bodies").entered();
         for item in source_file.items() {
             match &item {
                 Item::Function(func) => self.infer_function(func),
@@ -135,10 +148,17 @@ impl<'a> InferEngine<'a> {
                 _ => {}
             }
         }
+        debug!("body inference complete");
+        drop(body_span);
     }
 
     /// Collect signatures from items inside an inline module.
     pub fn collect_module_signatures(&mut self, module_def: &spl_ast::ModuleDef) {
+        let module_name = module_def
+            .name()
+            .map(|n| n.syntax().text().to_string())
+            .unwrap_or_default();
+        debug!(module_name = %module_name, "collecting module signatures");
         for item in module_def.items() {
             match &item {
                 Item::Function(func) => self.collect_function_signature(func),
@@ -690,6 +710,20 @@ impl<'a> InferEngine<'a> {
 
     /// Collect signatures for all methods in an impl block (public for multi-file inference).
     pub fn collect_impl_signatures(&mut self, impl_block: &spl_ast::ImplBlock) {
+        let struct_name = impl_block
+            .self_ty()
+            .map(|t| t.syntax().text().to_string())
+            .unwrap_or_default();
+        let method_count = impl_block
+            .items()
+            .filter(|item| matches!(item, Item::Function(_)))
+            .count();
+        debug!(
+            struct_name = %struct_name,
+            method_count,
+            "collecting impl signatures"
+        );
+
         // Get the struct this impl is for
         let struct_def_id = self.get_impl_struct_def_id(impl_block);
 
@@ -756,6 +790,8 @@ impl<'a> InferEngine<'a> {
 
     /// Collect signatures for all extern functions (public for multi-file inference).
     pub fn collect_extern_signatures(&mut self, extern_block: &spl_ast::ExternBlock) {
+        let extern_fn_count = extern_block.extern_fns().count();
+        debug!(extern_fn_count, "collecting extern signatures");
         for extern_fn in extern_block.extern_fns() {
             self.collect_extern_fn_signature(&extern_fn);
         }

@@ -8,6 +8,7 @@ use cranelift_codegen::ir::Function;
 use cranelift_frontend::FunctionBuilderContext;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{FuncId, Linkage, Module};
+use tracing::debug;
 
 use super::error::CodegenError;
 use super::runtime::Runtime;
@@ -43,6 +44,8 @@ impl CodegenContext {
         let ctx = module.make_context();
         let func_ctx = FunctionBuilderContext::new();
 
+        debug!("created JIT context");
+
         Ok(Self {
             module,
             ctx,
@@ -63,6 +66,7 @@ impl CodegenContext {
         );
 
         // Register runtime symbols
+        let runtime_symbol_count = runtime.iter().count();
         for func in runtime.iter() {
             builder.symbol(func.name, func.ptr);
         }
@@ -70,6 +74,8 @@ impl CodegenContext {
         let module = JITModule::new(builder);
         let ctx = module.make_context();
         let func_ctx = FunctionBuilderContext::new();
+
+        debug!(runtime_symbol_count, "created JIT context with runtime");
 
         Ok(Self {
             module,
@@ -174,6 +180,7 @@ impl CodegenContext {
     /// getting function pointers.
     pub fn finalize(&mut self) {
         self.module.finalize_definitions().expect("finalize failed");
+        debug!("finalized JIT module");
     }
 
     /// Get a function pointer for a defined function.

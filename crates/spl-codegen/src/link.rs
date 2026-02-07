@@ -8,6 +8,8 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use tracing::debug;
+
 use super::error::CodegenError;
 
 /// Options for the linker.
@@ -200,6 +202,8 @@ impl Linker for CcLinker {
         let cc = self.compiler_command();
         let args = self.build_args(objects, output, options);
 
+        debug!(compiler = %cc, arg_count = args.len(), output = %output.display(), "invoking linker");
+
         let output_result = Command::new(&cc)
             .args(&args)
             .output()
@@ -212,6 +216,8 @@ impl Linker for CcLinker {
                 stderr: String::from_utf8_lossy(&output_result.stderr).into_owned(),
             });
         }
+
+        debug!(output = %output.display(), "linking succeeded");
 
         Ok(())
     }
@@ -233,6 +239,7 @@ pub fn link_object_to_executable(
     output: &Path,
     options: Option<&LinkOptions>,
 ) -> Result<(), LinkError> {
+    debug!(object_bytes = object_bytes.len(), output = %output.display(), "linking object to executable");
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
 

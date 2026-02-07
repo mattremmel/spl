@@ -32,6 +32,7 @@ pub fn pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
 /// single_pattern = ref_pat | tuple_or_grouped_pat | slice_pat | wildcard_pat | literal_or_range_pat | rest_pat | ident_pat
 /// ```
 fn single_pattern(p: &mut Parser<'_>) -> Result<CompletedMarker, ParseError> {
+    tracing::trace!(token = ?p.current(), "parsing pattern");
     match_token!(p, {
         // Reference pattern: &x, &mut x
         AMP => ref_pat(p),

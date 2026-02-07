@@ -10,7 +10,7 @@
 
 use logos::Logos;
 use std::fmt;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 /// All token types in the SPL language.
 #[derive(Logos, Debug, Clone, PartialEq)]
@@ -318,6 +318,7 @@ fn lex_block_comment(lex: &mut logos::Lexer<'_, Token>) -> bool {
         true
     } else {
         // Consume all remaining input for unterminated comment error
+        trace!(consumed_bytes = bytes.len(), "unterminated block comment, consumed remaining input");
         lex.bump(bytes.len());
         false
     }
@@ -364,6 +365,7 @@ fn lex_raw_string_body(lex: &mut logos::Lexer<'_, Token>, hash_count: usize) -> 
     }
 
     // No closing delimiter found - consume all for error
+    trace!(consumed_bytes = bytes.len(), hash_count, "unterminated raw string, consumed remaining input");
     lex.bump(bytes.len());
     false
 }
@@ -539,11 +541,22 @@ pub fn lex_all(source: &str) -> LexResult<'_> {
     let _span = tracing::info_span!("lex", source_bytes = source.len()).entered();
     let mut tokens = Vec::new();
     let mut errors = Vec::new();
+    let mut keyword_count: usize = 0;
+    let mut punct_count: usize = 0;
+    let mut literal_count: usize = 0;
+    let mut ident_count: usize = 0;
 
     for spanned in Lexer::new(source) {
-        if spanned.token == Token::Error {
-            let error = classify_error(source, &spanned);
-            errors.push(error);
+        match &spanned.token {
+            Token::Error => {
+                let error = classify_error(source, &spanned);
+                errors.push(error);
+            }
+            t if is_keyword(t) => keyword_count += 1,
+            t if is_literal(t) => literal_count += 1,
+            Token::Ident => ident_count += 1,
+            t if is_punctuation(t) => punct_count += 1,
+            _ => {} // trivia (whitespace, newline, comments)
         }
         tokens.push(spanned);
     }
@@ -556,17 +569,60 @@ pub fn lex_all(source: &str) -> LexResult<'_> {
     tracing::info!(
         token_count = tokens.len(),
         error_count = errors.len(),
+        keyword_count,
+        ident_count,
+        literal_count,
+        punct_count,
         "lexing complete"
     );
     LexResult { tokens, errors }
 }
 
+/// Check if a token is a keyword.
+fn is_keyword(t: &Token) -> bool {
+    matches!(
+        t,
+        Token::Let | Token::Mut | Token::Fn | Token::Gen | Token::Struct
+            | Token::Enum | Token::Trait | Token::Type | Token::Impl
+            | Token::If | Token::Else | Token::While | Token::For
+            | Token::In | Token::Loop | Token::Break | Token::Continue
+            | Token::Return | Token::Yield | Token::Throw | Token::Throws
+            | Token::As | Token::True | Token::False | Token::Pub
+            | Token::SelfType | Token::SelfValue | Token::Super
+            | Token::Where | Token::Is | Token::Match | Token::Extern
+            | Token::Const | Token::Static | Token::Unsafe | Token::Use | Token::Module
+    )
+}
+
+/// Check if a token is a literal.
+fn is_literal(t: &Token) -> bool {
+    matches!(
+        t,
+        Token::Integer | Token::Float | Token::String | Token::Char
+            | Token::RawString | Token::ByteString | Token::RawByteString
+            | Token::CString | Token::ByteChar
+    )
+}
+
+/// Check if a token is punctuation (operators, delimiters).
+fn is_punctuation(t: &Token) -> bool {
+    !matches!(
+        t,
+        Token::Whitespace | Token::Newline | Token::LineComment | Token::BlockComment
+            | Token::Ident | Token::Error | Token::Tick
+    ) && !is_keyword(t) && !is_literal(t)
+}
+
 /// Classify an error token into a specific error kind.
 fn classify_error(source: &str, token: &SpannedToken<'_>) -> LexError {
+    let result = classify_error_inner(source, token);
+    debug!(error_text = %token.text, span = ?token.span, error_kind = ?result.kind, "classified lex error");
+    result
+}
+
+fn classify_error_inner(source: &str, token: &SpannedToken<'_>) -> LexError {
     let text = token.text;
     let span = token.span.clone();
-
-    debug!(text = %text, span = ?span, "classifying lex error");
 
     // Check for unterminated raw string
     if text.starts_with("r#") || text.starts_with("r\"") {

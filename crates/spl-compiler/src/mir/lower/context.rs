@@ -884,6 +884,7 @@ impl<'hir> MirLoweringContext<'hir> {
         };
 
         // Create SwitchInt terminator: true -> then_bb, false -> else_bb
+        trace!(then_block = ?then_bb, else_block = ?else_bb, "control flow edge: if branch");
         let targets = SwitchTargets::new_bool(then_bb, else_bb);
         builder.set_terminator(
             TerminatorKind::SwitchInt {
@@ -898,6 +899,7 @@ impl<'hir> MirLoweringContext<'hir> {
         let then_operand = self.lower_expr_as_operand(builder, then_branch)?;
         // Only add fallthrough if the branch didn't diverge (e.g., break/continue/return)
         if !builder.is_current_block_terminated() {
+            trace!(to_block = ?join_bb, "control flow edge: then to join");
             builder.push_statement(Statement::assign(
                 result_place.clone(),
                 Rvalue::Use(then_operand),
@@ -912,6 +914,7 @@ impl<'hir> MirLoweringContext<'hir> {
             let else_operand = self.lower_expr_as_operand(builder, else_expr)?;
             // Only add fallthrough if the branch didn't diverge
             if !builder.is_current_block_terminated() {
+                trace!(to_block = ?join_bb, "control flow edge: else to join");
                 builder.push_statement(Statement::assign(
                     result_place.clone(),
                     Rvalue::Use(else_operand),
@@ -952,6 +955,7 @@ impl<'hir> MirLoweringContext<'hir> {
         });
 
         // Jump to header
+        trace!(to_block = ?header_bb, "control flow edge: enter loop");
         builder.set_terminator(TerminatorKind::Goto(header_bb), span.clone());
 
         // Lower body in header block
@@ -961,6 +965,7 @@ impl<'hir> MirLoweringContext<'hir> {
         // If we're still in header and no terminator set, loop back
         // (This handles the case where body doesn't end in break/continue/return)
         if builder.current_block().terminator.is_none() {
+            trace!(to_block = ?header_bb, "control flow edge: loop back");
             builder.set_terminator(TerminatorKind::Goto(header_bb), span.clone());
         }
 
@@ -1009,6 +1014,7 @@ impl<'hir> MirLoweringContext<'hir> {
         }
 
         // Jump to exit block
+        trace!(to_block = ?loop_ctx.exit_block, "control flow edge: break to loop exit");
         builder.set_terminator(TerminatorKind::Goto(loop_ctx.exit_block), span.clone());
 
         // Break doesn't produce a value (execution continues elsewhere)
@@ -1036,6 +1042,7 @@ impl<'hir> MirLoweringContext<'hir> {
         };
 
         // Jump to header block
+        trace!(to_block = ?loop_ctx.header_block, "control flow edge: continue to loop header");
         builder.set_terminator(TerminatorKind::Goto(loop_ctx.header_block), span.clone());
 
         // Continue doesn't produce a value
@@ -1409,6 +1416,13 @@ impl<'hir> MirLoweringContext<'hir> {
 
         // Add return terminator
         builder.set_terminator(TerminatorKind::Return, span);
+
+        debug!(
+            function_name = %func.name,
+            block_count = builder.basic_blocks.len(),
+            local_count = builder.locals.len(),
+            "function body lowered to MIR"
+        );
 
         // Preserve function metadata (def_id and name) from HIR
         Ok(builder.finish_with_metadata(func.params.len(), func.def_id, func.name.clone()))

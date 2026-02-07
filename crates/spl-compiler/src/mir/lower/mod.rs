@@ -78,6 +78,12 @@ pub fn lower_hir_to_mir(hir: &HirDatabase) -> IceResult<Vec<Body>> {
         if let HirItem::Function(func) = item {
             debug!(function_name = %func.name, "lowering function to MIR");
             let body = ctx.lower_function(func)?;
+            debug!(
+                function_name = %func.name,
+                block_count = body.basic_blocks.len(),
+                local_count = body.locals.len(),
+                "function MIR lowering complete"
+            );
             ctx.bodies.push(body);
         }
     }

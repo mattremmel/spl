@@ -191,10 +191,15 @@ pub fn infer(source_file: &SourceFile, resolve_result: &ResolveResult) -> InferR
     let _span = tracing::info_span!("infer").entered();
     let mut engine = InferEngine::new(resolve_result);
     engine.infer_source_file(source_file);
-    engine.apply_defaults();
+    {
+        let _span = tracing::debug_span!("apply_defaults").entered();
+        engine.apply_defaults();
+    }
     let result = engine.into_result();
     tracing::info!(
         diagnostic_count = result.diagnostics.len(),
+        expr_type_count = result.expr_types.len(),
+        binding_type_count = result.binding_types.len(),
         "type inference complete"
     );
     result

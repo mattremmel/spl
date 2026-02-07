@@ -765,6 +765,7 @@ impl<'a> InferEngine<'a> {
                         // Record the type for this field access
                         let seg_span = text_range_to_span(segment.syntax().text_range());
                         self.results.expr_types.insert(seg_span, result_ty);
+                        trace!(field_name = %field_name, result_type = result_ty.index(), "field access resolved");
                         return result_ty;
                     }
                 }
@@ -2100,7 +2101,9 @@ impl<'a> InferEngine<'a> {
                             }
                         }
                         // Substitute type parameters in field type
-                        return self.substitute_type_params(ty, &subst);
+                        let result_ty = self.substitute_type_params(ty, &subst);
+                        trace!(field_name = %field_name, result_type = result_ty.index(), "field access resolved");
+                        return result_ty;
                     }
                 }
             }
@@ -2412,6 +2415,7 @@ impl<'a> InferEngine<'a> {
                     self.results
                         .method_resolutions
                         .insert(method_span, *method_def_id);
+                    debug!(method_name = %method_name, def_id = method_def_id.index(), "method resolved");
 
                     return self.synth_method_call_with_receiver(
                         call,
@@ -3377,6 +3381,7 @@ impl<'a> InferEngine<'a> {
 
     /// Check an expression against an expected type.
     pub(super) fn check_expr(&mut self, expr: &Expr, expected: TypeId) {
+        trace!(expected = expected.index(), "checking expression against expected type");
         let actual = self.synth_expr(expr);
         // unify(expected, actual): checks if actual can satisfy expected
         // Coercion allows &mut T to satisfy &T, but not vice versa

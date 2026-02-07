@@ -55,6 +55,7 @@ use cranelift_codegen::ir::Function;
 use cranelift_frontend::FunctionBuilderContext;
 use cranelift_module::{FuncId, Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule};
+use tracing::debug;
 
 use super::error::CodegenError;
 use super::target::TargetConfig;
@@ -95,6 +96,8 @@ impl AotContext {
         let module = ObjectModule::new(builder);
         let ctx = module.make_context();
         let func_ctx = FunctionBuilderContext::new();
+
+        debug!("created AOT compilation context");
 
         Ok(Self {
             module,
@@ -180,7 +183,9 @@ impl AotContext {
     /// Consumes the context and returns the raw object file data.
     pub fn finish(self) -> Vec<u8> {
         let product = self.module.finish();
-        product.emit().expect("failed to emit object file")
+        let bytes = product.emit().expect("failed to emit object file");
+        debug!(object_bytes = bytes.len(), "emitted object file");
+        bytes
     }
 
     /// Get a reference to the underlying module.

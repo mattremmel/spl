@@ -69,6 +69,7 @@ fn expr_bp(
     depth: usize,
 ) -> Result<Option<CompletedMarker>, crate::ParseError> {
     if depth > MAX_EXPR_DEPTH {
+        tracing::trace!(depth, max = MAX_EXPR_DEPTH, "expression nesting limit exceeded");
         return Err(p.error_at_current("expression nesting limit exceeded".to_string()));
     }
 
@@ -84,6 +85,7 @@ fn expr_bp(
         // Check for postfix operators first (highest precedence)
         if let Some((l_bp, ())) = postfix_bp(op) {
             if l_bp < min_bp {
+                tracing::trace!(op = ?op, l_bp, min_bp, "postfix below min_bp, stopping");
                 break;
             }
             lhs = postfix_expr(p, lhs, op)?;
@@ -93,8 +95,10 @@ fn expr_bp(
         // Check for infix operators
         if let Some((l_bp, r_bp)) = infix_bp(op) {
             if l_bp < min_bp {
+                tracing::trace!(op = ?op, l_bp, min_bp, "infix below min_bp, stopping");
                 break;
             }
+            tracing::trace!(op = ?op, l_bp, r_bp, depth, "parsing infix expression");
             lhs = infix_expr(p, lhs, r_bp, allow_struct, depth + 1)?;
             continue;
         }

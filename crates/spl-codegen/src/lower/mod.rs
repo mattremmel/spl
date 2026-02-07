@@ -211,7 +211,11 @@ impl<'a> FunctionLowerer<'a> {
         }
 
         self.builder.finalize();
-        trace!("function body lowering complete");
+        debug!(
+            block_count = self.body.num_blocks(),
+            local_count = self.body.num_locals(),
+            "function body lowering complete"
+        );
         Ok(())
     }
 

@@ -85,8 +85,9 @@ pub fn lower_to_hir(source_file: &SourceFile, infer_result: &InferResult) -> Hir
     let _span = info_span!("lower_to_hir").entered();
     let mut ctx = LoweringContext::new(infer_result);
     ctx.lower_source_file(source_file);
+    let missing_expr_count = ctx.missing_expr_count;
     let db = ctx.into_database();
-    info!(item_count = db.items.len(), "HIR lowering complete");
+    info!(item_count = db.items.len(), missing_expr_count, "HIR lowering complete");
     db
 }
 
@@ -101,8 +102,9 @@ pub fn lower_package_to_hir(
     let _span = info_span!("lower_package_to_hir", package = package.name()).entered();
     let mut ctx = LoweringContext::new(infer_result);
     lower_package_files(package, &mut ctx);
+    let missing_expr_count = ctx.missing_expr_count;
     let db = ctx.into_database();
-    info!(item_count = db.items.len(), "package HIR lowering complete");
+    info!(item_count = db.items.len(), missing_expr_count, "package HIR lowering complete");
     db
 }
 
@@ -130,6 +132,8 @@ struct LoweringContext<'a> {
     db: HirDatabase,
     /// Reference to inference results (types, resolutions, etc.).
     infer_result: &'a InferResult,
+    /// Count of Missing expressions produced during lowering.
+    missing_expr_count: usize,
 }
 
 impl<'a> LoweringContext<'a> {
@@ -138,7 +142,11 @@ impl<'a> LoweringContext<'a> {
         // Clone the type interner from the inference result
         db.types = infer_result.types.clone();
 
-        Self { db, infer_result }
+        Self {
+            db,
+            infer_result,
+            missing_expr_count: 0,
+        }
     }
 
     fn into_database(mut self) -> HirDatabase {
@@ -1349,12 +1357,17 @@ impl<'a> LoweringContext<'a> {
                 // Check if the result type is a struct type - if so, it's struct instantiation
                 let is_struct = matches!(self.db.types.get(ty), Type::Struct(_, _));
                 if is_struct {
+                    debug!(dispatch = "struct", "call dispatch");
                     self.lower_call_as_struct(call, path_expr, span, ty)
                 } else {
+                    debug!(dispatch = "function", "call dispatch");
                     self.lower_call_as_function(call, path_expr, span, ty)
                 }
             }
-            Expr::Field(field_expr) => self.lower_call_as_method(call, field_expr, span, ty),
+            Expr::Field(field_expr) => {
+                debug!(dispatch = "method", "call dispatch");
+                self.lower_call_as_method(call, field_expr, span, ty)
+            }
             _ => {
                 // Arbitrary callable expression
                 let callee_id = self.lower_expr(&callee);
@@ -1683,6 +1696,7 @@ impl<'a> LoweringContext<'a> {
 
     /// Desugar `while cond { body }` to `loop { if !cond { break; } body }`
     fn lower_while_expr(&mut self, while_expr: &WhileExpr, span: Span) -> ExprId {
+        debug!("desugaring while loop to loop+if+break");
         let ty = self.unit_type(); // while loops have unit type
 
         // Get the condition
@@ -1795,6 +1809,7 @@ impl<'a> LoweringContext<'a> {
     /// }
     /// ```
     fn lower_for_expr(&mut self, for_expr: &ForExpr, span: Span) -> ExprId {
+        debug!("desugaring for loop to loop+compare+break+increment");
         let ty = self.unit_type(); // for loops have unit type
 
         // Get the iterable (expected to be a Range expression: start..end)
@@ -2151,6 +2166,7 @@ impl<'a> LoweringContext<'a> {
     }
 
     fn lower_missing(&mut self, span: Span) -> ExprId {
+        self.missing_expr_count += 1;
         warn!("producing Missing HIR expression");
         let expr = HirExpr {
             kind: HirExprKind::Missing,

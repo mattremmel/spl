@@ -17,6 +17,7 @@ pub(super) fn primary_expr(
     allow_struct: bool,
     _depth: usize,
 ) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!(token = ?p.current(), "primary_expr dispatch");
     match_token!(p, {
         // Literals
         INT_LITERAL | FLOAT_LITERAL

@@ -7,6 +7,7 @@ use super::{FileId, SourceMap};
 use rowan::ast::AstNode;
 use spl_ast::{Item, SourceFile as AstSourceFile};
 use spl_parser::{Parse, ParseError, parse};
+use tracing::debug;
 
 /// Aggregated AST from multiple source files.
 pub struct CompilationUnit {
@@ -19,6 +20,7 @@ impl CompilationUnit {
     ///
     /// Parses each file identified by `file_ids` using the content from `source_map`.
     pub fn parse(source_map: SourceMap, file_ids: &[FileId]) -> Self {
+        debug!(file_count = file_ids.len(), "parsing compilation unit");
         let parsed_files = file_ids
             .iter()
             .filter_map(|&id| {

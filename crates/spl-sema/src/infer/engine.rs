@@ -226,6 +226,12 @@ pub struct InferEngine<'a> {
 
     /// Inference outputs (expression types, binding types, resolutions).
     pub(super) results: InferResults,
+
+    /// Count of unification attempts (for tracing metrics).
+    pub(super) unification_count: usize,
+
+    /// Count of unification failures (for tracing metrics).
+    pub(super) unification_failures: usize,
 }
 
 impl<'a> InferEngine<'a> {
@@ -243,6 +249,8 @@ impl<'a> InferEngine<'a> {
             defs: CollectedDefs::default(),
             methods: MethodRegistry::default(),
             results: InferResults::default(),
+            unification_count: 0,
+            unification_failures: 0,
         };
         engine.register_builtin_primitive_methods();
         engine
@@ -333,6 +341,11 @@ impl<'a> InferEngine<'a> {
             );
         }
 
+        debug!(
+            unification_count = self.unification_count,
+            unification_failures = self.unification_failures,
+            "unification summary"
+        );
         debug!(
             diagnostic_count = self.diagnostics.len(),
             expr_type_count = self.results.expr_types.len(),

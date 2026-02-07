@@ -231,6 +231,13 @@ impl Package {
 
         let included = try_resolve_includes(&file_names, &directives, conditions)?;
 
+        debug!(
+            total_files = file_names.len(),
+            included_files = included.len(),
+            excluded_files = file_names.len() - included.len(),
+            "include resolution complete"
+        );
+
         if included.is_empty() {
             debug!(path = %root.display(), "no source files after include resolution");
             return Err(PackageError::NoSourceFiles(root));
@@ -292,6 +299,7 @@ impl Package {
 
         // Find and load child modules
         let subdirs = find_modules(&root)?;
+        debug!(candidate_modules = subdirs.len(), "discovered candidate modules");
 
         // Get module names and filter to those with .spl files
         let available_modules: Vec<String> = subdirs
@@ -308,6 +316,12 @@ impl Package {
 
         // Resolve which modules to include
         let included_modules = try_resolve_modules(&available_modules, &directives, conditions)?;
+
+        debug!(
+            available = available_modules.len(),
+            included = included_modules.len(),
+            "module resolution complete"
+        );
 
         let mut modules = Vec::new();
         let mut warnings = Vec::new();

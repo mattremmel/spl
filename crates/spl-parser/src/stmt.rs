@@ -60,6 +60,7 @@ fn can_start_stmt_or_expr(p: &mut Parser<'_>) -> bool {
 
 /// Parse a let statement: `let [mut] pattern [: type] [= expr];`
 fn let_stmt(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    tracing::trace!(token = ?p.current(), "parsing statement");
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::LET_KW) {
         m.abandon(p);

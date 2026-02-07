@@ -25,6 +25,7 @@ use rowan::ast::AstNode;
 use spl_ast::{InnerAttribute, SourceFile};
 use spl_parser as parser;
 use std::fmt;
+use tracing::debug;
 
 /// Errors that can occur when parsing module directives.
 #[derive(Debug, Clone)]
@@ -99,6 +100,14 @@ pub fn parse_package_directives(source: &str) -> Result<PackageDirectives, Direc
     for attr in source_file.inner_attributes() {
         process_attribute(&attr, &mut directives)?;
     }
+
+    debug!(
+        name = directives.name.as_deref().unwrap_or("<unnamed>"),
+        no_auto_include = directives.no_auto_include,
+        include_count = directives.includes.len(),
+        exclude_count = directives.excludes.len(),
+        "parsed package directives"
+    );
 
     Ok(directives)
 }
