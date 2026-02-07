@@ -334,6 +334,7 @@ fn opt_visibility(p: &mut Parser<'_>) -> Option<CompletedMarker> {
 ///
 /// Return type syntax: `fn foo(): i32 where T { ... }`
 pub(crate) fn function_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let _span = tracing::debug_span!("parse_function_def").entered();
     let m = p.start();
 
     // Optional attributes
@@ -404,6 +405,7 @@ pub(crate) fn function_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate:
 
 /// Parse a generator function definition: `[attrs] [pub] gen fn name(params) [: Type] [throws] [where ...] { body }`
 pub(crate) fn generator_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let _span = tracing::debug_span!("parse_generator_def").entered();
     let m = p.start();
 
     // Optional attributes
@@ -703,6 +705,7 @@ fn param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
 ///
 /// Syntax: `[attrs] [pub] struct Name(fields) [where ...]` or `[attrs] [pub] struct Name;`
 pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let _span = tracing::debug_span!("parse_struct_def").entered();
     let m = p.start();
 
     // Optional attributes
@@ -773,6 +776,7 @@ pub(crate) fn struct_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::P
 /// Syntax: `[attrs] [pub] enum Name { Variants } [where ...]`
 /// Note: Where clause comes AFTER closing brace per spec.
 pub(crate) fn enum_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let _span = tracing::debug_span!("parse_enum_def").entered();
     let m = p.start();
 
     // Optional attributes
@@ -883,6 +887,7 @@ fn variant_fields(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseErr
 ///
 /// Syntax: `[unsafe] trait Name [: Bounds] [where ...] { items }`
 pub(crate) fn trait_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let _span = tracing::debug_span!("parse_trait_def").entered();
     let m = p.start();
 
     // Optional attributes
@@ -1134,6 +1139,7 @@ fn paren_field_def(p: &mut Parser<'_>, index: u32) -> Result<CompletedMarker, cr
 
 /// Parse a static definition: `[attrs] [pub] static [mut] Name: Type = Expr [;]`
 pub(crate) fn static_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let _span = tracing::debug_span!("parse_static_def").entered();
     let m = p.start();
 
     // Optional attributes
@@ -1185,6 +1191,7 @@ pub(crate) fn static_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::P
 
 /// Parse a const definition: `[attrs] [pub] const Name: Type = Expr [;]`
 pub(crate) fn const_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let _span = tracing::debug_span!("parse_const_def").entered();
     let m = p.start();
 
     // Optional attributes
@@ -1269,6 +1276,7 @@ fn opt_generic_params(p: &mut Parser<'_>) -> Option<CompletedMarker> {
 
 /// Parse a type alias: `[attrs] [pub] type Name [(params)] = Type [where ...];`
 pub(crate) fn type_alias(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let _span = tracing::debug_span!("parse_type_alias").entered();
     let m = p.start();
 
     // Optional attributes
@@ -1328,6 +1336,7 @@ const IMPL_ITEM_RECOVERY_SET: &[SyntaxKind] = &[
 ///
 /// Syntax: `[attrs] ["unsafe"] "impl" [TraitType "for"] Type [where T, U] { items }`
 pub(crate) fn impl_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let _span = tracing::debug_span!("parse_impl_block").entered();
     let m = p.start();
 
     // Optional attributes
@@ -1421,6 +1430,7 @@ fn visibility_lookahead_at(p: &mut Parser<'_>, start_offset: usize) -> usize {
 
 /// Parse an extern block: `extern "ABI" { fn name(...); ... }`
 pub(crate) fn extern_block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let _span = tracing::debug_span!("parse_extern_block").entered();
     let m = p.start();
 
     // Optional attributes
@@ -1510,6 +1520,7 @@ fn extern_fn(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
 /// - `use std.io.{Read, Write};`
 /// - `use std.{vec.Vec, io.{Read, Write}};`
 pub(crate) fn use_decl(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let _span = tracing::debug_span!("parse_use_decl").entered();
     let m = p.start();
 
     // Optional attributes
@@ -1711,6 +1722,7 @@ fn attribute_lookahead(p: &mut Parser<'_>) -> usize {
 
 /// Parse a top-level item (function, struct, type alias, impl block, extern block, or use decl).
 pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    tracing::trace!(token = ?p.current(), "parsing item");
     // Skip over attributes and visibility to find the item keyword
     let attr_offset = attribute_lookahead(p);
     let vis_offset = visibility_lookahead_at(p, attr_offset);
@@ -1773,6 +1785,7 @@ pub(crate) fn item(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseEr
 
 /// Parse a module definition: `[attrs] [pub] module name { items }` or `module name;`
 pub(crate) fn module_def(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    let _span = tracing::debug_span!("parse_module_def").entered();
     let m = p.start();
 
     // Optional attributes

@@ -94,6 +94,7 @@ impl CompiledModule {
     /// Traps (unreachable, assertion failures) will cause process termination
     /// via SIGILL. Use `run_catching` for trap-safe execution in the future.
     pub fn run(&self, def_id: DefId) -> Result<i32, RuntimeError> {
+        let _span = debug_span!("run", def_id = def_id.index()).entered();
         let ptr = self
             .function_ptrs
             .get(&def_id)
@@ -101,7 +102,9 @@ impl CompiledModule {
             .ok_or(RuntimeError::MainNotFound)?;
 
         let func: fn() -> i32 = unsafe { std::mem::transmute(ptr) };
-        Ok(func())
+        let exit_code = func();
+        debug!(exit_code, "function execution complete");
+        Ok(exit_code)
     }
 
     /// Run the main function and return its i32 result.
@@ -113,7 +116,9 @@ impl CompiledModule {
     /// Traps (unreachable, assertion failures) will cause process termination
     /// via SIGILL. Use `run_main_catching` for trap-safe execution in the future.
     pub fn run_main(&self) -> Result<i32, RuntimeError> {
+        let _span = debug_span!("run_main").entered();
         let def_id = self.main_def_id.ok_or(RuntimeError::MainNotFound)?;
+        debug!(def_id = def_id.index(), "running main");
         self.run(def_id)
     }
 }

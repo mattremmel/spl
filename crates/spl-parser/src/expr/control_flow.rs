@@ -30,6 +30,7 @@ fn try_parse_label(p: &mut Parser<'_>) -> bool {
 pub(super) fn labeled_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing labeled expression");
     // We already know we're at TICK, so start the outer marker for the loop/block
     let m = p.start();
 
@@ -103,6 +104,7 @@ pub(super) fn labeled_expr(
 
 /// Parse a block expression.
 pub(super) fn block_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing block expression");
     let m = p.start();
     if let Err(e) = block(p) {
         m.abandon(p);
@@ -118,6 +120,7 @@ pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseE
 
 /// Parse an if expression.
 pub(super) fn if_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing if expression");
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::IF_KW) {
         m.abandon(p);
@@ -153,6 +156,7 @@ pub(super) fn if_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, cra
 
 /// Parse a while expression.
 pub(super) fn while_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing while expression");
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::WHILE_KW) {
         m.abandon(p);
@@ -171,6 +175,7 @@ pub(super) fn while_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, 
 
 /// Parse a for expression.
 pub(super) fn for_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing for expression");
     let m = p.start();
     p.expect(SyntaxKind::FOR_KW)?;
 
@@ -200,6 +205,7 @@ pub(super) fn for_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, cr
 
 /// Parse a loop expression.
 pub(super) fn loop_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing loop expression");
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::LOOP_KW) {
         m.abandon(p);
@@ -214,6 +220,7 @@ pub(super) fn loop_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, c
 
 /// Parse a break expression.
 pub(super) fn break_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing break expression");
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::BREAK_KW) {
         m.abandon(p);
@@ -244,6 +251,7 @@ pub(super) fn break_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, 
 pub(super) fn continue_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing continue expression");
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::CONTINUE_KW) {
         m.abandon(p);
@@ -263,6 +271,7 @@ pub(super) fn continue_expr(
 pub(super) fn return_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing return expression");
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::RETURN_KW) {
         m.abandon(p);
@@ -285,6 +294,7 @@ pub(super) fn return_expr(
 
 /// Parse a yield expression: `yield expr`
 pub(super) fn yield_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing yield expression");
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::YIELD_KW) {
         m.abandon(p);
@@ -309,6 +319,7 @@ pub(super) fn yield_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, 
 pub(super) fn unsafe_expr(
     p: &mut Parser<'_>,
 ) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing unsafe expression");
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::UNSAFE_KW) {
         m.abandon(p);
@@ -323,6 +334,7 @@ pub(super) fn unsafe_expr(
 
 /// Parse a throw expression: `throw expr`
 pub(super) fn throw_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing throw expression");
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::THROW_KW) {
         m.abandon(p);

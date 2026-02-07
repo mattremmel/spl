@@ -653,6 +653,7 @@ impl<'ctx> Resolver<'ctx> {
 
     /// Resolve a glob import (use foo.*).
     fn resolve_glob_import(&mut self, import: &PendingImport) {
+        debug!("resolving glob import");
         // Handle path prefix
         let (resolved_path, _) = self.resolve_path_prefix(&import.path, &import.span);
         if resolved_path.is_none() {
@@ -860,6 +861,19 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_item(&mut self, item: &Item) {
+        let kind = match item {
+            Item::Function(_) => "function",
+            Item::Struct(_) => "struct",
+            Item::TypeAlias(_) => "type_alias",
+            Item::Impl(_) => "impl",
+            Item::Extern(_) => "extern",
+            Item::Module(_) => "module",
+            Item::Use(_) => "use",
+            Item::Enum(_) => "enum",
+            Item::Trait(_) => "trait",
+            Item::Generator(_) => "generator",
+        };
+        trace!(kind, "resolving item");
         match item {
             Item::Function(func) => self.resolve_function(func),
             Item::Struct(struct_def) => self.resolve_struct(struct_def),
@@ -908,6 +922,7 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_struct(&mut self, struct_def: &StructDef) {
+        trace!("resolving struct");
         // Enter a scope for the struct's generic parameters and fields
         self.ctx.enter_scope(ScopeKind::Block);
 
@@ -940,6 +955,7 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_type_alias(&mut self, type_alias: &TypeAlias) {
+        trace!("resolving type alias");
         // Enter scope for generic parameters
         self.ctx.enter_scope(ScopeKind::Block);
 
@@ -986,6 +1002,7 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_extern_block(&mut self, extern_block: &ExternBlock) {
+        trace!("resolving extern block");
         // Resolve parameter and return types in extern function declarations
         for extern_fn in extern_block.extern_fns() {
             self.resolve_extern_fn(&extern_fn);
@@ -1010,6 +1027,7 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_module_def(&mut self, module_def: &spl_ast::ModuleDef) {
+        trace!("resolving module def");
         // Get the module's DefId to look up its scope
         let module_def_id = module_def.name().and_then(|name| {
             let token = Self::get_ident_token(&name)?;
@@ -1133,6 +1151,11 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_stmt(&mut self, stmt: &Stmt) {
+        let kind = match stmt {
+            Stmt::Let(_) => "let",
+            Stmt::Expr(_) => "expr",
+        };
+        trace!(kind, "resolving statement");
         match stmt {
             Stmt::Let(let_stmt) => self.resolve_let_stmt(let_stmt),
             Stmt::Expr(expr_stmt) => {
@@ -1170,6 +1193,40 @@ impl<'ctx> Resolver<'ctx> {
     // ===== Expression Resolution =====
 
     fn resolve_expr(&mut self, expr: &Expr) {
+        let kind = match expr {
+            Expr::Literal(_) => "literal",
+            Expr::Path(_) => "path",
+            Expr::Paren(_) => "paren",
+            Expr::Tuple(_) => "tuple",
+            Expr::Array(_) => "array",
+            Expr::Call(_) => "call",
+            Expr::Binary(_) => "binary",
+            Expr::Prefix(_) => "prefix",
+            Expr::Block(_) => "block",
+            Expr::If(_) => "if",
+            Expr::While(_) => "while",
+            Expr::For(_) => "for",
+            Expr::Loop(_) => "loop",
+            Expr::Break(_) => "break",
+            Expr::Continue(_) => "continue",
+            Expr::Return(_) => "return",
+            Expr::Closure(_) => "closure",
+            Expr::Match(_) => "match",
+            Expr::Field(_) => "field",
+            Expr::Index(_) => "index",
+            Expr::Slice(_) => "slice",
+            Expr::Ref(_) => "ref",
+            Expr::Range(_) => "range",
+            Expr::EnumShorthand(_) => "enum_shorthand",
+            Expr::Is(_) => "is",
+            Expr::Yield(_) => "yield",
+            Expr::Unsafe(_) => "unsafe",
+            Expr::Throw(_) => "throw",
+            Expr::Dollar(_) => "dollar",
+            Expr::OptionalField(_) => "optional_field",
+            Expr::Try(_) => "try",
+        };
+        trace!(kind, "resolving expression");
         match expr {
             // Literals, Continue, and Dollar have nothing to resolve
             // Dollar is a contextual placeholder for array length
@@ -1419,6 +1476,7 @@ impl<'ctx> Resolver<'ctx> {
     }
 
     fn resolve_call_expr(&mut self, call_expr: &CallExpr) {
+        trace!("resolving call");
         // Resolve the callee expression
         if let Some(callee) = call_expr.callee() {
             self.resolve_expr(&callee);

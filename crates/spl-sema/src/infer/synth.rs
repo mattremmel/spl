@@ -428,11 +428,13 @@ impl<'a> InferEngine<'a> {
                 self.types.never()
             }
         };
+        trace!(result_type = type_id.index(), "synthesized expression");
         self.results.expr_types.insert(span, type_id);
         type_id
     }
 
     fn synth_literal(&mut self, lit: &LiteralExpr) -> TypeId {
+        trace!("synthesizing literal");
         let Some(token) = lit.token() else {
             return self.types.error();
         };
@@ -789,6 +791,7 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_paren(&mut self, paren: &ParenExpr) -> TypeId {
+        trace!("synthesizing paren");
         match paren.expr() {
             Some(inner) => self.synth_expr(&inner),
             None => self.types.error(),
@@ -796,11 +799,13 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_tuple(&mut self, tuple: &TupleExpr) -> TypeId {
+        trace!("synthesizing tuple");
         let elem_types: Vec<TypeId> = tuple.exprs().map(|e| self.synth_expr(&e)).collect();
         self.types.mk_tuple(elem_types)
     }
 
     fn synth_array(&mut self, array: &ArrayExpr) -> TypeId {
+        trace!("synthesizing array");
         let exprs: Vec<_> = array.exprs().collect();
         if exprs.is_empty() {
             // Empty array needs type annotation
@@ -1816,6 +1821,7 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_prefix(&mut self, prefix: &PrefixExpr) -> TypeId {
+        trace!("synthesizing prefix");
         let Some(op) = prefix.op_token() else {
             return self.types.error();
         };
@@ -1878,6 +1884,7 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_ref(&mut self, ref_expr: &RefExpr) -> TypeId {
+        trace!("synthesizing ref");
         let Some(inner) = ref_expr.expr() else {
             return self.types.error();
         };
@@ -2495,6 +2502,7 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_index(&mut self, index: &IndexExpr) -> TypeId {
+        trace!("synthesizing index");
         let Some(base) = index.base() else {
             return self.types.error();
         };
@@ -2538,6 +2546,7 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_slice(&mut self, slice: &SliceExpr) -> TypeId {
+        trace!("synthesizing slice");
         let Some(base) = slice.base() else {
             return self.types.error();
         };
@@ -2722,6 +2731,7 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_break(&mut self, break_expr: &BreakExpr) -> TypeId {
+        trace!("synthesizing break");
         let span = text_range_to_span(break_expr.syntax().text_range());
 
         // Check if we're inside a loop
@@ -2770,6 +2780,7 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_continue(&mut self, continue_expr: &ContinueExpr) -> TypeId {
+        trace!("synthesizing continue");
         // Check if we're inside a loop
         if self.ctx.loop_kind.is_none() {
             let span = text_range_to_span(continue_expr.syntax().text_range());
@@ -2783,6 +2794,7 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_return(&mut self, return_expr: &ReturnExpr) -> TypeId {
+        trace!("synthesizing return");
         let value_ty = if let Some(value) = return_expr.expr() {
             self.synth_expr(&value)
         } else {
@@ -2808,6 +2820,7 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_yield(&mut self, yield_expr: &YieldExpr) -> TypeId {
+        trace!("synthesizing yield");
         let span = text_range_to_span(yield_expr.syntax().text_range());
 
         let Some(yield_ty) = self.ctx.block_yield_type else {
@@ -3032,6 +3045,7 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_range(&mut self, range: &RangeExpr) -> TypeId {
+        trace!("synthesizing range");
         let start_ty = range.start().map(|e| self.synth_expr(&e));
         let end_ty = range.end().map(|e| self.synth_expr(&e));
 
@@ -3064,6 +3078,7 @@ impl<'a> InferEngine<'a> {
     }
 
     fn synth_is(&mut self, is_expr: &IsExpr) -> TypeId {
+        trace!("synthesizing is");
         // Synthesize the left-hand side (scrutinee)
         let scrutinee_ty = if let Some(lhs) = is_expr.lhs() {
             self.synth_expr(&lhs)
@@ -3148,6 +3163,7 @@ impl<'a> InferEngine<'a> {
     /// Check that a pattern is compatible with an expected type.
     /// This doesn't define bindings; it just validates the pattern structure.
     fn check_pattern_type(&mut self, pat: &Pat, expected_ty: TypeId) {
+        trace!(expected = expected_ty.index(), "checking pattern type");
         match pat {
             Pat::Literal(lit_pat) => {
                 // Check that the literal type matches the expected type
@@ -3288,6 +3304,7 @@ impl<'a> InferEngine<'a> {
     }
 
     pub(super) fn synth_block(&mut self, block: &Block) -> TypeId {
+        trace!("synthesizing block");
         // Track if the block diverges
         let mut diverges = false;
         // Track if we've warned about unreachable code in this block

@@ -95,6 +95,7 @@ pub(super) fn primary_expr(
 /// ClosureBody = Block | Expression ;
 /// ```
 fn closure_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing closure");
     let m = p.start();
 
     // Optional capture list: @[captures]
@@ -233,6 +234,7 @@ fn closure_param(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseErro
 
 /// Parse an enum shorthand expression: `.Variant` or `.Variant(args)`
 fn enum_shorthand_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, crate::ParseError> {
+    tracing::trace!("parsing enum shorthand");
     let m = p.start();
 
     // Consume the leading dot
@@ -310,6 +312,7 @@ pub(super) fn match_expr(p: &mut Parser<'_>) -> Result<Option<CompletedMarker>, 
 
 /// Parse a match arm: `pattern [if guard] => expr,`
 fn match_arm(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    tracing::trace!("parsing match arm");
     let m = p.start();
 
     // Pattern

@@ -547,6 +547,7 @@ pub fn lex_all(source: &str) -> LexResult<'_> {
     let mut ident_count: usize = 0;
 
     for spanned in Lexer::new(source) {
+        trace!(token = ?spanned.token, start = spanned.span.start, end = spanned.span.end, "lexed token");
         match &spanned.token {
             Token::Error => {
                 let error = classify_error(source, &spanned);

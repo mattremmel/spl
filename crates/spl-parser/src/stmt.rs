@@ -125,6 +125,7 @@ fn tuple_type_element(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::Pars
 /// The optional `?` postfix makes the type optional (sugar for `Option(T: T)`).
 /// Multiple `?` are allowed: `T??` = `Option(T: Option(T: T))`.
 pub(crate) fn type_annotation(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    tracing::trace!(token = ?p.current(), "parsing type annotation");
     let mut result = base_type(p)?;
 
     // Optional postfix: T? = Option(T: T), T?? = Option(T: Option(T: T))
@@ -297,6 +298,7 @@ fn base_type(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
 
 /// Parse a block with statements: `{ stmt* [expr] }`
 pub(crate) fn block(p: &mut Parser<'_>) -> Result<CompletedMarker, crate::ParseError> {
+    tracing::trace!("parsing block");
     let m = p.start();
     if let Err(e) = p.expect(SyntaxKind::L_BRACE) {
         m.abandon(p);
