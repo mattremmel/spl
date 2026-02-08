@@ -190,11 +190,22 @@ let name = match expr {
 
 ### Precedence
 
-`??` has lower precedence than `||`, allowing:
+`??` has lower precedence than `||` (precedence 2 vs 3), meaning `||` binds tighter:
 
 ```spl
 let value = config.primary ?? config.fallback ?? default;  // Right-associative chain
-let flag = opt_bool ?? false || other_condition;           // ?? binds tighter than ||
+let flag = opt_bool ?? false || other_condition;           // ?? binds looser than ||
+// Parses as: opt_bool ?? (false || other_condition)
+```
+
+### Nested Optionals
+
+The `??` operator unwraps exactly one `Option` layer. For nested optionals (`T??`, i.e., `Option(T: Option(T: T))`), `x ?? default` produces `T?` (i.e., `Option(T: T)`), not `T`. To fully unwrap a nested optional, chain the operator: `x ?? .None ?? default`.
+
+```spl
+let nested: i32?? = .Some(.Some(42));
+let once = nested ?? .None;       // once: i32? = .Some(42)
+let flat = nested ?? .None ?? 0;  // flat: i32 = 42
 ```
 
 ### Lazy Evaluation

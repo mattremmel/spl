@@ -935,9 +935,18 @@ let mixed: (i32, name: String) = (42, name: "hello")
 
 ### Trait Objects and Existential Types
 
-SPL currently uses automatic boxing for trait objects rather than explicit `dyn Trait` syntax. When a value type is used where a trait bound is expected, the compiler may automatically box it.
+SPL uses trait names directly as types for dynamic dispatch. A trait name used as a type (e.g., `&Draw`, `Box(Draw)`) denotes a trait object with automatic boxing and dynamic dispatch. A trait name used in a `where` bound (e.g., `where T: Draw`) denotes a generic constraint with static dispatch and monomorphization.
 
-Explicit `dyn Trait` syntax and `impl Trait` return types are deferred features. The language may add these in the future if automatic boxing proves insufficient for performance-critical code.
+```spl
+// Trait object (dynamic dispatch, auto-boxed):
+fn draw_shape(shape: &Draw) { shape.draw(); }
+let shapes: Vec(T: Box(Draw)) = [Box.new(circle), Box.new(square)];
+
+// Generic constraint (static dispatch, monomorphized):
+fn draw_all(shapes: &[T]) where T: Draw { ... }
+```
+
+SPL does not use `dyn` or `impl Trait` keywords. The distinction between trait objects and generics is determined by syntactic position: type position = trait object, `where` bound = generic.
 
 ---
 
@@ -1055,7 +1064,7 @@ Expressions are defined using layered production rules that encode operator prec
 | 13         | `+` `-`                      | Left          | AdditiveExpr       |
 | 14         | `*` `/` `%`                  | Left          | MultiplicativeExpr |
 | 15         | `**`                         | Right         | ExponentiationExpr |
-| 16         | `!` `-` `*` `&` `~` (unary)  | Right         | UnaryExpr          |
+| 16         | `!` `-` `*` `&` (unary)      | Right         | UnaryExpr          |
 | 17 (highest)| `.` `?.` `()` `[]` `[:]` `!` | Left          | PostfixExpr        |
 
 **Dual-use Operators:**
@@ -1068,7 +1077,18 @@ Expressions are defined using layered production rules that encode operator prec
 
 Position determines interpretation: prefix position = unary, infix position = binary.
 
+**Prefix `!` vs Postfix `!`:**
+
+| Position | Operator | Precedence | Description |
+|----------|----------|------------|-------------|
+| Prefix | `!x` | 16 (UnaryExpr) | Logical/bitwise NOT |
+| Postfix | `x!` | 17 (PostfixExpr) | Try/unwrap (early return on failure) |
+
+Position relative to the operand determines which: `!x` is logical/bitwise NOT, `x!` is try/unwrap. These are distinct operators at different precedence levels and are never ambiguous because the parser knows whether it is in prefix position (expecting a new expression) or postfix position (after a primary expression). See [error-handling.md](error-handling.md) for the `!` try/propagate operator semantics.
+
 Type conversions use methods (`.widen()`, `.truncate()`, `.try_into()`) rather than a cast operator.
+
+**Short-Circuit Evaluation:** `&&` and `||` use short-circuit evaluation. The right operand is not evaluated if the left operand determines the result. For `&&`, if the left operand is `false`, the result is `false` without evaluating the right operand. For `||`, if the left operand is `true`, the result is `true` without evaluating the right operand. This is guaranteed behavior and may be relied upon for guarding side effects or avoiding errors (e.g., `index < len && arr[index] > 0`).
 
 **Range Expression Types:**
 
@@ -1098,8 +1118,11 @@ OrExpr = AndExpr { "||" AndExpr } ;
 
 AndExpr = IsExpr { "&&" IsExpr } ;
 
-(* Pattern matching with is *)
-IsExpr = EqualityExpr [ "is" Pattern ] ;
+(* Pattern matching with is; optional `!` negates the match *)
+(* `expr is Pattern` returns true if the pattern matches *)
+(* `expr is !Pattern` returns true if the pattern does NOT match *)
+(* See pattern-matching.md section 3.4 for `is !` semantics *)
+IsExpr = EqualityExpr [ "is" [ "!" ] Pattern ] ;
 
 EqualityExpr = ComparisonExpr { ( "==" | "!=" ) ComparisonExpr } ;
 
@@ -1123,7 +1146,7 @@ MultiplicativeExpr = ExponentiationExpr { ( "*" | "/" | "%" ) ExponentiationExpr
 (* Exponentiation is right-associative: 2 ** 3 ** 2 = 2 ** (3 ** 2) = 512 *)
 ExponentiationExpr = UnaryExpr [ "**" ExponentiationExpr ] ;
 
-UnaryExpr = ( "!" | "-" | "&" [ "mut" ] | "*" | "~" ) UnaryExpr
+UnaryExpr = ( "!" | "-" | "&" [ "mut" ] | "*" ) UnaryExpr
           | PostfixExpr ;
 
 (* Dereference operator `*`:
@@ -1171,6 +1194,8 @@ NamedArg = UPPER_IDENT ":" Type             (* type argument: T: i32 *)
 (* Note: UPPER_IDENT and LOWER_IDENT are defined in the EBNF Notation section. *)
 ```
 
+**Argument Evaluation Order:** Function arguments are evaluated left-to-right before the call. All arguments are fully evaluated before the function body begins executing. This is guaranteed and may be relied upon for side-effecting expressions in argument position.
+
 ### Primary Expressions
 
 ```ebnf
@@ -1215,10 +1240,16 @@ ClosureParams = "||"
    return type annotation syntax is provided, matching Rust's behavior. *)
 ClosureBody = Block | Expression ;
 
-(* Note: `||` is disambiguated by position. In prefix position (start of an
-   expression where a closure is expected), `||` begins an empty-parameter
-   closure. In infix position (between two expressions), `||` is logical OR.
-   The parser context determines which interpretation applies. *)
+(* Disambiguation rule for `||` (closure params vs logical OR):
+   An expression starting with `||` or `|params|` followed by `{` or an
+   expression body is parsed as a closure. In all other contexts, `||` is
+   the logical OR operator. The parser resolves this by checking whether
+   `||` appears in expression-start position (after `=`, `(`, `,`, `return`,
+   `=>`, etc.) versus infix position (between two sub-expressions). In
+   expression-start position, `||` begins an empty-parameter closure; in
+   infix position, `||` is logical OR. No backtracking is required — the
+   parser's current state (expecting a new expression vs. an operator)
+   unambiguously determines the interpretation. *)
 
 (* Note: Explicit capture lists (@[...]) control whether variables are
    captured by reference or by value. The capture expression determines

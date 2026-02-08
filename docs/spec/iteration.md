@@ -240,13 +240,16 @@ impl IndexIterator for [T; N] where T {
     fn get_mut(&mut self, index: usize): &mut T { &mut self[index] }
 }
 
-impl IndexIterator for String {
-    type Item = char;
-
-    fn len(&self): usize { self.char_count() }
-    fn get(&self, index: usize): &char { ... }
-    fn get_mut(&mut self, index: usize): &mut char { ... }
-}
+// Note: String does NOT implement IndexIterator. UTF-8 encoding means
+// characters are variable-width (1-4 bytes), so O(1) indexing by character
+// position is not possible. Instead, String provides:
+//
+// - .chars()          -> Iterator yielding char values
+// - .bytes()          -> Iterator yielding u8 values
+// - .char_indices()   -> Iterator yielding (usize, char) pairs (byte offset + char)
+//
+// Use RefIterator-based .chars() for `for c in &string` syntax.
+// See standard-library.md for the full String API.
 ```
 
 ### Bounds Checking
@@ -1142,7 +1145,7 @@ spawn(|| {
 
 | Trait | For | Yields | Storage | Use Case |
 |-------|-----|--------|---------|----------|
-| `IndexIterator` | Random-access collections | `&T` / `&mut T` | N/A (uses indexing) | Vec, arrays, strings |
+| `IndexIterator` | Random-access collections | `&T` / `&mut T` | N/A (uses indexing) | Vec, arrays |
 | `RefIterator` | Sequential collections | `&T` | Scoped types | HashMap, LinkedList, Tree |
 | `Iterator` | Value sequences | `T` (owned) | Regular structs | Generators, ranges, consuming |
 
@@ -1192,7 +1195,8 @@ RefIterator      - Scoped reference iteration (hashmaps, trees, linked lists)
 
 | Collection Type | Reference Iteration | Consuming Iteration |
 |-----------------|---------------------|---------------------|
-| Vec, Array, String | `IndexIterator` | `IntoIterator` → `Iterator` |
+| Vec, Array | `IndexIterator` | `IntoIterator` → `Iterator` |
+| String | `RefIterator` (via `.chars()`) | `IntoIterator` → `Iterator` |
 | Range | N/A | `Iterator` (yields owned) |
 | HashMap, BTreeMap | `RefIterator` | `IntoIterator` → `Iterator` |
 | LinkedList, Tree | `RefIterator` | `IntoIterator` → `Iterator` |

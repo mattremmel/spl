@@ -12,7 +12,7 @@ SPL's memory model provides:
 - **Second-class references with intersection semantics**: References can be parameters or returned, but never stored in structs. Returned references are assumed to borrow from all input references
 - **Place expressions**: Compile-time representation of memory locations
 - **No garbage collector** (v1): Memory is managed through ownership and scoping
-- **Panic = unwind**: Panics unwind the stack, running destructors for cleanup. Aborts at FFI boundaries.
+- **Panic = unwind**: Panics unwind the stack, running destructors for cleanup. If a destructor panics during unwinding (a "double panic"), the process aborts immediately. Panics also abort at FFI boundaries.
 
 ### Design Philosophy
 
@@ -941,11 +941,11 @@ Fat pointers contain (pointer, length):
 
 ---
 
-## 10. Interior Mutability (Future)
+## 10. Interior Mutability
 
-Some patterns require mutation through shared references. SPL will provide controlled escape hatches:
+Some patterns require mutation through shared references. SPL provides controlled escape hatches:
 
-### Cell Types (Planned)
+### Cell Types
 
 ```spl
 // Single-threaded interior mutability
@@ -958,7 +958,9 @@ RwLock(T: T)    // Reader-writer lock
 Atomic*         // Lock-free atomics
 ```
 
-### Unsafe Blocks (Planned)
+See [concurrency.md](concurrency.md) for `Mutex`, `RwLock`, and `Atomic*` specifications, and [standard-library.md](standard-library.md) for `Cell`, `RefCell`, and `UnsafeCell` definitions.
+
+### Unsafe Blocks
 
 For low-level control, `unsafe` blocks bypass some compiler checks:
 
@@ -969,6 +971,8 @@ unsafe {
     // Accessing mutable statics
 }
 ```
+
+See [unsafe.md](unsafe.md) for the full specification of unsafe operations.
 
 ---
 
@@ -1113,7 +1117,27 @@ fn batch_process(items: &[Item]) {
 
 ---
 
-## 12. Comparison with Other Languages
+## 12. Allocator Model and OOM Behavior
+
+### Global Allocator
+
+SPL uses a **global allocator** for all heap allocations. The default is the system allocator (e.g., `malloc`/`free` on Unix, `HeapAlloc`/`HeapFree` on Windows). All standard library types that perform heap allocation (`String`, `Vec`, `Box`, `HashMap`, etc.) use this global allocator.
+
+### Out-of-Memory (OOM) Behavior
+
+When a heap allocation fails (out of memory), the process **aborts immediately**. There is no recovery mechanism for OOM in SPL v1 -- allocation is treated as infallible from the caller's perspective.
+
+**Rationale:** Handling OOM gracefully adds significant complexity to every allocating operation. Most programs cannot meaningfully recover from OOM, and aborting provides predictable behavior. This matches Rust's default behavior.
+
+### Future Extensions
+
+- **Custom allocators:** Allow types to accept an allocator parameter (see section 11.3 for the planned allocator-aware type design)
+- **Fallible allocation:** Provide `try_alloc` variants that return `Result` instead of aborting, for use cases like embedded systems or large allocation requests
+- **Per-collection allocators:** Allow individual collections to use different allocators
+
+---
+
+## 13. Comparison with Other Languages
 
 | Feature | SPL v1 | Rust | Go | Zig | D |
 |---------|--------|------|----|----|---|
@@ -1127,7 +1151,7 @@ fn batch_process(items: &[Item]) {
 
 ---
 
-## 13. Summary
+## 14. Summary
 
 ### V1 Memory Model
 
@@ -1143,7 +1167,7 @@ fn batch_process(items: &[Item]) {
 | Drop | Automatic at scope end |
 | Panic | Unwind (abort at FFI boundary) |
 | Overflow | Always trap |
-| Unsafe | Planned (not in v1) |
+| Unsafe | Supported |
 
 ### Key Guarantees
 

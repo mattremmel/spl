@@ -412,8 +412,8 @@ impl Draw for Square {
     fn draw(&self): () { /* ... */ }
 }
 
-// Trait object: &dyn Draw
-fn draw_shape(shape: &dyn Draw): () {
+// Trait object: &Draw
+fn draw_shape(shape: &Draw): () {
     shape.draw();  // Dynamic dispatch
 }
 
@@ -428,7 +428,7 @@ draw_shape(&s);
 
 ```spl
 // Store heterogeneous types
-let shapes: Vec(T: Box(dyn Draw)) = [
+let shapes: Vec(T: Box(Draw)) = [
     Box.new(Circle(radius: 5.0)),
     Box.new(Square(side: 10.0)),
 ];
@@ -474,11 +474,11 @@ trait Convert {
 ```spl
 // Clone is not object-safe, but we can make a clonable trait object
 trait CloneBox {
-    fn clone_box(&self): Box(dyn CloneBox);
+    fn clone_box(&self): Box(CloneBox);
 }
 
 impl CloneBox for T where T: Clone + 'static {
-    fn clone_box(&self): Box(dyn CloneBox) {
+    fn clone_box(&self): Box(CloneBox) {
         return Box.new(self.clone());
     }
 }
@@ -916,7 +916,7 @@ fn process(x: T) where T: DebugCloneSend { }
 | Associated const | `const MAX: Self;` | Constant defined by implementor |
 | Type parameter | `trait Foo(T) where T` | Generic trait |
 | Default method | `fn foo(&self) { ... }` | Method with default body |
-| Trait object | `&dyn Foo` | Dynamic dispatch |
+| Trait object | `&Foo` | Dynamic dispatch |
 | Marker trait | `trait Copy: Clone { }` | No methods, signals property |
 | Blanket impl | `impl Foo for T where T: Bar` | Implement for all matching types |
 | Negative impl | `impl !Send for Foo` | Opt out of auto trait |

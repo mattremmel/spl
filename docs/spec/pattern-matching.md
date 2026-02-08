@@ -41,7 +41,16 @@ match flag {
     true => "yes",
     false => "no",
 }
+
+// decimal literals
+match price {
+    0.0 => "free",
+    1.00 => "one dollar",  // matches 1.0 (mathematical equality)
+    _ => "other",
+}
 ```
+
+**Decimal pattern matching:** Pattern matching on `decimal` values uses mathematical equality (`1.0` matches `1.00`). This follows IEEE 754 decimal semantics where trailing zeros do not affect comparison. See [type-system.md](type-system.md) for `decimal` equality and scale semantics.
 
 ### 1.3 Range Patterns
 
@@ -394,13 +403,7 @@ match opt {
 }
 ```
 
-To override and move out (if allowed):
-```spl
-match opt {
-    &Some(ref s) => { /* s: &String */ },
-    &None => {},
-}
-```
+This is the standard way to borrow in patterns -- match on a reference rather than the value itself.
 
 ---
 
@@ -602,51 +605,43 @@ match opt {
 // opt is no longer valid
 ```
 
-### 8.2 Borrowing in Patterns
+### 8.2 Reference Matching
 
-Use `ref` to borrow instead of move:
+SPL does not have `ref` or `ref mut` pattern modifiers. Instead, when matching on a reference (`&T` or `&mut T`), bindings automatically receive the appropriate reference type. This is the sole mechanism for borrowing in patterns.
+
+**Matching on `&T`** -- bindings automatically borrow:
 
 ```spl
 let opt: Option(T: String) = Some("hello".to_string());
 
-match opt {
-    Some(ref s) => {
-        // s: &String (borrowed)
+// Match on &opt: bindings get &T
+match &opt {
+    Some(s) => {
+        // s: &String (automatically borrowed)
         println(s);
+    },
+    None => {},
+}
+// opt still valid -- nothing was moved
+```
+
+**Matching on `&mut T`** -- bindings automatically get mutable borrows:
+
+```spl
+let mut opt: Option(T: String) = Some("hello".to_string());
+
+// Match on &mut opt: bindings get &mut T
+match &mut opt {
+    Some(s) => {
+        // s: &mut String (automatically borrowed mutably)
+        s.push_str(" world");
     },
     None => {},
 }
 // opt still valid
 ```
 
-### 8.3 Mutable Borrowing
-
-```spl
-let mut opt: Option(T: String) = Some("hello".to_string());
-
-match opt {
-    Some(ref mut s) => {
-        // s: &mut String
-        s.push_str(" world");
-    },
-    None => {},
-}
-```
-
-### 8.4 Automatic Reference Matching
-
-When matching on `&T` or `&mut T`, the compiler automatically adjusts:
-
-```spl
-fn process(opt: &Option(T: String)): () {
-    match opt {
-        Some(s) => {
-            // s: &String (automatic borrowing)
-        },
-        None => {},
-    }
-}
-```
+**Why no `ref`/`ref mut`?** Automatic reference matching is simpler and covers all use cases. When you want to borrow rather than move, match on a reference to the value (`&value` or `&mut value`) instead of using a modifier on the binding. The compiler adjusts all bindings in the pattern to be references, matching the ergonomics of the scrutinee type.
 
 ---
 

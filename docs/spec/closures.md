@@ -266,7 +266,7 @@ This unified model (like Go and Swift) simplifies the type system at the cost of
 
 SPL's second-class references (refs cannot be stored in structs) simplifies closure design:
 
-**Closures cannot store references.** Captured variables can only be owned values or copies.
+**Escaping closures cannot store references.** Non-escaping closures may temporarily borrow from the enclosing scope (the borrow exists only during the function call, not stored in the closure). See section 5 below for details.
 
 However, closures can:
 

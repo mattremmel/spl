@@ -90,7 +90,7 @@ let tax = price * 0.0825;          // Precise decimal arithmetic
 | `%` | Remainder |
 | `-` (unary) | Negation |
 
-**Division Semantics:** Division of `decimal` values uses banker's rounding (round half to even) when the result cannot be represented exactly. Division by zero panics. The precision is sufficient for financial calculations (at least 34 significant digits per IEEE 754 decimal128).
+**Division Semantics:** Division of `decimal` values uses banker's rounding (round half to even) when the result cannot be represented exactly. Division by zero panics. Division results follow IEEE 754 decimal128 rules with 34 significant digits. The preferred exponent rule determines result scale: for example, `1.0 / 3.0` produces `0.3333333333333333333333333333333333` (34 significant digits), and `10.00 / 5.0` produces `2.0` (preserving scale where possible).
 
 **Comparison:** All comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) are supported.
 
@@ -396,8 +396,9 @@ let unit: () = ();
 // Destructuring
 let (x, y) = pair;
 
-// Field access (future feature)
-// let first = pair.0;
+// Positional field access
+let first = pair.0;
+let second = pair.1;
 ```
 
 ### Structs
@@ -954,10 +955,10 @@ impl Point(T: T) where T {
 
 ### Trait Objects
 
-SPL supports **trait objects** (`dyn Trait`) for dynamic dispatch alongside monomorphization.
+SPL supports **trait objects** for dynamic dispatch alongside monomorphization. A trait name used directly as a type denotes a trait object -- no `dyn` keyword is needed.
 
 Trait objects enable:
-- Heterogeneous collections: `Vec(T: Box(dyn Draw))` containing different types implementing `Draw`
+- Heterogeneous collections: `Vec(T: Box(Draw))` containing different types implementing `Draw`
 - Runtime polymorphism without generics
 - Reduced code size (at the cost of indirect calls)
 
@@ -967,12 +968,12 @@ trait Draw {
 }
 
 // Trait object reference
-fn draw_shape(shape: &dyn Draw): () {
+fn draw_shape(shape: &Draw): () {
     shape.draw();  // Dynamic dispatch
 }
 
 // Heterogeneous collection with boxed trait objects
-let shapes: Vec(T: Box(dyn Draw)) = [
+let shapes: Vec(T: Box(Draw)) = [
     Box.new(Circle(radius: 5.0)),
     Box.new(Square(side: 10.0)),
 ];
@@ -1006,7 +1007,53 @@ let shapes: Vec(T: Shape) = [Shape.Circle(c), Shape.Rectangle(r)];
 
 ---
 
-## 7. Type Coercions
+## 7. Method Resolution
+
+When a method call `expr.method(args)` is encountered, the compiler resolves which method to call using the following algorithm:
+
+1. **Look for inherent methods on the concrete type.** If `expr` has type `T`, search all `impl T` blocks for a method with the matching name.
+
+2. **Auto-ref.** If no match is found, try inserting an automatic reference on the receiver. The compiler tries, in order:
+   - `self` (by value)
+   - `&self` (immutable reference)
+   - `&mut self` (mutable reference)
+
+3. **Auto-deref.** If no match is found, follow the `Deref` chain. If `T` implements `Deref(Target = U)`, repeat steps 1-2 with type `U`. Continue following the chain (`U` -> `V` -> ...) until a match is found or no further `Deref` implementations exist.
+
+4. **Search trait methods in scope.** If no inherent method matched after auto-ref and auto-deref, search methods from all traits currently in scope (via `use` declarations or the prelude).
+
+5. **Error on ambiguity.** If multiple candidates are found at the same priority level (e.g., two trait methods from different traits with the same name), the compiler reports an ambiguity error. The programmer must disambiguate using fully qualified syntax: `TraitName.method(expr, args)`.
+
+**Examples:**
+
+```spl
+let s = String.from("hello");
+
+// Step 1: String has inherent method `len`
+s.len()
+
+// Step 2 (auto-ref): Vec.push takes &mut self
+let mut v = Vec.new();
+v.push(42)  // compiler calls (&mut v).push(42)
+
+// Step 3 (auto-deref): Box(T: String) derefs to String
+let b = Box.new(String.from("hello"));
+b.len()  // Box -> String via Deref, then String.len()
+
+// Step 4 (trait method): Clone.clone is in scope via prelude
+let s2 = s.clone()
+
+// Disambiguation for ambiguous trait methods
+trait A { fn name(&self): &str }
+trait B { fn name(&self): &str }
+// If both A and B are in scope:
+// x.name()              // ERROR: ambiguous
+// A.name(&x)            // OK: fully qualified
+```
+
+---
+
+## 8. Type Coercions
 
 SPL distinguishes between implicit coercions (automatic) and explicit conversions (using methods).
 
@@ -1122,7 +1169,7 @@ let w = x.checked_add(1);      // None
 
 ---
 
-## 8. Type Equality and Compatibility
+## 9. Type Equality and Compatibility
 
 ### Nominal Typing
 
@@ -1221,7 +1268,7 @@ fn greet(name: String, title: String?): () {
 
 ---
 
-## 9. Sized and Unsized Types
+## 10. Sized and Unsized Types
 
 Most types in SPL have a known size at compile time. These are called **sized types**. Some types do not have a known size and are called **unsized** or **dynamically sized types (DSTs)**.
 
@@ -1273,7 +1320,7 @@ See [traits.md](traits.md) section 5.2 for the `Sized` trait definition.
 
 ---
 
-## 10. Future Extensions
+## 11. Future Extensions
 
 This section documents potential language extensions that are under consideration but not currently part of SPL.
 

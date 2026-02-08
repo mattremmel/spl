@@ -242,7 +242,7 @@ let value = rx.await();  // Wait for the single value
 
 `select` waits on multiple channel operations.
 
-> **Note:** `select` is a built-in language construct with dedicated parser support, not a library function or macro.
+> **Note:** `select` is a compiler-recognized function in `std.task` with special support for its block argument, similar to how `format`/`print` are compiler intrinsics. No new keyword is needed -- `select` is not a reserved word but receives compiler support for validating and transforming its block syntax into the appropriate channel multiplexing code.
 
 ### 3.1 Basic Select
 
@@ -622,7 +622,9 @@ let final_results = results.into_inner();
 | **Mutable shared state** | Via `Arc(T: Mutex(T: T))` or channels | Via `Mutex` (no `Arc` needed — scope guarantees lifetime) |
 | **Lifetime** | Unbounded — task may outlive caller | Bounded — all tasks complete before `scope()` returns |
 
-Because scoped tasks are guaranteed to complete before the enclosing `scope()` call returns, they can borrow from the enclosing stack frame without requiring `Send` or ownership transfer. This is the same non-escaping closure mechanism described in [closures.md](closures.md) §5.1 — the borrow exists only for the duration of the `scope()` call.
+Because scoped tasks are guaranteed to complete before the enclosing `scope()` call returns, they can borrow from the enclosing stack frame without requiring `Send` or ownership transfer. This is the same non-escaping closure mechanism described in [closures.md](closures.md) §5.1 -- the borrow exists only for the duration of the `scope()` call.
+
+**`Sync` requirement for shared references:** While `Send` is not required for scoped tasks (data stays within the creating thread's logical scope and is not transferred), any data accessed via shared reference (`&T`) by multiple scoped tasks must be `Sync`. This is because multiple tasks may read concurrently from different OS threads, and `Sync` guarantees that `&T` is safe to share across threads. For example, `&Vec(T: i32)` is safe (since `Vec(T: i32)` is `Sync`), but `&Cell(T: i32)` is not (since `Cell` is not `Sync` -- it allows mutation through `&self` without synchronization).
 
 See also [memory-model.md](memory-model.md) §8 for scoped type semantics.
 

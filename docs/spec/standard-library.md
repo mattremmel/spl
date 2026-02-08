@@ -14,7 +14,9 @@ std
 ├── net             # Networking
 ├── task            # Concurrency primitives
 ├── channel         # Channel types
-├── sync            # Synchronization primitives
+├── sync            # Synchronization primitives (Arc, Mutex, RwLock)
+├── rc              # Reference counting (Rc)
+├── cell            # Interior mutability (Cell, RefCell, UnsafeCell)
 ├── time            # Time and duration
 ├── fmt             # Formatting
 ├── str             # String utilities
@@ -39,7 +41,7 @@ Items automatically imported into every module:
 
 ```spl
 // Types
-Option, Result, String, Vec, Box
+Option, Result, String, Vec, Box, decimal
 
 // Enum variants
 Some, None, Ok, Err
@@ -47,6 +49,7 @@ Some, None, Ok, Err
 // Traits
 Clone, Copy, Default, Debug, Display
 PartialEq, Eq, PartialOrd, Ord
+Hash
 Iterator, IntoIterator
 From, Into, TryFrom, TryInto
 Drop
@@ -412,10 +415,11 @@ impl String {
     fn truncate(&mut self, new_len: usize): ();
     fn as_str(&self): &str;
     fn as_bytes(&self): &[u8];
-    fn chars(&self): impl Iterator(Item: char);
-    fn bytes(&self): impl Iterator(Item: u8);
-    fn lines(&self): impl Iterator(Item: &str);
-    fn split(&self, pattern: &str): impl Iterator(Item: &str);
+    fn chars(&self): Iterator(Item: char);
+    fn bytes(&self): Iterator(Item: u8);
+    fn char_indices(&self): Iterator(Item: (usize, char));
+    fn lines(&self): Iterator(Item: &str);
+    fn split(&self, pattern: &str): Iterator(Item: &str);
     fn trim(&self): &str;
     fn trim_start(&self): &str;
     fn trim_end(&self): &str;
@@ -454,8 +458,8 @@ impl Vec(T: T) where T {
     fn last(&self): Option(T: &T);
     fn as_slice(&self): &[T];
     fn as_mut_slice(&mut self): &mut [T];
-    fn iter(&self): impl Iterator(Item: &T);
-    fn iter_mut(&mut self): impl Iterator(Item: &mut T);
+    fn iter(&self): Iterator(Item: &T);
+    fn iter_mut(&mut self): Iterator(Item: &mut T);
     fn sort(&mut self): () where T: Ord;
     fn sort_by(&mut self, compare: fn(&T, &T): Ordering): ();
     fn reverse(&mut self): ();
@@ -475,6 +479,214 @@ impl Box(T: T) where T {
 }
 ```
 
+### 2.6 Hash Trait
+
+The `Hash` trait is defined in `std.hash`. Types used as `HashMap` or `HashSet` keys must implement `Hash`.
+
+```spl
+// std.hash
+
+/// A trait for types that can be hashed.
+trait Hash {
+    /// Feeds this value into the given hasher.
+    fn hash(&self, hasher: &mut Hasher): ();
+}
+
+/// A trait for hash functions.
+trait Hasher {
+    /// Write a single byte into the hasher.
+    fn write(&mut self, bytes: &[u8]): ();
+
+    /// Return the hash value computed so far.
+    fn finish(&self): u64;
+}
+```
+
+`Hash` can be derived for structs and enums where all fields implement `Hash`:
+
+```spl
+#[derive(Hash)]
+struct Point(x: i32, y: i32)
+```
+
+**Built-in implementations:** All primitive integer types, `bool`, `char`, `str`, `String`, `decimal`, tuples (element-wise), arrays (element-wise), `Option(T)` where `T: Hash`, `Result(T, E)` where `T: Hash, E: Hash`.
+
+**Note:** `f32` and `f64` do **not** implement `Hash` because NaN values would violate the contract that `a == b` implies `hash(a) == hash(b)`.
+
+### 2.7 Default Trait
+
+The `Default` trait provides a way to create a default value for a type.
+
+```spl
+trait Default {
+    /// Returns the default value for this type.
+    fn default(): Self;
+}
+```
+
+`Default` can be derived for structs where all fields implement `Default`:
+
+```spl
+#[derive(Default)]
+struct Config(
+    width: i32,     // defaults to 0
+    height: i32,    // defaults to 0
+    name: String,   // defaults to ""
+)
+
+let config = Config.default();
+```
+
+**Built-in implementations:** All numeric types default to `0` (or `0.0` for floats, `0` for `decimal`). `bool` defaults to `false`. `String` defaults to `""`. `Vec(T)` defaults to an empty vector. `Option(T)` defaults to `None`.
+
+### 2.8 Arc and Rc
+
+#### Arc (Atomically Reference Counted)
+
+`Arc` provides shared ownership of a heap-allocated value with atomic reference counting, suitable for concurrent access across tasks.
+
+```spl
+// std.sync
+
+struct Arc(T) where T { /* ... */ }
+
+impl Arc(T: T) where T {
+    /// Creates a new Arc wrapping the given value.
+    fn new(value: T): Arc(T: T);
+
+    /// Creates a new Arc that shares ownership (increments reference count).
+    fn clone(&self): Arc(T: T);
+
+    /// Returns the number of strong references to this allocation.
+    fn strong_count(&self): usize;
+
+    /// Returns the number of weak references to this allocation.
+    fn weak_count(&self): usize;
+}
+```
+
+**Thread safety:** `Arc(T)` implements `Send + Sync` when `T: Send + Sync`. This makes it the standard way to share data across tasks.
+
+#### Rc (Reference Counted)
+
+`Rc` provides shared ownership of a heap-allocated value with non-atomic reference counting, suitable for single-threaded use only.
+
+```spl
+// std.rc
+
+struct Rc(T) where T { /* ... */ }
+
+impl Rc(T: T) where T {
+    /// Creates a new Rc wrapping the given value.
+    fn new(value: T): Rc(T: T);
+
+    /// Creates a new Rc that shares ownership (increments reference count).
+    fn clone(&self): Rc(T: T);
+
+    /// Returns the number of strong references to this allocation.
+    fn strong_count(&self): usize;
+}
+```
+
+**Thread safety:** `Rc` is neither `Send` nor `Sync`. Use `Arc` for cross-task sharing. `Rc` has lower overhead than `Arc` due to non-atomic operations.
+
+### 2.9 Cell, RefCell, and UnsafeCell
+
+These types provide interior mutability -- the ability to mutate data even through shared references.
+
+#### Cell
+
+`Cell` provides interior mutability for `Copy` types by moving values in and out.
+
+```spl
+// std.cell
+
+struct Cell(T) where T: Copy { /* ... */ }
+
+impl Cell(T: T) where T: Copy {
+    /// Creates a new Cell containing the given value.
+    fn new(value: T): Cell(T: T);
+
+    /// Returns a copy of the contained value.
+    fn get(&self): T;
+
+    /// Sets the contained value.
+    fn set(&self, value: T): ();
+
+    /// Replaces the contained value, returning the old value.
+    fn replace(&self, value: T): T;
+}
+```
+
+#### RefCell
+
+`RefCell` provides interior mutability for any type via runtime borrow checking.
+
+```spl
+struct RefCell(T) where T { /* ... */ }
+
+impl RefCell(T: T) where T {
+    /// Creates a new RefCell containing the given value.
+    fn new(value: T): RefCell(T: T);
+
+    /// Immutably borrows the wrapped value. Panics if already mutably borrowed.
+    fn borrow(&self): Ref(T: T);
+
+    /// Mutably borrows the wrapped value. Panics if already borrowed.
+    fn borrow_mut(&self): RefMut(T: T);
+
+    /// Attempts to immutably borrow. Returns None if already mutably borrowed.
+    fn try_borrow(&self): Option(T: Ref(T: T));
+
+    /// Attempts to mutably borrow. Returns None if already borrowed.
+    fn try_borrow_mut(&self): Option(T: RefMut(T: T));
+}
+```
+
+`Ref(T)` and `RefMut(T)` are scoped guard types that implement `Deref` and `DerefMut` respectively, releasing the borrow when dropped.
+
+#### UnsafeCell
+
+`UnsafeCell` is the fundamental building block for all interior mutability in SPL. It is the only way to obtain a mutable pointer from a shared reference.
+
+```spl
+struct UnsafeCell(T) where T { /* ... */ }
+
+impl UnsafeCell(T: T) where T {
+    /// Creates a new UnsafeCell containing the given value.
+    fn new(value: T): UnsafeCell(T: T);
+
+    /// Returns a raw mutable pointer to the contained value.
+    fn get(&self): *mut T;
+}
+```
+
+**Note:** `UnsafeCell` is only usable in `unsafe` blocks. It is the primitive upon which `Cell`, `RefCell`, `Mutex`, and `RwLock` are built.
+
+### 2.10 Memory Utilities
+
+```spl
+// std.mem
+
+/// Returns the size of type T in bytes.
+fn size_of(T)(): usize where T;
+
+/// Returns the alignment of type T in bytes.
+fn align_of(T)(): usize where T;
+
+/// Swaps the values at two mutable references.
+fn swap(T)(a: &mut T, b: &mut T): () where T;
+
+/// Replaces the value at a mutable reference, returning the old value.
+fn replace(T)(dest: &mut T, src: T): T where T;
+
+/// Takes the value out of a mutable reference, replacing it with Default.
+fn take(T)(dest: &mut T): T where T: Default;
+
+/// Forgets a value without running its destructor.
+fn forget(T)(val: T): () where T;
+```
+
 ---
 
 ## 3. Collections
@@ -483,42 +695,247 @@ impl Box(T: T) where T {
 
 ```spl
 struct HashMap(K, V) where K: Hash + Eq, V { /* ... */ }
+
+impl HashMap(K: K, V: V) where K: Hash + Eq, V {
+    /// Creates an empty HashMap.
+    fn new(): HashMap(K: K, V: V);
+    /// Creates an empty HashMap with the specified capacity.
+    fn with_capacity(capacity: usize): HashMap(K: K, V: V);
+    /// Inserts a key-value pair. Returns the previous value if the key was present.
+    fn insert(&mut self, key: K, value: V): Option(T: V);
+    /// Returns a reference to the value for the given key.
+    fn get(&self, key: &K): Option(T: &V);
+    /// Returns a mutable reference to the value for the given key.
+    fn get_mut(&mut self, key: &K): Option(T: &mut V);
+    /// Removes a key-value pair, returning the value if present.
+    fn remove(&mut self, key: &K): Option(T: V);
+    /// Returns true if the map contains the given key.
+    fn contains_key(&self, key: &K): bool;
+    /// Returns the number of key-value pairs.
+    fn len(&self): usize;
+    /// Returns true if the map is empty.
+    fn is_empty(&self): bool;
+    /// Removes all key-value pairs.
+    fn clear(&mut self): ();
+    /// Applies a function to each key-value pair.
+    fn each(&self, f: fn(&K, &V)): ();
+    /// Returns a RefIterator over key-value pairs.
+    fn ref_iter(&self): HashMapIter(K: K, V: V);
+}
 ```
 
 ### 3.2 HashSet
 
 ```spl
 struct HashSet(T) where T: Hash + Eq { /* ... */ }
+
+impl HashSet(T: T) where T: Hash + Eq {
+    /// Creates an empty HashSet.
+    fn new(): HashSet(T: T);
+    /// Creates an empty HashSet with the specified capacity.
+    fn with_capacity(capacity: usize): HashSet(T: T);
+    /// Inserts a value. Returns true if the value was not already present.
+    fn insert(&mut self, value: T): bool;
+    /// Removes a value. Returns true if the value was present.
+    fn remove(&mut self, value: &T): bool;
+    /// Returns true if the set contains the value.
+    fn contains(&self, value: &T): bool;
+    /// Returns the number of elements.
+    fn len(&self): usize;
+    /// Returns true if the set is empty.
+    fn is_empty(&self): bool;
+    /// Removes all elements.
+    fn clear(&mut self): ();
+    /// Applies a function to each element.
+    fn each(&self, f: fn(&T)): ();
+    /// Returns a RefIterator over elements.
+    fn ref_iter(&self): HashSetIter(T: T);
+    /// Returns the union of two sets.
+    fn union(&self, other: &HashSet(T: T)): HashSet(T: T) where T: Clone;
+    /// Returns the intersection of two sets.
+    fn intersection(&self, other: &HashSet(T: T)): HashSet(T: T) where T: Clone;
+    /// Returns the difference (elements in self but not in other).
+    fn difference(&self, other: &HashSet(T: T)): HashSet(T: T) where T: Clone;
+    /// Returns true if self is a subset of other.
+    fn is_subset(&self, other: &HashSet(T: T)): bool;
+}
 ```
 
 ### 3.3 BTreeMap
 
 ```spl
 struct BTreeMap(K, V) where K: Ord, V { /* ... */ }
+
+impl BTreeMap(K: K, V: V) where K: Ord, V {
+    /// Creates an empty BTreeMap.
+    fn new(): BTreeMap(K: K, V: V);
+    /// Inserts a key-value pair. Returns the previous value if the key was present.
+    fn insert(&mut self, key: K, value: V): Option(T: V);
+    /// Returns a reference to the value for the given key.
+    fn get(&self, key: &K): Option(T: &V);
+    /// Returns a mutable reference to the value for the given key.
+    fn get_mut(&mut self, key: &K): Option(T: &mut V);
+    /// Removes a key-value pair, returning the value if present.
+    fn remove(&mut self, key: &K): Option(T: V);
+    /// Returns true if the map contains the given key.
+    fn contains_key(&self, key: &K): bool;
+    /// Returns the number of key-value pairs.
+    fn len(&self): usize;
+    /// Returns true if the map is empty.
+    fn is_empty(&self): bool;
+    /// Removes all key-value pairs.
+    fn clear(&mut self): ();
+    /// Applies a function to each key-value pair in sorted order.
+    fn each(&self, f: fn(&K, &V)): ();
+    /// Returns a RefIterator over key-value pairs in sorted order.
+    fn ref_iter(&self): BTreeMapIter(K: K, V: V);
+    /// Returns the first (smallest) key-value pair.
+    fn first(&self): Option(T: (&K, &V));
+    /// Returns the last (largest) key-value pair.
+    fn last(&self): Option(T: (&K, &V));
+}
 ```
 
 ### 3.4 BTreeSet
 
 ```spl
 struct BTreeSet(T) where T: Ord { /* ... */ }
+
+impl BTreeSet(T: T) where T: Ord {
+    /// Creates an empty BTreeSet.
+    fn new(): BTreeSet(T: T);
+    /// Inserts a value. Returns true if the value was not already present.
+    fn insert(&mut self, value: T): bool;
+    /// Removes a value. Returns true if the value was present.
+    fn remove(&mut self, value: &T): bool;
+    /// Returns true if the set contains the value.
+    fn contains(&self, value: &T): bool;
+    /// Returns the number of elements.
+    fn len(&self): usize;
+    /// Returns true if the set is empty.
+    fn is_empty(&self): bool;
+    /// Removes all elements.
+    fn clear(&mut self): ();
+    /// Applies a function to each element in sorted order.
+    fn each(&self, f: fn(&T)): ();
+    /// Returns a RefIterator over elements in sorted order.
+    fn ref_iter(&self): BTreeSetIter(T: T);
+    /// Returns the first (smallest) element.
+    fn first(&self): Option(T: &T);
+    /// Returns the last (largest) element.
+    fn last(&self): Option(T: &T);
+    /// Returns true if self is a subset of other.
+    fn is_subset(&self, other: &BTreeSet(T: T)): bool;
+}
 ```
 
 ### 3.5 VecDeque
 
+A double-ended queue implemented with a growable ring buffer.
+
 ```spl
 struct VecDeque(T) where T { /* ... */ }
+
+impl VecDeque(T: T) where T {
+    /// Creates an empty VecDeque.
+    fn new(): VecDeque(T: T);
+    /// Creates an empty VecDeque with the specified capacity.
+    fn with_capacity(capacity: usize): VecDeque(T: T);
+    /// Appends an element to the back.
+    fn push_back(&mut self, value: T): ();
+    /// Prepends an element to the front.
+    fn push_front(&mut self, value: T): ();
+    /// Removes and returns the last element.
+    fn pop_back(&mut self): Option(T: T);
+    /// Removes and returns the first element.
+    fn pop_front(&mut self): Option(T: T);
+    /// Returns a reference to the element at the given index.
+    fn get(&self, index: usize): Option(T: &T);
+    /// Returns a mutable reference to the element at the given index.
+    fn get_mut(&mut self, index: usize): Option(T: &mut T);
+    /// Returns a reference to the front element.
+    fn front(&self): Option(T: &T);
+    /// Returns a reference to the back element.
+    fn back(&self): Option(T: &T);
+    /// Returns the number of elements.
+    fn len(&self): usize;
+    /// Returns true if the deque is empty.
+    fn is_empty(&self): bool;
+    /// Removes all elements.
+    fn clear(&mut self): ();
+    /// Returns true if the deque contains the value.
+    fn contains(&self, value: &T): bool where T: PartialEq;
+    /// Returns an iterator over elements.
+    fn iter(&self): Iterator(Item: &T);
+}
 ```
 
 ### 3.6 LinkedList
 
+A doubly-linked list.
+
 ```spl
 struct LinkedList(T) where T { /* ... */ }
+
+impl LinkedList(T: T) where T {
+    /// Creates an empty LinkedList.
+    fn new(): LinkedList(T: T);
+    /// Appends an element to the back.
+    fn push_back(&mut self, value: T): ();
+    /// Prepends an element to the front.
+    fn push_front(&mut self, value: T): ();
+    /// Removes and returns the last element.
+    fn pop_back(&mut self): Option(T: T);
+    /// Removes and returns the first element.
+    fn pop_front(&mut self): Option(T: T);
+    /// Returns a reference to the front element.
+    fn front(&self): Option(T: &T);
+    /// Returns a reference to the back element.
+    fn back(&self): Option(T: &T);
+    /// Returns the number of elements.
+    fn len(&self): usize;
+    /// Returns true if the list is empty.
+    fn is_empty(&self): bool;
+    /// Removes all elements.
+    fn clear(&mut self): ();
+    /// Returns true if the list contains the value.
+    fn contains(&self, value: &T): bool where T: PartialEq;
+    /// Applies a function to each element.
+    fn each(&self, f: fn(&T)): ();
+    /// Returns a RefIterator over elements.
+    fn ref_iter(&self): LinkedListIter(T: T);
+}
 ```
 
 ### 3.7 BinaryHeap
 
+A priority queue implemented with a binary heap. Elements are ordered by `Ord`, with the greatest element at the top.
+
 ```spl
 struct BinaryHeap(T) where T: Ord { /* ... */ }
+
+impl BinaryHeap(T: T) where T: Ord {
+    /// Creates an empty BinaryHeap.
+    fn new(): BinaryHeap(T: T);
+    /// Creates an empty BinaryHeap with the specified capacity.
+    fn with_capacity(capacity: usize): BinaryHeap(T: T);
+    /// Pushes a value onto the heap.
+    fn push(&mut self, value: T): ();
+    /// Removes and returns the greatest element. Returns None if empty.
+    fn pop(&mut self): Option(T: T);
+    /// Returns a reference to the greatest element without removing it.
+    fn peek(&self): Option(T: &T);
+    /// Returns the number of elements.
+    fn len(&self): usize;
+    /// Returns true if the heap is empty.
+    fn is_empty(&self): bool;
+    /// Removes all elements.
+    fn clear(&mut self): ();
+    /// Consumes the heap and returns elements as a sorted Vec.
+    fn into_sorted_vec(self): Vec(T: T);
+    /// Returns an iterator over elements in arbitrary order.
+    fn iter(&self): Iterator(Item: &T);
+}
 ```
 
 ---
@@ -543,7 +960,7 @@ trait Seek {
 
 trait BufRead: Read {
     fn read_line(&mut self, buf: &mut String): Result(T: usize, E: IoError);
-    fn lines(&self): impl Iterator(Item: Result(T: String, E: IoError));
+    fn lines(&self): Iterator(Item: Result(T: String, E: IoError));
 }
 ```
 
@@ -643,13 +1060,54 @@ trait Display {
     fn fmt(&self, f: &mut Formatter): Result(T: (), E: Error);
 }
 
-// Functions (not macros — SPL macros look like regular function calls)
+// Compiler intrinsics for formatted output.
+// These accept a variable number of arguments and the compiler validates
+// the format string at compile time. No new keywords are needed — they are
+// compiler-recognized functions, not macros.
 format("{}", value)      // Returns String
 print("{}", value)       // Print to stdout
 println("{}", value)     // Print line to stdout
 eprint("{}", value)      // Print to stderr
 eprintln("{}", value)    // Print line to stderr
 ```
+
+### Format String Specifiers
+
+`format`, `print`, `println`, `eprint`, and `eprintln` are **compiler intrinsics** with special compile-time format string validation. The first argument must be a string literal (or a `const` string). The compiler verifies at compile time that the number and types of arguments match the format placeholders.
+
+| Specifier | Meaning | Trait Used |
+|-----------|---------|------------|
+| `{}` | Display formatting | `Display` |
+| `{:?}` | Debug formatting | `Debug` |
+| `{name}` | Named argument | `Display` (by name) |
+| `{name:?}` | Named argument, debug | `Debug` (by name) |
+| `{:.N}` | Precision (N decimal places) | `Display` |
+| `{:>N}` | Right-align, width N | `Display` |
+| `{:<N}` | Left-align, width N | `Display` |
+| `{:^N}` | Center-align, width N | `Display` |
+| `{:0N}` | Zero-padded, width N | `Display` |
+| `{{` | Literal `{` | N/A |
+| `}}` | Literal `}` | N/A |
+
+**Examples:**
+
+```spl
+let name = "Alice";
+let age = 30;
+
+println("Hello, {}!", name)          // Positional: "Hello, Alice!"
+println("{name} is {age} years old") // Named: "Alice is 30 years old"
+println("Debug: {:?}", some_value)   // Debug formatting
+println("Pi: {:.2}", 3.14159)        // Precision: "Pi: 3.14"
+println("{:>10}", "right")           // Right-align: "     right"
+println("{:06}", 42)                 // Zero-pad: "000042"
+```
+
+**Compile-time validation:**
+- Mismatched argument count is a compile error
+- Using `{}` with a type that does not implement `Display` is a compile error
+- Using `{:?}` with a type that does not implement `Debug` is a compile error
+- Named arguments must match parameter names or `let` bindings in scope
 
 ---
 
@@ -675,40 +1133,40 @@ Adapters are lazy — they build a pipeline that executes only when a consumer i
 ```spl
 impl Iterator {
     /// Transforms each element.
-    fn map(self, f: fn(Self.Item): U): impl Iterator(Item: U) where U;
+    fn map(self, f: fn(Self.Item): U): Iterator(Item: U) where U;
 
     /// Keeps only elements satisfying the predicate.
-    fn filter(self, predicate: fn(&Self.Item): bool): impl Iterator(Item: Self.Item);
+    fn filter(self, predicate: fn(&Self.Item): bool): Iterator(Item: Self.Item);
 
     /// Filters and maps in a single step.
-    fn filter_map(self, f: fn(Self.Item): Option(T: U)): impl Iterator(Item: U) where U;
+    fn filter_map(self, f: fn(Self.Item): Option(T: U)): Iterator(Item: U) where U;
 
     /// Maps each element to an iterator and flattens the results.
-    fn flat_map(self, f: fn(Self.Item): impl IntoIterator(Item: U)): impl Iterator(Item: U) where U;
+    fn flat_map(self, f: fn(Self.Item): IntoIterator(Item: U)): Iterator(Item: U) where U;
 
     /// Flattens nested iterators.
-    fn flatten(self): impl Iterator(Item: U) where Self.Item: IntoIterator(Item: U), U;
+    fn flatten(self): Iterator(Item: U) where Self.Item: IntoIterator(Item: U), U;
 
     /// Yields at most `n` elements.
-    fn take(self, n: usize): impl Iterator(Item: Self.Item);
+    fn take(self, n: usize): Iterator(Item: Self.Item);
 
     /// Skips the first `n` elements.
-    fn skip(self, n: usize): impl Iterator(Item: Self.Item);
+    fn skip(self, n: usize): Iterator(Item: Self.Item);
 
     /// Yields elements while the predicate is true.
-    fn take_while(self, predicate: fn(&Self.Item): bool): impl Iterator(Item: Self.Item);
+    fn take_while(self, predicate: fn(&Self.Item): bool): Iterator(Item: Self.Item);
 
     /// Skips elements while the predicate is true.
-    fn skip_while(self, predicate: fn(&Self.Item): bool): impl Iterator(Item: Self.Item);
+    fn skip_while(self, predicate: fn(&Self.Item): bool): Iterator(Item: Self.Item);
 
     /// Chains two iterators end-to-end.
-    fn chain(self, other: impl IntoIterator(Item: Self.Item)): impl Iterator(Item: Self.Item);
+    fn chain(self, other: IntoIterator(Item: Self.Item)): Iterator(Item: Self.Item);
 
     /// Zips two iterators into pairs. Stops when either is exhausted.
-    fn zip(self, other: impl IntoIterator(Item: U)): impl Iterator(Item: (Self.Item, U)) where U;
+    fn zip(self, other: IntoIterator(Item: U)): Iterator(Item: (Self.Item, U)) where U;
 
     /// Yields `(index, element)` pairs starting from 0.
-    fn enumerate(self): impl Iterator(Item: (usize, Self.Item));
+    fn enumerate(self): Iterator(Item: (usize, Self.Item));
 
     /// Wraps in a peekable iterator that supports `peek()`.
     fn peekable(self): Peekable(I: Self);
@@ -796,6 +1254,45 @@ trait FromIterator {
     fn from_iter(iter: I): Self where I: IntoIterator(Item: Self.Item);
 }
 ```
+
+### 9.6 Sum and Product
+
+These traits power the `.sum()` and `.product()` consumer methods on iterators.
+
+```spl
+/// Trait for types that can be created by summing an iterator.
+trait Sum {
+    /// Sums the elements of an iterator, starting from the type's additive identity.
+    fn sum(iter: I): Self where I: Iterator(Item: Self);
+}
+
+/// Trait for types that can be created by multiplying an iterator.
+trait Product {
+    /// Multiplies the elements of an iterator, starting from the type's multiplicative identity.
+    fn product(iter: I): Self where I: Iterator(Item: Self);
+}
+```
+
+**Built-in implementations:** All integer types, `f32`, `f64`, and `decimal` implement both `Sum` and `Product`.
+
+### 9.7 Step
+
+The `Step` trait defines types that can be iterated over in ranges (`a..b`, `a..=b`). See [iteration.md](iteration.md) section 3 for the full range implementation.
+
+```spl
+trait Step: Clone + PartialOrd {
+    /// Returns the number of steps from `start` to `self`.
+    fn steps_from(&self, start: &Self): usize;
+
+    /// Returns the value `count` steps forward from `self`.
+    fn forward(&self, count: usize): Self;
+
+    /// Returns the value `count` steps backward from `self`.
+    fn backward(&self, count: usize): Self;
+}
+```
+
+**Built-in implementations:** All integer types and `char` implement `Step`.
 
 ---
 
@@ -1228,7 +1725,38 @@ trait AsMut(T) where T {
 
 ---
 
-## 13. Error Handling
+## 13. Deref Traits
+
+The `Deref` and `DerefMut` traits enable transparent dereferencing, allowing a type to behave like another type through automatic coercion. They are defined in `std.ops`.
+
+```spl
+/// Enables `*value` to produce `&Self.Target`.
+/// Also enables automatic deref coercions: `&T` coerces to `&T.Target`.
+trait Deref {
+    type Target;
+    fn deref(&self): &Self.Target;
+}
+
+/// Enables mutable dereference: `*value = x` where value: &mut T.
+/// Also enables automatic deref coercions: `&mut T` coerces to `&mut T.Target`.
+trait DerefMut: Deref {
+    fn deref_mut(&mut self): &mut Self.Target;
+}
+```
+
+**Built-in implementations:**
+
+| Type | Target | Effect |
+|------|--------|--------|
+| `Box(T)` | `T` | `Box(T)` transparently behaves like `T` |
+| `String` | `str` | `&String` coerces to `&str` |
+| `Vec(T)` | `[T]` | `&Vec(T)` coerces to `&[T]` |
+
+Deref coercions are used by the method resolution algorithm (see [type-system.md](type-system.md) section 7) to automatically follow the deref chain when looking up methods.
+
+---
+
+## 14. Error Handling
 
 ```spl
 // std.error
@@ -1240,7 +1768,7 @@ trait Error {
     fn message(&self): &str;
 
     /// The underlying cause of this error, if any.
-    fn source(&self): Option(T: &dyn Error) { return None; }
+    fn source(&self): Option(T: &Error) { return None; }
 }
 
 /// Standard I/O error type

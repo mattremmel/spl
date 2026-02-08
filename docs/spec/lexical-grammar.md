@@ -93,7 +93,6 @@ SPL reserves 37 keywords that cannot be used as identifiers:
 | `&`      | Bitwise AND      |
 | `\|`     | Bitwise OR       |
 | `^`      | Bitwise XOR      |
-| `~`      | Bitwise NOT      |
 | `<<`     | Left shift       |
 | `>>`     | Right shift      |
 
