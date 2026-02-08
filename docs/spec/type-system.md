@@ -462,7 +462,7 @@ type Predicate = fn(i32): bool;
 type BinaryOp = fn(i32, i32): i32;
 ```
 
-**Note:** The `fn(Args): Return` syntax represents callable types. Unlike Rust, SPL's `fn` type covers all callables including capturing closures. The compiler internally tracks whether closures implement `Fn`, `FnMut`, or `FnOnce` based on how they use their captures, but at the type level, `fn(Args): Return` is the unified surface syntax for all callable types. See [closures.md](closures.md) Section 4 for the Fn/FnMut/FnOnce trait hierarchy and inference rules.
+**Note:** The `fn(Args): Return` syntax represents callable types. SPL's `fn` type covers named functions and `Fn` closures (those that only read their captures). Closures that mutate captures (`FnMut`) or consume captures (`FnOnce`) cannot be assigned to `fn` types — use generic parameters with `FnMut` or `FnOnce` bounds instead. Non-capturing callables are represented as thin function pointers; capturing `Fn` closures assigned to `fn` type are heap-allocated as fat pointers `(fn_ptr, env_ptr)`. See [closures.md](closures.md) Section 4 for the Fn/FnMut/FnOnce trait hierarchy, calling convention safety rules, and representation details.
 
 ---
 
@@ -592,12 +592,54 @@ let f: f32 = 2.0;    // f32
 
 ### Inference Algorithm
 
-SPL uses a Hindley-Milner style inference algorithm with the following steps:
+SPL uses a Hindley-Milner style inference algorithm:
 
-1. **Constraint generation**: Walk the AST, generating type constraints from expressions
+1. **Constraint generation**: Walk the AST, generating type equality constraints from expressions
 2. **Unification**: Solve constraints by unifying type variables
-3. **Defaulting**: Apply defaults for unconstrained numeric types (`i32`, `f64`)
-4. **Error if ambiguous**: Report errors for types that cannot be determined
+3. **Trait bound checking**: Verify that unified types satisfy all required trait bounds
+4. **Defaulting**: Apply defaults for unconstrained numeric types (`i32`, `f64`)
+5. **Error if ambiguous**: Report errors for types that cannot be determined
+
+#### Constraint Generation
+
+The compiler generates type equality constraints from the following sources:
+
+| Source | Constraint generated |
+|---|---|
+| `let x = expr` | `type(x) = type(expr)` |
+| `let x: T = expr` | `type(x) = T`, `type(expr) = T` |
+| `f(arg)` where `f: fn(P): R` | `type(arg) = P`, `type(call) = R` |
+| `x.method(arg)` | Resolve method via §7, constrain receiver and args |
+| `expr1 + expr2` | Both operands unified per `Add` trait |
+| `if c { e1 } else { e2 }` | `type(e1) = type(e2)` |
+| `return expr` | `type(expr) = declared_return_type` |
+
+#### Unification
+
+Unification merges type variables into concrete types using the standard algorithm:
+
+1. **Substitution**: When a type variable `?T` is unified with a concrete type `U`, all occurrences of `?T` are replaced by `U`
+2. **Occurs check**: Before substituting `?T = U`, verify that `?T` does not appear in `U` (prevents infinite types like `T = Option(T: T)`)
+3. **Structural matching**: Two concrete types unify if they have the same constructor and all parameters unify (e.g., `Vec(T: ?A)` unifies with `Vec(T: i32)` by setting `?A = i32`)
+4. **Failure**: If two concrete types cannot be unified (e.g., `i32` vs `String`), a type error is reported
+
+#### Defaulting
+
+After unification, unconstrained numeric type variables receive default types:
+
+| Unconstrained type | Default |
+|---|---|
+| Integer literal type variable | `i32` |
+| Float literal type variable | `f64` |
+
+Defaulting occurs only if no other constraint determines the type. If a type variable is constrained by usage (e.g., passed to a function expecting `u64`), the constraint takes precedence over the default.
+
+#### Ambiguity Errors
+
+A type error is reported when:
+- A type variable remains unconstrained after defaulting (e.g., `Vec.new()` with no subsequent usage)
+- Multiple conflicting constraints exist (e.g., expression used as both `i32` and `String`)
+- A required trait bound is not satisfied after unification
 
 ### Enum Variant Shorthand
 
@@ -1053,6 +1095,21 @@ enum Shape{
 
 let shapes: Vec(T: Shape) = [Shape.Circle(c), Shape.Rectangle(r)];
 ```
+
+### Variance for Generic Type Parameters
+
+User-defined generic type parameters are **invariant** by default. A `Container(T: Cat)` is not assignable to `Container(T: Animal)` even if `Cat` is a subtype of `Animal` (which it is not in SPL's nominal type system, but the rule applies uniformly).
+
+**Variance summary:**
+
+| Type constructor | Variance in `T` | Explanation |
+|---|---|---|
+| `&T` | Covariant | Can widen: `&SubType` usable where `&SuperType` expected |
+| `&mut T` | Invariant | Must match exactly (read + write) |
+| `fn(T): R` | Invariant in both `T` and `R` | Must match exactly |
+| `Vec(T: T)`, `Box(T: T)`, all user-defined generics | Invariant in `T` | Must match exactly |
+
+**Why all generics are invariant:** SPL uses nominal typing with no subtyping relationship between distinct named types. Combined with monomorphization, variance only matters for reference types. Making all generic parameters invariant simplifies the type system with negligible practical cost — the only covariance in SPL is `&T` being covariant in `T` (e.g., if a lifetime outlives another, the longer-lived reference can be used where the shorter-lived one is expected). Separately, `&mut T` can coerce to `&T` at coercion sites (see §8), which is a coercion rather than a variance relationship.
 
 ---
 

@@ -171,6 +171,56 @@ enum TryRecvError {
 
 Values sent through channels cross task boundaries, so channel element types must be `Send`. This ensures thread-safety for all cross-task value transfers.
 
+### 2.3.1 Channel Close Semantics
+
+A channel is **closed** when all `Sender` handles for that channel have been dropped (either explicitly via `drop()` or implicitly when they go out of scope). Closing semantics:
+
+**Sender side:**
+- `Sender.send()` on a closed channel (all receivers dropped) returns `SendError.Disconnected(value)` (the unsent value is returned to the caller; does not panic)
+- `Sender.is_closed()` returns `true` when all receivers have been dropped
+- Dropping all senders closes the channel from the send side
+
+**Receiver side:**
+- When all senders are dropped, `Receiver.recv()` returns remaining buffered messages, then returns `None`
+- `Receiver.try_recv()` returns `TryRecvError.Disconnected` after all buffered messages are consumed
+- `Receiver` implements `IntoIterator`: `for msg in rx { ... }` yields all messages until the channel closes, then the loop exits
+
+```spl
+let (tx, rx) = bounded(10);
+
+spawn(|| {
+    for i in 0..5 {
+        tx.send(i);
+    }
+    drop(tx);  // Channel closes
+});
+
+// IntoIterator: yields 0, 1, 2, 3, 4, then loop exits
+for msg in rx {
+    println("{}", msg);
+}
+```
+
+**Broadcast channels:**
+- Broadcast channels use a fixed-size ring buffer (capacity specified at creation)
+- When the buffer is full, new messages overwrite the oldest messages
+- A lagging receiver (one that hasn't consumed overwritten messages) receives `RecvError.Lagged(count)` on its next `recv()`, where `count` is the number of missed messages
+- After receiving `Lagged`, the receiver resumes from the oldest available message
+
+```spl
+let (tx, rx) = broadcast(4);  // Ring buffer of size 4
+let rx2 = rx.clone();
+
+// Send 6 messages into buffer of size 4
+for i in 0..6 { tx.send(i); }
+
+// rx2 hasn't consumed anything — it lagged
+match rx2.recv() {
+    Ok(msg) => println("got {}", msg),
+    Err(RecvError.Lagged(n)) => println("missed {} messages", n),  // missed 2
+}
+```
+
 ### 2.4 Multiple Producers
 
 Senders can be cloned for multiple producers:
@@ -257,6 +307,25 @@ select {
         handle_b(msg);
     },
 }
+```
+
+### 3.1.1 Select Semantics
+
+**Multiple-ready behavior:** When multiple arms of a `select` are ready simultaneously, the runtime selects one using **pseudo-random** choice. There is no fairness guarantee — a frequently-ready arm may starve other arms. For fairness-sensitive use cases, implement round-robin logic manually.
+
+**Evaluation order:** Arm conditions are evaluated top-to-bottom, but the actual selection among ready arms is non-deterministic. The `default` arm is only selected if no other arm is ready.
+
+**Grammar:** A `select` block is a compiler-recognized construct (not a macro):
+
+```ebnf
+SelectExpr = "select" "{" SelectArm { "," SelectArm } [ "," ] "}" ;
+
+SelectArm = RecvArm | SendArm | TimeoutArm | DefaultArm ;
+
+RecvArm = Pattern "=" Expr "." "recv" "(" ")" "=>" Block ;
+SendArm = Expr "." "send" "(" Expr ")" "=>" Block ;
+TimeoutArm = "timeout" "(" Expr ")" "=>" Block ;
+DefaultArm = "default" "=>" Block ;
 ```
 
 ### 3.2 Select with Send
@@ -544,6 +613,18 @@ When a task is cancelled:
 - `try_await()` returns `Err(TaskError.Panicked(msg))`, not `Err(TaskError.Cancelled)`, in this case.
 - A pending cancellation is ignored during panic unwinding — destructors run to completion as part of the panic, not the cancellation.
 
+**Cancellation and held locks:**
+
+When a task is cancelled and unwinds, any held `MutexGuard` values are dropped as part of the unwinding process, which **releases the lock**. The mutex is **not poisoned** on cancellation (unlike on panic):
+
+| Event | Lock released? | Mutex poisoned? |
+|---|---|---|
+| Normal scope exit | Yes (guard dropped) | No |
+| Cancellation unwind | Yes (guard dropped) | No |
+| Panic unwind | Yes (guard dropped) | **Yes** |
+
+**Rationale:** Cancellation is a normal control flow event (not an error), so it does not leave the mutex in a potentially inconsistent state. Panics indicate a bug, so the mutex is poisoned to prevent other tasks from observing potentially corrupted data. A poisoned mutex can still be locked via `lock()`, which returns `Result(T: MutexGuard, E: PoisonError)`.
+
 ---
 
 ## 6. Scoped Tasks
@@ -610,6 +691,44 @@ let final_results = results.into_inner();
 ```
 
 **Note:** Shared mutation across concurrent tasks always requires synchronization. The borrow checker rejects multiple mutable borrows to the same data, so patterns like two tasks both calling `results.push()` on a bare `Vec` are compile errors. Use `Mutex`, `RwLock`, or channels to coordinate writes.
+
+### 6.2.1 Scoped Task Return Types and Disjoint Borrows
+
+**Return type:** `s.spawn()` returns a `ScopedJoinHandle(T: T)` that can be used to retrieve the task's result before the scope exits:
+
+```spl
+scope(|s| {
+    let h1: ScopedJoinHandle(T: i32) = s.spawn(|| compute_a());
+    let h2: ScopedJoinHandle(T: i32) = s.spawn(|| compute_b());
+
+    let a = h1.await();  // Wait for task result
+    let b = h2.await();
+    println("sum = {}", a + b);
+});
+```
+
+`ScopedJoinHandle` has the same API as `JoinHandle` (`await()`, `try_await()`, `is_finished()`) but cannot outlive the enclosing `scope()` call.
+
+**Disjoint mutable borrows:** Multiple scoped tasks can mutably borrow **disjoint** portions of the same data. The programmer must ensure disjointness at the API level (e.g., via `split_at_mut` or indexing into separate ranges):
+
+```spl
+let mut data = vec![0; 1000];
+let (left, right) = data.split_at_mut(500);
+
+scope(|s| {
+    s.spawn(|| {
+        for i in 0..left.len() { left[i] = i; }
+    });
+    s.spawn(|| {
+        for i in 0..right.len() { right[i] = i * 2; }
+    });
+});
+// Both halves mutated safely
+```
+
+The borrow checker verifies that `left` and `right` are distinct borrows. Two scoped tasks borrowing the same `&mut` is a compile error.
+
+**Cancellation:** Individual scoped tasks cannot be cancelled — they always run to completion. The entire scope can be abandoned only if a panic occurs (in which case all tasks are unwound).
 
 ### 6.3 Scoped vs Unscoped Task Closures
 

@@ -343,6 +343,52 @@ use std.{vec.Vec, io.{Read, Write}};
 let v = std.vec.Vec(T: i32).new();
 ```
 
+### Import Conflict Resolution
+
+**Glob import conflicts are lazy:** When two glob imports bring in items with the same name, no error is reported at the import site. An error is only reported when the ambiguous name is actually **used**:
+
+```spl
+use module_a.*;  // Contains fn helper()
+use module_b.*;  // Also contains fn helper()
+
+// No error yet — both globs imported
+
+helper();  // ERROR: ambiguous name `helper` — found in both module_a and module_b
+```
+
+**Resolution precedence:**
+
+| Priority | Source | Shadows |
+|---|---|---|
+| 1 (highest) | Local items (defined in current module) | Everything |
+| 2 | Explicit imports (`use path.item`) | Glob imports |
+| 3 | Glob imports (`use path.*`) | Prelude |
+| 4 (lowest) | Prelude | Nothing |
+
+```spl
+use std.collections.*;  // Imports HashMap, HashSet, etc.
+use custom.HashMap;     // Explicit import — shadows glob's HashMap
+
+// HashMap refers to custom.HashMap (explicit wins over glob)
+let map = HashMap.new();
+
+// HashSet still refers to std.collections.HashSet (from glob)
+let set = HashSet.new();
+```
+
+**Local items always win:**
+
+```spl
+use external.*;  // Contains fn process()
+
+// Local definition shadows the glob import
+fn process() { /* ... */ }
+
+process();  // Calls local process(), not external.process()
+```
+
+When a local item shadows a glob import, the compiler emits a **warning** (not an error) to alert the programmer that the imported name is hidden.
+
 ---
 
 ## 3. Visibility Rules
@@ -405,6 +451,32 @@ fn external_fn() {
     other_pkg.package_fn();      // ERROR: pub($) not visible
     other_pkg.public_fn();       // OK: pub is visible
 }
+```
+
+### Re-export Visibility
+
+Re-exports (`pub use`) can only **maintain or narrow** the original item's visibility — they cannot make a private item more visible than its declaration allows:
+
+```spl
+// In module internal:
+fn private_fn() { }        // Private
+pub($) fn package_fn() { } // Package-private
+pub fn public_fn() { }     // Public
+
+// In _module.spl:
+pub use internal.public_fn;      // OK: pub re-export of pub item
+pub($) use internal.package_fn;  // OK: same visibility
+pub use internal.package_fn;     // ERROR: cannot widen pub($) to pub
+pub use internal.private_fn;     // ERROR: cannot re-export private item
+```
+
+**Transitive re-exports** are permitted — a re-export can be re-exported again:
+
+```spl
+// In _module.spl of top-level module:
+pub use submodule.Widget;  // submodule itself re-exports Widget from deeper
+
+// Users can access via: mypackage.Widget
 ```
 
 ### Path-Based Visibility
@@ -476,9 +548,31 @@ fn example() {
 }
 ```
 
+### Circular Dependencies
+
+**Intra-package circular dependencies are permitted:** Modules within the same package may reference each other (directly or transitively). The compiler resolves these by processing type declarations first (names and signatures), then function bodies:
+
+```spl
+// In module_a.spl:
+use $.module_b.TypeB;
+pub struct TypeA(b: TypeB)
+
+// In module_b.spl:
+use $.module_a.TypeA;
+pub fn create(a: &TypeA): TypeB { /* ... */ }
+```
+
+**Inter-package circular dependencies are forbidden:** Package A cannot depend on package B if package B (directly or transitively) depends on package A. The build system rejects circular package dependencies at configuration time.
+
+**Resolution order:**
+1. **Phase 1 — Type collection:** All type names, struct fields, enum variants, trait signatures, and function signatures are collected across the package
+2. **Phase 2 — Body checking:** Function bodies, trait implementations, and expressions are type-checked using the fully-resolved type information from Phase 1
+
 ### Name Shadowing
 
-Imports can shadow prelude items:
+Items from different sources can shadow each other according to the precedence rules defined in §2 (Import Conflict Resolution). Additionally:
+
+**Imports shadow prelude items:**
 
 ```spl
 // Option and Result are in prelude, but can be shadowed
@@ -487,6 +581,20 @@ use custom_types.Option;  // Now 'Option' refers to custom_types.Option
 // Original still accessible via full path
 let x: i32? = Some(42);
 ```
+
+**Imported names are treated as module-level items.** When an explicit import and a local definition have the same name, the local definition takes precedence. The compiler emits a warning about the unused import:
+
+```spl
+use external.Config;  // Imported
+
+struct Config(name: String)  // Local definition — takes precedence
+
+// Config refers to the local struct, not external.Config
+// Compiler warning: unused import `external.Config` (shadowed by local definition)
+let c = Config(name: "app");
+```
+
+**Explicit imports shadow glob imports of the same name** without any warning — this is the expected use case (importing a specific item to disambiguate a glob).
 
 ---
 

@@ -438,14 +438,29 @@ fn get_both(a: &Container, b: &Container, idx: usize): (&T, &T) {
 
 ### Nested References (`&&T`)
 
-Nested references (references to references) are **not permitted** in SPL. This keeps the borrowing model simple and avoids complex lifetime interactions:
+Directly writing nested reference types (`&&T`, `&mut &T`, etc.) is **not permitted** in SPL type annotations. This keeps the borrowing model simple and avoids complex lifetime interactions:
 
 ```spl
-// NOT ALLOWED
+// NOT ALLOWED: explicit nested reference type
 // fn get_ref_to_ref(&self): &&T { ... }  // compile error
 
 // Instead, return the inner reference directly
 fn get(&self): &T { ... }
+```
+
+**Nested references via generics:** When a generic type parameter is instantiated with a reference type, nested references can arise implicitly. For example, `Option(T: &T)` contains `Some(&T)`, which is structurally `Option(&T)`. Similarly, a function returning `&Option(T: &T)` creates a reference to a value containing a reference. These are **permitted** in function parameters, return values, and local variables because the provenance of each reference layer is clear (both borrow from input references via intersection semantics). However, they **cannot** be stored in struct fields (consistent with the second-class reference rule):
+
+```spl
+// OK: nested reference via generic in function signature
+fn get_opt_ref(&self, i: usize): Option(&T) {
+    if i < self.len() { Some(&self.data[i]) } else { None }
+}
+
+// OK: local variable with nested reference via generic
+let r: &Option(T: &str) = &opt_ref;
+
+// NOT ALLOWED: storing in non-scoped struct
+// struct Holder(inner: Option(&T))  // compile error: reference in struct field
 ```
 
 ### Element Aliasing
@@ -484,6 +499,47 @@ let mr = &mut x;
 take_ref(mr);   // Implicit reborrow as &i32
 *mr = 100;      // mr still valid after reborrow ends
 ```
+
+#### Reborrowing Rules
+
+Reborrowing creates a temporary reference derived from an existing mutable reference. The original mutable reference is suspended (cannot be used) for the duration of the reborrow:
+
+**When reborrowing occurs:**
+- **Implicit at call boundaries:** When a `&mut T` is passed where `&T` is expected, the compiler inserts an implicit reborrow as `&*mr`
+- **Implicit mutable reborrow:** When a `&mut T` is passed to another function expecting `&mut T`, the compiler reborrows as `&mut *mr`
+- **Explicit:** The programmer can write `&*mr` or `&mut *mr` directly
+
+**Reborrow lifetime (NLL-based):**
+
+NLL (non-lexical lifetimes) means that borrow scopes end at the **last use** of the borrow rather than at the end of the lexical block. See §5 for full NLL details.
+
+- The reborrow begins when the derived reference is created
+- The reborrow **ends at the last use** of the derived reference (non-lexical lifetime)
+- After the reborrow ends, the original mutable reference becomes usable again
+
+```spl
+let mut x = 42;
+let mr = &mut x;
+
+let r: &i32 = &*mr;     // Shared reborrow: mr is suspended
+println(r);              // Last use of r
+// r's reborrow ends here (NLL)
+
+*mr = 100;               // OK: mr is active again
+
+let mr2: &mut i32 = &mut *mr;  // Mutable reborrow: mr is suspended
+*mr2 = 200;                     // Last use of mr2
+// mr2's reborrow ends here (NLL)
+
+*mr = 300;               // OK: mr is active again
+```
+
+**Reborrow forms:**
+
+| Expression | Creates | Original `&mut T` |
+|---|---|---|
+| `&*mr` or passing `mr` where `&T` expected | `&T` (shared reborrow) | Suspended (read-only via reborrow) |
+| `&mut *mr` or passing `mr` where `&mut T` expected | `&mut T` (mutable reborrow) | Suspended (inaccessible) |
 
 ### Dereferencing References
 
@@ -644,6 +700,40 @@ fn first_only(a: &'x str, b: &str): &'x str {
 }
 ```
 
+#### Lifetime Elision for Methods
+
+When a method has `&self` or `&mut self` plus additional reference parameters, the default intersection semantics apply — the returned reference borrows from **all** input references (both `self` and the other parameters). To narrow this, use lifetime markers:
+
+```spl
+impl Container {
+    // Default: returned &T borrows from both &self and key
+    fn get_or_lookup(&self, key: &str): &T { ... }
+
+    // Narrowed: returned &T borrows only from &self
+    fn get(&'a self, key: &str): &'a T { ... }
+}
+```
+
+**Elision rules for methods:**
+1. If a method has only `&self`/`&mut self` and no other reference parameters, the returned reference borrows from `self`
+2. If a method has `&self`/`&mut self` plus other reference parameters, intersection semantics apply (borrows from all)
+3. Lifetime markers on `self` and/or other parameters can narrow the default
+
+**Lifetime markers on trait impl methods:** When a trait method signature uses lifetime markers, the impl must use compatible markers. The impl may use the same marker names or different names, but the borrowing relationships must match:
+
+```spl
+trait Lookup {
+    fn find(&'a self, key: &str): &'a T;
+}
+
+impl Lookup for MyMap {
+    // Must maintain: return borrows from self only
+    fn find(&'a self, key: &str): &'a T {
+        return &self.data[key];
+    }
+}
+```
+
 ---
 
 ## 6. Drop and Destructors
@@ -682,6 +772,34 @@ Values are dropped in reverse order of declaration:
 ```
 
 Struct fields are dropped in declaration order.
+
+**Additional drop order rules:**
+
+| Context | Drop order |
+|---|---|
+| Local variables | Reverse declaration order |
+| Struct fields | Declaration order (first field drops first) |
+| Enum variants | Only the active variant's fields are dropped, in declaration order |
+| Tuple elements | Left to right (element 0 first) |
+| Temporaries | End of the enclosing statement, in reverse creation order |
+| Pattern destructuring | When a value is destructured via pattern matching, the original value's `Drop` impl is **not** called. Instead, each bound field is dropped independently when its binding goes out of scope. Unbound fields (matched by `_` or `...`) are dropped immediately at the destructuring site. |
+
+```spl
+// Enum drop: only active variant drops
+enum Resource{
+    File(handle: FileHandle),
+    Network(socket: Socket, buffer: Buffer),
+}
+let r = Resource.Network(socket: s, buffer: b);
+drop(r);  // Only socket and buffer are dropped (in declaration order)
+
+// Temporary drop: end of statement
+process(String.from("temp"));  // String dropped at end of this statement
+
+// Destructuring: no Drop call on original
+let Point(x, y) = point;  // point's Drop is NOT called
+// x and y drop independently when they go out of scope
+```
 
 ### Early Drop
 
@@ -878,12 +996,55 @@ let result = map.ref_iter()
 
 See [iteration.md](iteration.md) for complete RefIterator documentation.
 
+### Generators as Implicit Scoped Types
+
+Generators that capture reference parameters are implicitly `#[scoped]`. The compiler-generated state machine struct for such a generator stores the reference, making it subject to all scoped type rules. Generators with only owned parameters are non-scoped and can be freely stored, returned, and sent. See [iteration.md](iteration.md) §5.1 for the complete generator capture and reference rules.
+
 ### Implementation Notes
 
 - **No runtime cost**: Scoped-ness is purely a compile-time property
 - **Same memory layout**: Scoped structs have identical layout to non-scoped equivalents
 - **Propagates through generics**: `where I: RefIterator` implies `I` is scoped
 - **Error messages**: Compiler provides clear messages about escape attempts
+
+### Scoped Type Nesting and Interactions
+
+**Nesting:** Scoped types can contain other scoped types. When multiple scoped types are nested, the **most restrictive scope** wins — the outermost scoped type's lifetime constrains all inner scoped types:
+
+```spl
+let map: HashMap(K: String, V: Vec(T: i32)) = /* ... */;
+let iter = map.ref_iter();                    // Scoped to map's lifetime
+let filtered = iter.filter(|kv| kv.1.len() > 0);  // Also scoped to map's lifetime
+// filtered cannot outlive iter, which cannot outlive map
+```
+
+**Generic code interaction:** When a generic function accepts a scoped type via a trait bound (e.g., `where I: RefIterator`), the scoped-ness propagates — the generic function cannot store, return, or send the scoped value:
+
+```spl
+// OK: uses scoped type within its scope
+fn count_matches(iter: I, pred: fn(&I.Item): bool): usize where I: RefIterator {
+    let mut n = 0;
+    while iter.next() is Some(item) {
+        if pred(item) { n += 1; }
+    }
+    return n;
+}
+
+// ERROR: cannot return scoped type from non-scoped function
+// fn wrap_iter(iter: I): Wrapper(I) where I: RefIterator { ... }
+```
+
+**Closure passing:** Scoped types can be passed to **non-escaping** closures (closures that are called synchronously and do not outlive the call). They **cannot** be passed to escaping closures (stored, returned, or sent to other tasks):
+
+```spl
+let iter = map.ref_iter();
+
+// OK: non-escaping closure (each is called synchronously)
+iter.for_each(|item| process(item));
+
+// ERROR: escaping closure would outlive the scoped type
+// let f: fn() = || { iter.for_each(|item| process(item)); };
+```
 
 ---
 
@@ -943,22 +1104,80 @@ Fat pointers contain (pointer, length):
 
 ## 10. Interior Mutability
 
-Some patterns require mutation through shared references. SPL provides controlled escape hatches:
+Some patterns require mutation through shared references (`&T`). SPL provides controlled mechanisms for interior mutability, all built on the `UnsafeCell` primitive.
 
-### Cell Types
+### UnsafeCell: The Foundation
+
+`UnsafeCell(T: T)` is the **only** primitive that permits mutation through a shared reference. It opts out of the compiler's aliasing assumptions for its contents:
 
 ```spl
-// Single-threaded interior mutability
-Cell(T: T)      // For Copy types, get/set
-RefCell(T: T)   // Runtime borrow checking
+// UnsafeCell is the primitive building block for all interior mutability
+struct UnsafeCell(value: T) where T
 
-// Thread-safe interior mutability
-Mutex(T: T)     // Mutual exclusion
-RwLock(T: T)    // Reader-writer lock
-Atomic*         // Lock-free atomics
+impl UnsafeCell(T: T) where T {
+    fn new(value: T): Self;
+    fn get(&self): MutPtr(T: T);  // Returns raw mutable pointer (unsafe to use)
+}
 ```
 
-See [concurrency.md](concurrency.md) for `Mutex`, `RwLock`, and `Atomic*` specifications, and [standard-library.md](standard-library.md) for `Cell`, `RefCell`, and `UnsafeCell` definitions.
+**Key properties of `UnsafeCell`:**
+- Types containing `UnsafeCell` are `!Sync` (cannot be shared across threads via `&T`) unless they provide their own synchronization
+- The compiler does not assume immutability for data behind `UnsafeCell`, even through `&T`
+- Direct use of `UnsafeCell` requires `unsafe` — safe wrappers (`Cell`, `RefCell`, `Mutex`, etc.) provide safe APIs
+
+### Cell: Copy-In/Copy-Out
+
+`Cell(T: T)` provides interior mutability for `Copy` types via value copying. No references to the inner value are ever created — values are copied in and out:
+
+```spl
+struct Cell(inner: UnsafeCell(T: T)) where T: Copy
+
+impl Cell(T: T) where T: Copy {
+    fn new(value: T): Self;
+    fn get(&self): T;                // Copies value out
+    fn set(&self, value: T);         // Copies value in
+    fn replace(&self, value: T): T;  // Swap and return old value
+}
+```
+
+**Why `Cell.set(&self, ...)` is safe:** `Cell` never exposes a reference to its contents. `get()` returns a copy and `set()` writes a copy. Because only copies cross the boundary, no aliasing violation occurs — even though mutation happens through `&self`. `Cell` is `!Sync` (not safe to share across threads) because concurrent `get`/`set` from multiple threads would be a data race.
+
+### RefCell: Runtime Borrow Checking
+
+`RefCell(T: T)` provides interior mutability with runtime borrow checking. It enforces the borrowing rules (multiple shared OR one exclusive) at runtime rather than compile time:
+
+```spl
+struct RefCell(inner: UnsafeCell(T: T), borrow_state: Cell(T: isize)) where T
+
+impl RefCell(T: T) where T {
+    fn new(value: T): Self;
+    fn borrow(&self): Ref(T: T);          // Shared borrow (panics if mutably borrowed)
+    fn borrow_mut(&self): RefMut(T: T);   // Exclusive borrow (panics if any borrow active)
+    fn try_borrow(&self): Result(T: Ref(T: T), E: BorrowError);
+    fn try_borrow_mut(&self): Result(T: RefMut(T: T), E: BorrowMutError);
+}
+```
+
+`RefCell` maintains a runtime borrow counter: positive for shared borrows, -1 for exclusive borrow, 0 for unborrowed. Violating the rules at runtime panics (or returns `Err` for `try_*` variants). `RefCell` is `!Sync` because the borrow counter is not thread-safe.
+
+### Thread-Safe Interior Mutability
+
+For concurrent access, use synchronization primitives that provide their own thread-safety guarantees:
+
+| Type | Mechanism | `Send` | `Sync` |
+|------|-----------|--------|--------|
+| `Mutex(T: T)` | OS mutex lock | If `T: Send` | If `T: Send` |
+| `RwLock(T: T)` | Reader-writer lock | If `T: Send` | If `T: Send + Sync` |
+| `Atomic*` (including `AtomicPtr(T: T)`) | Hardware atomic operations | Yes | Yes |
+
+See [concurrency.md](concurrency.md) for `Mutex`, `RwLock`, and `Atomic*` specifications, and [standard-library.md](standard-library.md) for full API definitions.
+
+### Interior Mutability and Aliasing
+
+Types containing `UnsafeCell` (directly or transitively) have special treatment:
+
+1. **`!Sync` by default:** The compiler does not auto-derive `Sync` for types containing `UnsafeCell`. Thread-safe wrappers (`Mutex`, `RwLock`, `Atomic*`) explicitly implement `Sync` because they provide synchronization.
+2. **Optimization restrictions:** The compiler cannot assume data behind `&T` is immutable if `T` contains `UnsafeCell`. This affects optimizations like caching reads through shared references.
 
 ### Unsafe Blocks
 

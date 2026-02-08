@@ -280,13 +280,13 @@ An explicit capture list (`@[...]`) overrides inference for the listed variables
 
 ### Function Types and the Fn Hierarchy
 
-The `fn(...)` type represents any callable with a matching signature, including both plain functions and closures (with or without captures):
+The `fn(...)` type represents any callable with a matching signature, including named functions and closures that implement `Fn` (read-only captures or no captures):
 
 ```spl
 // Non-capturing closure
 let add: fn(i32, i32): i32 = |a, b| a + b;
 
-// Capturing closure - also valid
+// Capturing Fn closure - valid (read-only capture)
 let x = 10;
 let add_x: fn(i32): i32 = |a| a + x;
 
@@ -295,9 +295,58 @@ fn double(n: i32): i32 { return n * 2; }
 let f: fn(i32): i32 = double;
 ```
 
-This unified model (like Go and Swift) simplifies the type system at the cost of some optimization opportunities. The compiler cannot inline through `fn` types since the concrete callable is not known at compile time.
+### 4.1 Calling Convention Safety
 
-**Relationship to `Fn`/`FnMut`/`FnOnce`:** Internally, the compiler tracks which `Fn*` trait each closure implements (based on capture usage analysis above). The `fn(Args): Return` surface type is compatible with all three traits — a value of type `fn(i32): i32` can be called in any context that expects `Fn(i32)`, `FnMut(i32)`, or `FnOnce(i32)`. The trait hierarchy is used internally for optimization (inlining, monomorphization) and for enforcing correct usage of closures that mutate or consume captures, but is not exposed in type annotations.
+Only closures implementing `Fn` (which only read their captures) may be assigned to the `fn(...)` type. Closures that mutate captures (`FnMut`) or consume captures (`FnOnce`) **cannot** be assigned to `fn(...)`:
+
+```spl
+let mut count = 0;
+
+// ERROR: FnMut closure cannot be assigned to fn type
+// let inc: fn(): i32 = || { count += 1; count };
+
+// ERROR: FnOnce closure cannot be assigned to fn type
+// let data = vec![1, 2, 3];
+// let consume: fn(): Vec(T: i32) = || take_ownership(data);
+```
+
+**Rationale:** A `fn` value can be called multiple times, but an `FnOnce` closure is only safe to call once (it consumes captures). An `FnMut` closure requires exclusive `&mut` access to its captures on each call, which cannot be guaranteed through a shared `fn` value. Restricting `fn` to `Fn` closures prevents these soundness issues.
+
+**Compiler error:**
+```
+error: cannot assign FnMut closure to `fn` type
+  --> src/main.spl:4:30
+  |
+4 |     let inc: fn(): i32 = || { count += 1; count };
+  |                              ^^^^^^^^^^^^^^^^^^^^^^
+  |                              closure mutates capture `count`
+  |
+  = note: `fn` types require `Fn` closures (read-only captures)
+  = help: consider using a generic parameter `F: FnMut(): i32` instead
+```
+
+**Representation:**
+
+| Closure kind | Representation when assigned to `fn` |
+|---|---|
+| Non-capturing closure or named function | Thin function pointer (`fn_ptr`) |
+| Capturing `Fn` closure | Heap-allocated fat pointer `(fn_ptr, env_ptr)` with `env_ptr` pointing to a reference-counted capture environment |
+
+Non-capturing closures and named functions can be represented as thin pointers because they carry no state. Capturing `Fn` closures are heap-allocated at the point of assignment to `fn` type — the capture environment is boxed and the `fn` value becomes a fat pointer `(fn_ptr, env_ptr)`. The environment is reference-counted to support `fn` values being `Copy`.
+
+**Relationship to `Fn`/`FnMut`/`FnOnce`:** Internally, the compiler tracks which `Fn*` trait each closure implements (based on capture usage analysis above). The `fn(Args): Return` surface type is compatible only with the `Fn` trait. For higher-order functions that need `FnMut` or `FnOnce` semantics, use generic parameters with trait bounds:
+
+```spl
+// Accepts any callable, including FnMut
+fn apply_mut(f: F) where F: FnMut() {
+    f();
+}
+
+// Accepts any callable, including FnOnce
+fn apply_once(f: F) where F: FnOnce() {
+    f();
+}
+```
 
 ---
 

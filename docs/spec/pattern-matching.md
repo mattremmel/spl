@@ -175,6 +175,22 @@ let [] = arr;                         // Empty slice
 let [...a, middle, ...b] = arr;  // ERROR: multiple rest patterns
 ```
 
+**Rest binding type:** When a rest pattern binds a name (e.g., `...rest`), the binding has type `&[T]` (a slice reference). In a mutable matching context (`&mut`), the binding has type `&mut [T]`:
+
+```spl
+let arr = [1, 2, 3, 4, 5];
+
+let [first, ...rest] = arr;
+// first: i32 (Copy), rest: &[i32] = &[2, 3, 4, 5]
+
+match &mut arr {
+    [_, ...tail] => {
+        // tail: &mut [i32] — can modify elements
+        tail[0] = 99;
+    },
+}
+```
+
 ### 1.8 Reference Patterns
 
 ```spl
@@ -205,6 +221,20 @@ match option {
 match result {
     Ok(n) | Err(n) => use(n),  // OK if both n have same type
 }
+```
+
+**"Compatible types" defined:** All alternatives in an or-pattern must bind the same set of names, and each name must have a **type-equal** type across all alternatives (after type inference). The types must unify to a single concrete type — no implicit conversion is applied:
+
+```spl
+// OK: both branches bind n as i32
+match value {
+    Ok(n) | Err(n) => use(n),  // n: i32 in both branches
+}
+
+// ERROR: incompatible types for n
+// match value {
+//     Ok(n) | Err(n) => use(n),  // n: i32 in Ok, n: String in Err — error
+// }
 ```
 
 ### 1.10 Grouped Patterns
@@ -369,6 +399,14 @@ match pair {
 }
 ```
 
+**Guard evaluation rules:**
+
+1. **Evaluated after pattern match:** The guard expression is evaluated only if the pattern matches. If the guard evaluates to `false`, matching continues with the next arm.
+2. **Bindings are read-only in guards:** Pattern bindings are accessible as `&T` (shared reference) in guard expressions. Mutable access (`&mut T`) is not permitted in guards.
+3. **Purity requirement:** Guard expressions should be pure (no side effects). The compiler does not enforce purity, but guards with side effects are considered a programming error because the evaluation order is defined (top-to-bottom) but guard execution depends on which patterns match.
+4. **Top-to-bottom order:** Guards are evaluated in source order — the first arm whose pattern matches **and** whose guard returns `true` is selected.
+5. **No exhaustiveness contribution:** Guards are completely ignored during exhaustiveness checking (see §5.6). An arm with a guard is never considered to "cover" any values for exhaustiveness purposes.
+
 ### 4.3 Binding Modes in Match
 
 ```spl
@@ -487,6 +525,41 @@ match opt {
     None => "none",
 }
 ```
+
+### 5.7 Exhaustiveness Algorithm
+
+The compiler uses an **uncovered-set** algorithm to verify exhaustiveness. It tracks the set of value patterns not yet matched by any arm and reports an error if the set is non-empty after processing all arms.
+
+**Algorithm outline:**
+
+1. Start with the **uncovered set** = all possible values of the scrutinee type
+2. For each match arm (in source order):
+   a. Compute the set of values covered by the arm's pattern (ignoring guards)
+   b. Subtract the covered set from the uncovered set
+3. If the uncovered set is non-empty after all arms, report a non-exhaustiveness error listing example uncovered patterns
+
+**Pattern coverage rules:**
+
+| Pattern kind | Coverage |
+|---|---|
+| Wildcard `_` or binding `x` | Covers all values of the type |
+| Literal `42` | Covers exactly that value |
+| Range `0..10` | Covers all values in the range |
+| Enum variant `Some(p)` | Covers the variant, recursively checking inner pattern `p` |
+| Tuple `(p1, p2)` | Cartesian product of `p1` coverage and `p2` coverage |
+| Or-pattern `p1 \| p2` | Union of `p1` coverage and `p2` coverage |
+| Struct `Point(x, y)` | Covers the struct, recursively checking field patterns |
+| Slice `[a, b]` | Covers slices of exactly that length |
+| Slice `[a, ...]` | Covers slices of at least that length |
+| Slice `[a, ...rest, b]` | Covers slices of at least the fixed element count |
+
+**Special cases:**
+
+- **Open-ended ranges** (`100..`): Cover all values from the bound to the type's maximum
+- **`decimal` type:** Always requires a wildcard `_` arm — the value space is too large for exhaustive literal/range coverage
+- **Guards:** Completely ignored — an arm with a guard contributes nothing to exhaustiveness
+- **Nested patterns:** Exhaustiveness is checked recursively (e.g., `(Option, Option)` checks all 4 combinations of `Some`/`None`)
+- **Integer types:** Full coverage is possible for bounded types like `u8` (256 values) or `bool` (2 values) via ranges or literals
 
 ---
 

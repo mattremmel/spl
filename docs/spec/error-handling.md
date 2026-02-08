@@ -106,6 +106,53 @@ items.get(0)!        // (items.get(0))! - try the result of get
 
 See [syntax-grammar.md](syntax-grammar.md) for the full precedence table.
 
+### Missing FromResidual Error
+
+When the `!` operator is used in a function whose return type does not implement `FromResidual` for the residual type, the compiler produces a specific error:
+
+```
+error: `!` operator cannot convert `ParseError` to `AppError`
+  --> src/main.spl:5:38
+  |
+5 |     let config = parse(contents)!;
+  |                                 ^ no `FromResidual` implementation
+  |
+  = note: the function returns `Result(T: Config, E: AppError)`
+  = note: but `parse()` returns `Result(T: Config, E: ParseError)`
+  = help: implement `From(T: ParseError) for AppError` to enable automatic conversion
+  = help: or use `.map_err(|e| ...)` for manual conversion
+```
+
+### Valid `main()` Signatures
+
+The entry point function `main()` accepts the following signatures:
+
+| Signature | Description |
+|---|---|
+| `fn main()` | No return value, panics propagate |
+| `fn main(): i32` | Return exit code (0 = success) |
+| `fn main() throws E where E: Debug` | Print error and exit with code 1 on failure |
+| `fn main(): i32 throws E where E: Debug` | Return exit code, or print error on failure |
+
+When `main` uses `throws`, an uncaught error is printed via its `Debug` representation to stderr and the process exits with code 1. The `E: Debug` bound ensures the error can always be displayed.
+
+### Closures and `throws`
+
+Closures do **not** support the `throws` syntax. Use explicit `Result` return types for closures that can fail:
+
+```spl
+// ERROR: throws not supported on closures
+// let f = |x: i32|: i32 throws ParseError { ... };
+
+// Correct: use explicit Result
+let f = |x: i32|: Result(T: i32, E: ParseError) {
+    if x < 0 { return Err(.Negative); }
+    return Ok(x * 2);
+};
+```
+
+**Rationale:** Closure type syntax is already complex. Adding `throws` to closures would require disambiguating `fn(i32): i32 throws E` in type position, which conflicts with the trailing return type. The explicit `Result` form is clear and unambiguous.
+
 ---
 
 ## 3. Optional Chaining (`?.`)
@@ -322,22 +369,18 @@ fn process(path: &str): Result(T: Data, E: AppError) {
 
 ### Option to Result Conversion
 
-Options can be used with `!` in Result-returning functions:
-
-```spl
-impl FromResidual(R: ()) for Result(T: T, E: E) where T, E: Default {
-    fn from_residual(residual: ()): Self {
-        return Err(E.default());
-    }
-}
-```
-
-**Preferred: Explicit conversion** for clarity about the error value:
+Using `!` on an `Option` inside a `Result`-returning function requires explicit conversion. There is no blanket `FromResidual` impl from `Option` to `Result` because the implicit error value (`E.default()`) is rarely the intended error and creates confusing failures:
 
 ```spl
 fn process(): Result(T: i32, E: Error) {
     let x: i32? = get_optional();
-    let value = x.ok_or(Error.NotFound)!;  // Explicit error
+
+    // ERROR: no FromResidual impl from Option to Result
+    // let value = x!;
+
+    // Correct: use explicit conversion
+    let value = x.ok_or(Error.NotFound)!;      // Explicit error value
+    let value = x.ok_or_else(|| Error.new("missing"))!;  // Lazy error
     return Ok(value * 2);
 }
 ```

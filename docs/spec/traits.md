@@ -84,6 +84,39 @@ impl Bounded for i32 {
 }
 ```
 
+### 1.6 Default Type Parameters
+
+Trait type parameters can have default types, which are used when the caller does not specify them:
+
+```spl
+trait Add where RHS = Self {
+    type Output;
+    fn add(self, rhs: RHS): Self.Output;
+}
+```
+
+**Syntax:** In a `where` clause, `ParamName = DefaultType` specifies a default.
+
+**Rules:**
+- Parameters with defaults must come after parameters without defaults
+- Callers can override defaults by specifying the type argument explicitly: `Add(RHS: f64)`
+- If the default is `Self`, it refers to the implementing type
+- Defaults are resolved at the impl site, not the definition site
+
+```spl
+// Default RHS = Self: i32 + i32 → i32
+impl Add for i32 {
+    type Output = i32;
+    fn add(self, rhs: i32): i32 { /* ... */ }
+}
+
+// Override default: i32 + f64 → f64
+impl Add(RHS: f64) for i32 {
+    type Output = f64;
+    fn add(self, rhs: f64): f64 { /* ... */ }
+}
+```
+
 ---
 
 ## 2. Trait Implementation
@@ -346,15 +379,43 @@ print_it("hello");   // &str (unsized)
 ### 5.3 Send and Sync
 
 ```spl
-// Send: safe to send between threads
+// Send: safe to transfer ownership between threads
 trait Send { }
 
-// Sync: safe to share references between threads
+// Sync: safe to share &T references between threads
+// Equivalently: T is Sync if and only if &T is Send
 trait Sync { }
+```
 
-// Most types implement Send and Sync automatically
-// Types with interior mutability may not be Sync
-// Types with thread-local state may not be Send
+**Auto-derivation rules:** `Send` and `Sync` are auto-traits — the compiler automatically implements them based on a type's structure:
+
+| Type | `Send` | `Sync` | Reason |
+|---|---|---|---|
+| All primitive types (`i32`, `bool`, `f64`, etc.) | Yes | Yes | No shared mutable state |
+| `&T` | If `T: Sync` | If `T: Sync` | Sharing requires `Sync` |
+| `&mut T` | If `T: Send` | If `T: Send` | Exclusive access, transfer requires `Send` |
+| Struct / Enum | If all fields `Send` | If all fields `Sync` | Compositional |
+| `UnsafeCell(T: T)` | If `T: Send` | **No** (`!Sync`) | Allows mutation through `&self` |
+| `Cell(T: T)`, `RefCell(T: T)` | If `T: Send` | **No** (`!Sync`) | Contains `UnsafeCell` |
+| `Mutex(T: T)` | If `T: Send` | If `T: Send` | Lock provides synchronization |
+| `RwLock(T: T)` | If `T: Send` | If `T: Send + Sync` | Read access requires `Sync` |
+| `Arc(T: T)` | If `T: Send + Sync` | If `T: Send + Sync` | Shared ownership across threads |
+| `Rc(T: T)` | **No** (`!Send`) | **No** (`!Sync`) | Non-atomic reference counting |
+| `Ptr(T: T)`, `MutPtr(T: T)` | **No** (`!Send`) | **No** (`!Sync`) | Raw pointers are unsafe |
+| `fn(...)` types | Yes | Yes | Function pointers have no state |
+
+**Opting out:** Use negative impls to remove auto-derived `Send` or `Sync`:
+
+```spl
+impl !Send for Rc(T: T) where T { }
+impl !Sync for Rc(T: T) where T { }
+```
+
+**Opting in (unsafe):** Types with raw pointers that are actually thread-safe can manually implement `Send`/`Sync` in an `unsafe impl`:
+
+```spl
+unsafe impl Send for MyPointerWrapper(T: T) where T: Send { }
+unsafe impl Sync for MyPointerWrapper(T: T) where T: Send + Sync { }
 ```
 
 ### 5.4 Unpin
@@ -442,12 +503,16 @@ for shape in shapes.iter() {
 
 ### 7.3 Object Safety
 
-Not all traits can be used as trait objects. A trait is **object-safe** if:
+Not all traits can be used as trait objects. A trait is **object-safe** if all of the following hold:
 
 1. All methods have `self`, `&self`, or `&mut self` receiver
-2. No methods use `Self` in return position
+2. No methods use `Self` in return position (except in `where Self: Sized` methods — see rule 7)
 3. No associated functions (methods without `self`)
-4. No generic methods
+4. No methods have their own type parameters (method-level generics)
+5. All associated types must be specified when constructing the trait object (e.g., `Iterator(Item: i32)`)
+6. The trait has no type parameters that remain unspecified (all must be fully specified in the trait object type)
+7. Methods with a `where Self: Sized` bound are excluded from the trait object's vtable (statically dispatched only) — such methods do not prevent a trait from being object-safe
+8. Supertraits must also be object-safe
 
 ```spl
 // Object-safe
@@ -542,6 +607,29 @@ The compiler ensures at most one implementation of a trait for any given type:
 impl Debug for MyType { }
 impl Debug for MyType { }  // ERROR: conflicting implementations
 ```
+
+### 8.4 Overlap Detection and Blanket Impls
+
+Two trait implementations **overlap** if any concrete type could satisfy both. The compiler rejects overlapping implementations:
+
+```spl
+// Blanket impl: Into for all T where U: From(T: T)
+impl Into(T: U) for T where T, U: From(T: T) {
+    fn into(self): U { U.from(self) }
+}
+
+// Specific impl: also Into for MyType → String
+// ERROR: overlaps with blanket impl if String: From(T: MyType) exists
+impl Into(T: String) for MyType {
+    fn into(self): String { self.name }
+}
+```
+
+**Overlap rules:**
+1. Two impls overlap if there exists any type substitution that satisfies both sets of bounds
+2. Overlapping impls for the same trait are always rejected — no specialization
+3. Blanket impls (e.g., `impl Trait for T where T: Bound`) are defined in the standard library alongside their traits, satisfying the orphan rule
+4. Negative impls (`impl !Trait for T`) restrict auto-trait derivation but do not create coherence conflicts with positive impls
 
 ---
 

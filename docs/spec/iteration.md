@@ -775,6 +775,55 @@ gen.next();  // PANIC: "oops" - propagates to caller
 - Captured variables are stored in the generator struct
 - Generator size depends on captured state, similar to closures
 
+### 5.1 Generator Capture and Reference Rules
+
+Generators are compiled into state machine structs that store their captured variables. This creates a special interaction with second-class references:
+
+**The problem:** A generator like `gen fn items(vec: &Vec(T: i32)): i32` captures the reference parameter `vec` in its state machine struct. Normally, references cannot be stored in structs. Generators are the exception because the compiler manages their lifetime.
+
+**Rules:**
+
+1. **Generators with reference parameters are implicitly `#[scoped]`:** If any parameter is a reference type (`&T` or `&mut T`), the resulting `Generator` type is a scoped type. It cannot escape its creation scope, be stored in non-scoped structs, or be sent to other tasks.
+
+2. **Generators with only owned parameters are non-scoped:** If all parameters are owned types (including `Copy` types), the generator is a regular (non-scoped) type that can be stored, returned, and sent freely.
+
+3. **The scoped restriction is transitive:** Adapters applied to a scoped generator (`.filter()`, `.map()`, `.take()`, etc.) also produce scoped types.
+
+```spl
+// Scoped: captures &Vec reference → generator is #[scoped]
+gen fn items(vec: &Vec(T: i32)): i32 {
+    for item in vec {
+        yield *item;
+    }
+}
+
+let data = vec![1, 2, 3];
+for x in items(&data) {     // OK: used within scope of data
+    println(x);
+}
+// Generator dropped here, borrow of data ends
+
+// ERROR: cannot return scoped generator
+// fn make_gen(v: &Vec(T: i32)): Generator(T: i32) {
+//     return items(v);  // compile error: scoped type cannot escape
+// }
+
+// Non-scoped: only owned parameters → generator is regular type
+gen fn countdown(n: i32): i32 {
+    let mut i = n;
+    while i > 0 {
+        yield i;
+        i -= 1;
+    }
+}
+
+fn make_countdown(): Generator(T: i32) {
+    return countdown(10);  // OK: non-scoped, can be returned
+}
+```
+
+This design is consistent with scoped types (see [memory-model.md](memory-model.md) §8) — generators that hold references are treated like any other scoped type that holds references.
+
 ---
 
 ## 6. Consuming Iteration
