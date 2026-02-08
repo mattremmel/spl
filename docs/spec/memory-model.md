@@ -980,6 +980,8 @@ See [unsafe.md](unsafe.md) for the full specification of unsafe operations.
 
 SPL's memory model is designed to support multiple memory management strategies in future versions.
 
+> **Note:** The syntax in this section (including `undefined`, `@gc`, `region`, `defer`, `gen_alloc`, `gen_free`, and custom allocator APIs) is **proposed** and not part of the current language. Implementing any of these features would require corresponding additions to the lexical grammar, parser, and semantic analysis.
+
 ### 11.1 Interior Iteration with Generators
 
 SPL will use generators/coroutines for iteration, avoiding the need for iterator objects that hold references:

@@ -291,7 +291,7 @@ When using `!` in a function returning a different `Try` type, conversion happen
 ### The FromResidual Trait
 
 ```spl
-trait FromResidual(R) {
+trait FromResidual where R {
     fn from_residual(residual: R): Self;
 }
 ```

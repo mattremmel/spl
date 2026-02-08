@@ -207,16 +207,16 @@ let f = @[config: config.clone(), logger: &logger] || {
 Closures implement traits based on how they use their captures:
 
 ```spl
-trait FnOnce(Args) {
+trait FnOnce where Args {
     type Output;
     fn call_once(self, args: Args): Self.Output;
 }
 
-trait FnMut(Args): FnOnce(Args) {
+trait FnMut: FnOnce(Args) where Args {
     fn call_mut(&mut self, args: Args): Self.Output;
 }
 
-trait Fn(Args): FnMut(Args) {
+trait Fn: FnMut(Args) where Args {
     fn call(&self, args: Args): Self.Output;
 }
 ```
@@ -225,7 +225,13 @@ trait Fn(Args): FnMut(Args) {
 
 ### Trait Inference
 
-The compiler determines which trait a closure implements:
+The compiler determines which `Fn*` trait a closure implements based on how the closure body uses its captures:
+
+| Usage of captures | Trait implemented |
+|-------------------|-------------------|
+| Only reads captures (or no captures) | `Fn` (and `FnMut`, `FnOnce`) |
+| Mutates any capture | `FnMut` (and `FnOnce`, but not `Fn`) |
+| Moves out of any capture (consumes it) | `FnOnce` only |
 
 ```spl
 let data = vec![1, 2, 3];
@@ -241,7 +247,38 @@ let increment = || { count += 1; };
 let consume = || take_ownership(data);
 ```
 
-### Function Types
+### Parameter Type Inference
+
+Closure parameter types are inferred from the expected type context. When a closure appears where a specific function type is expected, the compiler infers parameter and return types from that context:
+
+```spl
+// Parameter type inferred from Vec.map's signature
+let nums = vec![1, 2, 3];
+let doubled = nums.iter().map(|x| x * 2);  // x: &i32 inferred from Iterator.Item
+
+// Inferred from explicit fn type annotation
+let f: fn(i32, i32): i32 = |a, b| a + b;  // a: i32, b: i32 inferred
+
+// Inferred from function parameter type
+fn apply(f: fn(i32): String, x: i32): String { return f(x); }
+apply(|n| format("{}", n), 42);  // n: i32 inferred from parameter
+```
+
+If no expected type context is available and parameter types are not annotated, the compiler reports a type error.
+
+### Capture Mode Inference
+
+When no explicit capture list (`@[...]`) is provided, the compiler infers how each captured variable is used:
+
+1. **Immutable borrow** (`&T`): The capture is only read (e.g., `x.len()`, `x + 1`)
+2. **Mutable borrow** (`&mut T`): The capture is mutated (e.g., `x += 1`, `x.push(v)`)
+3. **Move**: The capture is moved out of (e.g., passed to a function taking ownership)
+
+For **non-escaping closures**, the compiler uses the least restrictive mode: borrow if possible, move only if required. For **escaping closures**, non-Copy types are always moved (since the closure must own its captures to outlive the creation scope). Copy types are always copied regardless of escaping classification.
+
+An explicit capture list (`@[...]`) overrides inference for the listed variables. Variables not listed in the capture list use the default inference rules.
+
+### Function Types and the Fn Hierarchy
 
 The `fn(...)` type represents any callable with a matching signature, including both plain functions and closures (with or without captures):
 
@@ -259,6 +296,8 @@ let f: fn(i32): i32 = double;
 ```
 
 This unified model (like Go and Swift) simplifies the type system at the cost of some optimization opportunities. The compiler cannot inline through `fn` types since the concrete callable is not known at compile time.
+
+**Relationship to `Fn`/`FnMut`/`FnOnce`:** Internally, the compiler tracks which `Fn*` trait each closure implements (based on capture usage analysis above). The `fn(Args): Return` surface type is compatible with all three traits — a value of type `fn(i32): i32` can be called in any context that expects `Fn(i32)`, `FnMut(i32)`, or `FnOnce(i32)`. The trait hierarchy is used internally for optimization (inlining, monomorphization) and for enforcing correct usage of closures that mutate or consume captures, but is not exposed in type annotations.
 
 ---
 

@@ -1622,7 +1622,9 @@ RangePatternBound = LiteralPattern
 (* Note: PathExpr in range patterns must resolve to a const item.
    This is verified semantically. *)
 
-TuplePattern = "(" [ Pattern { "," Pattern } [ "," ] ] ")" ;
+TuplePattern = "(" [ TuplePatternElement { "," TuplePatternElement } [ "," ] ] ")" ;
+
+TuplePatternElement = RestPattern | Pattern ;
 
 SlicePattern = "[" [ SlicePatternElement { "," SlicePatternElement } [ "," ] ] "]" ;
 

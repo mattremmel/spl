@@ -301,6 +301,8 @@ let x: i32 = if condition { 42 } else { panic("unreachable") };
 
 **Note:** The `Never` type coerces to any type only in expression position. `Never` as a type argument (e.g., `Option(T: Never)`) remains distinct and represents an impossible instantiation—a type that can never be constructed.
 
+**Display convention:** `Never` is the source-level keyword used in type annotations. The compiler may display this type as `!` in diagnostic output (error messages, type mismatch reports). Both refer to the same type.
+
 When a block contains a single expression, the value is implicit. Multi-statement blocks require explicit `break` (or `return` in functions).
 
 ---
@@ -787,7 +789,7 @@ trait Container {
 
 | Feature | Associated Type | Type Parameter |
 |---------|-----------------|----------------|
-| Syntax | `trait Foo { type Bar; }` | `trait Foo(T) where T` |
+| Syntax | `trait Foo { type Bar; }` | `trait Foo where T` |
 | Determined by | Implementor | Caller |
 | Multiple impls | One per type | Many per type |
 | Use case | Output types | Input types |
@@ -800,9 +802,56 @@ trait Iterator {
 }
 
 // Type parameter: can implement Add for many RHS types
-trait Add(RHS) where RHS {
+trait Add where RHS {
     type Output;
     fn add(self, rhs: RHS): Self.Output;
+}
+```
+
+### Associated Type Resolution
+
+When the compiler encounters an associated type projection `T.AssocType`, it resolves the concrete type through the following algorithm:
+
+1. **Identify the trait bound.** Given `T.Item`, find a trait bound on `T` that declares an associated type named `Item`. For example, `T: Iterator` declares `type Item`.
+
+2. **Look up the implementation.** If `T` is a concrete type (e.g., `Counter`), find the `impl Iterator for Counter` block and read `type Item = i32`. If `T` is still generic, the projection remains abstract until monomorphization.
+
+3. **Substitute the concrete type.** Replace `T.Item` with the resolved type (e.g., `i32`) throughout the function signature and body.
+
+**Within trait method bodies**, `Self.Item` refers to the associated type defined by whichever type implements the trait. The concrete type is not known until an implementation is provided:
+
+```spl
+trait Container {
+    type Item;
+
+    fn first(&self): Self.Item?;
+
+    // Default method using Self.Item
+    fn contains(&self, target: &Self.Item): bool where Self.Item: PartialEq {
+        // Self.Item resolves to the implementor's choice
+    }
+}
+```
+
+**Constraining associated types in bounds** uses the same named-argument syntax as generic type parameters:
+
+```spl
+// Require that the Iterator's Item is i32
+fn sum(iter: &mut I): i32 where I: Iterator(Item: i32) { ... }
+
+// Require that two iterators yield the same type
+fn zip_eq(a: &mut A, b: &mut B) where A: Iterator, B: Iterator(Item: A.Item) { ... }
+```
+
+The `GenericArgs` production in the grammar (`Iterator(Item: i32)`) handles both type parameter arguments and associated type constraints uniformly — the compiler distinguishes them based on whether the name refers to a type parameter or an associated type in the trait definition.
+
+**Interaction with generic type parameters:** When a trait has both type parameters and associated types, bound syntax constrains them together:
+
+```spl
+// Add has type parameter RHS and associated type Output
+// Constrain both: RHS = f64, Output = f64
+fn add_floats(a: T, b: f64): f64 where T: Add(RHS: f64, Output: f64) {
+    return a.add(b);
 }
 ```
 
@@ -1009,46 +1058,68 @@ let shapes: Vec(T: Shape) = [Shape.Circle(c), Shape.Rectangle(r)];
 
 ## 7. Method Resolution
 
-When a method call `expr.method(args)` is encountered, the compiler resolves which method to call using the following algorithm:
+When a method call `expr.method(args)` is encountered, the compiler resolves which method to call using the following algorithm. At each step, the first match wins — later steps are only tried if no match was found.
 
-1. **Look for inherent methods on the concrete type.** If `expr` has type `T`, search all `impl T` blocks for a method with the matching name.
+**Phase 1: Inherent methods with auto-ref and auto-deref.**
 
-2. **Auto-ref.** If no match is found, try inserting an automatic reference on the receiver. The compiler tries, in order:
-   - `self` (by value)
-   - `&self` (immutable reference)
-   - `&mut self` (mutable reference)
+For each type in the deref chain (`T`, then `Deref::Target` of `T`, then `Deref::Target` of that, etc.):
 
-3. **Auto-deref.** If no match is found, follow the `Deref` chain. If `T` implements `Deref(Target = U)`, repeat steps 1-2 with type `U`. Continue following the chain (`U` -> `V` -> ...) until a match is found or no further `Deref` implementations exist.
+1. Try matching an inherent method with receiver `self` (by value)
+2. Try matching an inherent method with receiver `&self`
+3. Try matching an inherent method with receiver `&mut self`
 
-4. **Search trait methods in scope.** If no inherent method matched after auto-ref and auto-deref, search methods from all traits currently in scope (via `use` declarations or the prelude).
+If a match is found at any step, resolution stops. Otherwise, follow the `Deref` chain to the next type and repeat steps 1-3. The chain continues until no further `Deref` implementations exist.
 
-5. **Error on ambiguity.** If multiple candidates are found at the same priority level (e.g., two trait methods from different traits with the same name), the compiler reports an ambiguity error. The programmer must disambiguate using fully qualified syntax: `TraitName.method(expr, args)`.
+**Phase 2: Trait methods in scope.**
+
+If no inherent method matched, repeat the same auto-ref and auto-deref process for trait methods from all traits currently in scope (via `use` declarations or the prelude). For each type in the deref chain:
+
+4. Try matching a trait method with receiver `self`
+5. Try matching a trait method with receiver `&self`
+6. Try matching a trait method with receiver `&mut self`
+
+**Phase 3: Ambiguity check.**
+
+If multiple candidates are found at the same priority level (e.g., two trait methods from different traits with the same name and receiver type), the compiler reports an ambiguity error.
+
+### Disambiguation with Fully Qualified Syntax (UFCS)
+
+When method resolution is ambiguous, use fully qualified syntax to specify which trait's method to call:
+
+```spl
+// Trait-qualified call: TraitName.method(receiver, args)
+A.name(&x)      // Calls A's name method on x
+B.name(&x)      // Calls B's name method on x
+```
+
+This syntax is also useful for calling trait methods that are shadowed by inherent methods.
 
 **Examples:**
 
 ```spl
 let s = String.from("hello");
 
-// Step 1: String has inherent method `len`
+// Phase 1, step 1: String has inherent method `len` (by value or &self)
 s.len()
 
-// Step 2 (auto-ref): Vec.push takes &mut self
+// Phase 1, step 3 (auto-ref to &mut self): Vec.push takes &mut self
 let mut v = Vec.new();
 v.push(42)  // compiler calls (&mut v).push(42)
 
-// Step 3 (auto-deref): Box(T: String) derefs to String
+// Phase 1, auto-deref: Box(T: String) derefs to String
 let b = Box.new(String.from("hello"));
 b.len()  // Box -> String via Deref, then String.len()
 
-// Step 4 (trait method): Clone.clone is in scope via prelude
+// Phase 2 (trait method): Clone.clone is in scope via prelude
 let s2 = s.clone()
 
-// Disambiguation for ambiguous trait methods
+// Ambiguity requiring UFCS
 trait A { fn name(&self): &str }
 trait B { fn name(&self): &str }
 // If both A and B are in scope:
 // x.name()              // ERROR: ambiguous
-// A.name(&x)            // OK: fully qualified
+A.name(&x)               // OK: fully qualified
+B.name(&x)               // OK: fully qualified
 ```
 
 ---
@@ -1070,6 +1141,41 @@ SPL performs very few implicit coercions to maintain type safety.
 | `Box(T: T)` | `&T` | Box to reference (deref coercion) |
 | `Never` | Any type | Never type to any type (expression position only) |
 | `[T; N]` | `Vec(T: T)` | Array to Vec (when target type is known) |
+
+#### Coercion Sites
+
+Implicit coercions only occur at specific syntactic positions called **coercion sites**:
+
+1. **`let` bindings with explicit type annotations**: `let x: &str = my_string;`
+2. **Function arguments**: The expression is coerced to match the parameter type
+3. **Return statements**: The expression is coerced to match the declared return type
+4. **Struct field initialization**: The expression is coerced to match the field type
+5. **Array element positions**: Elements are coerced to match the declared element type
+
+Outside these positions, no implicit coercion occurs — the types must match exactly.
+
+#### Deref Coercions
+
+When the compiler expects `&U` but receives `&T`, and `T` implements `Deref(Target: U)`, the compiler automatically inserts a deref coercion. Deref coercions can **chain**: if `T` derefs to `U` and `U` derefs to `V`, then `&T` can coerce to `&V`.
+
+Key deref coercion chains:
+- `String` implements `Deref(Target: str)`, so `&String` coerces to `&str`
+- `Box(T: T)` implements `Deref(Target: T)`, so `&Box(T: T)` coerces to `&T`
+- Chaining: `Box(T: String)` → `&String` → `&str` (two deref steps)
+
+```spl
+fn takes_str(s: &str) { }
+
+let s: String = String.from("hello");
+takes_str(&s);  // &String → &str via Deref coercion
+
+let b: Box(T: String) = Box.new(String.from("hello"));
+takes_str(&b);  // &Box(T: String) → &String → &str via chained Deref
+```
+
+Mutable deref coercions follow the same pattern: `&mut T` coerces to `&mut U` when `T` implements `DerefMut(Target: U)`, and `&mut T` also coerces to `&U` (combining deref with the `&mut T` → `&T` coercion).
+
+#### Examples
 
 ```spl
 fn take_ref(r: &i32) { }

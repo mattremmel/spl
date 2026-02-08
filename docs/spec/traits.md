@@ -54,19 +54,21 @@ trait Container {
 ### 1.4 Trait with Type Parameters
 
 ```spl
-trait From(T) where T {
+trait From where T {
     fn from(value: T): Self;
 }
 
-trait Into(T) where T {
+trait Into where T {
     fn into(self): T;
 }
 
-trait Add(RHS) where RHS {
+trait Add where RHS {
     type Output;
     fn add(self, rhs: RHS): Self.Output;
 }
 ```
+
+For the complete list of operator traits (`Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, `BitAnd`, `BitOr`, `BitXor`, `Not`, `Shl`, `Shr`, and their compound assignment variants), including the full desugaring table, mixed-type rules, and overflow behavior, see [standard-library.md](standard-library.md) section 10.
 
 ### 1.5 Trait with Associated Constants
 
@@ -210,7 +212,7 @@ impl Iterator for Range {
     // Override default count() with O(1) implementation
     fn count(&mut self): usize {
         if self.start < self.end {
-            let count = (self.end - self.start) as usize;
+            let count: usize = (self.end - self.start).widen();
             self.start = self.end;
             return count;
         }
@@ -639,7 +641,7 @@ The `Index` and `IndexMut` traits enable the `collection[i]` subscript syntax.
 ### 11.1 Index Trait
 
 ```spl
-trait Index(Idx) where Idx {
+trait Index where Idx {
     type Output;
 
     /// Returns a reference to the element at `idx`.
@@ -653,7 +655,7 @@ The `index` method returns `&Self.Output` and is legal because there is an input
 ### 11.2 IndexMut Trait
 
 ```spl
-trait IndexMut(Idx): Index(Idx) where Idx {
+trait IndexMut: Index(Idx) where Idx {
     /// Returns a mutable reference to the element at `idx`.
     /// Panics if `idx` is out of bounds.
     fn index_mut(&mut self, idx: Idx): &mut Self.Output;
@@ -914,7 +916,7 @@ fn process(x: T) where T: DebugCloneSend { }
 | Supertrait | `trait Foo: Bar { ... }` | Foo requires Bar |
 | Associated type | `type Item;` | Type defined by implementor |
 | Associated const | `const MAX: Self;` | Constant defined by implementor |
-| Type parameter | `trait Foo(T) where T` | Generic trait |
+| Type parameter | `trait Foo where T` | Generic trait |
 | Default method | `fn foo(&self) { ... }` | Method with default body |
 | Trait object | `&Foo` | Dynamic dispatch |
 | Marker trait | `trait Copy: Clone { }` | No methods, signals property |

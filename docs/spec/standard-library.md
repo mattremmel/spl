@@ -1298,37 +1298,80 @@ trait Step: Clone + PartialOrd {
 
 ## 10. Operator Traits
 
-Operator traits are defined in `std.ops`. Each trait maps to one or more operators in the language.
+Operator traits are defined in `std.ops`. Each trait maps to one or more operators in the language. See [traits.md](traits.md) section 1.4 for the generic trait definition pattern.
+
+### 10.0 Operator Desugaring Summary
+
+Every operator in SPL desugars to a trait method call. The compiler rewrites operator expressions before type checking.
+
+| Expression | Desugars To | Trait | Method |
+|------------|-------------|-------|--------|
+| `a + b` | `a.add(b)` | `Add(RHS)` | `add(self, rHS)` |
+| `a - b` | `a.sub(b)` | `Sub(RHS)` | `sub(self, rhs)` |
+| `a * b` | `a.mul(b)` | `Mul(RHS)` | `mul(self, rhs)` |
+| `a / b` | `a.div(b)` | `Div(RHS)` | `div(self, rhs)` |
+| `a % b` | `a.rem(b)` | `Rem(RHS)` | `rem(self, rhs)` |
+| `-a` | `a.neg()` | `Neg` | `neg(self)` |
+| `a ** b` | `a.pow(b)` | `Pow(RHS)` | `pow(self, rhs)` |
+| `a & b` | `a.bitand(b)` | `BitAnd(RHS)` | `bitand(self, rhs)` |
+| `a \| b` | `a.bitor(b)` | `BitOr(RHS)` | `bitor(self, rhs)` |
+| `a ^ b` | `a.bitxor(b)` | `BitXor(RHS)` | `bitxor(self, rhs)` |
+| `!a` | `a.not()` | `Not` | `not(self)` |
+| `a << b` | `a.shl(b)` | `Shl(RHS)` | `shl(self, rhs)` |
+| `a >> b` | `a.shr(b)` | `Shr(RHS)` | `shr(self, rhs)` |
+| `a += b` | `a.add_assign(b)` | `AddAssign(RHS)` | `add_assign(&mut self, rhs)` |
+| `a -= b` | `a.sub_assign(b)` | `SubAssign(RHS)` | `sub_assign(&mut self, rhs)` |
+| `a *= b` | `a.mul_assign(b)` | `MulAssign(RHS)` | `mul_assign(&mut self, rhs)` |
+| `a /= b` | `a.div_assign(b)` | `DivAssign(RHS)` | `div_assign(&mut self, rhs)` |
+| `a %= b` | `a.rem_assign(b)` | `RemAssign(RHS)` | `rem_assign(&mut self, rhs)` |
+| `a **= b` | `a.pow_assign(b)` | `PowAssign(RHS)` | `pow_assign(&mut self, rhs)` |
+| `a &= b` | `a.bitand_assign(b)` | `BitAndAssign(RHS)` | `bitand_assign(&mut self, rhs)` |
+| `a \|= b` | `a.bitor_assign(b)` | `BitOrAssign(RHS)` | `bitor_assign(&mut self, rhs)` |
+| `a ^= b` | `a.bitxor_assign(b)` | `BitXorAssign(RHS)` | `bitxor_assign(&mut self, rhs)` |
+| `a <<= b` | `a.shl_assign(b)` | `ShlAssign(RHS)` | `shl_assign(&mut self, rhs)` |
+| `a >>= b` | `a.shr_assign(b)` | `ShrAssign(RHS)` | `shr_assign(&mut self, rhs)` |
+| `a == b` | `a.eq(&b)` | `PartialEq(RHS)` | `eq(&self, other: &RHS)` |
+| `a != b` | `a.ne(&b)` | `PartialEq(RHS)` | `ne(&self, other: &RHS)` |
+| `a < b` | `a.lt(&b)` | `PartialOrd(RHS)` | `lt(&self, other: &RHS)` |
+| `a > b` | `a.gt(&b)` | `PartialOrd(RHS)` | `gt(&self, other: &RHS)` |
+| `a <= b` | `a.le(&b)` | `PartialOrd(RHS)` | `le(&self, other: &RHS)` |
+| `a >= b` | `a.ge(&b)` | `PartialOrd(RHS)` | `ge(&self, other: &RHS)` |
+| `collection[i]` | `*collection.index(i)` | `Index(Idx)` | `index(&self, idx)` |
+| `collection[i] = v` | `*collection.index_mut(i) = v` | `IndexMut(Idx)` | `index_mut(&mut self, idx)` |
+
+**Mixed-type arithmetic:** SPL does not perform implicit numeric type promotion. `i32 + i64` is a type error — use explicit conversion (e.g., `a.widen() + b`). The default `RHS = Self` on operator traits means binary operators expect both operands to have the same type unless a cross-type implementation is explicitly provided.
+
+**Integer overflow:** All integer arithmetic operations trap (panic) on overflow by default. Use `wrapping_*`, `saturating_*`, or `checked_*` methods for alternative behavior. See [type-system.md](type-system.md) section 8 "Integer Overflow" for details.
 
 ### 10.1 Arithmetic Operators
 
 ```spl
 /// `a + b` desugars to `a.add(b)`
-trait Add(RHS) where RHS = Self {
+trait Add where RHS = Self {
     type Output;
     fn add(self, rhs: RHS): Self.Output;
 }
 
 /// `a - b` desugars to `a.sub(b)`
-trait Sub(RHS) where RHS = Self {
+trait Sub where RHS = Self {
     type Output;
     fn sub(self, rhs: RHS): Self.Output;
 }
 
 /// `a * b` desugars to `a.mul(b)`
-trait Mul(RHS) where RHS = Self {
+trait Mul where RHS = Self {
     type Output;
     fn mul(self, rhs: RHS): Self.Output;
 }
 
 /// `a / b` desugars to `a.div(b)`
-trait Div(RHS) where RHS = Self {
+trait Div where RHS = Self {
     type Output;
     fn div(self, rhs: RHS): Self.Output;
 }
 
 /// `a % b` desugars to `a.rem(b)`
-trait Rem(RHS) where RHS = Self {
+trait Rem where RHS = Self {
     type Output;
     fn rem(self, rhs: RHS): Self.Output;
 }
@@ -1338,9 +1381,15 @@ trait Neg {
     type Output;
     fn neg(self): Self.Output;
 }
+
+/// `a ** b` desugars to `a.pow(b)`
+trait Pow where RHS = Self {
+    type Output;
+    fn pow(self, rhs: RHS): Self.Output;
+}
 ```
 
-**Built-in implementations:** All integer types (`i8`–`i128`, `u8`–`u128`, `isize`, `usize`) implement `Add`, `Sub`, `Mul`, `Div`, `Rem`. Signed types also implement `Neg`. Float types (`f32`, `f64`) implement all arithmetic traits. `decimal` implements all arithmetic traits.
+**Built-in implementations:** All integer types (`i8`–`i128`, `u8`–`u128`, `isize`, `usize`) implement `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Pow`. Signed types also implement `Neg`. Float types (`f32`, `f64`) implement all arithmetic traits. `decimal` implements all arithmetic traits.
 
 ```spl
 // Example: implementing Add for a custom type
@@ -1356,19 +1405,19 @@ impl Add for Point {
 
 ```spl
 /// `a & b` desugars to `a.bitand(b)`
-trait BitAnd(RHS) where RHS = Self {
+trait BitAnd where RHS = Self {
     type Output;
     fn bitand(self, rhs: RHS): Self.Output;
 }
 
 /// `a | b` desugars to `a.bitor(b)`
-trait BitOr(RHS) where RHS = Self {
+trait BitOr where RHS = Self {
     type Output;
     fn bitor(self, rhs: RHS): Self.Output;
 }
 
 /// `a ^ b` desugars to `a.bitxor(b)`
-trait BitXor(RHS) where RHS = Self {
+trait BitXor where RHS = Self {
     type Output;
     fn bitxor(self, rhs: RHS): Self.Output;
 }
@@ -1381,13 +1430,13 @@ trait Not {
 }
 
 /// `a << b` desugars to `a.shl(b)`
-trait Shl(RHS) where RHS = Self {
+trait Shl where RHS = Self {
     type Output;
     fn shl(self, rhs: RHS): Self.Output;
 }
 
 /// `a >> b` desugars to `a.shr(b)`
-trait Shr(RHS) where RHS = Self {
+trait Shr where RHS = Self {
     type Output;
     fn shr(self, rhs: RHS): Self.Output;
 }
@@ -1399,36 +1448,41 @@ trait Shr(RHS) where RHS = Self {
 
 ```spl
 /// `a += b` desugars to `a.add_assign(b)`
-trait AddAssign(RHS) where RHS = Self {
+trait AddAssign where RHS = Self {
     fn add_assign(&mut self, rhs: RHS): ();
 }
 
 /// `a -= b` desugars to `a.sub_assign(b)`
-trait SubAssign(RHS) where RHS = Self {
+trait SubAssign where RHS = Self {
     fn sub_assign(&mut self, rhs: RHS): ();
 }
 
 /// `a *= b` desugars to `a.mul_assign(b)`
-trait MulAssign(RHS) where RHS = Self {
+trait MulAssign where RHS = Self {
     fn mul_assign(&mut self, rhs: RHS): ();
 }
 
 /// `a /= b` desugars to `a.div_assign(b)`
-trait DivAssign(RHS) where RHS = Self {
+trait DivAssign where RHS = Self {
     fn div_assign(&mut self, rhs: RHS): ();
 }
 
 /// `a %= b` desugars to `a.rem_assign(b)`
-trait RemAssign(RHS) where RHS = Self {
+trait RemAssign where RHS = Self {
     fn rem_assign(&mut self, rhs: RHS): ();
 }
 
+/// `a **= b` desugars to `a.pow_assign(b)`
+trait PowAssign where RHS = Self {
+    fn pow_assign(&mut self, rhs: RHS): ();
+}
+
 /// `a &= b`, `a |= b`, `a ^= b`, `a <<= b`, `a >>= b`
-trait BitAndAssign(RHS) where RHS = Self { fn bitand_assign(&mut self, rhs: RHS): (); }
-trait BitOrAssign(RHS) where RHS = Self { fn bitor_assign(&mut self, rhs: RHS): (); }
-trait BitXorAssign(RHS) where RHS = Self { fn bitxor_assign(&mut self, rhs: RHS): (); }
-trait ShlAssign(RHS) where RHS = Self { fn shl_assign(&mut self, rhs: RHS): (); }
-trait ShrAssign(RHS) where RHS = Self { fn shr_assign(&mut self, rhs: RHS): (); }
+trait BitAndAssign where RHS = Self { fn bitand_assign(&mut self, rhs: RHS): (); }
+trait BitOrAssign where RHS = Self { fn bitor_assign(&mut self, rhs: RHS): (); }
+trait BitXorAssign where RHS = Self { fn bitxor_assign(&mut self, rhs: RHS): (); }
+trait ShlAssign where RHS = Self { fn shl_assign(&mut self, rhs: RHS): (); }
+trait ShrAssign where RHS = Self { fn shr_assign(&mut self, rhs: RHS): (); }
 ```
 
 **Built-in implementations:** All types implementing the corresponding binary operator also implement the compound assignment variant.
@@ -1438,14 +1492,14 @@ trait ShrAssign(RHS) where RHS = Self { fn shr_assign(&mut self, rhs: RHS): (); 
 ```spl
 /// `collection[index]` desugars to `*collection.index(index)` (in value context)
 /// `&collection[index]` desugars to `collection.index(index)`
-trait Index(Idx) where Idx {
+trait Index where Idx {
     type Output;
     fn index(&self, index: Idx): &Self.Output;
 }
 
 /// `&mut collection[index]` desugars to `collection.index_mut(index)`
 /// `collection[index] = v` desugars to `*collection.index_mut(index) = v`
-trait IndexMut(Idx): Index(Idx) where Idx {
+trait IndexMut: Index(Idx) where Idx {
     fn index_mut(&mut self, index: Idx): &mut Self.Output;
 }
 ```
@@ -1467,7 +1521,7 @@ Provides equality comparison (`==` and `!=`).
 ```spl
 /// `a == b` desugars to `a.eq(&b)`
 /// `a != b` desugars to `a.ne(&b)`
-trait PartialEq(RHS) where RHS = Self {
+trait PartialEq where RHS = Self {
     /// Required: returns true if self equals other.
     fn eq(&self, other: &RHS): bool;
 
@@ -1504,7 +1558,7 @@ trait Eq: PartialEq { }
 Provides ordering comparison (`<`, `>`, `<=`, `>=`).
 
 ```spl
-trait PartialOrd(RHS): PartialEq where RHS = Self {
+trait PartialOrd: PartialEq(RHS) where RHS = Self {
     /// Required: returns the ordering between self and other, or None if incomparable.
     fn partial_cmp(&self, other: &RHS): Option(T: Ordering);
 
@@ -1611,7 +1665,7 @@ Conversion traits are defined in `std.convert`. They provide standard interfaces
 Infallible conversion from one type to another. Also used by the `!` (try) operator for automatic error conversion — see [error-handling.md](error-handling.md) sections 6-7.
 
 ```spl
-trait From(T) where T {
+trait From where T {
     /// Converts from T to Self.
     fn from(value: T): Self;
 }
@@ -1639,7 +1693,7 @@ fn read_data(path: &str): Data throws AppError {
 The reciprocal of `From`. A blanket implementation provides `Into` for any type implementing `From`:
 
 ```spl
-trait Into(T) where T {
+trait Into where T {
     /// Converts self into T.
     fn into(self): T;
 }
@@ -1659,7 +1713,7 @@ impl Into(T: U) for T where T, U, U: From(T: T) {
 Fallible conversion from one type to another.
 
 ```spl
-trait TryFrom(T) where T {
+trait TryFrom where T {
     type Error;
 
     /// Attempts to convert from T to Self, returning an error on failure.
@@ -1690,7 +1744,7 @@ let big: u8 = 1000i64.try_into()!;    // Err(TryFromIntError)
 The reciprocal of `TryFrom`. A blanket implementation provides `TryInto` for any type implementing `TryFrom`:
 
 ```spl
-trait TryInto(T) where T {
+trait TryInto where T {
     type Error;
 
     /// Attempts to convert self into T.
@@ -1712,11 +1766,11 @@ impl TryInto(T: U) for T where T, U, U: TryFrom(T: T) {
 Cheap reference-to-reference conversions.
 
 ```spl
-trait AsRef(T) where T {
+trait AsRef where T {
     fn as_ref(&self): &T;
 }
 
-trait AsMut(T) where T {
+trait AsMut where T {
     fn as_mut(&mut self): &mut T;
 }
 ```

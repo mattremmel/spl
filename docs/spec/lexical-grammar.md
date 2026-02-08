@@ -4,7 +4,7 @@ This document defines the lexical structure of SPL (Simple Programming Language)
 
 ## Overview
 
-The lexer transforms source text into a stream of tokens. Whitespace and comments are skipped (not emitted as tokens). The lexer is greedy, always consuming the longest possible match.
+The lexer transforms source text into a stream of tokens. Whitespace (`WHITESPACE`, `NEWLINE`) and comments (`COMMENT`) are emitted as **trivia tokens** — they are preserved in the concrete syntax tree (CST) for tooling (formatting, refactoring) but are skipped during grammar-level parsing. The lexer is greedy, always consuming the longest possible match.
 
 ---
 
